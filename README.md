@@ -175,7 +175,7 @@ return [
             ),
             relationships: [
                 'posts' => new RecordHasManyType(
-                    model: \App\Models\Post::class,
+                    table: 'users',
                     foreign_key: 'user_id',
                     local_key: 'id'
                 ),
