@@ -1,0 +1,26 @@
+{
+  "name": "sopheak/sp-laravel-api",
+  "description": "Core utilities for Laravel apps: standardized API responses, request ID middleware, and CLI helpers.",
+  "type": "library",
+  "license": "proprietary",
+  "version": "0.1.0",
+  "require": {
+    "php": "^8.2",
+    "laravel/framework": "^12.0",
+    "nesbot/carbon": "^3.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "Sopheak\\Core\\": "src/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Sopheak\\Core\\CoreServiceProvider"
+      ]
+    }
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
+}

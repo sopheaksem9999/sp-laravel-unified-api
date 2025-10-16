@@ -1,0 +1,113 @@
+<?php
+
+namespace Sopheak\Core\Types;
+
+/**
+ * Class RecordTableType.
+ *
+ * Represents a table configuration for record management.
+ * This class defines the structure and behavior of a database table.
+ *
+ * @property string            $pms_name         The name of the table in the PMS system
+ * @property bool              $soft_deletes     Whether soft deletes are enabled for this table
+ * @property RecordTablePublic $public           Public configuration settings for the table
+ * @property null|array        $relationships    Array of relationships with other tables
+ * @property null|array        $functions        Array of function configurations
+ * @property null|string       $primary_key      The primary key column name (defaults to 'id')
+ * @property bool              $has_tenant_id    Whether the table has tenant ID column
+ * @property null|array        $columns          Array of column definitions
+ * @property null|array        $fulltext_indexes Array of full-text index configurations for optimized search
+ * @property null|string       $auditLogFn       The function name for audit logging (optional)
+ *
+ * Example usage:
+ * ```php
+ * $table = new RecordTableType(
+ *     pms_name: 'users',
+ *     soft_deletes: true,
+ *     disable_auditLog: false,
+ *     public: new RecordTablePublic(),
+ *     relationships: [
+ *         'roles' => new RecordMetaBelongsToManyType(...),
+ *         'profile' => new RecordHasOneType(...),
+ *     ],
+ *     functions: [
+ *         // Using RecordFunctionType object (recommended)
+ *         'getFullName' => new RecordFunctionType(
+ *             type: 'class',
+ *             class: 'App\\Services\\UserService',
+ *             function_method: 'getFullName',
+ *             method: ['GET'],
+ *             description: 'Get the full name of the user'
+ *         ),
+ *
+ *         // Using array configuration (legacy support)
+ *         'calculateStats' => [
+ *             'type' => 'class',
+ *             'class' => 'App\\Services\\UserStatsService',
+ *             'function_method' => 'calculate',
+ *             'method' => ['POST'],
+ *             'required_params' => ['period'],
+ *             'description' => 'Calculate user statistics'
+ *         ],
+ *
+ *         // Query-based function
+ *         'getActiveUsers' => new RecordFunctionType(
+ *             type: 'query',
+ *             query: 'SELECT * FROM users WHERE active = 1 AND created_at >= ::since',
+ *             method: ['GET'],
+ *             required_params: ['since'],
+ *             description: 'Get active users since a specific date'
+ *         ),
+ *     ],
+ *     primary_key: 'id',
+ *     has_tenant_id: false,
+ *     columns: [
+ * 'name' => ['type' => 'string', 'nullable' => false],
+ * 'email' => ['type' => 'string', 'unique' => true],
+ * ],
+ * fulltext_indexes: [
+ * ['name', 'description'],  // Multi-column full-text index
+ * ['content'],              // Single-column full-text index
+ * ],
+ * );
+ * ```
+ */
+class RecordTableType
+{
+    public function __construct(
+        public string $pms_name,
+        public ?string $table = null,
+        public bool $soft_deletes = true,
+        public bool $disable_auditLog = false,
+        public RecordTablePublic $public = new RecordTablePublic(),
+        public ?array $relationships = [],
+        public ?array $functions = [],
+        public ?string $primary_key = 'id',
+        public bool $has_tenant_id = false,
+        public ?array $columns = [],
+        public ?array $fulltext_indexes = [],
+        public ?string $auditLogFn = null,
+    ) {}
+
+    /**
+     * Handle var_export() for configuration caching.
+     * This method is required for Laravel's config:cache command.
+     */
+    public static function __set_state(array $properties): static
+    {
+        return new static(
+            pms_name: $properties['pms_name'],
+            table: $properties['table'] ?? null,
+            soft_deletes: $properties['soft_deletes'] ?? true,
+            disable_auditLog: $properties['disable_auditLog'] ?? false,
+            public: $properties['public'] ?? new RecordTablePublic(),
+            relationships: $properties['relationships'] ?? [],
+            functions: $properties['functions'] ?? [],
+            primary_key: $properties['primary_key'] ?? 'id',
+            has_tenant_id: $properties['has_tenant_id'] ?? false,
+            columns: $properties['columns'] ?? [],
+            fulltext_indexes: $properties['fulltext_indexes'] ?? [],
+            auditLogFn: $properties['auditLogFn'] ?? null,
+        );
+    }
+}
