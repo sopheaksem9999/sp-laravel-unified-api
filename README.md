@@ -636,6 +636,7 @@ php artisan sp-laravel-api:clean-audit-logs --dry-run --days=90
 ## Documentation
 
 ### Package Documentation
+- **Deployment Guide**: [`DEPLOYMENT.md`](DEPLOYMENT.md) - How to deploy and distribute this private package
 - **API Documentation**: [`docs/api-documentation.md`](docs/api-documentation.md) - Comprehensive API endpoints and usage guide
 - **Audit Interface**: [`docs/audit-interface.md`](docs/audit-interface.md) - Custom audit queries and logging
 - **Cursor Pagination**: [`docs/cursor-pagination.md`](docs/cursor-pagination.md) - Efficient pagination for large datasets
