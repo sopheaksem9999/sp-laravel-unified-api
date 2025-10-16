@@ -8,18 +8,355 @@ Core utilities for Laravel apps: standardized API responses, request ID middlewa
 - **Dynamic API Controller**: Full CRUD operations for any database table with advanced filtering
 - **QueryHelpers Trait**: Powerful trait for advanced query filtering and manipulation
 - **Audit Logging**: Comprehensive audit trail for all data changes
+- **Audit Interface**: Custom audit queries with `AuditQueryInterface` and `HasAuditQuery` trait
 - **AuditLogJob**: Queue-based audit logging for improved performance
 - **Audit Log Cleanup**: CLI command for cleaning old audit logs based on retention policy
 - **Query Caching**: Intelligent caching system for improved performance
+- **Permission System**: Built-in Spatie Laravel Permission for role-based access control
+- **JWT Authentication**: Integrated JWT authentication support
 - **OpenAPI Spec Generation**: CLI command to generate API documentation
 - **Configuration Publishing**: Easy setup with sensible defaults
 
-## Installation
-1. Add this package as a path repo in root `composer.json` (already handled if you are in this repo):
-   - `repositories` entry pointing to `packages/sp-laravel-api`.
-   - Require `sopheak/sp-laravel-api: *`.
-2. Run `composer update sopheak/sp-laravel-api -W`.
-3. The service provider auto-discovers; no manual registration needed.
+## Installation & Setup
+
+### Requirements
+- PHP 8.2 or higher
+- Laravel 12.x
+- MySQL 8.0+ or PostgreSQL 13+
+
+### Included Dependencies
+The package automatically installs these dependencies:
+- **Spatie Laravel Permission** (^6.21) - Role and permission management
+- **JWT Auth** (^2.8.2) - JSON Web Token authentication
+- **Carbon** (^3.0) - Date manipulation library
+
+### Step 1: Install the Package
+
+#### Option A: Via Composer (Recommended for Production)
+```bash
+composer require sopheak/sp-laravel-api
+```
+
+#### Option B: Local Development (Path Repository)
+Add this to your project's `composer.json`:
+```json
+{
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../sp-laravel-api"
+        }
+    ],
+    "require": {
+        "sopheak/sp-laravel-api": "*"
+    }
+}
+```
+
+Then run:
+```bash
+composer update sopheak/sp-laravel-api -W
+```
+
+### Step 2: Publish Configuration Files
+```bash
+php artisan sp-laravel-api:setup
+```
+
+This command publishes the following configuration files:
+- `config/record.php` - Database table configurations and relationships
+- `config/audit.php` - Audit logging settings
+- `config/cursor_pagination.php` - Cursor pagination settings
+- `config/sp-laravel-api.php` - Main package configuration
+
+### Step 3: Environment Configuration
+
+Add these environment variables to your `.env` file:
+
+```env
+# API Configuration
+RECORD_API_PREFIX=api
+RECORD_MAX_DEPTH=3
+RECORD_CACHE_TTL=3600
+RECORD_LAZY_CACHE_TTL=300
+
+# Audit Logging
+AUDIT_LOG_ENABLED=true
+AUDIT_LOG_RETENTION_DAYS=365
+AUDIT_LOG_QUEUE_ENABLED=true
+
+# Cursor Pagination
+CURSOR_PAGINATION_AUTO_THRESHOLD=1000
+CURSOR_PAGINATION_DEFAULT_PER_PAGE=15
+CURSOR_PAGINATION_MAX_PER_PAGE=100
+
+# JWT Authentication (if using JWT)
+JWT_SECRET=your-jwt-secret-key
+JWT_TTL=60
+JWT_REFRESH_TTL=20160
+```
+
+### Step 4: Database Setup
+
+#### Run Migrations
+The package includes migrations for audit logging. Run them with:
+```bash
+php artisan migrate
+```
+
+#### Configure Database Tables (Optional)
+Edit `config/record.php` to configure your database tables for the dynamic API:
+
+```php
+return [
+    'api_prefix' => env('RECORD_API_PREFIX', 'api'),
+    'tables' => [
+        'users' => [
+            'model' => App\Models\User::class,
+            'permissions' => [
+                'view' => 'view_users',
+                'create' => 'create_users',
+                'update' => 'update_users',
+                'delete' => 'delete_users',
+            ],
+            'relationships' => [
+                'posts' => [
+                    'type' => 'hasMany',
+                    'model' => App\Models\Post::class,
+                ],
+            ],
+        ],
+        // Add more tables as needed
+    ],
+];
+```
+
+### Step 5: Authentication Setup
+
+#### Option A: JWT Authentication
+If using JWT, install the JWT package:
+```bash
+composer require tymon/jwt-auth
+php artisan vendor:publish --provider="Tymon\JWTAuth\Providers\LaravelServiceProvider"
+php artisan jwt:secret
+```
+
+Configure your User model:
+```php
+use Tymon\JWTAuth\Contracts\JWTSubject;
+
+class User extends Authenticatable implements JWTSubject
+{
+    public function getJWTIdentifier()
+    {
+        return $this->getKey();
+    }
+
+    public function getJWTCustomClaims()
+    {
+        return [];
+    }
+}
+```
+
+#### Option B: Laravel Sanctum
+If using Sanctum:
+```bash
+composer require laravel/sanctum
+php artisan vendor:publish --provider="Laravel\Sanctum\SanctumServiceProvider"
+php artisan migrate
+```
+
+### Step 6: Middleware Configuration
+
+Add the request ID middleware to your API routes in `app/Http/Kernel.php`:
+
+```php
+protected $middlewareGroups = [
+    'api' => [
+        \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+        'throttle:api',
+        \Illuminate\Routing\Middleware\SubstituteBindings::class,
+        \Sopheak\Core\Http\Middleware\RequestId::class, // Add this line
+    ],
+];
+```
+
+Or apply it to specific route groups:
+```php
+Route::middleware(['api', 'auth:api', 'request.id'])->group(function () {
+    // Your API routes
+});
+```
+
+### Step 7: Queue Configuration (Optional but Recommended)
+
+For optimal performance with audit logging, configure queues:
+
+```bash
+# Install Redis (recommended)
+composer require predis/predis
+
+# Or use database queues
+php artisan queue:table
+php artisan migrate
+```
+
+Update your `.env`:
+```env
+QUEUE_CONNECTION=redis
+# or
+QUEUE_CONNECTION=database
+```
+
+Start the queue worker:
+```bash
+php artisan queue:work
+```
+
+### Step 8: Permissions Setup (Included)
+
+The package includes Spatie Laravel Permission as a dependency. Set it up:
+
+```bash
+# Publish the permission migration
+php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider"
+
+# Run the migration
+php artisan migrate
+```
+
+Create basic permissions for your tables:
+```php
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+
+// Create permissions for your tables
+Permission::create(['name' => 'view_users']);
+Permission::create(['name' => 'create_users']);
+Permission::create(['name' => 'update_users']);
+Permission::create(['name' => 'delete_users']);
+
+// Create roles and assign permissions
+$adminRole = Role::create(['name' => 'admin']);
+$adminRole->givePermissionTo(['view_users', 'create_users', 'update_users', 'delete_users']);
+
+$userRole = Role::create(['name' => 'user']);
+$userRole->givePermissionTo(['view_users']);
+```
+
+Add the trait to your User model:
+```php
+use Spatie\Permission\Traits\HasRoles;
+
+class User extends Authenticatable
+{
+    use HasRoles;
+    
+    // Your model code
+}
+```
+
+### Step 9: Test the Installation
+
+Create a test route to verify everything is working:
+
+```php
+// routes/api.php
+Route::middleware(['api', 'request.id'])->get('/test', function () {
+    $response = app('api.response');
+    return $response->success(['message' => 'SP Laravel API is working!']);
+});
+```
+
+Test the endpoint:
+```bash
+curl -X GET http://your-app.test/api/test
+```
+
+Expected response:
+```json
+{
+    "success": true,
+    "data": {
+        "message": "SP Laravel API is working!"
+    },
+    "meta": {
+        "request_id": "req_1234567890abcdef"
+    }
+}
+```
+
+### Step 10: Configure Your Models (Optional)
+
+To use the QueryHelpers trait in your models:
+
+```php
+use Sopheak\Core\Traits\QueryHelpers;
+
+class User extends Authenticatable
+{
+    use QueryHelpers;
+    
+    // Your model code
+}
+```
+
+To implement audit logging in your models:
+
+```php
+use Sopheak\Core\Traits\HasAuditQuery;
+use Sopheak\Core\Interfaces\AuditQueryInterface;
+
+class User extends Authenticatable implements AuditQueryInterface
+{
+    use HasAuditQuery;
+    
+    public function getAuditEntityName(): string
+    {
+        return 'users';
+    }
+    
+    public function getAuditEntityClass(): string
+    {
+        return static::class;
+    }
+}
+```
+
+## Quick Start
+
+Once installed, you can immediately start using the dynamic API endpoints:
+
+```bash
+# List users with pagination
+GET /api/users
+
+# Get specific user with relationships
+GET /api/users/1?with=posts,roles
+
+# Create new user
+POST /api/users
+{
+    "name": "John Doe",
+    "email": "john@example.com"
+}
+
+# Update user
+PUT /api/users/1
+{
+    "name": "Jane Doe"
+}
+
+# Delete user (soft delete)
+DELETE /api/users/1
+
+# Search users
+GET /api/users?s=john&status=eq.active
+
+# Advanced filtering
+GET /api/users?age=gt.18&created_at=between.2024-01-01,2024-12-31
+```
 
 ## Services
 
@@ -297,19 +634,22 @@ php artisan sp-laravel-api:clean-audit-logs --dry-run --days=90
 - **Configurable**: Respects audit configuration or allows override
 
 ## Documentation
-- API records: `docs/api-v2-records.md`
-- Request ID middleware: `Sopheak\\Core\\Http\\Middleware\\RequestId`
-- Response service: `Sopheak\\Core\\Services\\ApiResponseService`
-- OpenAPI CLI: `Sopheak\\Core\\Console\\GenerateOpenApiSpec`
-- Vue module architecture: `docs/vue-module-architecture.md`
-- Cursor pagination: `docs/cursor-pagination.md`
-- Currency formatting: `docs/currency-formatting.md`, `docs/currency-formatting-examples.md`
-- Composables overview: `docs/composables-README.md`
-- Composables forms: `docs/composables-useFormService.md`
-- Composables form dialog: `docs/composables-useFormDialogService.md`
-- Composables page view: `docs/composables-usePageViewService.md`, `docs/composables-usePageViewDialogService.md`
-- NVM setup: `docs/nvm-setup.md`
-- Legacy app-core notes: `docs/app-core.md`
+
+### Package Documentation
+- **API Documentation**: [`docs/api-documentation.md`](docs/api-documentation.md) - Comprehensive API endpoints and usage guide
+- **Audit Interface**: [`docs/audit-interface.md`](docs/audit-interface.md) - Custom audit queries and logging
+- **Cursor Pagination**: [`docs/cursor-pagination.md`](docs/cursor-pagination.md) - Efficient pagination for large datasets
+- **Package Overview**: [`docs/README.md`](docs/README.md) - Package features and quick reference
+
+### Core Classes Reference
+- **Request ID Middleware**: `Sopheak\Core\Http\Middleware\RequestId`
+- **API Response Service**: `Sopheak\Core\Services\ApiResponseService`
+- **Audit Log Service**: `Sopheak\Core\Services\AuditLogService`
+- **Query Cache Service**: `Sopheak\Core\Services\QueryCacheService`
+- **Cursor Pagination Service**: `Sopheak\Core\Services\CursorPagination`
+- **Dynamic API Controller**: `Sopheak\Core\Http\Controllers\DynamicApiController`
+- **Query Helpers Trait**: `Sopheak\Core\Traits\QueryHelpers`
+- **Audit Query Interface**: `Sopheak\Core\Interfaces\AuditQueryInterface`
 
 ## Notes
 - Keep `request.id` middleware active to ensure `meta.request_id` consistency.

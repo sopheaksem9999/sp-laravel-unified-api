@@ -2,12 +2,12 @@
 
 namespace Sopheak\Core\Console\Records;
 
-use App\Utilities\Support\SchemaRegistry;
+use Sopheak\Core\Support\SchemaRegistry;
 use Illuminate\Console\Command;
 
 class GetRecordCache extends Command
 {
-    protected $signature = 'record:getCache';
+    protected $signature = 'sp-laravel-api:cache-generate';
     protected $description = 'Generate record table cache';
 
     public function handle(): void

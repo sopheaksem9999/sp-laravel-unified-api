@@ -35,11 +35,15 @@ class CoreServiceProvider extends ServiceProvider
     {
         $this->publishes([
             __DIR__ . '/../config/sp-laravel-api.php' => config_path('sp-laravel-api.php'),
+            __DIR__ . '/../config/audit.php' => config_path('audit.php'),
+            __DIR__ . '/../config/record.php' => config_path('record.php'),
+            __DIR__ . '/../config/cursor_pagination.php' => config_path('cursor_pagination.php'),
         ], 'sp-laravel-api-config');
 
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'sp-laravel-api');
-        // Routes are handled by the main application in routes/api.php
-        // $this->loadRoutesFrom(__DIR__ . '/../routes/api.php');
+        
+        // Load package routes
+        $this->loadRoutesFrom(__DIR__ . '/../routes/api.php');
 
         if ($this->app->runningInConsole()) {
             $this->commands([

@@ -2,7 +2,7 @@
 
 namespace Sopheak\Core\Types;
 
-use App\Utilities\Enums\RecordRelationshipsEnum;
+use Sopheak\Core\Enums\RecordRelationshipsEnum;
 
 /**
  * Create a new RecordHasManyType instance.

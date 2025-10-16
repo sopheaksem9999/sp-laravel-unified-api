@@ -2,7 +2,7 @@
 
 namespace Sopheak\Core\Types;
 
-use App\Utilities\Enums\RecordRelationshipsEnum;
+use Sopheak\Core\Enums\RecordRelationshipsEnum;
 
 /**
  * This class represents a has-many-through relationship configuration between database models.

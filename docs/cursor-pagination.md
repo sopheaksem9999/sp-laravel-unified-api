@@ -1,6 +1,6 @@
 # Cursor-Based Pagination
 
-This document describes the cursor-based pagination implementation for the QBO Finance ERP system, which provides better performance for large datasets compared to traditional offset-based pagination.
+This document describes the cursor-based pagination implementation for the SP Laravel API package, which provides better performance for large datasets compared to traditional offset-based pagination.
 
 ## Overview
 
@@ -61,31 +61,33 @@ Tables in `excluded_tables` will never use cursor pagination.
 ### Basic Cursor Pagination
 
 ```http
-# First page
-GET /api/v2/invoices?per_page=25
+# First page (using default API prefix 'api')
+GET /api/invoices?per_page=25
 
 # Next page using cursor
-GET /api/v2/invoices?per_page=25&cursor=12345&direction=next
+GET /api/invoices?per_page=25&cursor=12345&direction=next
 
 # Previous page using cursor
-GET /api/v2/invoices?per_page=25&cursor=12345&direction=prev
+GET /api/invoices?per_page=25&cursor=12345&direction=prev
 ```
+
+**Note**: The API prefix is configurable via `config('record.api_prefix', 'api')` and can be customized to `/api/v1`, `/api/v2`, etc.
 
 ### Explicit Cursor Column
 
 ```http
 # Use created_at as cursor column
-GET /api/v2/invoices?per_page=25&cursor_column=created_at
+GET /api/invoices?per_page=25&cursor_column=created_at
 
 # Composite cursor for complex sorting
-GET /api/v2/invoices?per_page=25&composite_cursor=true&sortby=created_at
+GET /api/invoices?per_page=25&composite_cursor=true&sortby=created_at
 ```
 
 ### Force Cursor Pagination
 
 ```http
 # Force cursor pagination even for small tables
-GET /api/v2/small_table?per_page=25&cursor=0
+GET /api/small_table?per_page=25&cursor=0
 ```
 
 ## Response Format

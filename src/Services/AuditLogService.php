@@ -2,9 +2,7 @@
 
 namespace Sopheak\Core\Services;
 
-use App\Jobs\AuditLogJob;
-use App\Models\AuditLog;
-use App\Models\User;
+use Illuminate\Foundation\Bus\DispatchesJobs;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
@@ -20,6 +18,10 @@ class AuditLogService
      */
     public static function handleAuditDataEntry(AuditLogEventEnum $event, string $entityName, string $entityType, array $queryData, ?string $subject = null, ?string $recap = null): void
     {
+        if (!static::isAuditEnabled()) {
+            return;
+        }
+
         $oldData = [];
         $newData = [];
 
@@ -68,6 +70,10 @@ class AuditLogService
      */
     public static function createAuditLogEntry(array $data): void
     {
+        if (!static::isAuditEnabled()) {
+            return;
+        }
+
         // Additional safeguard: For UPDATE events, verify there are actual changes
         if (isset($data['event']) && $data['event'] === AuditLogEventEnum::UPDATED->value) {
             $oldData = is_array($data['old_data']) ? $data['old_data'] : [];
@@ -156,18 +162,21 @@ class AuditLogService
             return;
         }
 
+        $userModel = config('audit.user_model', 'App\Models\User');
+        $auditLogJobClass = config('audit.audit_log_job', 'App\Jobs\AuditLogJob');
+
         if (static::isAuditQueueEnabled()) {
-            AuditLogJob::dispatch(
+            $auditLogJobClass::dispatch(
                 event: $auditLogEventEnum,
                 entityName: 'users',
-                entityType: User::class,
+                entityType: $userModel,
                 queryData: $data
             );
         } else {
             static::handleAuditDataEntry(
                 event: $auditLogEventEnum,
                 entityName: 'users',
-                entityType: User::class,
+                entityType: $userModel,
                 queryData: $data
             );
         }
@@ -180,6 +189,10 @@ class AuditLogService
      */
     public static function insertAuditLog(AuditLogEventEnum $auditLogEventEnum, string $entityClass, array|object $queryData = [], ?string $subject = '', ?string $recap = ''): void
     {
+        if (!static::isAuditEnabled()) {
+            return;
+        }
+
         $entityName = AuditLogService::getTableNameFromEntityType($entityClass);
         $entityType = $entityClass;
 
@@ -188,7 +201,8 @@ class AuditLogService
 
         // Handle audit logging based on queue configuration
         if (static::isAuditQueueEnabled()) {
-            AuditLogJob::dispatch(
+            $auditLogJobClass = config('audit.audit_log_job', 'App\Jobs\AuditLogJob');
+            $auditLogJobClass::dispatch(
                 event: $auditLogEventEnum,
                 entityName: $entityName,
                 entityType: $entityType,
@@ -227,7 +241,8 @@ class AuditLogService
      */
     public static function getAuditStats(array $filters = []): array
     {
-        $query = AuditLog::query();
+        $auditLogModel = config('audit.audit_log_model', 'App\Models\AuditLog');
+        $query = $auditLogModel::query();
 
         // Apply date filter if provided
         if (!empty($filters['start_date']) && !empty($filters['end_date'])) {
@@ -269,7 +284,8 @@ class AuditLogService
      */
     public static function getEntityAuditLogs(string $entityType, mixed $entityId, int $limit = 50): Collection
     {
-        return AuditLog::with(['user', 'module'])
+        $auditLogModel = config('audit.audit_log_model', 'App\Models\AuditLog');
+        return $auditLogModel::with(['user', 'module'])
             ->where('entity_type', $entityType)
             ->where('entity_id', $entityId)
             ->orderBy('created_at', 'desc')
@@ -286,8 +302,9 @@ class AuditLogService
     public static function cleanupOldLogs(int $daysToKeep = 365): int
     {
         $cutoffDate = Carbon::now()->subDays($daysToKeep);
+        $auditLogModel = config('audit.audit_log_model', 'App\Models\AuditLog');
 
-        return AuditLog::where('created_at', '<', $cutoffDate)->delete();
+        return $auditLogModel::where('created_at', '<', $cutoffDate)->delete();
     }
 
     /**
@@ -491,7 +508,8 @@ class AuditLogService
      */
     public static function getFieldTimeline(string $entityType, mixed $entityId, string $field, int $limit = 10): array
     {
-        $logs = AuditLog::where('entity_type', $entityType)
+        $auditLogModel = config('audit.audit_log_model', 'App\Models\AuditLog');
+        $logs = $auditLogModel::where('entity_type', $entityType)
             ->where('entity_id', $entityId)
             ->whereRaw("JSON_EXTRACT(metadata, '$.field_changes.{$field}') IS NOT NULL")
             ->orderBy('created_at', 'desc')
@@ -521,7 +539,8 @@ class AuditLogService
      */
     public static function getFieldStats(string $entityType, mixed $entityId, string $field): array
     {
-        $logs = AuditLog::where('entity_type', $entityType)
+        $auditLogModel = config('audit.audit_log_model', 'App\Models\AuditLog');
+        $logs = $auditLogModel::where('entity_type', $entityType)
             ->where('entity_id', $entityId)
             ->whereRaw("JSON_EXTRACT(metadata, '$.field_changes.{$field}') IS NOT NULL")
             ->get()
@@ -638,14 +657,15 @@ class AuditLogService
             ];
         }
 
-        $previousLog = AuditLog::where('entity_type', $entityType)
+        $auditLogModel = config('audit.audit_log_model', 'App\Models\AuditLog');
+        $previousLog = $auditLogModel::where('entity_type', $entityType)
             ->where('entity_id', $entityId)
             ->whereRaw('JSON_EXTRACT(metadata, "$.field_changes.\"'.$field.'\"") IS NOT NULL')
             ->orderBy('created_at', 'desc')
             ->first()
         ;
 
-        $totalChanges = AuditLog::where('entity_type', $entityType)
+        $totalChanges = $auditLogModel::where('entity_type', $entityType)
             ->where('entity_id', $entityId)
             ->whereRaw('JSON_EXTRACT(metadata, "$.field_changes.\"'.$field.'\"") IS NOT NULL')
             ->count()
