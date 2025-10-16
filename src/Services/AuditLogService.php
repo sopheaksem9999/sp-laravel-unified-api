@@ -504,14 +504,45 @@ class AuditLogService
     }
 
     /**
+     * Get database-specific JSON extract query.
+     */
+    private static function getJsonExtractQuery(string $column, string $path): string
+    {
+        $driver = DB::getDriverName();
+        
+        switch ($driver) {
+            case 'sqlite':
+                // SQLite uses json_extract with $ prefix
+                return "json_extract({$column}, '$.{$path}')";
+            case 'mysql':
+            case 'mariadb':
+                // MySQL/MariaDB uses JSON_EXTRACT with $ prefix
+                return "JSON_EXTRACT({$column}, '$.{$path}')";
+            case 'pgsql':
+                // PostgreSQL uses ->> operator for JSON
+                $pathParts = explode('.', $path);
+                $query = $column;
+                foreach ($pathParts as $part) {
+                    $query .= "->'{$part}'";
+                }
+                return $query;
+            default:
+                // Fallback to MySQL syntax
+                return "JSON_EXTRACT({$column}, '$.{$path}')";
+        }
+    }
+
+    /**
      * Get field timeline for a specific entity and field.
      */
     public static function getFieldTimeline(string $entityType, mixed $entityId, string $field, int $limit = 10): array
     {
         $auditLogModel = config('audit.audit_log_model', 'App\Models\AuditLog');
+        $jsonQuery = static::getJsonExtractQuery('metadata', "field_changes.{$field}");
+        
         $logs = $auditLogModel::where('entity_type', $entityType)
             ->where('entity_id', $entityId)
-            ->whereRaw("JSON_EXTRACT(metadata, '$.field_changes.{$field}') IS NOT NULL")
+            ->whereRaw("{$jsonQuery} IS NOT NULL")
             ->orderBy('created_at', 'desc')
             ->limit($limit)
             ->get()
@@ -540,9 +571,11 @@ class AuditLogService
     public static function getFieldStats(string $entityType, mixed $entityId, string $field): array
     {
         $auditLogModel = config('audit.audit_log_model', 'App\Models\AuditLog');
+        $jsonQuery = static::getJsonExtractQuery('metadata', "field_changes.{$field}");
+        
         $logs = $auditLogModel::where('entity_type', $entityType)
             ->where('entity_id', $entityId)
-            ->whereRaw("JSON_EXTRACT(metadata, '$.field_changes.{$field}') IS NOT NULL")
+            ->whereRaw("{$jsonQuery} IS NOT NULL")
             ->get()
         ;
 
@@ -658,16 +691,18 @@ class AuditLogService
         }
 
         $auditLogModel = config('audit.audit_log_model', 'App\Models\AuditLog');
+        $jsonQuery = static::getJsonExtractQuery('metadata', "field_changes.{$field}");
+        
         $previousLog = $auditLogModel::where('entity_type', $entityType)
             ->where('entity_id', $entityId)
-            ->whereRaw('JSON_EXTRACT(metadata, "$.field_changes.\"'.$field.'\"") IS NOT NULL')
+            ->whereRaw("{$jsonQuery} IS NOT NULL")
             ->orderBy('created_at', 'desc')
             ->first()
         ;
 
         $totalChanges = $auditLogModel::where('entity_type', $entityType)
             ->where('entity_id', $entityId)
-            ->whereRaw('JSON_EXTRACT(metadata, "$.field_changes.\"'.$field.'\"") IS NOT NULL')
+            ->whereRaw("{$jsonQuery} IS NOT NULL")
             ->count()
         ;
 

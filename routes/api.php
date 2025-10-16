@@ -18,6 +18,57 @@ use Sopheak\Core\Http\Controllers\AuditController;
 |
 */
 
+/*
+|--------------------------------------------------------------------------
+| Public API Routes (Authorization handled by RecordController)
+|--------------------------------------------------------------------------
+*/
+Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.id'])->group(function () {
+    
+    /*
+    |--------------------------------------------------------------------------
+    | Table-specific RPC Functions
+    |--------------------------------------------------------------------------
+    */
+    Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/rpc/{functionName}', [RecordController::class, 'executeTableFunction'])
+        ->where(['table' => '[a-zA-Z_][a-zA-Z0-9_]*', 'functionName' => '[a-zA-Z_][a-zA-Z0-9_]*'])
+        ->middleware('throttle:api-functions');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Standard CRUD Operations
+    |--------------------------------------------------------------------------
+    */
+    Route::get('{table}', [RecordController::class, 'index'])->middleware('throttle:api-reads');
+    Route::get('{table}/{id}', [RecordController::class, 'show'])->middleware('throttle:api-reads');
+    Route::post('{table}', [RecordController::class, 'store'])->middleware('throttle:api-writes');
+    Route::match(['put', 'patch'], '{table}/{id}', [RecordController::class, 'update'])->middleware('throttle:api-writes');
+    Route::delete('{table}/{id}', [RecordController::class, 'destroy'])->middleware('throttle:api-writes');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Advanced CRUD Operations
+    |--------------------------------------------------------------------------
+    */
+    Route::post('{table}/{id}/restore', [RecordController::class, 'restore'])->middleware('throttle:api-writes');
+    Route::delete('{table}/{id}/force', [RecordController::class, 'forceDelete'])->middleware('throttle:api-writes');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Bulk Operations
+    |--------------------------------------------------------------------------
+    */
+    Route::post('{table}/bulk', [RecordController::class, 'bulk'])->middleware('throttle:api-writes');
+    Route::post('{table}/bulk/create', [RecordController::class, 'bulkCreate'])->middleware('throttle:api-writes');
+    Route::post('{table}/bulk/update', [RecordController::class, 'bulkUpdate'])->middleware('throttle:api-writes');
+    Route::post('{table}/bulk/delete', [RecordController::class, 'bulkDelete'])->middleware('throttle:api-writes');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Authenticated API Routes (Always require authentication)
+|--------------------------------------------------------------------------
+*/
 Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'auth:api', 'request.id'])->group(function () {
     
     /*
@@ -57,42 +108,4 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'auth:api'
     Route::match(['get', 'post', 'put', 'patch', 'delete'], '{functionName}', [RecordController::class, 'executeGlobalFunction'])
         ->where('functionName', '[a-zA-Z_][a-zA-Z0-9_]*')
         ->middleware('throttle:api-functions');
-
-    /*
-    |--------------------------------------------------------------------------
-    | Table-specific RPC Functions
-    |--------------------------------------------------------------------------
-    */
-    Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/rpc/{functionName}', [RecordController::class, 'executeTableFunction'])
-        ->where(['table' => '[a-zA-Z_][a-zA-Z0-9_]*', 'functionName' => '[a-zA-Z_][a-zA-Z0-9_]*'])
-        ->middleware('throttle:api-functions');
-
-    /*
-    |--------------------------------------------------------------------------
-    | Standard CRUD Operations
-    |--------------------------------------------------------------------------
-    */
-    Route::get('{table}', [RecordController::class, 'index'])->middleware('throttle:api-reads');
-    Route::get('{table}/{id}', [RecordController::class, 'show'])->middleware('throttle:api-reads');
-    Route::post('{table}', [RecordController::class, 'store'])->middleware('throttle:api-writes');
-    Route::match(['put', 'patch'], '{table}/{id}', [RecordController::class, 'update'])->middleware('throttle:api-writes');
-    Route::delete('{table}/{id}', [RecordController::class, 'destroy'])->middleware('throttle:api-writes');
-
-    /*
-    |--------------------------------------------------------------------------
-    | Advanced CRUD Operations
-    |--------------------------------------------------------------------------
-    */
-    Route::post('{table}/{id}/restore', [RecordController::class, 'restore'])->middleware('throttle:api-writes');
-    Route::delete('{table}/{id}/force', [RecordController::class, 'forceDelete'])->middleware('throttle:api-writes');
-
-    /*
-    |--------------------------------------------------------------------------
-    | Bulk Operations
-    |--------------------------------------------------------------------------
-    */
-    Route::post('{table}/bulk', [RecordController::class, 'bulk'])->middleware('throttle:api-writes');
-    Route::post('{table}/bulk/create', [RecordController::class, 'bulkCreate'])->middleware('throttle:api-writes');
-    Route::post('{table}/bulk/update', [RecordController::class, 'bulkUpdate'])->middleware('throttle:api-writes');
-    Route::post('{table}/bulk/delete', [RecordController::class, 'bulkDelete'])->middleware('throttle:api-writes');
 });

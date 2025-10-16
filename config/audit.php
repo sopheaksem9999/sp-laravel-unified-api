@@ -25,6 +25,17 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Audit Log Model
+    |--------------------------------------------------------------------------
+    |
+    | This option specifies which model should be used for audit logs.
+    | By default, it uses the package's AuditLog model.
+    |
+    */
+    'audit_log_model' => env('AUDIT_LOG_MODEL', 'Sopheak\\Core\\Models\\AuditLog'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Queue Configuration
     |--------------------------------------------------------------------------
     |

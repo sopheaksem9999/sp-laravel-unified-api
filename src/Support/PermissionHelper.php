@@ -16,7 +16,6 @@ class PermissionHelper
             return false;
         }
 
-        // $public = $tables[$table]['public'] ?? false;
         $public = $tables[$table]->public ?? false;
 
         // Entire resource public
@@ -24,18 +23,9 @@ class PermissionHelper
             return true;
         }
 
-        if (!is_array($public)) {
+        // If public is not a RecordTablePublic object, deny access
+        if (!is_object($public) || !property_exists($public, 'read') || !property_exists($public, 'write')) {
             return false;
-        }
-
-        // Wildcard support: '*'=>true
-        if ((bool) ($public['*'] ?? false)) {
-            return true;
-        }
-
-        // Explicit per-action
-        if (array_key_exists($action, $public)) {
-            return (bool) $public[$action];
         }
 
         // Grouped semantics: 'read' and 'write'

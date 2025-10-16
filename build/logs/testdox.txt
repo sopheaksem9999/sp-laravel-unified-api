@@ -1,0 +1,5 @@
+Basic (Sopheak\Core\Tests\Unit\Basic)
+ [x] It can run basic test
+ [x] It has laravel application
+ [x] It can access config
+

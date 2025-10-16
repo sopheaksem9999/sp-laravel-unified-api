@@ -144,17 +144,35 @@ class SchemaRegistry
         }
 
         try {
-            $columns = DB::select("DESCRIBE `{$tableName}`");
+            $driver = DB::getDriverName();
             $columnInfo = [];
 
-            foreach ($columns as $column) {
-                $columnInfo[$column->Field] = [
-                    'type' => $column->Type,
-                    'nullable' => 'YES' === $column->Null,
-                    'key' => $column->Key,
-                    'default' => $column->Default,
-                    'extra' => $column->Extra,
-                ];
+            if ($driver === 'sqlite') {
+                // SQLite syntax
+                $columns = DB::select("PRAGMA table_info({$tableName})");
+                
+                foreach ($columns as $column) {
+                    $columnInfo[$column->name] = [
+                        'type' => $column->type,
+                        'nullable' => $column->notnull == 0,
+                        'key' => $column->pk == 1 ? 'PRI' : '',
+                        'default' => $column->dflt_value,
+                        'extra' => '',
+                    ];
+                }
+            } else {
+                // MySQL syntax (default)
+                $columns = DB::select("DESCRIBE `{$tableName}`");
+                
+                foreach ($columns as $column) {
+                    $columnInfo[$column->Field] = [
+                        'type' => $column->Type,
+                        'nullable' => 'YES' === $column->Null,
+                        'key' => $column->Key,
+                        'default' => $column->Default,
+                        'extra' => $column->Extra,
+                    ];
+                }
             }
 
             // Cache the result

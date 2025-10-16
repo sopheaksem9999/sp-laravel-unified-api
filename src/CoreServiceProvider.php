@@ -7,6 +7,7 @@ use Illuminate\Routing\Router;
 use Sopheak\Core\Http\Middleware\RequestId;
 use Sopheak\Core\Console\GenerateOpenApiSpec;
 use Sopheak\Core\Console\SetupPackage;
+use Sopheak\Core\Console\ValidateSetup;
 use Sopheak\Core\Console\Records\ClearRecordCache;
 use Sopheak\Core\Console\Records\GetRecordCache;
 use Sopheak\Core\Console\Records\RecordRefreshCache;
@@ -40,6 +41,14 @@ class CoreServiceProvider extends ServiceProvider
             __DIR__ . '/../config/cursor_pagination.php' => config_path('cursor_pagination.php'),
         ], 'sp-laravel-api-config');
 
+        $this->publishes([
+            __DIR__ . '/../database/migrations/' => database_path('migrations'),
+        ], 'sp-laravel-api-migrations');
+
+        $this->publishes([
+            __DIR__ . '/Models/AuditLogPublishable.php' => app_path('Models/AuditLog.php'),
+        ], 'sp-laravel-api-models');
+
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'sp-laravel-api');
         
         // Load package routes
@@ -49,6 +58,7 @@ class CoreServiceProvider extends ServiceProvider
             $this->commands([
                 GenerateOpenApiSpec::class,
                 SetupPackage::class,
+                ValidateSetup::class,
                 ClearRecordCache::class,
                 GetRecordCache::class,
                 RecordRefreshCache::class,

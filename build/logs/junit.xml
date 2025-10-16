@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="Sopheak\Core\Tests\Unit\BasicTest" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/sp-laravel-api/tests/Unit/BasicTest.php" tests="3" assertions="3" errors="0" failures="0" skipped="0" time="0.271299">
+    <testcase name="it_has_laravel_application" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/sp-laravel-api/tests/Unit/BasicTest.php" line="16" class="Sopheak\Core\Tests\Unit\BasicTest" classname="Sopheak.Core.Tests.Unit.BasicTest" assertions="1" time="0.198270"/>
+    <testcase name="it_can_access_config" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/sp-laravel-api/tests/Unit/BasicTest.php" line="22" class="Sopheak\Core\Tests\Unit\BasicTest" classname="Sopheak.Core.Tests.Unit.BasicTest" assertions="1" time="0.037414"/>
+    <testcase name="it_can_run_basic_test" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/sp-laravel-api/tests/Unit/BasicTest.php" line="10" class="Sopheak\Core\Tests\Unit\BasicTest" classname="Sopheak.Core.Tests.Unit.BasicTest" assertions="1" time="0.035616"/>
+  </testsuite>
+</testsuites>

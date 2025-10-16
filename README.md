@@ -1,34 +1,53 @@
-# App Core (Laravel Package)
+# SP Laravel API - Dynamic ERP SaaS Package
 
-Core utilities for Laravel apps: standardized API responses, request ID middleware, and simple CLI helpers. Designed to drop into any Laravel app via path-based Composer install.
+A comprehensive Laravel package that provides standardized API responses, dynamic API controllers, query helpers, audit logging, permission system, JWT authentication, and OpenAPI specification generation for ERP SaaS applications.
 
-## Features
-- **Standardized API Responses**: Consistent JSON response format across your application
-- **Request ID Middleware**: Automatic request tracking for debugging and monitoring
-- **Dynamic API Controller**: Full CRUD operations for any database table with advanced filtering
-- **QueryHelpers Trait**: Powerful trait for advanced query filtering and manipulation
-- **Audit Logging**: Comprehensive audit trail for all data changes
-- **Audit Interface**: Custom audit queries with `AuditQueryInterface` and `HasAuditQuery` trait
-- **AuditLogJob**: Queue-based audit logging for improved performance
-- **Audit Log Cleanup**: CLI command for cleaning old audit logs based on retention policy
-- **Query Caching**: Intelligent caching system for improved performance
-- **Permission System**: Built-in Spatie Laravel Permission for role-based access control
-- **JWT Authentication**: Integrated JWT authentication support
-- **OpenAPI Spec Generation**: CLI command to generate API documentation
-- **Configuration Publishing**: Easy setup with sensible defaults
+## 🚀 Quick Start
 
-## Installation & Setup
+```bash
+# 1. Install the package
+composer require sopheak/sp-laravel-api
 
-### Requirements
-- PHP 8.2 or higher
-- Laravel 12.x
-- MySQL 8.0+ or PostgreSQL 13+
+# 2. Publish configuration files
+php artisan sp-laravel-api:setup
 
-### Included Dependencies
+# 3. Run migrations
+php artisan migrate
+
+# 4. Test the installation
+curl -X GET http://your-app.test/api/test
+```
+
+## ✨ Features
+
+- **🔄 Dynamic API Controller**: Full CRUD operations for any database table with advanced filtering
+- **📊 Standardized API Responses**: Consistent JSON response format across your application
+- **🔍 QueryHelpers Trait**: Powerful trait for advanced query filtering and manipulation
+- **📝 Audit Logging**: Comprehensive audit trail for all data changes with queue-based processing
+- **🔐 Permission System**: Built-in Spatie Laravel Permission for role-based access control
+- **🔑 JWT Authentication**: Integrated JWT authentication support
+- **📚 OpenAPI Spec Generation**: CLI command to generate API documentation
+- **🎯 Request ID Middleware**: Automatic request tracking for debugging and monitoring
+- **⚡ Performance Optimized**: Query caching, lazy loading, and cursor pagination
+- **🧹 Audit Log Cleanup**: CLI command for cleaning old audit logs based on retention policy
+- **🏢 Multi-Tenant Ready**: Built-in support for tenant isolation
+- **🔧 Configuration Publishing**: Easy setup with sensible defaults
+
+## 📋 Requirements
+
+- **PHP**: 8.2 or higher
+- **Laravel**: 12.x
+- **Database**: MySQL 8.0+, PostgreSQL 13+, or SQLite 3.8+
+- **Extensions**: BCMath, Ctype, JSON, Mbstring, OpenSSL, PDO, Tokenizer, XML
+
+## 📦 Included Dependencies
+
 The package automatically installs these dependencies:
 - **Spatie Laravel Permission** (^6.21) - Role and permission management
 - **JWT Auth** (^2.8.2) - JSON Web Token authentication
 - **Carbon** (^3.0) - Date manipulation library
+
+## 📥 Installation & Setup
 
 ### Step 1: Install the Package
 
@@ -94,48 +113,167 @@ CURSOR_PAGINATION_MAX_PER_PAGE=100
 JWT_SECRET=your-jwt-secret-key
 JWT_TTL=60
 JWT_REFRESH_TTL=20160
+
+# Cache Configuration (recommended for performance)
+CACHE_DRIVER=redis
+
+# Queue Configuration (recommended)
+QUEUE_CONNECTION=redis
 ```
 
-### Step 4: Database Setup
+### Step 4: Run Setup Command
 
-#### Run Migrations
-The package includes migrations for audit logging. Run them with:
+Use the automated setup command to configure the package:
+
 ```bash
-php artisan migrate
+# Run the setup command
+php artisan sp-laravel-api:setup
+
+# This will:
+# - Publish configuration files
+# - Run migrations
+# - Set up basic permissions
+# - Configure JWT (if selected)
+# - Create sample configuration
 ```
 
-#### Configure Database Tables (Optional)
-Edit `config/record.php` to configure your database tables for the dynamic API:
+### Step 5: Validate Installation
+
+Verify your installation is working correctly:
+
+```bash
+# Validate the complete setup
+php artisan sp-laravel-api:validate
+
+# Run with verbose output for detailed information
+php artisan sp-laravel-api:validate --verbose
+
+# Auto-fix common issues
+php artisan sp-laravel-api:validate --fix
+```
+
+### Step 6: Configure Database Tables
+
+Edit `config/record.php` to configure your database tables for the dynamic API. See the [examples directory](examples/config/record.php) for a complete configuration example:
 
 ```php
+use Sopheak\Core\Types\RecordTableType;
+use Sopheak\Core\Types\RecordSpatiePermissionType;
+use Sopheak\Core\Types\RecordHasManyType;
+use Sopheak\Core\Types\RecordBelongsToType;
+
 return [
     'api_prefix' => env('RECORD_API_PREFIX', 'api'),
     'tables' => [
-        'users' => [
-            'model' => App\Models\User::class,
-            'permissions' => [
-                'view' => 'view_users',
-                'create' => 'create_users',
-                'update' => 'update_users',
-                'delete' => 'delete_users',
+        'users' => new RecordTableType(
+            model: \App\Models\User::class,
+            permissions: new RecordSpatiePermissionType(
+                view: 'view_users',
+                create: 'create_users',
+                update: 'update_users',
+                delete: 'delete_users'
+            ),
+            relationships: [
+                'posts' => new RecordHasManyType(
+                    model: \App\Models\Post::class,
+                    foreign_key: 'user_id',
+                    local_key: 'id'
+                ),
             ],
-            'relationships' => [
-                'posts' => [
-                    'type' => 'hasMany',
-                    'model' => App\Models\Post::class,
-                ],
-            ],
-        ],
-        // Add more tables as needed
+            soft_deletes: false,
+            has_tenant_id: false
+        ),
     ],
 ];
 ```
 
-### Step 5: Authentication Setup
+### Step 7: Test Your Installation
+
+Test the dynamic API endpoints:
+
+```bash
+# Test basic API functionality
+curl -X GET http://your-app.test/api/users
+
+# Test with authentication (if configured)
+curl -X GET http://your-app.test/api/users \
+  -H "Authorization: Bearer your-jwt-token"
+
+# Test creating a record
+curl -X POST http://your-app.test/api/users \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Test User","email":"test@example.com"}'
+```
+
+## 🗄️ Database-Specific Instructions
+
+### MySQL Configuration
+
+```env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=your_database
+DB_USERNAME=your_username
+DB_PASSWORD=your_password
+```
+
+**Recommended MySQL Settings:**
+```sql
+-- For better performance with large datasets
+SET GLOBAL innodb_buffer_pool_size = 1G;
+SET GLOBAL query_cache_size = 256M;
+SET GLOBAL max_connections = 200;
+```
+
+### PostgreSQL Configuration
+
+```env
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=your_database
+DB_USERNAME=your_username
+DB_PASSWORD=your_password
+```
+
+### SQLite Configuration
+
+```env
+DB_CONNECTION=sqlite
+DB_DATABASE=/absolute/path/to/database.sqlite
+```
+
+**Note:** SQLite is suitable for development but not recommended for production use with this package.
+
+## 🔧 Configuration Guide
+
+### Core Configuration (`config/record.php`)
+
+```php
+return [
+    // API route prefix
+    'api_prefix' => env('RECORD_API_PREFIX', 'api'),
+    
+    // Global settings
+    'max_depth' => env('RECORD_MAX_DEPTH', 3),
+    'cache_ttl' => env('RECORD_CACHE_TTL', 3600),
+    'lazy_cache_ttl' => env('RECORD_LAZY_CACHE_TTL', 300),
+    'enable_tenant_id' => env('RECORD_ENABLE_TENANT_ID', false),
+    
+    // Table configurations
+    'tables' => [
+        // Your table configurations here
+    ],
+];
+```
+
+### Authentication Setup
 
 #### Option A: JWT Authentication
-If using JWT, install the JWT package:
+
 ```bash
+# Install JWT package
 composer require tymon/jwt-auth
 php artisan vendor:publish --provider="Tymon\JWTAuth\Providers\LaravelServiceProvider"
 php artisan jwt:secret
@@ -160,14 +298,14 @@ class User extends Authenticatable implements JWTSubject
 ```
 
 #### Option B: Laravel Sanctum
-If using Sanctum:
+
 ```bash
 composer require laravel/sanctum
 php artisan vendor:publish --provider="Laravel\Sanctum\SanctumServiceProvider"
 php artisan migrate
 ```
 
-### Step 6: Middleware Configuration
+### Middleware Configuration
 
 Add the request ID middleware to your API routes in `app/Http/Kernel.php`:
 
@@ -257,9 +395,390 @@ class User extends Authenticatable
 }
 ```
 
-### Step 9: Test the Installation
+## 🧪 Testing Instructions
 
-Create a test route to verify everything is working:
+### Running Package Tests
+
+```bash
+# Run all tests
+vendor/bin/phpunit
+
+# Run specific test suites
+vendor/bin/phpunit tests/Feature/DynamicApiTest.php
+vendor/bin/phpunit tests/Unit/SchemaRegistryTest.php
+
+# Run tests with coverage
+vendor/bin/phpunit --coverage-html coverage
+```
+
+### Manual Testing
+
+Create test data and verify API functionality:
+
+```bash
+# Create test user
+php artisan tinker
+>>> $user = \App\Models\User::create(['name' => 'Test User', 'email' => 'test@example.com', 'password' => bcrypt('password')]);
+
+# Test API endpoints
+curl -X GET http://your-app.test/api/users
+curl -X GET http://your-app.test/api/users/1
+curl -X POST http://your-app.test/api/users -H "Content-Type: application/json" -d '{"name":"New User","email":"new@example.com"}'
+```
+
+## 🔍 Troubleshooting
+
+### Common Issues and Solutions
+
+#### 1. "Class 'Sopheak\Core\CoreServiceProvider' not found"
+
+**Solution:**
+```bash
+# Clear composer autoload cache
+composer dump-autoload
+
+# Ensure package is properly installed
+composer require sopheak/sp-laravel-api
+
+# Clear Laravel caches
+php artisan config:clear
+php artisan cache:clear
+```
+
+#### 2. "Configuration file not found"
+
+**Solution:**
+```bash
+# Publish configuration files
+php artisan vendor:publish --provider="Sopheak\Core\CoreServiceProvider"
+
+# Or publish specific configs
+php artisan vendor:publish --tag=sp-laravel-api-config
+```
+
+#### 3. "Database connection issues"
+
+**Solution:**
+```bash
+# Test database connection
+php artisan sp-laravel-api:validate --verbose
+
+# Check database configuration
+php artisan config:show database.connections.mysql
+
+# Verify migrations
+php artisan migrate:status
+```
+
+#### 4. "Permission denied errors"
+
+**Solution:**
+```bash
+# Ensure permissions are created
+php artisan permission:create-permission view_users
+php artisan permission:create-permission create_users
+
+# Assign permissions to user
+php artisan tinker
+>>> $user = \App\Models\User::find(1);
+>>> $user->givePermissionTo('view_users');
+```
+
+#### 5. "JWT token issues"
+
+**Solution:**
+```bash
+# Regenerate JWT secret
+php artisan jwt:secret --force
+
+# Clear config cache
+php artisan config:clear
+
+# Verify JWT configuration
+php artisan config:show jwt
+```
+
+#### 6. "API routes not working"
+
+**Solution:**
+```bash
+# Check route registration
+php artisan route:list | grep api
+
+# Verify middleware configuration
+php artisan route:list --middleware=api
+
+# Clear route cache
+php artisan route:clear
+```
+
+#### 7. "Cache-related issues"
+
+**Solution:**
+```bash
+# Clear all caches
+php artisan sp-laravel-api:clear-cache
+
+# Clear specific table cache
+php artisan sp-laravel-api:clear-cache users
+
+# Verify cache configuration
+php artisan config:show cache
+```
+
+### Debug Mode
+
+Enable debug mode for detailed error information:
+
+```env
+APP_DEBUG=true
+LOG_LEVEL=debug
+```
+
+### Validation Command
+
+Use the validation command to diagnose issues:
+
+```bash
+# Run comprehensive validation
+php artisan sp-laravel-api:validate --verbose --fix
+
+# Check specific components
+php artisan sp-laravel-api:validate --check=database
+php artisan sp-laravel-api:validate --check=permissions
+php artisan sp-laravel-api:validate --check=config
+```
+
+## ⚙️ Advanced Configuration
+
+### Performance Optimization
+
+#### 1. Database Optimization
+
+```php
+// config/record.php
+return [
+    'cache_ttl' => 7200, // 2 hours
+    'lazy_cache_ttl' => 600, // 10 minutes
+    'max_depth' => 2, // Limit relationship depth
+    'enable_query_cache' => true,
+];
+```
+
+#### 2. Redis Configuration
+
+```env
+REDIS_HOST=127.0.0.1
+REDIS_PASSWORD=null
+REDIS_PORT=6379
+CACHE_DRIVER=redis
+SESSION_DRIVER=redis
+QUEUE_CONNECTION=redis
+```
+
+#### 3. Queue Optimization
+
+```bash
+# Use multiple queue workers
+php artisan queue:work --queue=high,default --tries=3 --timeout=60
+
+# Use Supervisor for production
+sudo apt-get install supervisor
+```
+
+### Security Configuration
+
+#### 1. API Rate Limiting
+
+```php
+// config/record.php
+return [
+    'rate_limiting' => [
+        'enabled' => true,
+        'max_attempts' => 60,
+        'decay_minutes' => 1,
+    ],
+];
+```
+
+#### 2. CORS Configuration
+
+```bash
+composer require fruitcake/laravel-cors
+php artisan vendor:publish --tag="cors"
+```
+
+#### 3. API Versioning
+
+```php
+// config/record.php
+return [
+    'api_prefix' => 'api/v1',
+    'versioning' => [
+        'enabled' => true,
+        'header' => 'Accept-Version',
+        'default' => 'v1',
+    ],
+];
+```
+
+### Multi-tenancy Setup
+
+```php
+// config/record.php
+return [
+    'enable_tenant_id' => true,
+    'tenant_column' => 'tenant_id',
+    'tenant_resolver' => \App\Services\TenantResolver::class,
+];
+```
+
+### Custom Middleware
+
+```php
+// Register custom middleware
+protected $middlewareGroups = [
+    'api' => [
+        \App\Http\Middleware\TenantMiddleware::class,
+        \Sopheak\Core\Http\Middleware\RequestId::class,
+        \App\Http\Middleware\ApiVersioning::class,
+    ],
+];
+```
+
+## 🚀 Development Setup
+
+### Setting up for Package Development
+
+```bash
+# Clone the repository
+git clone https://github.com/your-username/sp-laravel-api.git
+cd sp-laravel-api
+
+# Install dependencies
+composer install
+
+# Set up testing environment
+cp .env.example .env.testing
+php artisan key:generate --env=testing
+
+# Run tests
+vendor/bin/phpunit
+```
+
+### Code Quality Tools
+
+```bash
+# Install development tools
+composer require --dev phpstan/phpstan
+composer require --dev friendsofphp/php-cs-fixer
+composer require --dev phpunit/phpunit
+
+# Run code analysis
+vendor/bin/phpstan analyse src
+
+# Fix code style
+vendor/bin/php-cs-fixer fix src
+```
+
+### Contributing Guidelines
+
+1. Fork the repository
+2. Create a feature branch
+3. Write tests for new functionality
+4. Ensure all tests pass
+5. Submit a pull request
+
+## 📚 Migration Guide
+
+### From Version 1.x to 2.x
+
+```bash
+# Update composer.json
+"sopheak/sp-laravel-api": "^2.0"
+
+# Update dependencies
+composer update
+
+# Republish configurations
+php artisan vendor:publish --provider="Sopheak\Core\CoreServiceProvider" --force
+
+# Run new migrations
+php artisan migrate
+
+# Update configuration format
+# See examples/config/record.php for new format
+```
+
+### Breaking Changes in 2.x
+
+- Configuration format changed to use Type classes
+- New permission system integration
+- Updated middleware registration
+- Enhanced caching mechanisms
+
+## 🎯 Performance Optimization
+
+### Database Optimization
+
+```sql
+-- Add indexes for better performance
+CREATE INDEX idx_audit_logs_auditable ON audit_logs(auditable_type, auditable_id);
+CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at);
+CREATE INDEX idx_users_email ON users(email);
+```
+
+### Caching Strategy
+
+```php
+// config/record.php
+return [
+    'caching' => [
+        'schema_cache_ttl' => 86400, // 24 hours
+        'query_cache_ttl' => 3600,   // 1 hour
+        'relationship_cache_ttl' => 1800, // 30 minutes
+    ],
+];
+```
+
+### Queue Configuration
+
+```bash
+# Use Redis for better performance
+QUEUE_CONNECTION=redis
+
+# Configure queue workers
+php artisan queue:work --queue=high,default --sleep=3 --tries=3 --max-time=3600
+```
+
+## 📖 Additional Resources
+
+### Package Documentation
+
+- [API Reference](docs/api-reference.md)
+- [Configuration Guide](docs/configuration.md)
+- [Security Best Practices](docs/security.md)
+- [Performance Tuning](docs/performance.md)
+- [Troubleshooting Guide](docs/troubleshooting.md)
+
+### Core Classes Reference
+
+- **ApiResponseService**: Standardized API responses
+- **AuditLogService**: Audit logging functionality
+- **SchemaRegistry**: Database schema management
+- **QueryHelpers**: Advanced query building
+- **CursorPagination**: Efficient pagination
+- **RequestId**: Request tracking middleware
+
+### Community and Support
+
+- [GitHub Issues](https://github.com/your-username/sp-laravel-api/issues)
+- [Discussions](https://github.com/your-username/sp-laravel-api/discussions)
+- [Documentation](https://sp-laravel-api.readthedocs.io)
+
+## 📄 License
+
+This package is open-sourced software licensed under the [MIT license](LICENSE.md).
 
 ```php
 // routes/api.php
