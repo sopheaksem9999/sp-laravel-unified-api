@@ -62,8 +62,8 @@ Add this to your project's `composer.json`:
 {
     "repositories": [
         {
-            "type": "path",
-            "url": "../sp-laravel-api"
+            "type": "vcs",
+            "url": "https://github.com/sopheaksem9999/sp-laravel-api.git"
         }
     ],
     "require": {
