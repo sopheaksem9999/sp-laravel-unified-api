@@ -14,9 +14,4 @@ use Illuminate\Support\Facades\Route;
 */
 
 // Custom Scalar documentation route using our custom template
-Route::get('/api-docs', fn(): \Illuminate\Contracts\View\View|\Illuminate\Contracts\View\Factory =>
-    // Check authorization (same as Scalar package)
-    // if (!Gate::allows('viewScalar')) {
-    //     abort(403);
-    // }
-    view('scalar'))->middleware(['web']);
+Route::get('/api-docs', fn(): \Illuminate\Contracts\View\View|\Illuminate\Contracts\View\Factory => view('sp-laravel-api::scalar'))->middleware(['web']);
