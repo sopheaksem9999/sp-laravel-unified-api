@@ -956,6 +956,37 @@ Route::middleware('request.id')->group(function () {
 php artisan sp-laravel-api:openapi
 ```
 
+Generates a comprehensive OpenAPI 3.0 specification for your API with the following features:
+
+**Enhanced Schema Generation:**
+- **Full Schema**: Complete model schema with all properties
+- **Read Schema**: Optimized for GET responses (includes computed fields, relationships)
+- **Write Schema**: Optimized for POST/PUT requests (excludes read-only fields)
+
+**Automatic Documentation:**
+- Dynamic CRUD endpoints for all configured tables
+- RPC function endpoints (global and table-specific)
+- Comprehensive parameter documentation (pagination, filtering, sorting)
+- Detailed response schemas with examples
+- Security schemes (Bearer token authentication)
+
+**Smart Table Detection:**
+- Automatically discovers database tables
+- Generates appropriate tags and descriptions
+- Includes relationship documentation
+- Supports custom table configurations
+
+**Output Options:**
+- Default: `storage/api-v2.json`
+- Configurable via `config('sp-laravel-api.openapi.output')`
+- Compatible with Swagger UI, Postman, and other OpenAPI tools
+
+**Example Generated Features:**
+- RESTful endpoints: `GET /api/{table}`, `POST /api/{table}`, etc.
+- RPC endpoints: `POST /api/{functionName}`, `POST /api/{table}/rpc/{functionName}`
+- Advanced filtering and pagination parameters
+- Comprehensive error response documentation
+
 ### Setup Package
 ```bash
 php artisan sp-laravel-api:setup
@@ -1021,11 +1052,53 @@ The package automatically registers RESTful API routes for dynamic database oper
 - `POST /{prefix}/{functionName}` - Execute global functions
 - `POST /{prefix}/{table}/rpc/{functionName}` - Execute table-specific functions
 
-## Config
-- Publish config: `php artisan vendor:publish --tag=sp-laravel-api-config`
-- File: `config/sp-laravel-api.php`
-  - `response.include_request_id` enables `meta.request_id` injection.
-  - `openapi.output` sets default output filename.
+## Configuration
+
+### Publishing Configuration Files
+```bash
+# Publish main package configuration
+php artisan vendor:publish --tag=sp-laravel-api-config
+
+# Publish all configurations (record, audit, jwt)
+php artisan sp-laravel-api:setup
+```
+
+### Main Configuration (`config/sp-laravel-api.php`)
+```php
+return [
+    'response' => [
+        'include_request_id' => env('SP_LARAVEL_API_INCLUDE_REQUEST_ID', true),
+    ],
+    'openapi' => [
+        'output' => env('SP_LARAVEL_API_OPENAPI_OUTPUT', 'storage/api-v2.json'),
+        'info' => [
+            'title' => env('APP_NAME', 'Laravel API'),
+            'version' => '2.0.0',
+            'description' => 'Comprehensive API documentation with dynamic CRUD operations...',
+        ],
+        'servers' => [
+            [
+                'url' => env('APP_URL', 'http://localhost'),
+                'description' => 'Development server',
+            ],
+        ],
+    ],
+];
+```
+
+### Record Configuration (`config/record.php`)
+Controls database table operations and OpenAPI generation:
+```php
+return [
+    'enable_tenant_id' => env('RECORD_ENABLE_TENANT_ID', false),
+    'api_prefix' => env('RECORD_API_PREFIX', 'api'),
+    'global_functions' => [
+        // Define custom RPC functions here
+        // 'functionName' => YourFunctionClass::class,
+    ],
+    // Table-specific configurations...
+];
+```
 
 ## Example Controller
 ```php
