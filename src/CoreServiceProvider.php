@@ -53,6 +53,7 @@ class CoreServiceProvider extends ServiceProvider
         
         // Load package routes
         $this->loadRoutesFrom(__DIR__ . '/../routes/api.php');
+        $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
 
         if ($this->app->runningInConsole()) {
             $this->commands([
