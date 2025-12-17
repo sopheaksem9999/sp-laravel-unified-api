@@ -79,7 +79,7 @@ class RecordTableType
         public ?string $table = null,
         public bool $soft_deletes = true,
         public bool $disable_auditLog = false,
-        public RecordTablePublic $public = new RecordTablePublic(),
+        public RecordTablePublic $recordTablePublic = new RecordTablePublic(),
         public ?array $relationships = [],
         public ?array $functions = [],
         public ?string $primary_key = 'id',

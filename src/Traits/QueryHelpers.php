@@ -73,7 +73,7 @@ trait QueryHelpers
 
                 return $query->where(function ($q) use ($columns, $keyword): void {
                     foreach ($columns as $column) {
-                        $q->orWhere($column, 'like', "%{$keyword}%");
+                        $q->orWhere($column, 'like', sprintf('%%%s%%', $keyword));
                     }
                 });
             })
@@ -99,7 +99,7 @@ trait QueryHelpers
                 foreach ($selectJoins as $table => $columns) {
                     if (is_array($columns)) {
                         foreach ($columns as $column) {
-                            $commonQuery = $commonQuery->addSelect("{$table}.{$column}");
+                            $commonQuery = $commonQuery->addSelect(sprintf('%s.%s', $table, $column));
                         }
                     }
                 }
@@ -114,7 +114,7 @@ trait QueryHelpers
             $joins = $this->castStringToArray($request->query('join'));
             foreach ($joins as $join) {
                 $join = trim((string) $join);
-                $commonQuery = $commonQuery->join($join, "{$join}.id", '=', "{$tableName}.{$join}_id");
+                $commonQuery = $commonQuery->join($join, $join . '.id', '=', sprintf('%s.%s_id', $tableName, $join));
             }
         }
 
@@ -133,7 +133,7 @@ trait QueryHelpers
                 foreach ($values as $value) {
                     if (preg_match('/^(is|eq|neq|like|gt|lt|gte|lte|in|contains|between|not_between)\.(.+)$/', (string) $value, $matches)) {
                         $operator = $matches[1];
-                        $queryValue = 'null' == $matches[2] ? null : $matches[2];
+                        $queryValue = 'null' === $matches[2] ? null : $matches[2];
                         $this->applyFilterOperator($commonQuery, $key, $operator, $queryValue, $tableName);
                     }
                     // Compare two fields: ?field1=compare.neq.field2
@@ -271,7 +271,7 @@ trait QueryHelpers
                 if ($isMultipleColumns) {
                     $builder->where(function ($q) use ($columns, $queryValue): void {
                         foreach ($columns as $column) {
-                            if (is_string($queryValue) && strpos($queryValue, ',')) {
+                            if (strpos($queryValue, ',')) {
                                 $values = explode(',', $queryValue);
                                 $q->orWhereIn($column, $values);
                             } else {
@@ -292,7 +292,7 @@ trait QueryHelpers
                 if ($isMultipleColumns) {
                     $builder->where(function ($q) use ($columns, $queryValue): void {
                         foreach ($columns as $column) {
-                            if (is_string($queryValue) && strpos($queryValue, ',')) {
+                            if (strpos($queryValue, ',')) {
                                 $values = explode(',', $queryValue);
                                 $q->orWhereNotIn($column, $values);
                             } else {
@@ -310,6 +310,7 @@ trait QueryHelpers
                 break;
 
             case 'like':
+            case 'contains':
                 if ($isMultipleColumns) {
                     $builder->where(function ($q) use ($columns, $queryValue): void {
                         foreach ($columns as $column) {
@@ -375,7 +376,7 @@ trait QueryHelpers
                 break;
 
             case 'between':
-                if (is_string($queryValue) && strpos($queryValue, ',')) {
+                if (strpos($queryValue, ',')) {
                     $values = explode(',', $queryValue, 2);
                     if (2 === count($values)) {
                         $startValue = trim($values[0]);
@@ -396,7 +397,7 @@ trait QueryHelpers
                 break;
 
             case 'not_between':
-                if (is_string($queryValue) && strpos($queryValue, ',')) {
+                if (strpos($queryValue, ',')) {
                     $values = explode(',', $queryValue, 2);
                     if (2 === count($values)) {
                         $startValue = trim($values[0]);
@@ -431,19 +432,6 @@ trait QueryHelpers
                 }
 
                 break;
-
-            case 'contains':
-                if ($isMultipleColumns) {
-                    $builder->where(function ($q) use ($columns, $queryValue): void {
-                        foreach ($columns as $column) {
-                            $q->orWhere($column, 'like', '%'.$queryValue.'%');
-                        }
-                    });
-                } else {
-                    $builder->where($key, 'like', '%'.$queryValue.'%');
-                }
-
-                break;
         }
     }
 
@@ -469,13 +457,7 @@ trait QueryHelpers
                 $relationName = trim($matches[1]);
                 $relationColumns = trim($matches[2]);
 
-                if ('*' === $relationColumns) {
-                    // Select all columns for this relationship
-                    $relationships[$relationName] = ['*'];
-                } else {
-                    // Parse specific columns
-                    $relationships[$relationName] = array_map('trim', explode(',', $relationColumns));
-                }
+                $relationships[$relationName] = '*' === $relationColumns ? ['*'] : array_map('trim', explode(',', $relationColumns));
 
                 // IMPORTANT: Skip adding to main columns - this is a relationship!
                 continue;
@@ -513,7 +495,6 @@ trait QueryHelpers
     {
         $relations = $this->castStringToArray($withParam);
         $withRelations = [];
-        $relationshipColumns = [];
 
         foreach ($relations as $relation) {
             $relation = trim((string) $relation);

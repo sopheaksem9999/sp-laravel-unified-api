@@ -2,6 +2,8 @@
 
 namespace Sopheak\Core\Http\Controllers;
 
+use Exception;
+use App\Models\AuditLog;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller;
@@ -18,18 +20,12 @@ use Illuminate\Support\Facades\Validator;
  */
 class AuditController extends Controller
 {
-    protected ApiResponseService $apiResponse;
-
-    public function __construct(ApiResponseService $apiResponse)
+    public function __construct(protected ApiResponseService $apiResponseService)
     {
-        $this->apiResponse = $apiResponse;
     }
 
     /**
      * Get audit logs for a specific entity.
-     * 
-     * @param Request $request
-     * @return JsonResponse
      */
     public function getLogs(Request $request): JsonResponse
     {
@@ -40,7 +36,7 @@ class AuditController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return $this->apiResponse->validationError($validator->errors()->toArray());
+            return $this->apiResponseService->validationError($validator->errors()->toArray());
         }
 
         try {
@@ -50,17 +46,14 @@ class AuditController extends Controller
 
             $logs = AuditLogService::getEntityAuditLogs($entityType, $entityId, $limit);
 
-            return $this->apiResponse->success($logs->toArray(), ['message' => 'Audit logs retrieved successfully']);
-        } catch (\Exception $e) {
-            return $this->apiResponse->serverError('Failed to retrieve audit logs: ' . $e->getMessage());
+            return $this->apiResponseService->success($logs->toArray(), ['message' => 'Audit logs retrieved successfully']);
+        } catch (Exception $exception) {
+            return $this->apiResponseService->serverError('Failed to retrieve audit logs: ' . $exception->getMessage());
         }
     }
 
     /**
      * Get audit statistics.
-     * 
-     * @param Request $request
-     * @return JsonResponse
      */
     public function getStats(Request $request): JsonResponse
     {
@@ -73,24 +66,21 @@ class AuditController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return $this->apiResponse->validationError($validator->errors()->toArray());
+            return $this->apiResponseService->validationError($validator->errors()->toArray());
         }
 
         try {
             $filters = $request->only(['entity_type', 'entity_id', 'start_date', 'end_date', 'event']);
             $stats = AuditLogService::getAuditStats($filters);
 
-            return $this->apiResponse->success($stats, ['message' => 'Audit statistics retrieved successfully']);
-        } catch (\Exception $e) {
-            return $this->apiResponse->serverError('Failed to retrieve audit statistics: ' . $e->getMessage());
+            return $this->apiResponseService->success($stats, ['message' => 'Audit statistics retrieved successfully']);
+        } catch (Exception $exception) {
+            return $this->apiResponseService->serverError('Failed to retrieve audit statistics: ' . $exception->getMessage());
         }
     }
 
     /**
      * Get field timeline for a specific field.
-     * 
-     * @param Request $request
-     * @return JsonResponse
      */
     public function getFieldTimeline(Request $request): JsonResponse
     {
@@ -102,7 +92,7 @@ class AuditController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return $this->apiResponse->validationError($validator->errors()->toArray());
+            return $this->apiResponseService->validationError($validator->errors()->toArray());
         }
 
         try {
@@ -113,17 +103,14 @@ class AuditController extends Controller
 
             $timeline = AuditLogService::getFieldTimeline($entityType, $entityId, $field, $limit);
 
-            return $this->apiResponse->success($timeline, ['message' => 'Field timeline retrieved successfully']);
-        } catch (\Exception $e) {
-            return $this->apiResponse->serverError('Failed to retrieve field timeline: ' . $e->getMessage());
+            return $this->apiResponseService->success($timeline, ['message' => 'Field timeline retrieved successfully']);
+        } catch (Exception $exception) {
+            return $this->apiResponseService->serverError('Failed to retrieve field timeline: ' . $exception->getMessage());
         }
     }
 
     /**
      * Get field statistics for a specific field.
-     * 
-     * @param Request $request
-     * @return JsonResponse
      */
     public function getFieldStats(Request $request): JsonResponse
     {
@@ -134,7 +121,7 @@ class AuditController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return $this->apiResponse->validationError($validator->errors()->toArray());
+            return $this->apiResponseService->validationError($validator->errors()->toArray());
         }
 
         try {
@@ -144,17 +131,14 @@ class AuditController extends Controller
 
             $stats = AuditLogService::getFieldStats($entityType, $entityId, $field);
 
-            return $this->apiResponse->success($stats, ['message' => 'Field statistics retrieved successfully']);
-        } catch (\Exception $e) {
-            return $this->apiResponse->serverError('Failed to retrieve field statistics: ' . $e->getMessage());
+            return $this->apiResponseService->success($stats, ['message' => 'Field statistics retrieved successfully']);
+        } catch (Exception $exception) {
+            return $this->apiResponseService->serverError('Failed to retrieve field statistics: ' . $exception->getMessage());
         }
     }
 
     /**
      * Manually create an audit log entry.
-     * 
-     * @param Request $request
-     * @return JsonResponse
      */
     public function createLog(Request $request): JsonResponse
     {
@@ -169,7 +153,7 @@ class AuditController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return $this->apiResponse->validationError($validator->errors()->toArray());
+            return $this->apiResponseService->validationError($validator->errors()->toArray());
         }
 
         try {
@@ -194,17 +178,14 @@ class AuditController extends Controller
                 recap: $recap
             );
 
-            return $this->apiResponse->success(null, ['message' => 'Audit log created successfully']);
-        } catch (\Exception $e) {
-            return $this->apiResponse->serverError('Failed to create audit log: ' . $e->getMessage());
+            return $this->apiResponseService->success(null, ['message' => 'Audit log created successfully']);
+        } catch (Exception $exception) {
+            return $this->apiResponseService->serverError('Failed to create audit log: ' . $exception->getMessage());
         }
     }
 
     /**
      * Clean up old audit logs.
-     * 
-     * @param Request $request
-     * @return JsonResponse
      */
     public function cleanup(Request $request): JsonResponse
     {
@@ -213,37 +194,34 @@ class AuditController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return $this->apiResponse->validationError($validator->errors()->toArray());
+            return $this->apiResponseService->validationError($validator->errors()->toArray());
         }
 
         try {
             $daysToKeep = $request->input('days_to_keep', 365);
             $deletedCount = AuditLogService::cleanupOldLogs($daysToKeep);
 
-            return $this->apiResponse->success([
+            return $this->apiResponseService->success([
                 'deleted_count' => $deletedCount,
                 'days_kept' => $daysToKeep
-            ], ['message' => "Successfully cleaned up {$deletedCount} old audit logs"]);
-        } catch (\Exception $e) {
-            return $this->apiResponse->serverError('Failed to cleanup audit logs: ' . $e->getMessage());
+            ], ['message' => sprintf('Successfully cleaned up %d old audit logs', $deletedCount)]);
+        } catch (Exception $exception) {
+            return $this->apiResponseService->serverError('Failed to cleanup audit logs: ' . $exception->getMessage());
         }
     }
 
     /**
      * Get audit log by ID.
-     * 
-     * @param int $id
-     * @return JsonResponse
      */
     public function show(int $id): JsonResponse
     {
         try {
-            $auditLogModel = config('audit.audit_log_model', 'App\Models\AuditLog');
+            $auditLogModel = config('audit.audit_log_model', AuditLog::class);
             $log = $auditLogModel::with(['user'])->findOrFail($id);
 
-            return $this->apiResponse->success($log, ['message' => 'Audit log retrieved successfully']);
-        } catch (\Exception $e) {
-            return $this->apiResponse->notFound('Audit log not found');
+            return $this->apiResponseService->success($log, ['message' => 'Audit log retrieved successfully']);
+        } catch (Exception) {
+            return $this->apiResponseService->notFound('Audit log not found');
         }
     }
 }

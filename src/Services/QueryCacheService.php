@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Services;
 
+use Exception;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
@@ -51,7 +52,7 @@ class QueryCacheService
 
         try {
             return Cache::remember($cacheKey, $ttl, $callback);
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             Log::warning('Query cache failed, executing callback directly', [
                 'key' => $key,
                 'error' => $exception->getMessage()
@@ -75,7 +76,7 @@ class QueryCacheService
 
         try {
             return Cache::put($cacheKey, $value, $ttl);
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             Log::warning('Failed to cache query result', [
                 'key' => $key,
                 'table' => $table,
@@ -99,7 +100,7 @@ class QueryCacheService
 
         try {
             return Cache::get($cacheKey);
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             Log::warning('Failed to get cached query result', [
                 'key' => $key,
                 'error' => $exception->getMessage()
@@ -122,7 +123,7 @@ class QueryCacheService
 
         try {
             return Cache::forget($cacheKey);
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             Log::warning('Failed to invalidate cache', [
                 'key' => $key,
                 'error' => $exception->getMessage()
@@ -150,7 +151,7 @@ class QueryCacheService
             }
 
             return $redis->del($keys);
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             Log::warning('Failed to invalidate cache by pattern', [
                 'pattern' => $pattern,
                 'error' => $exception->getMessage()
@@ -185,7 +186,7 @@ class QueryCacheService
      */
     public static function invalidateTable(string $table): int
     {
-        return self::forgetByPattern("*table:{$table}*");
+        return self::forgetByPattern(sprintf('*table:%s*', $table));
     }
 
     /**
@@ -213,7 +214,7 @@ class QueryCacheService
                 'memory_usage' => $redis->info('memory')['used_memory_human'] ?? 'unknown',
                 'cache_prefix' => self::getCachePrefix()
             ];
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             return [
                 'status' => 'error',
                 'cache_enabled' => true,

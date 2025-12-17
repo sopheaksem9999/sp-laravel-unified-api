@@ -1,5 +1,7 @@
 <?php
 
+use Illuminate\Contracts\View\View;
+use Illuminate\Contracts\View\Factory;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -14,7 +16,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 // Custom Scalar documentation route using our custom template
-Route::get('/api-docs', fn(): \Illuminate\Contracts\View\View|\Illuminate\Contracts\View\Factory => view('sp-laravel-api::scalar'))->middleware(['web']);
+Route::get('/api-docs', fn(): View|Factory => view('sp-laravel-api::scalar'))->middleware(['web']);
 
 // OpenAPI JSON specification endpoint
 Route::get('/api/docs/openapi/v2/record', function () {

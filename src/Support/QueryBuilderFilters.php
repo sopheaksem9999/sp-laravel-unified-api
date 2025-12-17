@@ -112,12 +112,12 @@ class QueryBuilderFilters
                     // Use MATCH AGAINST for full-text search if available, fallback to LIKE
                     $hasFullText = self::hasFullTextIndex($table, $searchableCols);
                     if ($hasFullText && strlen($keyword) >= 3) {
-                        $columns = implode(',', array_map(fn ($col): string => "{$table}.{$col}", $searchableCols));
-                        $q->whereRaw("MATCH({$columns}) AGAINST(? IN BOOLEAN MODE)", ["+{$keyword}*"]);
+                        $columns = implode(',', array_map(fn ($col): string => sprintf('%s.%s', $table, $col), $searchableCols));
+                        $q->whereRaw(sprintf('MATCH(%s) AGAINST(? IN BOOLEAN MODE)', $columns), [sprintf('+%s*', $keyword)]);
                     } else {
                         // Optimized LIKE search with reduced overhead
                         foreach ($searchableCols as $searchableCol) {
-                            $q->orWhere($table.'.'.$searchableCol, 'like', "%{$keyword}%");
+                            $q->orWhere($table.'.'.$searchableCol, 'like', sprintf('%%%s%%', $keyword));
                         }
                     }
                 });
@@ -310,10 +310,10 @@ class QueryBuilderFilters
      * @param array   $relationshipFilters Array of relationship filters
      * @param mixed   $tenantId            Tenant ID for filtering
      */
-    public static function applyRelationshipFilters(Builder $builder, string $table, array $relationshipFilters, $tenantId = null): void
+    public static function applyRelationshipFilters(Builder $builder, string $table, array $relationshipFilters, mixed $tenantId = null): void
     {
         $schema = SchemaRegistry::get();
-        $enableTenantId = config('record.enable_tenant_id', false);
+        config('record.enable_tenant_id', false);
 
         foreach ($relationshipFilters as $relationshipColumn => $filters) {
             // Parse relationship.column format
@@ -352,10 +352,8 @@ class QueryBuilderFilters
 
     /**
      * Apply a single relationship filter using EXISTS subquery.
-     *
-     * @param mixed $tenantId
      */
-    private static function applyRelationshipFilter(Builder $builder, string $table, array $config, string $column, string $operator, string $value, $tenantId, array $schema): void
+    private static function applyRelationshipFilter(Builder $builder, string $table, array $config, string $column, string $operator, string $value, mixed $tenantId, array $schema): void
     {
         $relatedTable = $config['table'];
         $type = $config['type'];
@@ -373,7 +371,7 @@ class QueryBuilderFilters
                     $query->whereExists(function ($subquery) use ($relatedTable, $table, $foreignKey, $ownerKey, $column, $operator, $value, $tenantId, $schema, $enableTenantId): void {
                         $subquery->select(DB::raw('1'))
                             ->from($relatedTable)
-                            ->whereColumn("{$relatedTable}.{$ownerKey}", "{$table}.{$foreignKey}")
+                            ->whereColumn(sprintf('%s.%s', $relatedTable, $ownerKey), sprintf('%s.%s', $table, $foreignKey))
                         ;
 
                         // Apply the filter condition
@@ -381,12 +379,12 @@ class QueryBuilderFilters
 
                         // Apply tenant filtering if enabled
                         if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns['tenant_id'])) {
-                            $subquery->where("{$relatedTable}.tenant_id", $tenantId);
+                            $subquery->where($relatedTable . '.tenant_id', $tenantId);
                         }
 
                         // Apply soft delete filtering
                         if ($schema[$relatedTable]->soft_deletes ?? false) {
-                            $subquery->whereNull("{$relatedTable}.deleted_at");
+                            $subquery->whereNull($relatedTable . '.deleted_at');
                         }
                     });
 
@@ -399,7 +397,7 @@ class QueryBuilderFilters
                     $query->whereExists(function ($subquery) use ($relatedTable, $table, $foreignKey, $localKey, $column, $operator, $value, $tenantId, $schema, $enableTenantId): void {
                         $subquery->select(DB::raw('1'))
                             ->from($relatedTable)
-                            ->whereColumn("{$relatedTable}.{$foreignKey}", "{$table}.{$localKey}")
+                            ->whereColumn(sprintf('%s.%s', $relatedTable, $foreignKey), sprintf('%s.%s', $table, $localKey))
                         ;
 
                         // Apply the filter condition
@@ -407,12 +405,12 @@ class QueryBuilderFilters
 
                         // Apply tenant filtering if enabled
                         if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns['tenant_id'])) {
-                            $subquery->where("{$relatedTable}.tenant_id", $tenantId);
+                            $subquery->where($relatedTable . '.tenant_id', $tenantId);
                         }
 
                         // Apply soft delete filtering
                         if ($schema[$relatedTable]->soft_deletes ?? false) {
-                            $subquery->whereNull("{$relatedTable}.deleted_at");
+                            $subquery->whereNull($relatedTable . '.deleted_at');
                         }
                     });
 
@@ -428,8 +426,8 @@ class QueryBuilderFilters
                     $query->whereExists(function ($subquery) use ($relatedTable, $throughTable, $table, $firstKey, $secondKey, $localKey, $secondLocalKey, $column, $operator, $value, $tenantId, $schema, $enableTenantId): void {
                         $subquery->select(DB::raw('1'))
                             ->from($relatedTable)
-                            ->join($throughTable, "{$throughTable}.{$secondKey}", '=', "{$relatedTable}.{$secondLocalKey}")
-                            ->whereColumn("{$throughTable}.{$firstKey}", "{$table}.{$localKey}")
+                            ->join($throughTable, sprintf('%s.%s', $throughTable, $secondKey), '=', sprintf('%s.%s', $relatedTable, $secondLocalKey))
+                            ->whereColumn(sprintf('%s.%s', $throughTable, $firstKey), sprintf('%s.%s', $table, $localKey))
                         ;
 
                         // Apply the filter condition
@@ -438,21 +436,21 @@ class QueryBuilderFilters
                         // Apply tenant filtering if enabled
                         if ($enableTenantId && $tenantId) {
                             if (isset($schema[$relatedTable]->columns['tenant_id'])) {
-                                $subquery->where("{$relatedTable}.tenant_id", $tenantId);
+                                $subquery->where($relatedTable . '.tenant_id', $tenantId);
                             }
 
                             if (isset($schema[$throughTable]->columns['tenant_id'])) {
-                                $subquery->where("{$throughTable}.tenant_id", $tenantId);
+                                $subquery->where($throughTable . '.tenant_id', $tenantId);
                             }
                         }
 
                         // Apply soft delete filtering
                         if ($schema[$relatedTable]->soft_deletes ?? false) {
-                            $subquery->whereNull("{$relatedTable}.deleted_at");
+                            $subquery->whereNull($relatedTable . '.deleted_at');
                         }
 
                         if ($schema[$throughTable]->soft_deletes ?? false) {
-                            $subquery->whereNull("{$throughTable}.deleted_at");
+                            $subquery->whereNull($throughTable . '.deleted_at');
                         }
                     });
 
@@ -463,12 +461,10 @@ class QueryBuilderFilters
 
     /**
      * Apply operator conditions to subquery for relationship filtering.
-     *
-     * @param mixed $subquery
      */
-    private static function applyOperatorToSubquery($subquery, string $table, string $column, string $operator, string $value): void
+    private static function applyOperatorToSubquery(mixed $subquery, string $table, string $column, string $operator, string $value): void
     {
-        $fullColumn = "{$table}.{$column}";
+        $fullColumn = sprintf('%s.%s', $table, $column);
 
         switch ($operator) {
             case 'eq':
@@ -634,7 +630,7 @@ class QueryBuilderFilters
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $value, $table): void {
                         foreach ($columns as $column) {
-                            if (is_string($value) && str_contains($value, ',')) {
+                            if (str_contains($value, ',')) {
                                 $q->orWhereIn($table.'.'.$column, array_map('trim', explode(',', $value)));
                             } else {
                                 $q->orWhere($table.'.'.$column, '=', $value);
@@ -643,7 +639,7 @@ class QueryBuilderFilters
                     });
                 } else {
                     $keyCol = $columns[0];
-                    if (is_string($value) && str_contains($value, ',')) {
+                    if (str_contains($value, ',')) {
                         $builder->whereIn($table.'.'.$keyCol, array_map('trim', explode(',', $value)));
                     } else {
                         $builder->where($table.'.'.$keyCol, '=', $value);
@@ -656,7 +652,7 @@ class QueryBuilderFilters
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $value, $table): void {
                         foreach ($columns as $column) {
-                            if (is_string($value) && str_contains($value, ',')) {
+                            if (str_contains($value, ',')) {
                                 $q->orWhereNotIn($table.'.'.$column, array_map('trim', explode(',', $value)));
                             } else {
                                 $q->orWhere($table.'.'.$column, '!=', $value);
@@ -665,7 +661,7 @@ class QueryBuilderFilters
                     });
                 } else {
                     $keyCol = $columns[0];
-                    if (is_string($value) && str_contains($value, ',')) {
+                    if (str_contains($value, ',')) {
                         $builder->whereNotIn($table.'.'.$keyCol, array_map('trim', explode(',', $value)));
                     } else {
                         $builder->where($table.'.'.$keyCol, '!=', $value);
@@ -743,7 +739,7 @@ class QueryBuilderFilters
                 break;
 
             case 'in':
-                $vals = array_map('trim', explode(',', (string) $value));
+                $vals = array_map('trim', explode(',', $value));
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $vals, $table): void { foreach ($columns as $column) { $q->orWhereIn($table.'.'.$column, $vals); } });
                 } else {
@@ -792,7 +788,7 @@ class QueryBuilderFilters
                 break;
 
             case 'not_in':
-                $vals = array_map('trim', explode(',', (string) $value));
+                $vals = array_map('trim', explode(',', $value));
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $vals, $table): void {
                         foreach ($columns as $column) {
@@ -996,7 +992,7 @@ class QueryBuilderFilters
             $searchableCols = [];
             $schema = SchemaRegistry::get();
 
-            if (!isset($schema[$table]) || !isset($schema[$table]->columns) || empty($schema[$table]->columns)) {
+            if (!isset($schema[$table]) || $schema[$table]->columns === null || empty($schema[$table]->columns)) {
                 self::$columnCache[$cacheKey] = [];
 
                 return [];
@@ -1209,30 +1205,6 @@ class QueryBuilderFilters
     }
 
     /**
-     * Execute pending lazy operations with performance optimization.
-     */
-    private static function executeLazyOperations(Builder $builder): void
-    {
-        foreach (self::$lazyOperations as $operationId => $operation) {
-            if ($operation['executed']) {
-                continue;
-            }
-
-            // Check if this operation should be executed based on query context
-            if (!self::shouldExecuteLazyOperation($builder, $operationId)) {
-                continue;
-            }
-
-            // Create a sub-query for lazy execution
-            $builder->where(function ($subQuery) use ($operation): void {
-                self::executeOperators($subQuery, $operation['table'], $operation['allowedCols'], $operation['params']);
-            });
-            // Mark as executed
-            self::$lazyOperations[$operationId]['executed'] = true;
-        }
-    }
-
-    /**
      * Optimized lazy operations execution with priority ordering and batch processing.
      */
     private static function executeLazyOperationsOptimized(Builder $builder): void
@@ -1250,9 +1222,9 @@ class QueryBuilderFilters
         }
 
         // Execute operations grouped by table for better performance
-        foreach ($operationsByTable as $table => $tableOperations) {
-            $builder->where(function ($subQuery) use ($tableOperations): void {
-                foreach ($tableOperations as [$operationId, $operation]) {
+        foreach ($operationsByTable as $operations) {
+            $builder->where(function ($subQuery) use ($operations): void {
+                foreach ($operations as [$operationId, $operation]) {
                     $subQuery->where(function ($opQuery) use ($operation): void {
                         self::executeOperatorsOptimized($opQuery, $operation['table'], $operation['allowedCols'], $operation['params']);
                     });

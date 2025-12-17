@@ -23,7 +23,7 @@ use Sopheak\Core\Http\Controllers\AuditController;
 | Public API Routes (Authorization handled by RecordController)
 |--------------------------------------------------------------------------
 */
-Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.id'])->group(function () {
+Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.id'])->group(function (): void {
     
     /*
     |--------------------------------------------------------------------------
@@ -69,14 +69,14 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.i
 | Authenticated API Routes (Always require authentication)
 |--------------------------------------------------------------------------
 */
-Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'auth:api', 'request.id'])->group(function () {
+Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'auth:api', 'request.id'])->group(function (): void {
     
     /*
     |--------------------------------------------------------------------------
     | Audit Management Routes
     |--------------------------------------------------------------------------
     */
-    Route::prefix('audit')->group(function () {
+    Route::prefix('audit')->group(function (): void {
         // Get audit logs for a specific entity
         Route::get('logs', [AuditController::class, 'getLogs'])->middleware('throttle:api-reads');
         

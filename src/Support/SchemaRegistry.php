@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Support;
 
+use Exception;
 use Sopheak\Core\Types\RecordTableType;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -11,9 +12,9 @@ class SchemaRegistry
 {
     private const CACHE_KEY = 'schema_record_registry:v1';
 
-    private static $cache = [];
+    private static array $cache = [];
 
-    private static $columnCache = [];
+    private static array $columnCache = [];
 
     // Cache TTL in seconds (1 year) - fallback if config not available
     private static int $cacheTtl = 31536000;
@@ -149,7 +150,7 @@ class SchemaRegistry
 
             if ($driver === 'sqlite') {
                 // SQLite syntax
-                $columns = DB::select("PRAGMA table_info({$tableName})");
+                $columns = DB::select(sprintf('PRAGMA table_info(%s)', $tableName));
                 
                 foreach ($columns as $column) {
                     $columnInfo[$column->name] = [
@@ -162,7 +163,7 @@ class SchemaRegistry
                 }
             } else {
                 // MySQL syntax (default)
-                $columns = DB::select("DESCRIBE `{$tableName}`");
+                $columns = DB::select(sprintf('DESCRIBE `%s`', $tableName));
                 
                 foreach ($columns as $column) {
                     $columnInfo[$column->Field] = [
@@ -180,9 +181,9 @@ class SchemaRegistry
             Cache::put($cacheKey, $columnInfo, self::$cacheTtl);
 
             return $columnInfo;
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             // Log the error for debugging
-            Log::warning("Failed to get columns for table {$tableName}: ".$exception->getMessage());
+            Log::warning(sprintf('Failed to get columns for table %s: ', $tableName).$exception->getMessage());
 
             // Return empty array as fallback
             return [];

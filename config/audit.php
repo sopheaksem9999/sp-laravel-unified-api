@@ -1,5 +1,7 @@
 <?php
 
+use Sopheak\Core\Models\AuditLog;
+
 return [
     /*
     |--------------------------------------------------------------------------
@@ -32,7 +34,7 @@ return [
     | By default, it uses the package's AuditLog model.
     |
     */
-    'audit_log_model' => env('AUDIT_LOG_MODEL', 'Sopheak\\Core\\Models\\AuditLog'),
+    'audit_log_model' => env('AUDIT_LOG_MODEL', AuditLog::class),
 
     /*
     |--------------------------------------------------------------------------

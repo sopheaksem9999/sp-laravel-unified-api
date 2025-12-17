@@ -10,6 +10,7 @@ use Illuminate\Console\Command;
 class ClearRecordCache extends Command
 {
     protected $signature = 'sp-laravel-api:cache-clear';
+
     protected $description = 'Clear record table cache';
 
     public function handle(): void

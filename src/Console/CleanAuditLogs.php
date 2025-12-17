@@ -47,9 +47,9 @@ class CleanAuditLogs extends Command
         
         $this->info("Audit Log Cleanup");
         $this->info("================");
-        $this->line("Retention period: {$retentionDays} days");
-        $this->line("Cutoff date: {$cutoffDate->format('Y-m-d H:i:s')}");
-        $this->line("Batch size: {$batchSize}");
+        $this->line(sprintf('Retention period: %s days', $retentionDays));
+        $this->line('Cutoff date: ' . $cutoffDate->format('Y-m-d H:i:s'));
+        $this->line('Batch size: ' . $batchSize);
         
         if ($isDryRun) {
             $this->warn("DRY RUN MODE - No data will be deleted");
@@ -61,22 +61,20 @@ class CleanAuditLogs extends Command
             ->count();
 
         if ($totalCount === 0) {
-            $this->info("No audit logs found older than {$retentionDays} days.");
+            $this->info(sprintf('No audit logs found older than %s days.', $retentionDays));
             return Command::SUCCESS;
         }
 
-        $this->line("Records to be deleted: {$totalCount}");
+        $this->line('Records to be deleted: ' . $totalCount);
 
         // Confirm deletion unless forced or dry run
-        if (!$isDryRun && !$isForced) {
-            if (!$this->confirm("Are you sure you want to delete {$totalCount} audit log records?")) {
-                $this->info('Operation cancelled.');
-                return Command::SUCCESS;
-            }
+        if (!$isDryRun && !$isForced && !$this->confirm(sprintf('Are you sure you want to delete %s audit log records?', $totalCount))) {
+            $this->info('Operation cancelled.');
+            return Command::SUCCESS;
         }
 
         if ($isDryRun) {
-            $this->info("DRY RUN: Would delete {$totalCount} audit log records.");
+            $this->info(sprintf('DRY RUN: Would delete %s audit log records.', $totalCount));
             return Command::SUCCESS;
         }
 
@@ -104,11 +102,11 @@ class CleanAuditLogs extends Command
         $progressBar->finish();
         $this->newLine(2);
 
-        $this->info("Successfully deleted {$deletedCount} audit log records.");
+        $this->info(sprintf('Successfully deleted %d audit log records.', $deletedCount));
         
         // Show remaining count
         $remainingCount = DB::table('audit_logs')->count();
-        $this->line("Remaining audit logs: {$remainingCount}");
+        $this->line('Remaining audit logs: ' . $remainingCount);
 
         return Command::SUCCESS;
     }

@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Types;
 
+use InvalidArgumentException;
 use Sopheak\Core\Enums\RecordRelationshipsEnum;
 
 /**
@@ -66,7 +67,7 @@ class RecordMetaBelongsToManyType
      * Create a new RecordMetaBelongsToManyType instance.
      *
      * @param string                  $related         The related model class name or table name (required)
-     * @param RecordRelationshipsEnum $type            The relationship type
+     * @param RecordRelationshipsEnum $recordRelationshipsEnum The relationship type
      * @param null|string             $table           The intermediate pivot table name
      * @param null|string             $foreignPivotKey Foreign key on pivot table for parent model
      * @param null|string             $relatedPivotKey Foreign key on pivot table for related model
@@ -79,11 +80,11 @@ class RecordMetaBelongsToManyType
      * @param array                   $select          Specific columns to select from the related table
      * @param array                   $pivotWhere      Legacy pivot where conditions (deprecated, use wherePivot)
      *
-     * @throws \InvalidArgumentException When related model/table name is empty or invalid
+     * @throws InvalidArgumentException When related model/table name is empty or invalid
      */
     public function __construct(
         public string $related,
-        public RecordRelationshipsEnum $type = RecordRelationshipsEnum::BELONGS_TO_MANY,
+        public RecordRelationshipsEnum $recordRelationshipsEnum = RecordRelationshipsEnum::BELONGS_TO_MANY,
         public ?string $table = null,
         public ?string $foreignPivotKey = null,
         public ?string $relatedPivotKey = null,
@@ -97,7 +98,7 @@ class RecordMetaBelongsToManyType
         public array $pivotWhere = [], // Legacy support
     ) {
         if (empty($related)) {
-            throw new \InvalidArgumentException('related model/table name cannot be empty');
+            throw new InvalidArgumentException('related model/table name cannot be empty');
         }
 
         // Merge legacy pivotWhere into wherePivot for backward compatibility
@@ -116,12 +117,12 @@ class RecordMetaBelongsToManyType
      *
      * @return static A new instance of RecordMetaBelongsToManyType
      *
-     * @throws \InvalidArgumentException When required properties are missing
+     * @throws InvalidArgumentException When required properties are missing
      */
     public static function __set_state(array $properties): static
     {
         return new static(
-            related: $properties['related'] ?? $properties['table'] ?? throw new \InvalidArgumentException('related is required'),
+            related: $properties['related'] ?? $properties['table'] ?? throw new InvalidArgumentException('related is required'),
             type: $properties['type'] ?? RecordRelationshipsEnum::BELONGS_TO_MANY,
             table: $properties['table'] ?? null,
             foreignPivotKey: $properties['foreignPivotKey'] ?? null,
@@ -147,7 +148,7 @@ class RecordMetaBelongsToManyType
     {
         $config = [
             'related' => $this->related,
-            'type' => $this->type,
+            'type' => $this->recordRelationshipsEnum,
         ];
 
         // Add optional properties only if they have values
@@ -209,7 +210,7 @@ class RecordMetaBelongsToManyType
      *
      * @return static A new instance of RecordMetaBelongsToManyType
      *
-     * @throws \InvalidArgumentException When required configuration keys are missing
+     * @throws InvalidArgumentException When required configuration keys are missing
      *
      * @example
      * ```php
@@ -227,7 +228,7 @@ class RecordMetaBelongsToManyType
     public static function fromArray(array $config): static
     {
         return new static(
-            related: $config['related'] ?? $config['table'] ?? throw new \InvalidArgumentException('related is required in config array'),
+            related: $config['related'] ?? $config['table'] ?? throw new InvalidArgumentException('related is required in config array'),
             type: $config['type'] ?? RecordRelationshipsEnum::BELONGS_TO_MANY,
             table: $config['table'] ?? null,
             foreignPivotKey: $config['foreignPivotKey'] ?? null,

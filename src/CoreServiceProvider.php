@@ -23,9 +23,7 @@ class CoreServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__ . '/../config/sp-laravel-api.php', 'sp-laravel-api');
 
-        $this->app->singleton('api.response', function () {
-            return new ApiResponseService();
-        });
+        $this->app->singleton('api.response', fn(): ApiResponseService => new ApiResponseService());
 
         $this->app->singleton(AuditLogService::class);
         $this->app->singleton(CursorPagination::class);

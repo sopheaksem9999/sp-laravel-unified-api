@@ -2,6 +2,9 @@
 
 namespace Sopheak\Core\Traits;
 
+use BadMethodCallException;
+use Illuminate\Database\Eloquent\Collection;
+use Exception;
 use Sopheak\Core\Services\AuditLogService;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 use Illuminate\Http\JsonResponse;
@@ -16,29 +19,28 @@ trait HasAuditQuery
 {
     /**
      * Log an audit event using the custom audit query.
-     * 
+     *
      * @param int $id The ID of the record
-     * @param AuditLogEventEnum $event The audit event type
+     * @param AuditLogEventEnum $auditLogEventEnum The audit event type
      * @param string|null $subject Optional subject for the audit log
      * @param string|null $recap Optional recap for the audit log
-     * @return void
      */
     protected function logAuditWithCustomQuery(
         int $id, 
-        AuditLogEventEnum $event, 
+        AuditLogEventEnum $auditLogEventEnum, 
         ?string $subject = null, 
         ?string $recap = null
     ): void {
         if (!method_exists($this, 'getAuditQuery')) {
-            throw new \BadMethodCallException('Controller must implement getAuditQuery method');
+            throw new BadMethodCallException('Controller must implement getAuditQuery method');
         }
 
         if (!method_exists($this, 'getAuditEntityName')) {
-            throw new \BadMethodCallException('Controller must implement getAuditEntityName method');
+            throw new BadMethodCallException('Controller must implement getAuditEntityName method');
         }
 
         if (!method_exists($this, 'getAuditEntityClass')) {
-            throw new \BadMethodCallException('Controller must implement getAuditEntityClass method');
+            throw new BadMethodCallException('Controller must implement getAuditEntityClass method');
         }
 
         $queryData = $this->getAuditQuery($id);
@@ -46,7 +48,7 @@ trait HasAuditQuery
         $entityClass = $this->getAuditEntityClass();
 
         AuditLogService::handleAuditDataEntry(
-            event: $event,
+            event: $auditLogEventEnum,
             entityName: $entityName,
             entityType: $entityClass,
             queryData: $queryData,
@@ -57,15 +59,14 @@ trait HasAuditQuery
 
     /**
      * Get audit logs for a specific record.
-     * 
+     *
      * @param int $id The ID of the record
      * @param int $limit Maximum number of logs to retrieve
-     * @return \Illuminate\Database\Eloquent\Collection
      */
-    protected function getAuditLogsForRecord(int $id, int $limit = 50)
+    protected function getAuditLogsForRecord(int $id, int $limit = 50): Collection
     {
         if (!method_exists($this, 'getAuditEntityClass')) {
-            throw new \BadMethodCallException('Controller must implement getAuditEntityClass method');
+            throw new BadMethodCallException('Controller must implement getAuditEntityClass method');
         }
 
         $entityClass = $this->getAuditEntityClass();
@@ -75,9 +76,8 @@ trait HasAuditQuery
 
     /**
      * API endpoint to get audit logs for a record.
-     * 
+     *
      * @param int $id The ID of the record
-     * @return JsonResponse
      */
     public function auditLogs(int $id): JsonResponse
     {
@@ -89,25 +89,24 @@ trait HasAuditQuery
                 'data' => $logs,
                 'message' => 'Audit logs retrieved successfully'
             ]);
-        } catch (\Exception $e) {
+        } catch (Exception $exception) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to retrieve audit logs: ' . $e->getMessage()
+                'message' => 'Failed to retrieve audit logs: ' . $exception->getMessage()
             ], 500);
         }
     }
 
     /**
      * API endpoint to get audit statistics for a record.
-     * 
+     *
      * @param int $id The ID of the record
-     * @return JsonResponse
      */
     public function auditStats(int $id): JsonResponse
     {
         try {
             if (!method_exists($this, 'getAuditEntityClass')) {
-                throw new \BadMethodCallException('Controller must implement getAuditEntityClass method');
+                throw new BadMethodCallException('Controller must implement getAuditEntityClass method');
             }
 
             $entityClass = $this->getAuditEntityClass();
@@ -122,27 +121,26 @@ trait HasAuditQuery
                 'data' => $stats,
                 'message' => 'Audit statistics retrieved successfully'
             ]);
-        } catch (\Exception $e) {
+        } catch (Exception $exception) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to retrieve audit statistics: ' . $e->getMessage()
+                'message' => 'Failed to retrieve audit statistics: ' . $exception->getMessage()
             ], 500);
         }
     }
 
     /**
      * API endpoint to get field timeline for a specific field.
-     * 
+     *
      * @param int $id The ID of the record
      * @param string $field The field name to get timeline for
      * @param int $limit Maximum number of timeline entries
-     * @return JsonResponse
      */
     public function fieldTimeline(int $id, string $field, int $limit = 10): JsonResponse
     {
         try {
             if (!method_exists($this, 'getAuditEntityClass')) {
-                throw new \BadMethodCallException('Controller must implement getAuditEntityClass method');
+                throw new BadMethodCallException('Controller must implement getAuditEntityClass method');
             }
 
             $entityClass = $this->getAuditEntityClass();
@@ -154,26 +152,25 @@ trait HasAuditQuery
                 'data' => $timeline,
                 'message' => 'Field timeline retrieved successfully'
             ]);
-        } catch (\Exception $e) {
+        } catch (Exception $exception) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to retrieve field timeline: ' . $e->getMessage()
+                'message' => 'Failed to retrieve field timeline: ' . $exception->getMessage()
             ], 500);
         }
     }
 
     /**
      * API endpoint to get field statistics for a specific field.
-     * 
+     *
      * @param int $id The ID of the record
      * @param string $field The field name to get statistics for
-     * @return JsonResponse
      */
     public function fieldStats(int $id, string $field): JsonResponse
     {
         try {
             if (!method_exists($this, 'getAuditEntityClass')) {
-                throw new \BadMethodCallException('Controller must implement getAuditEntityClass method');
+                throw new BadMethodCallException('Controller must implement getAuditEntityClass method');
             }
 
             $entityClass = $this->getAuditEntityClass();
@@ -185,10 +182,10 @@ trait HasAuditQuery
                 'data' => $stats,
                 'message' => 'Field statistics retrieved successfully'
             ]);
-        } catch (\Exception $e) {
+        } catch (Exception $exception) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to retrieve field statistics: ' . $e->getMessage()
+                'message' => 'Failed to retrieve field statistics: ' . $exception->getMessage()
             ], 500);
         }
     }

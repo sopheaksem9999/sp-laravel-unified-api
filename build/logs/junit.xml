@@ -1,8 +1,421 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
-  <testsuite name="Sopheak\Core\Tests\Unit\BasicTest" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/sp-laravel-api/tests/Unit/BasicTest.php" tests="3" assertions="3" errors="0" failures="0" skipped="0" time="0.271299">
-    <testcase name="it_has_laravel_application" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/sp-laravel-api/tests/Unit/BasicTest.php" line="16" class="Sopheak\Core\Tests\Unit\BasicTest" classname="Sopheak.Core.Tests.Unit.BasicTest" assertions="1" time="0.198270"/>
-    <testcase name="it_can_access_config" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/sp-laravel-api/tests/Unit/BasicTest.php" line="22" class="Sopheak\Core\Tests\Unit\BasicTest" classname="Sopheak.Core.Tests.Unit.BasicTest" assertions="1" time="0.037414"/>
-    <testcase name="it_can_run_basic_test" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/sp-laravel-api/tests/Unit/BasicTest.php" line="10" class="Sopheak\Core\Tests\Unit\BasicTest" classname="Sopheak.Core.Tests.Unit.BasicTest" assertions="1" time="0.035616"/>
+  <testsuite name="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/phpunit.xml" tests="19" assertions="9" errors="13" failures="3" skipped="0" time="0.786644">
+    <testsuite name="Unit" tests="9" assertions="6" errors="6" failures="0" skipped="0" time="0.386202">
+      <testsuite name="Sopheak\Core\Tests\Unit\SchemaRegistryTest" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Unit/SchemaRegistryTest.php" tests="6" assertions="3" errors="6" failures="0" skipped="0" time="0.283751">
+        <testcase name="it_can_refresh_cache" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Unit/SchemaRegistryTest.php" line="40" class="Sopheak\Core\Tests\Unit\SchemaRegistryTest" classname="Sopheak.Core.Tests.Unit.SchemaRegistryTest" assertions="1" time="0.216806">
+          <error type="Mockery\Exception\BadMethodCallException">Sopheak\Core\Tests\Unit\SchemaRegistryTest::it_can_refresh_cache
+Mockery\Exception\BadMethodCallException: Received Mockery_3_Illuminate_Config_Repository::offsetGet(), but no expectations were specified
+
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Database/DatabaseManager.php:388
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Database/Migrations/Migrator.php:654
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Database/Console/Migrations/RollbackCommand.php:63
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Container/BoundMethod.php:36
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Container/Util.php:43
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Container/BoundMethod.php:95
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Container/BoundMethod.php:35
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Container/Container.php:696
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Console/Command.php:213
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/symfony/console/Command/Command.php:318
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Console/Command.php:182
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/symfony/console/Application.php:1092
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/symfony/console/Application.php:359
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/symfony/console/Application.php:194
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Console/Application.php:166
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Console/Kernel.php:427
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Testing/PendingCommand.php:332
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/functions.php:63
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Database/MigrateProcessor.php:59
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Database/MigrateProcessor.php:46
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/InteractsWithMigrations.php:56
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:163
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/ApplicationTestingHooks.php:261
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/ApplicationTestingHooks.php:110
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:70
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Collections/helpers.php:236
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/sidekick/src/functions.php:88
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Collections/helpers.php:236
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:98
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/TestCase.php:61
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Unit/SchemaRegistryTest.php:17</error>
+        </testcase>
+        <testcase name="it_can_clear_all_cache" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Unit/SchemaRegistryTest.php" line="57" class="Sopheak\Core\Tests\Unit\SchemaRegistryTest" classname="Sopheak.Core.Tests.Unit.SchemaRegistryTest" assertions="1" time="0.032720">
+          <error type="Mockery\Exception\BadMethodCallException">Sopheak\Core\Tests\Unit\SchemaRegistryTest::it_can_clear_all_cache
+Mockery\Exception\BadMethodCallException: Received Mockery_3_Illuminate_Config_Repository::offsetGet(), but no expectations were specified
+
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Database/DatabaseManager.php:388
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Database/Migrations/Migrator.php:654
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Database/Console/Migrations/RollbackCommand.php:63
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Container/BoundMethod.php:36
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Container/Util.php:43
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Container/BoundMethod.php:95
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Container/BoundMethod.php:35
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Container/Container.php:696
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Console/Command.php:213
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/symfony/console/Command/Command.php:318
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Console/Command.php:182
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/symfony/console/Application.php:1092
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/symfony/console/Application.php:359
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/symfony/console/Application.php:194
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Console/Application.php:166
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Console/Kernel.php:427
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Testing/PendingCommand.php:332
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/functions.php:63
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Database/MigrateProcessor.php:59
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Database/MigrateProcessor.php:46
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/InteractsWithMigrations.php:56
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:163
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/ApplicationTestingHooks.php:261
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/ApplicationTestingHooks.php:110
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:70
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Collections/helpers.php:236
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/sidekick/src/functions.php:88
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Collections/helpers.php:236
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:98
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/TestCase.php:61
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Unit/SchemaRegistryTest.php:17</error>
+        </testcase>
+        <testcase name="it_uses_memory_cache_when_available" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Unit/SchemaRegistryTest.php" line="107" class="Sopheak\Core\Tests\Unit\SchemaRegistryTest" classname="Sopheak.Core.Tests.Unit.SchemaRegistryTest" assertions="1" time="0.034226">
+          <error type="Mockery\Exception\InvalidCountException">Sopheak\Core\Tests\Unit\SchemaRegistryTest::it_uses_memory_cache_when_available
+Mockery\Exception\InvalidCountException: Method get('record.tables', []) from Mockery_3_Illuminate_Config_Repository should be called
+ exactly 1 times but called 2 times.
+
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/mockery/mockery/library/Mockery/CountValidator/Exact.php:32
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/mockery/mockery/library/Mockery/Expectation.php:739
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/mockery/mockery/library/Mockery/ExpectationDirector.php:202
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/mockery/mockery/library/Mockery/Container.php:583
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/mockery/mockery/library/Mockery/Container.php:519
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/mockery/mockery/library/Mockery.php:176
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Unit/SchemaRegistryTest.php:16</error>
+        </testcase>
+        <testcase name="it_returns_empty_array_when_no_tables_configured" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Unit/SchemaRegistryTest.php" line="87" class="Sopheak\Core\Tests\Unit\SchemaRegistryTest" classname="Sopheak.Core.Tests.Unit.SchemaRegistryTest" assertions="0" time="0.000000">
+          <error type="PDOException">Sopheak\Core\Tests\Unit\SchemaRegistryTest::it_returns_empty_array_when_no_tables_configured
+PDOException: There is already an active transaction
+
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Database/Concerns/ManagesTransactions.php:151
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Database/Concerns/ManagesTransactions.php:127
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Testing/RefreshDatabase.php:101
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Testing/RefreshDatabase.php:73
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Testing/RefreshDatabase.php:25
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:120
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/HandlesDatabases.php:62
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:118
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/TestCase.php:71
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:44
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/ApplicationTestingHooks.php:89
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:43
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Collections/helpers.php:236
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/sidekick/src/functions.php:88
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Collections/helpers.php:236
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:57
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/TestCase.php:50
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/TestCase.php:18</error>
+        </testcase>
+        <testcase name="it_can_clear_table_cache" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Unit/SchemaRegistryTest.php" line="74" class="Sopheak\Core\Tests\Unit\SchemaRegistryTest" classname="Sopheak.Core.Tests.Unit.SchemaRegistryTest" assertions="0" time="0.000000">
+          <error type="PDOException">Sopheak\Core\Tests\Unit\SchemaRegistryTest::it_can_clear_table_cache
+PDOException: There is already an active transaction
+
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Database/Concerns/ManagesTransactions.php:151
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Database/Concerns/ManagesTransactions.php:127
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Testing/RefreshDatabase.php:101
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Testing/RefreshDatabase.php:73
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Testing/RefreshDatabase.php:25
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:120
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/HandlesDatabases.php:62
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:118
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/TestCase.php:71
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:44
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/ApplicationTestingHooks.php:89
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:43
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Collections/helpers.php:236
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/sidekick/src/functions.php:88
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Collections/helpers.php:236
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:57
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/TestCase.php:50
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/TestCase.php:18</error>
+        </testcase>
+        <testcase name="it_can_get_schema_registry" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Unit/SchemaRegistryTest.php" line="21" class="Sopheak\Core\Tests\Unit\SchemaRegistryTest" classname="Sopheak.Core.Tests.Unit.SchemaRegistryTest" assertions="0" time="0.000000">
+          <error type="PDOException">Sopheak\Core\Tests\Unit\SchemaRegistryTest::it_can_get_schema_registry
+PDOException: There is already an active transaction
+
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Database/Concerns/ManagesTransactions.php:151
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Database/Concerns/ManagesTransactions.php:127
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Testing/RefreshDatabase.php:101
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Testing/RefreshDatabase.php:73
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Testing/RefreshDatabase.php:25
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:120
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/HandlesDatabases.php:62
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:118
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/TestCase.php:71
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:44
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/ApplicationTestingHooks.php:89
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:43
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Collections/helpers.php:236
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/sidekick/src/functions.php:88
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Collections/helpers.php:236
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/Concerns/Testing.php:57
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/orchestra/testbench-core/src/TestCase.php:50
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/TestCase.php:18</error>
+        </testcase>
+      </testsuite>
+      <testsuite name="Sopheak\Core\Tests\Unit\BasicTest" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Unit/BasicTest.php" tests="3" assertions="3" errors="0" failures="0" skipped="0" time="0.102452">
+        <testcase name="it_can_access_config" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Unit/BasicTest.php" line="22" class="Sopheak\Core\Tests\Unit\BasicTest" classname="Sopheak.Core.Tests.Unit.BasicTest" assertions="1" time="0.033403"/>
+        <testcase name="it_has_laravel_application" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Unit/BasicTest.php" line="16" class="Sopheak\Core\Tests\Unit\BasicTest" classname="Sopheak.Core.Tests.Unit.BasicTest" assertions="1" time="0.032246"/>
+        <testcase name="it_can_run_basic_test" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Unit/BasicTest.php" line="10" class="Sopheak\Core\Tests\Unit\BasicTest" classname="Sopheak.Core.Tests.Unit.BasicTest" assertions="1" time="0.036803"/>
+      </testsuite>
+    </testsuite>
+    <testsuite name="Feature" tests="10" assertions="3" errors="7" failures="3" skipped="0" time="0.400442">
+      <testsuite name="Sopheak\Core\Tests\Feature\DynamicApiTest" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php" tests="10" assertions="3" errors="7" failures="3" skipped="0" time="0.400442">
+        <testcase name="it_supports_field_selection" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php" line="202" class="Sopheak\Core\Tests\Feature\DynamicApiTest" classname="Sopheak.Core.Tests.Feature.DynamicApiTest" assertions="0" time="0.045498">
+          <error type="Error">Sopheak\Core\Tests\Feature\DynamicApiTest::it_supports_field_selection
+Error: Class "App\Models\User" not found
+
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php:204</error>
+        </testcase>
+        <testcase name="it_can_delete_record_via_dynamic_api" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php" line="150" class="Sopheak\Core\Tests\Feature\DynamicApiTest" classname="Sopheak.Core.Tests.Feature.DynamicApiTest" assertions="0" time="0.032208">
+          <error type="Error">Sopheak\Core\Tests\Feature\DynamicApiTest::it_can_delete_record_via_dynamic_api
+Error: Class "App\Models\User" not found
+
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php:152</error>
+        </testcase>
+        <testcase name="it_can_update_record_via_dynamic_api" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php" line="118" class="Sopheak\Core\Tests\Feature\DynamicApiTest" classname="Sopheak.Core.Tests.Feature.DynamicApiTest" assertions="0" time="0.032099">
+          <error type="Error">Sopheak\Core\Tests\Feature\DynamicApiTest::it_can_update_record_via_dynamic_api
+Error: Class "App\Models\User" not found
+
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php:120</error>
+        </testcase>
+        <testcase name="it_can_list_records_via_dynamic_api" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php" line="37" class="Sopheak\Core\Tests\Feature\DynamicApiTest" classname="Sopheak.Core.Tests.Feature.DynamicApiTest" assertions="0" time="0.032271">
+          <error type="Error">Sopheak\Core\Tests\Feature\DynamicApiTest::it_can_list_records_via_dynamic_api
+Error: Class "App\Models\User" not found
+
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php:40</error>
+        </testcase>
+        <testcase name="it_can_show_single_record_via_dynamic_api" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php" line="92" class="Sopheak\Core\Tests\Feature\DynamicApiTest" classname="Sopheak.Core.Tests.Feature.DynamicApiTest" assertions="0" time="0.034521">
+          <error type="Error">Sopheak\Core\Tests\Feature\DynamicApiTest::it_can_show_single_record_via_dynamic_api
+Error: Class "App\Models\User" not found
+
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php:94</error>
+        </testcase>
+        <testcase name="it_can_create_record_via_dynamic_api" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php" line="64" class="Sopheak\Core\Tests\Feature\DynamicApiTest" classname="Sopheak.Core.Tests.Feature.DynamicApiTest" assertions="1" time="0.073188">
+          <failure type="PHPUnit\Framework\ExpectationFailedException">Sopheak\Core\Tests\Feature\DynamicApiTest::it_can_create_record_via_dynamic_api
+Expected response status code [201] but received 500.
+Failed asserting that 500 is identical to 201.
+
+The following exception occurred during the last request:
+
+InvalidArgumentException: Auth driver [jwt] for guard [api] is not defined. in /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Auth/AuthManager.php:99
+Stack trace:
+#0 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Auth/AuthManager.php(70): Illuminate\Auth\AuthManager-&gt;resolve('api')
+#1 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Auth/AuthManager.php(57): Illuminate\Auth\AuthManager-&gt;guard('api')
+#2 [internal function]: Illuminate\Auth\AuthManager-&gt;Illuminate\Auth\{closure}(NULL)
+#3 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Auth/AuthServiceProvider.php(89): call_user_func(Object(Closure), NULL)
+#4 [internal function]: Illuminate\Auth\AuthServiceProvider-&gt;Illuminate\Auth\{closure}(NULL)
+#5 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Http/Request.php(624): call_user_func(Object(Closure), NULL)
+#6 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Routing/Middleware/ThrottleRequests.php(215): Illuminate\Http\Request-&gt;user()
+#7 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Routing/Middleware/ThrottleRequests.php(97): Illuminate\Routing\Middleware\ThrottleRequests-&gt;resolveRequestSignature(Object(Illuminate\Http\Request))
+#8 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Routing\Middleware\ThrottleRequests-&gt;handle(Object(Illuminate\Http\Request), Object(Closure), 'api-writes')
+#9 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(127): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#10 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Routing/Router.php(807): Illuminate\Pipeline\Pipeline-&gt;then(Object(Closure))
+#11 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Routing/Router.php(786): Illuminate\Routing\Router-&gt;runRouteWithinStack(Object(Illuminate\Routing\Route), Object(Illuminate\Http\Request))
+#12 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Routing/Router.php(750): Illuminate\Routing\Router-&gt;runRoute(Object(Illuminate\Http\Request), Object(Illuminate\Routing\Route))
+#13 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Routing/Router.php(739): Illuminate\Routing\Router-&gt;dispatchToRoute(Object(Illuminate\Http\Request))
+#14 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(201): Illuminate\Routing\Router-&gt;dispatch(Object(Illuminate\Http\Request))
+#15 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(170): Illuminate\Foundation\Http\Kernel-&gt;Illuminate\Foundation\Http\{closure}(Object(Illuminate\Http\Request))
+#16 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php(21): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#17 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/ConvertEmptyStringsToNull.php(31): Illuminate\Foundation\Http\Middleware\TransformsRequest-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#18 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#19 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php(21): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#20 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TrimStrings.php(51): Illuminate\Foundation\Http\Middleware\TransformsRequest-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#21 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Foundation\Http\Middleware\TrimStrings-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#22 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Http/Middleware/ValidatePostSize.php(27): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#23 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Http\Middleware\ValidatePostSize-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#24 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/PreventRequestsDuringMaintenance.php(110): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#25 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#26 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Http/Middleware/HandleCors.php(62): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#27 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Http\Middleware\HandleCors-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#28 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Http/Middleware/TrustProxies.php(58): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#29 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Http\Middleware\TrustProxies-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#30 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/InvokeDeferredCallbacks.php(22): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#31 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Foundation\Http\Middleware\InvokeDeferredCallbacks-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#32 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(127): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#33 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(176): Illuminate\Pipeline\Pipeline-&gt;then(Object(Closure))
+#34 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(145): Illuminate\Foundation\Http\Kernel-&gt;sendRequestThroughRouter(Object(Illuminate\Http\Request))
+#35 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(607): Illuminate\Foundation\Http\Kernel-&gt;handle(Object(Illuminate\Http\Request))
+#36 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(573): Orchestra\Testbench\TestCase-&gt;call('POST', '/api/test_users', Array, Array, Array, Array, '{"name":"Dr. Ma...')
+#37 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(411): Orchestra\Testbench\TestCase-&gt;json('POST', '/api/test_users', Array, Array, 0)
+#38 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php(72): Orchestra\Testbench\TestCase-&gt;postJson('/api/test_users', Array)
+#39 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestCase.php(1657): Sopheak\Core\Tests\Feature\DynamicApiTest-&gt;it_can_create_record_via_dynamic_api()
+#40 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestCase.php(515): PHPUnit\Framework\TestCase-&gt;runTest()
+#41 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestRunner/TestRunner.php(87): PHPUnit\Framework\TestCase-&gt;runBare()
+#42 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestCase.php(361): PHPUnit\Framework\TestRunner-&gt;run(Object(Sopheak\Core\Tests\Feature\DynamicApiTest))
+#43 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestSuite.php(369): PHPUnit\Framework\TestCase-&gt;run()
+#44 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestSuite.php(369): PHPUnit\Framework\TestSuite-&gt;run()
+#45 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestSuite.php(369): PHPUnit\Framework\TestSuite-&gt;run()
+#46 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/TextUI/TestRunner.php(64): PHPUnit\Framework\TestSuite-&gt;run()
+#47 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/TextUI/Application.php(211): PHPUnit\TextUI\TestRunner-&gt;run(Object(PHPUnit\TextUI\Configuration\Configuration), Object(PHPUnit\Runner\ResultCache\DefaultResultCache), Object(PHPUnit\Framework\TestSuite))
+#48 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/phpunit(104): PHPUnit\TextUI\Application-&gt;run(Array)
+#49 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/bin/phpunit(122): include('/Users/sopheak/...')
+#50 {main}
+
+----------------------------------------------------------------------------------
+
+Auth driver [jwt] for guard [api] is not defined.
+
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Testing/TestResponseAssert.php:45
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Testing/TestResponse.php:160
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php:74</failure>
+        </testcase>
+        <testcase name="it_validates_required_fields_on_create" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php" line="235" class="Sopheak\Core\Tests\Feature\DynamicApiTest" classname="Sopheak.Core.Tests.Feature.DynamicApiTest" assertions="1" time="0.041243">
+          <failure type="PHPUnit\Framework\ExpectationFailedException">Sopheak\Core\Tests\Feature\DynamicApiTest::it_validates_required_fields_on_create
+Expected response status code [422] but received 500.
+Failed asserting that 500 is identical to 422.
+
+The following exception occurred during the last request:
+
+InvalidArgumentException: Auth driver [jwt] for guard [api] is not defined. in /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Auth/AuthManager.php:99
+Stack trace:
+#0 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Auth/AuthManager.php(70): Illuminate\Auth\AuthManager-&gt;resolve('api')
+#1 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Auth/AuthManager.php(57): Illuminate\Auth\AuthManager-&gt;guard('api')
+#2 [internal function]: Illuminate\Auth\AuthManager-&gt;Illuminate\Auth\{closure}(NULL)
+#3 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Auth/AuthServiceProvider.php(89): call_user_func(Object(Closure), NULL)
+#4 [internal function]: Illuminate\Auth\AuthServiceProvider-&gt;Illuminate\Auth\{closure}(NULL)
+#5 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Http/Request.php(624): call_user_func(Object(Closure), NULL)
+#6 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Routing/Middleware/ThrottleRequests.php(215): Illuminate\Http\Request-&gt;user()
+#7 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Routing/Middleware/ThrottleRequests.php(97): Illuminate\Routing\Middleware\ThrottleRequests-&gt;resolveRequestSignature(Object(Illuminate\Http\Request))
+#8 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Routing\Middleware\ThrottleRequests-&gt;handle(Object(Illuminate\Http\Request), Object(Closure), 'api-writes')
+#9 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(127): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#10 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Routing/Router.php(807): Illuminate\Pipeline\Pipeline-&gt;then(Object(Closure))
+#11 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Routing/Router.php(786): Illuminate\Routing\Router-&gt;runRouteWithinStack(Object(Illuminate\Routing\Route), Object(Illuminate\Http\Request))
+#12 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Routing/Router.php(750): Illuminate\Routing\Router-&gt;runRoute(Object(Illuminate\Http\Request), Object(Illuminate\Routing\Route))
+#13 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Routing/Router.php(739): Illuminate\Routing\Router-&gt;dispatchToRoute(Object(Illuminate\Http\Request))
+#14 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(201): Illuminate\Routing\Router-&gt;dispatch(Object(Illuminate\Http\Request))
+#15 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(170): Illuminate\Foundation\Http\Kernel-&gt;Illuminate\Foundation\Http\{closure}(Object(Illuminate\Http\Request))
+#16 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php(21): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#17 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/ConvertEmptyStringsToNull.php(31): Illuminate\Foundation\Http\Middleware\TransformsRequest-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#18 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#19 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php(21): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#20 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TrimStrings.php(51): Illuminate\Foundation\Http\Middleware\TransformsRequest-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#21 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Foundation\Http\Middleware\TrimStrings-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#22 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Http/Middleware/ValidatePostSize.php(27): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#23 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Http\Middleware\ValidatePostSize-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#24 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/PreventRequestsDuringMaintenance.php(110): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#25 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#26 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Http/Middleware/HandleCors.php(62): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#27 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Http\Middleware\HandleCors-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#28 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Http/Middleware/TrustProxies.php(58): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#29 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Http\Middleware\TrustProxies-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#30 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/InvokeDeferredCallbacks.php(22): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#31 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Foundation\Http\Middleware\InvokeDeferredCallbacks-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#32 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(127): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#33 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(176): Illuminate\Pipeline\Pipeline-&gt;then(Object(Closure))
+#34 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(145): Illuminate\Foundation\Http\Kernel-&gt;sendRequestThroughRouter(Object(Illuminate\Http\Request))
+#35 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(607): Illuminate\Foundation\Http\Kernel-&gt;handle(Object(Illuminate\Http\Request))
+#36 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(573): Orchestra\Testbench\TestCase-&gt;call('POST', '/api/test_users', Array, Array, Array, Array, '{"name":"","ema...')
+#37 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(411): Orchestra\Testbench\TestCase-&gt;json('POST', '/api/test_users', Array, Array, 0)
+#38 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php(237): Orchestra\Testbench\TestCase-&gt;postJson('/api/test_users', Array)
+#39 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestCase.php(1657): Sopheak\Core\Tests\Feature\DynamicApiTest-&gt;it_validates_required_fields_on_create()
+#40 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestCase.php(515): PHPUnit\Framework\TestCase-&gt;runTest()
+#41 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestRunner/TestRunner.php(87): PHPUnit\Framework\TestCase-&gt;runBare()
+#42 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestCase.php(361): PHPUnit\Framework\TestRunner-&gt;run(Object(Sopheak\Core\Tests\Feature\DynamicApiTest))
+#43 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestSuite.php(369): PHPUnit\Framework\TestCase-&gt;run()
+#44 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestSuite.php(369): PHPUnit\Framework\TestSuite-&gt;run()
+#45 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestSuite.php(369): PHPUnit\Framework\TestSuite-&gt;run()
+#46 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/TextUI/TestRunner.php(64): PHPUnit\Framework\TestSuite-&gt;run()
+#47 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/TextUI/Application.php(211): PHPUnit\TextUI\TestRunner-&gt;run(Object(PHPUnit\TextUI\Configuration\Configuration), Object(PHPUnit\Runner\ResultCache\DefaultResultCache), Object(PHPUnit\Framework\TestSuite))
+#48 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/phpunit(104): PHPUnit\TextUI\Application-&gt;run(Array)
+#49 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/bin/phpunit(122): include('/Users/sopheak/...')
+#50 {main}
+
+----------------------------------------------------------------------------------
+
+Auth driver [jwt] for guard [api] is not defined.
+
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Testing/TestResponseAssert.php:45
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Testing/TestResponse.php:160
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php:242</failure>
+        </testcase>
+        <testcase name="it_supports_query_filters" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php" line="167" class="Sopheak\Core\Tests\Feature\DynamicApiTest" classname="Sopheak.Core.Tests.Feature.DynamicApiTest" assertions="0" time="0.035350">
+          <error type="Error">Sopheak\Core\Tests\Feature\DynamicApiTest::it_supports_query_filters
+Error: Class "App\Models\User" not found
+
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php:169</error>
+        </testcase>
+        <testcase name="it_supports_sorting" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php" line="187" class="Sopheak\Core\Tests\Feature\DynamicApiTest" classname="Sopheak.Core.Tests.Feature.DynamicApiTest" assertions="0" time="0.033040">
+          <error type="Error">Sopheak\Core\Tests\Feature\DynamicApiTest::it_supports_sorting
+Error: Class "App\Models\User" not found
+
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php:189</error>
+        </testcase>
+        <testcase name="it_returns_404_for_non_existent_record" file="/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php" line="224" class="Sopheak\Core\Tests\Feature\DynamicApiTest" classname="Sopheak.Core.Tests.Feature.DynamicApiTest" assertions="1" time="0.041025">
+          <failure type="PHPUnit\Framework\ExpectationFailedException">Sopheak\Core\Tests\Feature\DynamicApiTest::it_returns_404_for_non_existent_record
+Expected response status code [404] but received 500.
+Failed asserting that 500 is identical to 404.
+
+The following exception occurred during the last request:
+
+InvalidArgumentException: Auth driver [jwt] for guard [api] is not defined. in /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Auth/AuthManager.php:99
+Stack trace:
+#0 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Auth/AuthManager.php(70): Illuminate\Auth\AuthManager-&gt;resolve('api')
+#1 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Auth/AuthManager.php(57): Illuminate\Auth\AuthManager-&gt;guard('api')
+#2 [internal function]: Illuminate\Auth\AuthManager-&gt;Illuminate\Auth\{closure}(NULL)
+#3 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Auth/AuthServiceProvider.php(89): call_user_func(Object(Closure), NULL)
+#4 [internal function]: Illuminate\Auth\AuthServiceProvider-&gt;Illuminate\Auth\{closure}(NULL)
+#5 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Http/Request.php(624): call_user_func(Object(Closure), NULL)
+#6 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Routing/Middleware/ThrottleRequests.php(215): Illuminate\Http\Request-&gt;user()
+#7 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Routing/Middleware/ThrottleRequests.php(97): Illuminate\Routing\Middleware\ThrottleRequests-&gt;resolveRequestSignature(Object(Illuminate\Http\Request))
+#8 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Routing\Middleware\ThrottleRequests-&gt;handle(Object(Illuminate\Http\Request), Object(Closure), 'api-reads')
+#9 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(127): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#10 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Routing/Router.php(807): Illuminate\Pipeline\Pipeline-&gt;then(Object(Closure))
+#11 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Routing/Router.php(786): Illuminate\Routing\Router-&gt;runRouteWithinStack(Object(Illuminate\Routing\Route), Object(Illuminate\Http\Request))
+#12 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Routing/Router.php(750): Illuminate\Routing\Router-&gt;runRoute(Object(Illuminate\Http\Request), Object(Illuminate\Routing\Route))
+#13 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Routing/Router.php(739): Illuminate\Routing\Router-&gt;dispatchToRoute(Object(Illuminate\Http\Request))
+#14 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(201): Illuminate\Routing\Router-&gt;dispatch(Object(Illuminate\Http\Request))
+#15 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(170): Illuminate\Foundation\Http\Kernel-&gt;Illuminate\Foundation\Http\{closure}(Object(Illuminate\Http\Request))
+#16 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php(21): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#17 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/ConvertEmptyStringsToNull.php(31): Illuminate\Foundation\Http\Middleware\TransformsRequest-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#18 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#19 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TransformsRequest.php(21): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#20 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/TrimStrings.php(51): Illuminate\Foundation\Http\Middleware\TransformsRequest-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#21 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Foundation\Http\Middleware\TrimStrings-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#22 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Http/Middleware/ValidatePostSize.php(27): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#23 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Http\Middleware\ValidatePostSize-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#24 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/PreventRequestsDuringMaintenance.php(110): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#25 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#26 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Http/Middleware/HandleCors.php(62): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#27 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Http\Middleware\HandleCors-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#28 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Http/Middleware/TrustProxies.php(58): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#29 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Http\Middleware\TrustProxies-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#30 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Middleware/InvokeDeferredCallbacks.php(22): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#31 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(209): Illuminate\Foundation\Http\Middleware\InvokeDeferredCallbacks-&gt;handle(Object(Illuminate\Http\Request), Object(Closure))
+#32 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Pipeline/Pipeline.php(127): Illuminate\Pipeline\Pipeline-&gt;Illuminate\Pipeline\{closure}(Object(Illuminate\Http\Request))
+#33 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(176): Illuminate\Pipeline\Pipeline-&gt;then(Object(Closure))
+#34 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Http/Kernel.php(145): Illuminate\Foundation\Http\Kernel-&gt;sendRequestThroughRouter(Object(Illuminate\Http\Request))
+#35 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(607): Illuminate\Foundation\Http\Kernel-&gt;handle(Object(Illuminate\Http\Request))
+#36 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(573): Orchestra\Testbench\TestCase-&gt;call('GET', '/api/test_users...', Array, Array, Array, Array, '[]')
+#37 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php(381): Orchestra\Testbench\TestCase-&gt;json('GET', '/api/test_users...', Array, Array, 0)
+#38 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php(226): Orchestra\Testbench\TestCase-&gt;getJson('/api/test_users...')
+#39 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestCase.php(1657): Sopheak\Core\Tests\Feature\DynamicApiTest-&gt;it_returns_404_for_non_existent_record()
+#40 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestCase.php(515): PHPUnit\Framework\TestCase-&gt;runTest()
+#41 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestRunner/TestRunner.php(87): PHPUnit\Framework\TestCase-&gt;runBare()
+#42 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestCase.php(361): PHPUnit\Framework\TestRunner-&gt;run(Object(Sopheak\Core\Tests\Feature\DynamicApiTest))
+#43 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestSuite.php(369): PHPUnit\Framework\TestCase-&gt;run()
+#44 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestSuite.php(369): PHPUnit\Framework\TestSuite-&gt;run()
+#45 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/Framework/TestSuite.php(369): PHPUnit\Framework\TestSuite-&gt;run()
+#46 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/TextUI/TestRunner.php(64): PHPUnit\Framework\TestSuite-&gt;run()
+#47 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/src/TextUI/Application.php(211): PHPUnit\TextUI\TestRunner-&gt;run(Object(PHPUnit\TextUI\Configuration\Configuration), Object(PHPUnit\Runner\ResultCache\DefaultResultCache), Object(PHPUnit\Framework\TestSuite))
+#48 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/phpunit/phpunit/phpunit(104): PHPUnit\TextUI\Application-&gt;run(Array)
+#49 /Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/bin/phpunit(122): include('/Users/sopheak/...')
+#50 {main}
+
+----------------------------------------------------------------------------------
+
+Auth driver [jwt] for guard [api] is not defined.
+
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Testing/TestResponseAssert.php:45
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/vendor/laravel/framework/src/Illuminate/Testing/TestResponse.php:160
+/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api/tests/Feature/DynamicApiTest.php:228</failure>
+        </testcase>
+      </testsuite>
+    </testsuite>
   </testsuite>
 </testsuites>

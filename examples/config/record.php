@@ -15,7 +15,6 @@ use Sopheak\Core\Types\RecordHasManyType;
 use Sopheak\Core\Types\RecordBelongsToType;
 use Sopheak\Core\Types\RecordHasManyThroughType;
 use Sopheak\Core\Types\RecordMetaBelongsToManyType;
-use Sopheak\Core\Types\RecordSpatiePermissionType;
 use Sopheak\Core\Types\RecordTablePublic;
 
 return [

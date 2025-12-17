@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Console;
 
+use Exception;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -73,24 +74,24 @@ class ValidateSetup extends Command
             $path = config_path($file);
             
             if (File::exists($path)) {
-                $this->addResult('✅', "Config file exists: {$file}", 'success');
+                $this->addResult('✅', 'Config file exists: ' . $file, 'success');
                 
                 // Validate config content
                 try {
                     $config = include $path;
                     if (is_array($config) && !empty($config)) {
-                        $this->addResult('✅', "Config file valid: {$file}", 'success');
+                        $this->addResult('✅', 'Config file valid: ' . $file, 'success');
                     } else {
-                        $this->addResult('⚠️', "Config file empty or invalid: {$file}", 'warning');
+                        $this->addResult('⚠️', 'Config file empty or invalid: ' . $file, 'warning');
                     }
-                } catch (\Exception $e) {
-                    $this->addResult('❌', "Config file syntax error: {$file} - {$e->getMessage()}", 'error');
+                } catch (Exception $e) {
+                    $this->addResult('❌', sprintf('Config file syntax error: %s - %s', $file, $e->getMessage()), 'error');
                 }
             } else {
-                $this->addResult('❌', "Missing config file: {$file}", 'error');
+                $this->addResult('❌', 'Missing config file: ' . $file, 'error');
                 
                 if ($this->option('fix')) {
-                    $this->info("🔧 Attempting to publish {$file}...");
+                    $this->info(sprintf('🔧 Attempting to publish %s...', $file));
                     $this->call('sp-laravel-api:setup');
                 }
             }
@@ -109,10 +110,10 @@ class ValidateSetup extends Command
             $this->addResult('✅', 'Database connection successful', 'success');
             
             $driver = DB::getDriverName();
-            $this->addResult('ℹ️', "Database driver: {$driver}", 'info');
+            $this->addResult('ℹ️', 'Database driver: ' . $driver, 'info');
             
-        } catch (\Exception $e) {
-            $this->addResult('❌', "Database connection failed: {$e->getMessage()}", 'error');
+        } catch (Exception $exception) {
+            $this->addResult('❌', 'Database connection failed: ' . $exception->getMessage(), 'error');
         }
     }
 
@@ -127,7 +128,7 @@ class ValidateSetup extends Command
             $driver = DB::getDriverName();
             
             if (in_array($driver, ['mysql', 'sqlite', 'pgsql'])) {
-                $this->addResult('✅', "Database driver '{$driver}' is supported", 'success');
+                $this->addResult('✅', sprintf("Database driver '%s' is supported", $driver), 'success');
                 
                 // Test SchemaRegistry with a simple table
                 $tables = DB::select($this->getTableListQuery($driver));
@@ -139,20 +140,20 @@ class ValidateSetup extends Command
                     $columns = $this->testColumnRetrieval($tableName);
                     
                     if (!empty($columns)) {
-                        $this->addResult('✅', "SchemaRegistry can read table columns for '{$tableName}'", 'success');
+                        $this->addResult('✅', sprintf("SchemaRegistry can read table columns for '%s'", $tableName), 'success');
                     } else {
-                        $this->addResult('⚠️', "SchemaRegistry returned empty columns for '{$tableName}'", 'warning');
+                        $this->addResult('⚠️', sprintf("SchemaRegistry returned empty columns for '%s'", $tableName), 'warning');
                     }
                 } else {
                     $this->addResult('⚠️', 'No tables found in database', 'warning');
                 }
                 
             } else {
-                $this->addResult('⚠️', "Database driver '{$driver}' may not be fully supported", 'warning');
+                $this->addResult('⚠️', sprintf("Database driver '%s' may not be fully supported", $driver), 'warning');
             }
             
-        } catch (\Exception $e) {
-            $this->addResult('❌', "Database compatibility check failed: {$e->getMessage()}", 'error');
+        } catch (Exception $exception) {
+            $this->addResult('❌', 'Database compatibility check failed: ' . $exception->getMessage(), 'error');
         }
     }
 
@@ -166,7 +167,7 @@ class ValidateSetup extends Command
         try {
             // Check if migrations table exists
             $tables = DB::select($this->getTableListQuery(DB::getDriverName()));
-            $tableNames = array_map(fn($table) => $this->getTableNameFromResult($table, DB::getDriverName()), $tables);
+            $tableNames = array_map(fn($table): string => $this->getTableNameFromResult($table, DB::getDriverName()), $tables);
             
             if (in_array('migrations', $tableNames)) {
                 $this->addResult('✅', 'Migrations table exists', 'success');
@@ -182,8 +183,8 @@ class ValidateSetup extends Command
                 $this->addResult('❌', 'Migrations table missing - run: php artisan migrate:install', 'error');
             }
             
-        } catch (\Exception $e) {
-            $this->addResult('❌', "Migration check failed: {$e->getMessage()}", 'error');
+        } catch (Exception $exception) {
+            $this->addResult('❌', 'Migration check failed: ' . $exception->getMessage(), 'error');
         }
     }
 
@@ -206,11 +207,11 @@ class ValidateSetup extends Command
             $value = env($var);
             
             if ($value !== null) {
-                $this->addResult('✅', "{$var} is set: {$value}", 'success');
+                $this->addResult('✅', sprintf('%s is set: %s', $var, $value), 'success');
             } else {
-                $message = "{$var} not set";
+                $message = $var . ' not set';
                 if (isset($config['default'])) {
-                    $message .= " (using default: {$config['default']})";
+                    $message .= sprintf(' (using default: %s)', $config['default']);
                 }
                 
                 $type = $config['required'] ? 'warning' : 'info';
@@ -230,7 +231,7 @@ class ValidateSetup extends Command
         try {
             // Check if Spatie Permission tables exist
             $tables = DB::select($this->getTableListQuery(DB::getDriverName()));
-            $tableNames = array_map(fn($table) => $this->getTableNameFromResult($table, DB::getDriverName()), $tables);
+            $tableNames = array_map(fn($table): string => $this->getTableNameFromResult($table, DB::getDriverName()), $tables);
             
             $permissionTables = ['permissions', 'roles', 'model_has_permissions', 'model_has_roles', 'role_has_permissions'];
             $missingTables = array_diff($permissionTables, $tableNames);
@@ -242,8 +243,8 @@ class ValidateSetup extends Command
                 $this->addResult('ℹ️', 'Run: php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider"', 'info');
             }
             
-        } catch (\Exception $e) {
-            $this->addResult('❌', "Permission check failed: {$e->getMessage()}", 'error');
+        } catch (Exception $exception) {
+            $this->addResult('❌', 'Permission check failed: ' . $exception->getMessage(), 'error');
         }
     }
 
@@ -263,11 +264,11 @@ class ValidateSetup extends Command
                 
                 if (!empty($schema)) {
                     $tableCount = count($schema);
-                    $this->addResult('✅', "SchemaRegistry loaded {$tableCount} table(s)", 'success');
+                    $this->addResult('✅', sprintf('SchemaRegistry loaded %d table(s)', $tableCount), 'success');
                     
                     if ($this->option('verbose')) {
                         foreach (array_keys($schema) as $tableName) {
-                            $this->addResult('ℹ️', "  - {$tableName}", 'info');
+                            $this->addResult('ℹ️', '  - ' . $tableName, 'info');
                         }
                     }
                 } else {
@@ -277,8 +278,8 @@ class ValidateSetup extends Command
                 $this->addResult('❌', 'SchemaRegistry::get() did not return array', 'error');
             }
             
-        } catch (\Exception $e) {
-            $this->addResult('❌', "SchemaRegistry check failed: {$e->getMessage()}", 'error');
+        } catch (Exception $exception) {
+            $this->addResult('❌', 'SchemaRegistry check failed: ' . $exception->getMessage(), 'error');
         }
     }
 
@@ -298,20 +299,20 @@ class ValidateSetup extends Command
             
             foreach ($routes as $route) {
                 $uri = $route->uri();
-                if (str_starts_with($uri, $apiPrefix . '/')) {
+                if (str_starts_with((string) $uri, $apiPrefix . '/')) {
                     $hasApiRoutes = true;
                     break;
                 }
             }
             
             if ($hasApiRoutes) {
-                $this->addResult('✅', "API routes registered with prefix: {$apiPrefix}", 'success');
+                $this->addResult('✅', 'API routes registered with prefix: ' . $apiPrefix, 'success');
             } else {
-                $this->addResult('⚠️', "No API routes found with prefix: {$apiPrefix}", 'warning');
+                $this->addResult('⚠️', 'No API routes found with prefix: ' . $apiPrefix, 'warning');
             }
             
-        } catch (\Exception $e) {
-            $this->addResult('❌', "Route check failed: {$e->getMessage()}", 'error');
+        } catch (Exception $exception) {
+            $this->addResult('❌', 'Route check failed: ' . $exception->getMessage(), 'error');
         }
     }
 
@@ -362,13 +363,12 @@ class ValidateSetup extends Command
             $driver = DB::getDriverName();
             
             if ($driver === 'sqlite') {
-                $columns = DB::select("PRAGMA table_info({$tableName})");
+                $columns = DB::select(sprintf('PRAGMA table_info(%s)', $tableName));
                 return array_map(fn($col) => $col->name, $columns);
-            } else {
-                $columns = DB::select("DESCRIBE `{$tableName}`");
-                return array_map(fn($col) => $col->Field, $columns);
             }
-        } catch (\Exception $e) {
+            $columns = DB::select(sprintf('DESCRIBE `%s`', $tableName));
+            return array_map(fn($col) => $col->Field, $columns);
+        } catch (Exception) {
             return [];
         }
     }
@@ -386,7 +386,7 @@ class ValidateSetup extends Command
         
         // Display immediately if verbose
         if ($this->option('verbose')) {
-            $this->line("  {$icon} {$message}");
+            $this->line(sprintf('  %s %s', $icon, $message));
         }
     }
 
@@ -401,27 +401,27 @@ class ValidateSetup extends Command
             $this->newLine();
             
             foreach ($this->results as $result) {
-                $this->line("  {$result['icon']} {$result['message']}");
+                $this->line(sprintf('  %s %s', $result['icon'], $result['message']));
             }
         }
         
         $this->newLine();
         
         // Summary
-        $errors = array_filter($this->results, fn($r) => $r['type'] === 'error');
-        $warnings = array_filter($this->results, fn($r) => $r['type'] === 'warning');
-        $successes = array_filter($this->results, fn($r) => $r['type'] === 'success');
+        $errors = array_filter($this->results, fn($r): bool => $r['type'] === 'error');
+        $warnings = array_filter($this->results, fn($r): bool => $r['type'] === 'warning');
+        $successes = array_filter($this->results, fn($r): bool => $r['type'] === 'success');
         
         $this->info('📊 Summary:');
         $this->line("  ✅ Passed: " . count($successes));
         $this->line("  ⚠️  Warnings: " . count($warnings));
         $this->line("  ❌ Errors: " . count($errors));
         
-        if (count($errors) > 0) {
+        if ($errors !== []) {
             $this->newLine();
             $this->error('❌ Setup validation failed. Please fix the errors above.');
             $this->info('💡 Run with --fix to attempt automatic fixes.');
-        } elseif (count($warnings) > 0) {
+        } elseif ($warnings !== []) {
             $this->newLine();
             $this->warn('⚠️ Setup validation completed with warnings.');
             $this->info('💡 Consider addressing the warnings for optimal functionality.');
@@ -436,6 +436,6 @@ class ValidateSetup extends Command
      */
     private function hasErrors(): bool
     {
-        return !empty(array_filter($this->results, fn($r) => $r['type'] === 'error'));
+        return !empty(array_filter($this->results, fn($r): bool => $r['type'] === 'error'));
     }
 }

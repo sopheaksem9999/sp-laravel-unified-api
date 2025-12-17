@@ -2,10 +2,6 @@
 
 namespace Sopheak\Core\Services;
 
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\File;
-use Sopheak\Core\Types\RecordTableType;
-
 class OpenApiService
 {
     /**
@@ -218,7 +214,7 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
             $formattedTableName = ucwords(str_replace('_', ' ', $tableName));
             $tags[] = [
                 'name' => $formattedTableName,
-                'description' => "Operations for `{$formattedTableName}` records"
+                'description' => sprintf('Operations for `%s` records', $formattedTableName)
             ];
         }
 
@@ -270,14 +266,14 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
         }
 
         foreach ($globalFunctions as $functionName => $functionConfig) {
-            $path = "/api/v2/rpc/{$functionName}";
+            $path = '/api/v2/rpc/' . $functionName;
             
             $paths[$path] = [
                 'post' => [
                     'tags' => ['RPC'],
-                    'summary' => $functionConfig['description'] ?? "Execute {$functionName} function",
-                    'description' => $functionConfig['description'] ?? "Execute the {$functionName} global function",
-                    'operationId' => "rpc_{$functionName}",
+                    'summary' => $functionConfig['description'] ?? sprintf('Execute %s function', $functionName),
+                    'description' => $functionConfig['description'] ?? sprintf('Execute the %s global function', $functionName),
+                    'operationId' => 'rpc_' . $functionName,
                     'requestBody' => [
                         'required' => true,
                         'content' => [
@@ -730,38 +726,16 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
     protected function mapColumnToOpenApi(array $columnConfig): array
     {
         $type = $columnConfig['type'] ?? 'string';
-        $schema = [];
-
-        switch ($type) {
-            case 'integer':
-            case 'bigint':
-                $schema = ['type' => 'integer', 'format' => 'int64'];
-                break;
-            case 'decimal':
-            case 'float':
-            case 'double':
-                $schema = ['type' => 'number', 'format' => 'double'];
-                break;
-            case 'boolean':
-                $schema = ['type' => 'boolean'];
-                break;
-            case 'date':
-                $schema = ['type' => 'string', 'format' => 'date'];
-                break;
-            case 'datetime':
-            case 'timestamp':
-                $schema = ['type' => 'string', 'format' => 'date-time'];
-                break;
-            case 'json':
-                $schema = ['type' => 'object'];
-                break;
-            case 'text':
-            case 'longtext':
-                $schema = ['type' => 'string'];
-                break;
-            default:
-                $schema = ['type' => 'string'];
-        }
+        $schema = match ($type) {
+            'integer', 'bigint' => ['type' => 'integer', 'format' => 'int64'],
+            'decimal', 'float', 'double' => ['type' => 'number', 'format' => 'double'],
+            'boolean' => ['type' => 'boolean'],
+            'date' => ['type' => 'string', 'format' => 'date'],
+            'datetime', 'timestamp' => ['type' => 'string', 'format' => 'date-time'],
+            'json' => ['type' => 'object'],
+            'text', 'longtext' => ['type' => 'string'],
+            default => ['type' => 'string'],
+        };
 
         // Add nullable if specified
         if (isset($columnConfig['nullable']) && $columnConfig['nullable']) {
@@ -801,9 +775,9 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
     {
         $paths = [];
         $apiPrefix = config('record.api_prefix', 'api');
-        $basePath = "/{$apiPrefix}/{$tableName}";
-        $itemPath = "/{$apiPrefix}/{$tableName}/{id}";
-        $bulkPath = "/{$apiPrefix}/{$tableName}/bulk";
+        $basePath = sprintf('/%s/%s', $apiPrefix, $tableName);
+        $itemPath = sprintf('/%s/%s/{id}', $apiPrefix, $tableName);
+        $bulkPath = sprintf('/%s/%s/bulk', $apiPrefix, $tableName);
 
         // Determine if operations are public
         $isPublicRead = $tableConfig && isset($tableConfig->public) && $tableConfig->public->read ?? false;
@@ -811,7 +785,7 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
 
         // List operation (GET /api/table)
         $paths[$basePath]['get'] = [
-            'summary' => "List {$tableName}",
+            'summary' => 'List ' . $tableName,
             'description' => $this->generateListDescription($tableName),
             'tags' => [ucfirst($tableName)],
             'security' => $isPublicRead ? [] : [['bearerAuth' => []]],
@@ -826,7 +800,7 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
                                 'properties' => [
                                     'data' => [
                                         'type' => 'array',
-                                        'items' => ['$ref' => "#/components/schemas/{$this->schemaName($tableName, 'Read')}"]
+                                        'items' => ['$ref' => '#/components/schemas/' . $this->schemaName($tableName)]
                                     ],
                                     'links' => ['$ref' => '#/components/schemas/PaginationLinks'],
                                     'meta' => ['$ref' => '#/components/schemas/PaginationMeta']
@@ -844,15 +818,15 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
 
         // Create operation (POST /api/table)
         $paths[$basePath]['post'] = [
-            'summary' => "Create {$tableName}",
-            'description' => "Create a new {$tableName} record",
+            'summary' => 'Create ' . $tableName,
+            'description' => sprintf('Create a new %s record', $tableName),
             'tags' => [ucfirst($tableName)],
             'security' => $isPublicWrite ? [] : [['bearerAuth' => []]],
             'requestBody' => [
                 'required' => true,
                 'content' => [
                     'application/json' => [
-                        'schema' => ['$ref' => "#/components/schemas/{$this->schemaName($tableName, 'Write')}"]
+                        'schema' => ['$ref' => '#/components/schemas/' . $this->schemaName($tableName)]
                     ]
                 ]
             ],
@@ -864,7 +838,7 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
                             'schema' => [
                                 'type' => 'object',
                                 'properties' => [
-                                    'data' => ['$ref' => "#/components/schemas/{$this->schemaName($tableName, 'Read')}"]
+                                    'data' => ['$ref' => '#/components/schemas/' . $this->schemaName($tableName)]
                                 ]
                             ]
                         ]
@@ -880,8 +854,8 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
 
         // Show operation (GET /api/table/{id})
         $paths[$itemPath]['get'] = [
-            'summary' => "Get {$tableName}",
-            'description' => "Retrieve a specific {$tableName} record by ID",
+            'summary' => 'Get ' . $tableName,
+            'description' => sprintf('Retrieve a specific %s record by ID', $tableName),
             'tags' => [ucfirst($tableName)],
             'security' => $isPublicRead ? [] : [['bearerAuth' => []]],
             'parameters' => array_merge(
@@ -896,7 +870,7 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
                             'schema' => [
                                 'type' => 'object',
                                 'properties' => [
-                                    'data' => ['$ref' => "#/components/schemas/{$this->schemaName($tableName, 'Read')}"]
+                                    'data' => ['$ref' => '#/components/schemas/' . $this->schemaName($tableName)]
                                 ]
                             ]
                         ]
@@ -912,8 +886,8 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
 
         // Update operations (PUT/PATCH /api/table/{id})
         $updateOperation = [
-            'summary' => "Update {$tableName}",
-            'description' => "Update a specific {$tableName} record",
+            'summary' => 'Update ' . $tableName,
+            'description' => sprintf('Update a specific %s record', $tableName),
             'tags' => [ucfirst($tableName)],
             'security' => $isPublicWrite ? [] : [['bearerAuth' => []]],
             'parameters' => [['$ref' => '#/components/parameters/PathId']],
@@ -921,7 +895,7 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
                 'required' => true,
                 'content' => [
                     'application/json' => [
-                        'schema' => ['$ref' => "#/components/schemas/{$this->schemaName($tableName, 'Write')}"]
+                        'schema' => ['$ref' => '#/components/schemas/' . $this->schemaName($tableName)]
                     ]
                 ]
             ],
@@ -933,7 +907,7 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
                             'schema' => [
                                 'type' => 'object',
                                 'properties' => [
-                                    'data' => ['$ref' => "#/components/schemas/{$this->schemaName($tableName, 'Read')}"]
+                                    'data' => ['$ref' => '#/components/schemas/' . $this->schemaName($tableName)]
                                 ]
                             ]
                         ]
@@ -953,8 +927,8 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
 
         // Delete operation (DELETE /api/table/{id})
         $paths[$itemPath]['delete'] = [
-            'summary' => "Delete {$tableName}",
-            'description' => "Delete a specific {$tableName} record",
+            'summary' => 'Delete ' . $tableName,
+            'description' => sprintf('Delete a specific %s record', $tableName),
             'tags' => [ucfirst($tableName)],
             'security' => $isPublicWrite ? [] : [['bearerAuth' => []]],
             'parameters' => [['$ref' => '#/components/parameters/PathId']],
@@ -982,8 +956,8 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
 
         // Bulk operation (POST /api/table/bulk)
         $paths[$bulkPath]['post'] = [
-            'summary' => "Bulk operations for {$tableName}",
-            'description' => "Perform bulk create, update, or delete operations on {$tableName} records",
+            'summary' => 'Bulk operations for ' . $tableName,
+            'description' => sprintf('Perform bulk create, update, or delete operations on %s records', $tableName),
             'tags' => [ucfirst($tableName)],
             'security' => $isPublicWrite ? [] : [['bearerAuth' => []]],
             'requestBody' => [
@@ -1000,7 +974,7 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
                                 ],
                                 'data' => [
                                     'type' => 'array',
-                                    'items' => ['$ref' => "#/components/schemas/{$this->schemaName($tableName, 'Write')}"],
+                                    'items' => ['$ref' => '#/components/schemas/' . $this->schemaName($tableName)],
                                     'description' => 'Array of records to process'
                                 ]
                             ],

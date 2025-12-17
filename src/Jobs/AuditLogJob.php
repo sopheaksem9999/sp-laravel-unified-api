@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Jobs;
 
+use Exception;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 use Sopheak\Core\Services\AuditLogService;
 use Illuminate\Bus\Queueable;
@@ -32,13 +33,13 @@ class AuditLogJob implements ShouldQueue
      * Create a new job instance.
      */
     public function __construct(
-        public AuditLogEventEnum $event,
+        public AuditLogEventEnum $auditLogEventEnum,
         public string $entityName,
         public ?string $entityType = null,
         public ?array $queryData = null
     ) {
         $this->queryData = $queryData;
-        $this->event = $event;
+        $this->auditLogEventEnum = $auditLogEventEnum;
         $this->entityName = $entityName;
         $this->entityType = $entityType;
     }
@@ -50,12 +51,12 @@ class AuditLogJob implements ShouldQueue
     {
         try {
             AuditLogService::handleAuditDataEntry(
-                event: $this->event,
+                event: $this->auditLogEventEnum,
                 entityName: $this->entityName,
                 entityType: $this->entityType,
                 queryData: $this->queryData,
             );
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             Log::error('Failed to process audit log job', [
                 'error' => $exception->getMessage(),
                 'entity_name' => $this->entityName,

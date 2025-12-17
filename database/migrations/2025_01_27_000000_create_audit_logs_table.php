@@ -11,25 +11,25 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('audit_logs', function (Blueprint $table) {
-            $table->id();
-            $table->string('title')->nullable();
-            $table->string('subject')->nullable();
-            $table->text('recap')->nullable();
-            $table->json('old_data')->nullable();
-            $table->json('new_data')->nullable();
-            $table->string('entity_name')->nullable();
-            $table->string('entity_type')->nullable();
-            $table->unsignedBigInteger('entity_id')->nullable();
-            $table->unsignedBigInteger('user_id')->nullable();
-            $table->json('metadata')->nullable();
-            $table->string('event')->nullable();
-            $table->timestamps();
+        Schema::create('audit_logs', function (Blueprint $blueprint): void {
+            $blueprint->id();
+            $blueprint->string('title')->nullable();
+            $blueprint->string('subject')->nullable();
+            $blueprint->text('recap')->nullable();
+            $blueprint->json('old_data')->nullable();
+            $blueprint->json('new_data')->nullable();
+            $blueprint->string('entity_name')->nullable();
+            $blueprint->string('entity_type')->nullable();
+            $blueprint->unsignedBigInteger('entity_id')->nullable();
+            $blueprint->unsignedBigInteger('user_id')->nullable();
+            $blueprint->json('metadata')->nullable();
+            $blueprint->string('event')->nullable();
+            $blueprint->timestamps();
 
-            $table->index(['entity_type', 'entity_id']);
-            $table->index(['user_id']);
-            $table->index(['event']);
-            $table->index(['created_at']);
+            $blueprint->index(['entity_type', 'entity_id']);
+            $blueprint->index(['user_id']);
+            $blueprint->index(['event']);
+            $blueprint->index(['created_at']);
         });
     }
 

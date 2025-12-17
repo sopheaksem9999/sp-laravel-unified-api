@@ -42,7 +42,7 @@ class RecordHasManyType
     public function __construct(
         public string $table,
         public string $foreignKey,
-        public RecordRelationshipsEnum $type = RecordRelationshipsEnum::HAS_MANY,
+        public RecordRelationshipsEnum $recordRelationshipsEnum = RecordRelationshipsEnum::HAS_MANY,
         public string $localKey = 'id',
         public ?array $with = [],   // hint for eager child include when requested
     ) {}
@@ -50,9 +50,6 @@ class RecordHasManyType
     /**
      * Handle var_export() for configuration caching.
      * This method is required for Laravel's config:cache command.
-     *
-     * @param array $properties
-     * @return static
      */
     public static function __set_state(array $properties): static
     {

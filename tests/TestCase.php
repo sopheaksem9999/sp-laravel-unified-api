@@ -2,8 +2,9 @@
 
 namespace Sopheak\Core\Tests;
 
+use Illuminate\Foundation\Auth\User;
+use Spatie\Permission\Models\Permission;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Support\Facades\Config;
 use Orchestra\Testbench\TestCase as OrchestraTestCase;
 use Sopheak\Core\CoreServiceProvider;
@@ -90,7 +91,7 @@ abstract class TestCase extends OrchestraTestCase
     {
         Config::set('record.tables', [
             'users' => [
-                'model' => \Illuminate\Foundation\Auth\User::class,
+                'model' => User::class,
                 'permissions' => [
                     'view' => 'view_users',
                     'create' => 'create_users',
@@ -107,19 +108,17 @@ abstract class TestCase extends OrchestraTestCase
     /**
      * Create a test user with permissions
      */
-    protected function createTestUser(array $permissions = []): \Illuminate\Foundation\Auth\User
+    protected function createTestUser(array $permissions = []): User
     {
-        $user = new \Illuminate\Foundation\Auth\User([
+        $user = new User([
             'name' => 'Test User',
             'email' => 'test@example.com',
             'password' => bcrypt('password'),
         ]);
         $user->save();
 
-        if (!empty($permissions)) {
-            foreach ($permissions as $permission) {
-                $user->givePermissionTo($permission);
-            }
+        foreach ($permissions as $permission) {
+            $user->givePermissionTo($permission);
         }
 
         return $user;
@@ -138,7 +137,7 @@ abstract class TestCase extends OrchestraTestCase
         ];
 
         foreach ($permissions as $permission) {
-            \Spatie\Permission\Models\Permission::create(['name' => $permission]);
+            Permission::create(['name' => $permission]);
         }
     }
 

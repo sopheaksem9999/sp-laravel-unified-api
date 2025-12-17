@@ -12,10 +12,11 @@
     "spatie/laravel-permission": "^6.21"
   },
   "require-dev": {
+    "friendsofphp/php-cs-fixer": "^3.0",
+    "larastan/larastan": "^2.0",
     "orchestra/testbench": "^8.0|^9.0|^10.0",
     "phpunit/phpunit": "^10.0|^11.0",
-    "larastan/larastan": "^2.0",
-    "friendsofphp/php-cs-fixer": "^3.0"
+    "rector/rector": "^1.2"
   },
   "autoload": {
     "psr-4": {
@@ -31,8 +32,9 @@
     "test": "vendor/bin/phpunit",
     "test-coverage": "vendor/bin/phpunit --coverage-html coverage",
     "analyse": "vendor/bin/phpstan analyse",
-    "format": "vendor/bin/php-cs-fixer fix",
-    "format-check": "vendor/bin/php-cs-fixer fix --dry-run --diff",
+    "rector": "vendor/bin/rector process --dry-run",
+    "rector:fix": "vendor/bin/rector process",
+    "rector:check": "vendor/bin/rector process --dry-run --no-progress-bar",
     "quality": [
       "@format-check",
       "@analyse",

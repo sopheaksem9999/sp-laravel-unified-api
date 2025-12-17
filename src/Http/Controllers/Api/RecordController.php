@@ -2,6 +2,8 @@
 
 namespace Sopheak\Core\Http\Controllers\Api;
 
+use Exception;
+use stdClass;
 use Illuminate\Routing\Controller;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 use Sopheak\Core\Services\AuditLogService;
@@ -330,10 +332,8 @@ class RecordController extends Controller
 
     /**
      * Optimized show method with enhanced caching and relationship loading.
-     *
-     * @param mixed $id
      */
-    public function show(Request $request, string $table, $id): JsonResponse
+    public function show(Request $request, string $table, mixed $id): JsonResponse
     {
         $this->authorizeAction($table, 'read');
         $schema = $this->getCachedSchema();
@@ -462,7 +462,7 @@ class RecordController extends Controller
 
         // Strip relationship data from main payload
         $payloadMain = RelationshipResolver::stripRelationshipData($table, $payload);
-        $payloadMain = $this->sanitizePayload($payloadMain, $schema[$table], false, $table);
+        $payloadMain = $this->sanitizePayload($payloadMain, $schema[$table]);
 
         $tenantId = $request->attributes->get('tenant_id');
         if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
@@ -497,7 +497,7 @@ class RecordController extends Controller
 
             // Commit transaction
             DB::commit();
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
 
@@ -530,7 +530,7 @@ class RecordController extends Controller
 
         // Strip relationship data from main payload
         $payloadMain = RelationshipResolver::stripRelationshipData($table, $payload);
-        $payloadMain = $this->sanitizePayload($payloadMain, $schema[$table], true, $table);
+        $payloadMain = $this->sanitizePayload($payloadMain, $schema[$table]);
 
         $tenantId = $request->attributes->get('tenant_id');
         $pk = $schema[$table]->primary_key ?? 'id';
@@ -574,7 +574,7 @@ class RecordController extends Controller
 
             // Commit transaction
             DB::commit();
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
 
@@ -635,7 +635,7 @@ class RecordController extends Controller
 
             // Commit transaction
             DB::commit();
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
 
@@ -668,7 +668,6 @@ class RecordController extends Controller
         $pk = $schema[$table]->primary_key ?? 'id';
 
         $affected = 0;
-        $post = null;
 
         // Begin transaction
         DB::beginTransaction();
@@ -704,7 +703,7 @@ class RecordController extends Controller
 
             // Commit transaction
             DB::commit();
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
 
@@ -763,7 +762,7 @@ class RecordController extends Controller
 
             // Commit transaction
             DB::commit();
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
 
@@ -807,12 +806,7 @@ class RecordController extends Controller
 
             if (JSON_ERROR_NONE === json_last_error() && is_array($decodedJson) && [] !== $decodedJson) {
                 // Check if it's an indexed array (direct bulk data)
-                if (array_keys($decodedJson) === range(0, count($decodedJson) - 1)) {
-                    $items = $decodedJson;
-                } else {
-                    // Single object, wrap in array
-                    $items = [$decodedJson];
-                }
+                $items = array_keys($decodedJson) === range(0, count($decodedJson) - 1) ? $decodedJson : [$decodedJson];
             } else {
                 $items = $request->input('items', []);
             }
@@ -824,7 +818,7 @@ class RecordController extends Controller
 
         $maxBatch = (int) config('record.bulk_max', 100);
         if (count($items) > $maxBatch) {
-            return $this->error("Batch too large, max {$maxBatch}", 413);
+            return $this->error('Batch too large, max ' . $maxBatch, 413);
         }
 
         $tenantId = $request->attributes->get('tenant_id');
@@ -846,7 +840,7 @@ class RecordController extends Controller
 
                 if ('create' === $operation) {
                     // CREATE: No ID present, create new record
-                    $item = $this->sanitizePayload($item, $schema[$table], false, $table);
+                    $item = $this->sanitizePayload($item, $schema[$table]);
                     if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
                         $item['tenant_id'] = $tenantId;
                     }
@@ -868,12 +862,12 @@ class RecordController extends Controller
                 } elseif ('update' === $operation) {
                     // UPDATE: ID present with additional data
                     if (!isset($item[$pk])) {
-                        throw ValidationException::withMessages(["{$pk}" => 'Primary key required for update']);
+                        throw ValidationException::withMessages([$pk => 'Primary key required for update']);
                     }
 
                     $id = $item[$pk];
                     unset($item[$pk]);
-                    $item = $this->sanitizePayload($item, $schema[$table], true, $table);
+                    $item = $this->sanitizePayload($item, $schema[$table]);
                     if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
                         $item['tenant_id'] = $tenantId;
                     }
@@ -901,7 +895,7 @@ class RecordController extends Controller
                 } elseif ('delete' === $operation) {
                     // DELETE: Only ID present
                     if (!isset($item[$pk])) {
-                        throw ValidationException::withMessages(["{$pk}" => 'Primary key required for delete']);
+                        throw ValidationException::withMessages([$pk => 'Primary key required for delete']);
                     }
 
                     $q = DB::table($actualTableName)->where($pk, $item[$pk]);
@@ -921,7 +915,7 @@ class RecordController extends Controller
                     }
                 } elseif ('upsert' === $operation) {
                     // UPSERT: Legacy action support
-                    $item = $this->sanitizePayload($item, $schema[$table], true, $table);
+                    $item = $this->sanitizePayload($item, $schema[$table]);
                     if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
                         $item['tenant_id'] = $tenantId;
                     }
@@ -947,7 +941,7 @@ class RecordController extends Controller
 
             // Commit transaction
             DB::commit();
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
 
@@ -1000,7 +994,7 @@ class RecordController extends Controller
             if (!isset($schema[$table])) {
                 return response()->json([
                     'error' => 'Table not found',
-                    'message' => "Table '{$table}' does not exist",
+                    'message' => sprintf("Table '%s' does not exist", $table),
                 ], 404);
             }
 
@@ -1035,20 +1029,18 @@ class RecordController extends Controller
             if (!$functionConfig) {
                 return response()->json([
                     'error' => 'Function not found',
-                    'message' => "Function '{$functionName}' not found for table '{$table}'",
+                    'message' => sprintf("Function '%s' not found for table '%s'", $functionName, $table),
                 ], 404);
             }
 
             // Check permission using table function's pms_name
             // Resolve actual table name from RecordTableType configuration
             $actualTableName = $this->resolveActualTableName($table);
-            if (isset($actualTableName)) {
-                $this->authorizeAction($actualTableName, 'read');
-            }
+            $this->authorizeAction($actualTableName, 'read');
 
             // Execute the custom function with extracted ID parameter
             return $this->executeCustomFunction($request, $functionConfig, $extractedId);
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             Log::error('Table function execution failed', [
                 'table' => $table,
                 'function' => $functionName,
@@ -1101,13 +1093,13 @@ class RecordController extends Controller
             if (!$functionConfig) {
                 return response()->json([
                     'error' => 'Function not found',
-                    'message' => "Function '{$functionName}' not found",
+                    'message' => sprintf("Function '%s' not found", $functionName),
                 ], 404);
             }
 
             // Execute the custom function with extracted ID parameter
             return $this->executeCustomFunction($request, $functionConfig, $extractedId);
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             Log::error('Table function execution failed', [
                 'function' => $functionName,
                 'error' => $exception->getMessage(),
@@ -1181,12 +1173,12 @@ class RecordController extends Controller
                 // Validate that no ID is provided for create operation
                 if (isset($item[$pk])) {
                     throw ValidationException::withMessages([
-                        "items.{$index}.{$pk}" => 'Primary key should not be provided for create operation',
+                        sprintf('items.%s.%s', $index, $pk) => 'Primary key should not be provided for create operation',
                     ]);
                 }
 
                 // Sanitize and prepare payload
-                $item = $this->sanitizePayload($item, $schema[$table], false, $table);
+                $item = $this->sanitizePayload($item, $schema[$table]);
 
                 if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
                     $item['tenant_id'] = $tenantId;
@@ -1213,7 +1205,7 @@ class RecordController extends Controller
             DB::commit();
 
             return $this->success($createdData, ['affected' => $affected]);
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             DB::rollBack();
 
             Log::error('Bulk create operation failed', [
@@ -1266,7 +1258,7 @@ class RecordController extends Controller
         $validator = Validator::make(['items' => $items], [
             'items' => 'required|array|min:1|max:'.config('record.bulk_max', 100),
             'items.*' => 'required|array',
-            "items.*.{$pk}" => 'required',
+            'items.*.' . $pk => 'required',
         ], [
             'items.required' => 'Payload must be an array',
             'items.array' => 'Payload must be an array',
@@ -1274,7 +1266,7 @@ class RecordController extends Controller
             'items.max' => 'Maximum '.config('record.bulk_max', 100).' items allowed',
             'items.*.required' => 'Each item is required',
             'items.*.array' => 'Each item must be an object',
-            "items.*.{$pk}.required" => "Primary key ({$pk}) is required for update operation",
+            sprintf('items.*.%s.required', $pk) => sprintf('Primary key (%s) is required for update operation', $pk),
         ]);
 
         if ($validator->fails()) {
@@ -1293,7 +1285,7 @@ class RecordController extends Controller
                 // Validate that ID is provided and other fields exist
                 if (!isset($item[$pk])) {
                     throw ValidationException::withMessages([
-                        "items.{$index}.{$pk}" => "Primary key ({$pk}) is required for update operation",
+                        sprintf('items.%s.%s', $index, $pk) => sprintf('Primary key (%s) is required for update operation', $pk),
                     ]);
                 }
 
@@ -1301,7 +1293,7 @@ class RecordController extends Controller
                 $updateFields = array_diff_key($item, [$pk => true]);
                 if (empty($updateFields)) {
                     throw ValidationException::withMessages([
-                        "items.{$index}" => 'At least one field besides the primary key must be provided for update',
+                        'items.' . $index => 'At least one field besides the primary key must be provided for update',
                     ]);
                 }
 
@@ -1309,7 +1301,7 @@ class RecordController extends Controller
                 unset($item[$pk]);
 
                 // Sanitize and prepare payload
-                $item = $this->sanitizePayload($item, $schema[$table], true, $table);
+                $item = $this->sanitizePayload($item, $schema[$table]);
 
                 if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
                     $item['tenant_id'] = $tenantId;
@@ -1340,7 +1332,7 @@ class RecordController extends Controller
                 } else {
                     // Record not found or no changes made
                     throw ValidationException::withMessages([
-                        "items.{$index}.{$pk}" => "Record with {$pk} '{$id}' not found or no changes detected",
+                        sprintf('items.%s.%s', $index, $pk) => sprintf("Record with %s '%s' not found or no changes detected", $pk, $id),
                     ]);
                 }
             }
@@ -1348,7 +1340,7 @@ class RecordController extends Controller
             DB::commit();
 
             return $this->success($updatedData, ['affected' => $affected]);
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             DB::rollBack();
 
             Log::error('Bulk update operation failed', [
@@ -1420,7 +1412,7 @@ class RecordController extends Controller
                 // Object format: {"id": 123}
                 if (!isset($item[$pk])) {
                     throw ValidationException::withMessages([
-                        "items.{$index}.{$pk}" => "Primary key ({$pk}) is required for delete operation",
+                        sprintf('items.%s.%s', $index, $pk) => sprintf('Primary key (%s) is required for delete operation', $pk),
                     ]);
                 }
 
@@ -1429,7 +1421,7 @@ class RecordController extends Controller
                 // Direct ID format: [123, 456, 789]
                 if (empty($item)) {
                     throw ValidationException::withMessages([
-                        "items.{$index}" => 'ID value cannot be empty',
+                        'items.' . $index => 'ID value cannot be empty',
                     ]);
                 }
 
@@ -1446,17 +1438,17 @@ class RecordController extends Controller
         DB::beginTransaction();
 
         try {
-            foreach ($idsToDelete as $id) {
+            foreach ($idsToDelete as $idToDelete) {
                 // Get record data before deletion for audit log
                 $recordToDelete = null;
                 if (!($schema[$table]->disable_auditLog ?? false)) {
-                    $recordResponse = $this->show($request, $table, $id);
+                    $recordResponse = $this->show($request, $table, $idToDelete);
                     if (200 === $recordResponse->getStatusCode()) {
                         $recordToDelete = json_decode(json_encode($recordResponse->getData()->data), true);
                     }
                 }
 
-                $q = DB::table($actualTableName)->where($pk, $id);
+                $q = DB::table($actualTableName)->where($pk, $idToDelete);
 
                 // Apply tenant filtering using optimized method
                 $this->applyTenantFilter($q, $actualTableName, $tenantId);
@@ -1466,7 +1458,7 @@ class RecordController extends Controller
                     : $q->delete();
 
                 if ($deleteCount > 0) {
-                    $deletedData[] = [$pk => $id];
+                    $deletedData[] = [$pk => $idToDelete];
                     $affected += $deleteCount;
 
                     // Audit log per deleted row (if not disabled)
@@ -1480,7 +1472,7 @@ class RecordController extends Controller
             DB::commit();
 
             return $this->success($deletedData, ['affected' => $affected]);
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             DB::rollBack();
 
             Log::error('Bulk delete operation failed', [
@@ -1593,7 +1585,7 @@ class RecordController extends Controller
      * @param string $table    Target table name for schema validation
      * @param mixed  $tenantId Tenant identifier for filtering
      */
-    private function applyTenantFilter($query, string $table, $tenantId): void
+    private function applyTenantFilter(mixed $query, string $table, mixed $tenantId): void
     {
         if ($this->isTenantIdEnabled() && $tenantId) {
             $schema = $this->getCachedSchema();
@@ -1622,12 +1614,12 @@ class RecordController extends Controller
             return 'create';
         }
 
-        if ($hasId && $hasOtherFields) {
+        if ($hasOtherFields) {
             // ID + other fields = UPDATE
             return 'update';
         }
 
-        if ($hasId && !$hasOtherFields) {
+        if (!$hasOtherFields) {
             // Only ID present = DELETE
             return 'delete';
         }
@@ -1655,7 +1647,7 @@ class RecordController extends Controller
         }
     }
 
-    private function sanitizePayload(array $input, $meta, bool $isUpdate = false, string $table = ''): array
+    private function sanitizePayload(array $input, $meta): array
     {
         $columns = array_keys($meta->columns ?? []);
         // Only allow known columns; prevent mass assignment to meta/system columns
@@ -1734,12 +1726,8 @@ class RecordController extends Controller
 
     /**
      * Generate cache key for single record.
-     *
-     * @param mixed $id
-     * @param mixed $tenantId
-     * @param mixed $select
      */
-    private function generateRecordCacheKey(string $table, $id, $tenantId, $select): string
+    private function generateRecordCacheKey(string $table, mixed $id, mixed $tenantId, mixed $select): string
     {
         $keyData = [
             'table' => $table,
@@ -1781,11 +1769,10 @@ class RecordController extends Controller
     /**
      * Recursively remove deleted_at fields from response data.
      *
-     * @param mixed $data
      *
      * @return mixed
      */
-    private function removeDeletedAtFields($data)
+    private function removeDeletedAtFields(mixed $data)
     {
         if (is_array($data)) {
             $result = [];
@@ -1799,7 +1786,7 @@ class RecordController extends Controller
         }
 
         if (is_object($data)) {
-            $result = new \stdClass();
+            $result = new stdClass();
             foreach ($data as $key => $value) {
                 if ('deleted_at' !== $key) {
                     $result->{$key} = $this->removeDeletedAtFields($value);
@@ -1861,7 +1848,7 @@ class RecordController extends Controller
             if (!in_array(strtoupper($request->method()), array_map('strtoupper', $allowedMethods))) {
                 return response()->json([
                     'error' => 'Method not allowed',
-                    'message' => "Method '{$request->method()}' not allowed for this function",
+                    'message' => sprintf("Method '%s' not allowed for this function", $request->method()),
                 ], 405);
             }
         }
@@ -1898,7 +1885,7 @@ class RecordController extends Controller
             if (!$className || !class_exists($className)) {
                 return response()->json([
                     'error' => 'Function class not found',
-                    'message' => "Class '{$className}' does not exist",
+                    'message' => sprintf("Class '%s' does not exist", $className),
                 ], 500);
             }
 
@@ -1906,7 +1893,7 @@ class RecordController extends Controller
             if (!method_exists($instance, $method)) {
                 return response()->json([
                     'error' => 'Function method not found',
-                    'message' => "Method '{$method}' does not exist in class '{$className}'",
+                    'message' => sprintf("Method '%s' does not exist in class '%s'", $method, $className),
                 ], 500);
             }
 
@@ -1936,7 +1923,7 @@ class RecordController extends Controller
             }
 
             return response()->json($result);
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             return response()->json([
                 'error' => 'Function execution failed',
                 'message' => $exception->getMessage(),

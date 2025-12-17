@@ -86,6 +86,7 @@ class ApiResponseService
                 $meta['request_id'] = $requestId;
             }
         }
+
         return array_merge($meta, $extra);
     }
 
@@ -96,15 +97,14 @@ class ApiResponseService
                 if (is_array($item)) {
                     return Arr::except($item, ['deleted_at']);
                 }
+
                 return $item;
             }, $data);
         }
 
-        if (is_object($data)) {
-            if (method_exists($data, 'toArray')) {
-                $array = $data->toArray();
-                return Arr::except($array, ['deleted_at']);
-            }
+        if (is_object($data) && method_exists($data, 'toArray')) {
+            $array = $data->toArray();
+            return Arr::except($array, ['deleted_at']);
         }
 
         return $data;

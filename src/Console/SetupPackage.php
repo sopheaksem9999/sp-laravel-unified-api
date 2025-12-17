@@ -2,13 +2,14 @@
 
 namespace Sopheak\Core\Console;
 
-use Illuminate\Support\Str;
-
+use Throwable;
+use RuntimeException;
 use Illuminate\Console\Command;
 
 class SetupPackage extends Command
 {
     protected $signature = 'sp-laravel-api:setup {--force : Overwrite existing configs}';
+
     protected $description = 'Setup SP Laravel API package: publish configs and create comprehensive record/audit/jwt configurations.';
 
     public function handle(): int
@@ -24,8 +25,8 @@ class SetupPackage extends Command
                 '--force' => true,
             ]);
             $this->info('✅ Package configurations published successfully.');
-        } catch (\Throwable $e) {
-            $this->error('❌ Vendor publish failed: ' . $e->getMessage());
+        } catch (Throwable $throwable) {
+            $this->error('❌ Vendor publish failed: ' . $throwable->getMessage());
             return self::FAILURE;
         }
 
@@ -34,19 +35,19 @@ class SetupPackage extends Command
 
         $this->line('🔧 Creating application configuration files...');
         $created = 0;
-        
+
         try {
             $created += $this->ensureFile('config/record.php', $this->defaultRecordConfig(), $force);
             $created += $this->ensureFile('config/audit.php', $this->defaultAuditConfig(), $force);
             $created += $this->ensureFile('config/jwt.php', $this->defaultJwtConfig(), $force);
-        } catch (\Throwable $e) {
-            $this->error('❌ Failed to create configuration files: ' . $e->getMessage());
+        } catch (Throwable $throwable) {
+            $this->error('❌ Failed to create configuration files: ' . $throwable->getMessage());
             return self::FAILURE;
         }
 
         $this->newLine();
-        $this->info("✅ Setup complete! Created/updated {$created} configuration file(s).");
-        
+        $this->info(sprintf('✅ Setup complete! Created/updated %d configuration file(s).', $created));
+
         if ($created > 0) {
             $this->newLine();
             $this->line('📋 Next steps:');
@@ -55,22 +56,22 @@ class SetupPackage extends Command
             $this->line('  3. Run: php artisan jwt:secret (to generate JWT secret)');
             $this->line('  4. Configure your database tables in config/record.php');
         }
-        
+
         if (!$force && $created === 0) {
             $this->newLine();
             $this->line('💡 Tip: Use --force to overwrite existing configurations.');
         }
-        
+
         return self::SUCCESS;
     }
 
     private function ensureFile(string $path, string $contents, bool $force): int
     {
         $relativePath = str_replace(base_path() . '/', '', $path);
-        
+
         if (!file_exists($path)) {
             $this->writeFile($path, $contents);
-            $this->info("  ✅ Created: {$relativePath}");
+            $this->info('  ✅ Created: ' . $relativePath);
             return 1;
         }
 
@@ -78,25 +79,23 @@ class SetupPackage extends Command
         $existing = trim(@file_get_contents($path) ?: '');
         if (!$existing || $existing === '<?php' || $force) {
             $this->writeFile($path, $contents);
-            $this->info("  ✅ Updated: {$relativePath}");
+            $this->info('  ✅ Updated: ' . $relativePath);
             return 1;
         }
 
-        $this->line("  ⏭️  Skipped (exists): {$relativePath}");
+        $this->line('  ⏭️  Skipped (exists): ' . $relativePath);
         return 0;
     }
 
     private function writeFile(string $path, string $contents): void
     {
         $dir = dirname($path);
-        if (!is_dir($dir)) {
-            if (!mkdir($dir, 0755, true) && !is_dir($dir)) {
-                throw new \RuntimeException("Failed to create directory: {$dir}");
-            }
+        if (!is_dir($dir) && (!mkdir($dir, 0755, true) && !is_dir($dir))) {
+            throw new RuntimeException('Failed to create directory: ' . $dir);
         }
-        
+
         if (file_put_contents($path, $contents) === false) {
-            throw new \RuntimeException("Failed to write file: {$path}");
+            throw new RuntimeException('Failed to write file: ' . $path);
         }
     }
 
@@ -267,7 +266,7 @@ PHP;
 
     private function defaultJwtConfig(): string
     {
-        return <<<'PHP'
+        return <<<'PHP_WRAP'
 <?php
 
 return [
@@ -490,6 +489,6 @@ return [
         'storage' => PHPOpenSourceSaver\JWTAuth\Providers\Storage\Illuminate::class,
     ],
 ];
-PHP;
+PHP_WRAP;
     }
 }

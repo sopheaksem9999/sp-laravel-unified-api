@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Types;
 
+use InvalidArgumentException;
 use Sopheak\Core\Enums\RecordRelationshipsEnum;
 
 /**
@@ -61,7 +62,7 @@ class RecordSpatiePermissionType
      *
      * @param string                  $related         The related model class name (required)
      * @param string                  $relation        The morph relation name (required)
-     * @param RecordRelationshipsEnum $type            The relationship type
+     * @param RecordRelationshipsEnum $recordRelationshipsEnum The relationship type
      * @param null|string             $table           The intermediate pivot table name
      * @param null|string             $foreignPivotKey Foreign key on pivot table for parent model
      * @param null|string             $relatedPivotKey Foreign key on pivot table for related model
@@ -74,12 +75,12 @@ class RecordSpatiePermissionType
      * @param bool                    $teamsEnabled    Whether teams functionality is enabled
      * @param null|string             $teamsKey        The teams key column name
      *
-     * @throws \InvalidArgumentException When related model class name or relation is empty
+     * @throws InvalidArgumentException When related model class name or relation is empty
      */
     public function __construct(
         public string $related,
         public string $relation,
-        public RecordRelationshipsEnum $type = RecordRelationshipsEnum::SPATIE_PERMISSION,
+        public RecordRelationshipsEnum $recordRelationshipsEnum = RecordRelationshipsEnum::SPATIE_PERMISSION,
         public ?string $table = null,
         public ?string $foreignPivotKey = null,
         public ?string $relatedPivotKey = null,
@@ -93,11 +94,11 @@ class RecordSpatiePermissionType
         public ?string $teamsKey = null,
     ) {
         if (empty($related)) {
-            throw new \InvalidArgumentException('related model class name cannot be empty');
+            throw new InvalidArgumentException('related model class name cannot be empty');
         }
 
         if (empty($relation)) {
-            throw new \InvalidArgumentException('relation name cannot be empty');
+            throw new InvalidArgumentException('relation name cannot be empty');
         }
 
         // Set default values from Spatie\Permission config if not provided
@@ -126,13 +127,13 @@ class RecordSpatiePermissionType
      *
      * @return static A new instance of RecordSpatiePermissionType
      *
-     * @throws \InvalidArgumentException When required properties are missing
+     * @throws InvalidArgumentException When required properties are missing
      */
     public static function __set_state(array $properties): static
     {
         return new static(
-            related: $properties['related'] ?? throw new \InvalidArgumentException('related is required'),
-            relation: $properties['relation'] ?? throw new \InvalidArgumentException('relation is required'),
+            related: $properties['related'] ?? throw new InvalidArgumentException('related is required'),
+            relation: $properties['relation'] ?? throw new InvalidArgumentException('relation is required'),
             type: $properties['type'] ?? RecordRelationshipsEnum::SPATIE_PERMISSION,
             table: $properties['table'] ?? null,
             foreignPivotKey: $properties['foreignPivotKey'] ?? null,
@@ -159,7 +160,7 @@ class RecordSpatiePermissionType
         $config = [
             'related' => $this->related,
             'relation' => $this->relation,
-            'type' => $this->type,
+            'type' => $this->recordRelationshipsEnum,
         ];
 
         // Add optional properties only if they have values
@@ -220,7 +221,7 @@ class RecordSpatiePermissionType
      *
      * @return static A new instance of RecordSpatiePermissionType
      *
-     * @throws \InvalidArgumentException When required configuration keys are missing
+     * @throws InvalidArgumentException When required configuration keys are missing
      *
      * @example
      * ```php
@@ -238,8 +239,8 @@ class RecordSpatiePermissionType
     public static function fromArray(array $config): static
     {
         return new static(
-            related: $config['related'] ?? throw new \InvalidArgumentException('related is required in config array'),
-            relation: $config['relation'] ?? throw new \InvalidArgumentException('relation is required in config array'),
+            related: $config['related'] ?? throw new InvalidArgumentException('related is required in config array'),
+            relation: $config['relation'] ?? throw new InvalidArgumentException('relation is required in config array'),
             type: $config['type'] ?? RecordRelationshipsEnum::SPATIE_PERMISSION,
             table: $config['table'] ?? null,
             foreignPivotKey: $config['foreignPivotKey'] ?? null,
@@ -286,7 +287,7 @@ class RecordSpatiePermissionType
      *
      * @return array The teams constraint configuration
      */
-    public function getTeamsConstraint($teamId = null): array
+    public function getTeamsConstraint(mixed $teamId = null): array
     {
         if (!$this->hasTeamsSupport()) {
             return [];

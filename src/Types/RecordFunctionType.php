@@ -2,6 +2,8 @@
 
 namespace Sopheak\Core\Types;
 
+use InvalidArgumentException;
+
 /**
  * Class RecordFunctionType.
  *
@@ -69,7 +71,7 @@ class RecordFunctionType
      * @param string       $function_method Method name for class-based functions (required)
      * @param null|string  $description     Function description for documentation purposes
      *
-     * @throws \InvalidArgumentException When pms_name, class, or function_method is empty or invalid
+     * @throws InvalidArgumentException When pms_name, class, or function_method is empty or invalid
      */
     public function __construct(
         public array|string $pms_name,
@@ -79,15 +81,15 @@ class RecordFunctionType
         public ?string $description = null,
     ) {
         if (empty($pms_name) || (is_array($pms_name) && [] === $pms_name)) {
-            throw new \InvalidArgumentException('pms_name cannot be empty');
+            throw new InvalidArgumentException('pms_name cannot be empty');
         }
 
         if (empty($class)) {
-            throw new \InvalidArgumentException('class cannot be empty');
+            throw new InvalidArgumentException('class cannot be empty');
         }
 
         if (empty($function_method)) {
-            throw new \InvalidArgumentException('function_method cannot be empty');
+            throw new InvalidArgumentException('function_method cannot be empty');
         }
     }
 
@@ -101,15 +103,15 @@ class RecordFunctionType
      *
      * @return static A new instance of RecordFunctionType
      *
-     * @throws \InvalidArgumentException When required properties are missing
+     * @throws InvalidArgumentException When required properties are missing
      */
     public static function __set_state(array $properties): static
     {
         return new static(
-            pms_name: $properties['pms_name'] ?? throw new \InvalidArgumentException('pms_name is required'),
+            pms_name: $properties['pms_name'] ?? throw new InvalidArgumentException('pms_name is required'),
             method: $properties['method'] ?? null,
-            class: $properties['class'] ?? throw new \InvalidArgumentException('class is required'),
-            function_method: $properties['function_method'] ?? throw new \InvalidArgumentException('function_method is required'),
+            class: $properties['class'] ?? throw new InvalidArgumentException('class is required'),
+            function_method: $properties['function_method'] ?? throw new InvalidArgumentException('function_method is required'),
             description: $properties['description'] ?? null,
         );
     }
@@ -146,7 +148,7 @@ class RecordFunctionType
      *
      * @return static A new instance of RecordFunctionType
      *
-     * @throws \InvalidArgumentException When required configuration keys are missing
+     * @throws InvalidArgumentException When required configuration keys are missing
      *
      * @example
      * ```php
@@ -163,10 +165,10 @@ class RecordFunctionType
     public static function fromArray(array $config): static
     {
         return new static(
-            pms_name: $config['pms_name'] ?? throw new \InvalidArgumentException('pms_name is required in config array'),
-            method: $config['method'] ?? throw new \InvalidArgumentException('method is required in config array'),
-            class: $config['class'] ?? throw new \InvalidArgumentException('class is required in config array'),
-            function_method: $config['function_method'] ?? throw new \InvalidArgumentException('function_method is required in config array'),
+            pms_name: $config['pms_name'] ?? throw new InvalidArgumentException('pms_name is required in config array'),
+            method: $config['method'] ?? throw new InvalidArgumentException('method is required in config array'),
+            class: $config['class'] ?? throw new InvalidArgumentException('class is required in config array'),
+            function_method: $config['function_method'] ?? throw new InvalidArgumentException('function_method is required in config array'),
             description: $config['description'] ?? null,
         );
     }

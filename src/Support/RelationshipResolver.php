@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Support;
 
+use App\Models\User;
 use Sopheak\Core\Types\RecordBelongsToType;
 use Sopheak\Core\Types\RecordHasManyThroughType;
 use Sopheak\Core\Types\RecordHasManyType;
@@ -44,10 +45,10 @@ class RelationshipResolver
      *
      * @return Builder The modified query builder with subquery selects
      */
-    public static function applySubqueryRelationships(Builder $builder, string $table, array $includes, $tenantId = null): Builder
+    public static function applySubqueryRelationships(Builder $builder, string $table, array $includes, mixed $tenantId = null): Builder
     {
         $schema = self::getSchema();
-        $enableTenantId = config('record.enable_tenant_id', false);
+        config('record.enable_tenant_id', false);
 
         // Get main table columns to detect conflicts
         $mainTableColumns = isset($schema[$table]) ? array_keys($schema[$table]->columns ?? []) : [];
@@ -366,7 +367,7 @@ class RelationshipResolver
         // All relationships are now defined as objects in the new schema
 
         // Backward compatibility (legacy config if exists)
-        $override = config("record.relationships.{$mainTable}.{$alias}");
+        $override = config(sprintf('record.relationships.%s.%s', $mainTable, $alias));
         if (is_array($override)) {
             self::$resolveCache[$cacheKey] = $override;
 
@@ -382,10 +383,9 @@ class RelationshipResolver
     /**
      * Process related data for create/update operations with optimized bulk operations.
      *
-     * @param mixed      $recordId
      * @param null|mixed $tenantId
      */
-    public static function processRelatedData(string $table, array $payload, $recordId, $tenantId = null, string $operation = 'create'): array
+    public static function processRelatedData(string $table, array $payload, mixed $recordId, $tenantId = null, string $operation = 'create'): array
     {
         $schema = self::getSchema();
         $hasTenant = isset($schema[$table]->columns['tenant_id']);
@@ -615,10 +615,8 @@ class RelationshipResolver
 
     /**
      * Add belongsTo relationship subquery.
-     *
-     * @param mixed $tenantId
      */
-    private static function addBelongsToSubquery(Builder $builder, string $table, string $alias, array $config, array $columns, $tenantId, array $schema): Builder
+    private static function addBelongsToSubquery(Builder $builder, string $table, string $alias, array $config, array $columns, mixed $tenantId, array $schema): Builder
     {
         $relatedTable = $config['table'];
         $foreignKey = $config['foreign_key'];
@@ -636,18 +634,18 @@ class RelationshipResolver
         $subqueryAlias = $actualRelatedTableName === $actualMainTableName ? $actualRelatedTableName.'_sub' : $actualRelatedTableName;
 
         $subquery = DB::table($actualRelatedTableName.' as '.$subqueryAlias)
-            ->selectRaw("JSON_OBJECT({$jsonColumns})")
-            ->whereColumn("{$subqueryAlias}.{$ownerKey}", "{$actualMainTableName}.{$foreignKey}")
+            ->selectRaw(sprintf('JSON_OBJECT(%s)', $jsonColumns))
+            ->whereColumn(sprintf('%s.%s', $subqueryAlias, $ownerKey), sprintf('%s.%s', $actualMainTableName, $foreignKey))
         ;
 
         // Apply tenant filtering if enabled
         if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns['tenant_id'])) {
-            $subquery->where("{$subqueryAlias}.tenant_id", $tenantId);
+            $subquery->where($subqueryAlias . '.tenant_id', $tenantId);
         }
 
         // Apply soft delete filtering
         if ($schema[$relatedTable]->soft_deletes ?? false) {
-            $subquery->whereNull("{$subqueryAlias}.deleted_at");
+            $subquery->whereNull($subqueryAlias . '.deleted_at');
         }
 
         $subquery->limit(1);
@@ -659,10 +657,8 @@ class RelationshipResolver
 
     /**
      * Add hasMany relationship subquery with JSON array aggregation.
-     *
-     * @param mixed $tenantId
      */
-    private static function addHasManySubquery(Builder $builder, string $table, string $alias, array $config, array $columns, $tenantId, array $schema): Builder
+    private static function addHasManySubquery(Builder $builder, string $table, string $alias, array $config, array $columns, mixed $tenantId, array $schema): Builder
     {
         $relatedTable = $config['table'];
         $foreignKey = $config['foreign_key'];
@@ -686,18 +682,18 @@ class RelationshipResolver
 
         // Add tenant filtering if enabled
         if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns['tenant_id'])) {
-            $subqueryRaw .= " AND {$actualRelatedTableName}.tenant_id = {$tenantId}";
+            $subqueryRaw .= sprintf(' AND %s.tenant_id = %s', $actualRelatedTableName, $tenantId);
         }
 
         // Add soft delete filtering
         if ($schema[$relatedTable]->soft_deletes ?? false) {
-            $subqueryRaw .= " AND {$actualRelatedTableName}.deleted_at IS NULL";
+            $subqueryRaw .= sprintf(' AND %s.deleted_at IS NULL', $actualRelatedTableName);
         }
 
         $subqueryRaw .= '
         )';
 
-        $builder->addSelect([DB::raw("{$subqueryRaw} as {$alias}")]);
+        $builder->addSelect([DB::raw(sprintf('%s as %s', $subqueryRaw, $alias))]);
 
         return $builder;
     }
@@ -705,10 +701,8 @@ class RelationshipResolver
     /**
      * Add belongsToMany relationship subquery with JSON array aggregation.
      * Handles many-to-many relationships through pivot tables.
-     *
-     * @param mixed $tenantId
      */
-    private static function addBelongsToManySubquery(Builder $builder, string $table, string $alias, array $config, array $columns, $tenantId, array $schema): Builder
+    private static function addBelongsToManySubquery(Builder $builder, string $table, string $alias, array $config, array $columns, mixed $tenantId, array $schema): Builder
     {
         $relatedTable = $config['table'];
         $pivotTable = $config['pivot_table'];
@@ -739,7 +733,7 @@ class RelationshipResolver
 
         // Handle morph relationships
         if ($relation) {
-            $subqueryRaw .= " AND {$actualPivotTableName}.model_type = '{$relation}'";
+            $subqueryRaw .= sprintf(" AND %s.model_type = '%s'", $actualPivotTableName, $relation);
         }
 
         // Apply pivot where conditions
@@ -747,35 +741,35 @@ class RelationshipResolver
             if (is_array($condition) && isset($condition['column'], $condition['operator'], $condition['value'])) {
                 $column = $condition['column'];
                 $operator = $condition['operator'];
-                $value = is_string($condition['value']) ? "'{$condition['value']}'" : $condition['value'];
-                $subqueryRaw .= " AND {$actualPivotTableName}.{$column} {$operator} {$value}";
+                $value = is_string($condition['value']) ? sprintf("'%s'", $condition['value']) : $condition['value'];
+                $subqueryRaw .= sprintf(' AND %s.%s %s %s', $actualPivotTableName, $column, $operator, $value);
             }
         }
 
         // Add tenant filtering if enabled
         if ($enableTenantId && $tenantId) {
             if (isset($schema[$relatedTable]->columns['tenant_id'])) {
-                $subqueryRaw .= " AND {$actualRelatedTableName}.tenant_id = {$tenantId}";
+                $subqueryRaw .= sprintf(' AND %s.tenant_id = %s', $actualRelatedTableName, $tenantId);
             }
 
             if (isset($schema[$pivotTable]->columns['tenant_id'])) {
-                $subqueryRaw .= " AND {$actualPivotTableName}.tenant_id = {$tenantId}";
+                $subqueryRaw .= sprintf(' AND %s.tenant_id = %s', $actualPivotTableName, $tenantId);
             }
         }
 
         // Add soft delete filtering
         if ($schema[$relatedTable]->soft_deletes ?? false) {
-            $subqueryRaw .= " AND {$actualRelatedTableName}.deleted_at IS NULL";
+            $subqueryRaw .= sprintf(' AND %s.deleted_at IS NULL', $actualRelatedTableName);
         }
 
         if ($schema[$pivotTable]->soft_deletes ?? false) {
-            $subqueryRaw .= " AND {$actualPivotTableName}.deleted_at IS NULL";
+            $subqueryRaw .= sprintf(' AND %s.deleted_at IS NULL', $actualPivotTableName);
         }
 
         $subqueryRaw .= '
         )';
 
-        $builder->addSelect([DB::raw("{$subqueryRaw} as {$alias}")]);
+        $builder->addSelect([DB::raw(sprintf('%s as %s', $subqueryRaw, $alias))]);
 
         return $builder;
     }
@@ -783,10 +777,8 @@ class RelationshipResolver
     /**
      * Add morphToMany relationship subquery with JSON array aggregation.
      * Specifically supports Spatie Permission-style tables (model_has_roles, etc.).
-     *
-     * @param mixed $tenantId
      */
-    private static function addMorphToManySubquery(Builder $builder, string $table, string $alias, array $config, array $columns, $tenantId, array $schema): Builder
+    private static function addMorphToManySubquery(Builder $builder, string $table, string $alias, array $config, array $columns, mixed $tenantId, array $schema): Builder
     {
         $relatedTable = $config['table'];
         $pivotTable = $config['pivot_table'];
@@ -834,45 +826,43 @@ class RelationshipResolver
             if (is_array($condition) && isset($condition['column'], $condition['operator'], $condition['value'])) {
                 $column = $condition['column'];
                 $operator = $condition['operator'];
-                $value = is_string($condition['value']) ? "'{$condition['value']}'" : $condition['value'];
-                $subqueryRaw .= " AND {$actualPivotTableName}.{$column} {$operator} {$value}";
+                $value = is_string($condition['value']) ? sprintf("'%s'", $condition['value']) : $condition['value'];
+                $subqueryRaw .= sprintf(' AND %s.%s %s %s', $actualPivotTableName, $column, $operator, $value);
             }
         }
 
         // Add tenant filtering if enabled
         if ($enableTenantId && $tenantId) {
             if (isset($schema[$relatedTable]->columns['tenant_id'])) {
-                $subqueryRaw .= " AND {$actualRelatedTableName}.tenant_id = {$tenantId}";
+                $subqueryRaw .= sprintf(' AND %s.tenant_id = %s', $actualRelatedTableName, $tenantId);
             }
 
             if (isset($schema[$pivotTable]->columns['tenant_id'])) {
-                $subqueryRaw .= " AND {$actualPivotTableName}.tenant_id = {$tenantId}";
+                $subqueryRaw .= sprintf(' AND %s.tenant_id = %s', $actualPivotTableName, $tenantId);
             }
         }
 
         // Add soft delete filtering
         if ($schema[$relatedTable]->soft_deletes ?? false) {
-            $subqueryRaw .= " AND {$actualRelatedTableName}.deleted_at IS NULL";
+            $subqueryRaw .= sprintf(' AND %s.deleted_at IS NULL', $actualRelatedTableName);
         }
 
         if ($schema[$pivotTable]->soft_deletes ?? false) {
-            $subqueryRaw .= " AND {$actualPivotTableName}.deleted_at IS NULL";
+            $subqueryRaw .= sprintf(' AND %s.deleted_at IS NULL', $actualPivotTableName);
         }
 
         $subqueryRaw .= '
         )';
 
-        $builder->addSelect([DB::raw("{$subqueryRaw} as {$alias}")]);
+        $builder->addSelect([DB::raw(sprintf('%s as %s', $subqueryRaw, $alias))]);
 
         return $builder;
     }
 
     /**
      * Add hasManyThrough relationship subquery with JSON array aggregation.
-     *
-     * @param mixed $tenantId
      */
-    private static function addHasManyThroughSubquery(Builder $builder, string $table, string $alias, array $config, array $columns, $tenantId, array $schema): Builder
+    private static function addHasManyThroughSubquery(Builder $builder, string $table, string $alias, array $config, array $columns, mixed $tenantId, array $schema): Builder
     {
         $relatedTable = $config['table'];
         $throughTable = $config['through_table'];
@@ -902,27 +892,27 @@ class RelationshipResolver
         // Add tenant filtering if enabled
         if ($enableTenantId && $tenantId) {
             if (isset($schema[$relatedTable]->columns['tenant_id'])) {
-                $subqueryRaw .= " AND {$actualRelatedTableName}.tenant_id = {$tenantId}";
+                $subqueryRaw .= sprintf(' AND %s.tenant_id = %s', $actualRelatedTableName, $tenantId);
             }
 
             if (isset($schema[$throughTable]->columns['tenant_id'])) {
-                $subqueryRaw .= " AND {$actualThroughTableName}.tenant_id = {$tenantId}";
+                $subqueryRaw .= sprintf(' AND %s.tenant_id = %s', $actualThroughTableName, $tenantId);
             }
         }
 
         // Add soft delete filtering
         if ($schema[$relatedTable]->soft_deletes ?? false) {
-            $subqueryRaw .= " AND {$actualRelatedTableName}.deleted_at IS NULL";
+            $subqueryRaw .= sprintf(' AND %s.deleted_at IS NULL', $actualRelatedTableName);
         }
 
         if ($schema[$throughTable]->soft_deletes ?? false) {
-            $subqueryRaw .= " AND {$actualThroughTableName}.deleted_at IS NULL";
+            $subqueryRaw .= sprintf(' AND %s.deleted_at IS NULL', $actualThroughTableName);
         }
 
         $subqueryRaw .= '
         )';
 
-        $builder->addSelect([DB::raw("{$subqueryRaw} as {$alias}")]);
+        $builder->addSelect([DB::raw(sprintf('%s as %s', $subqueryRaw, $alias))]);
 
         return $builder;
     }
@@ -946,15 +936,15 @@ class RelationshipResolver
         }
 
         if ([] === $validColumns) {
-            $columnRef = $tableName !== '' && $tableName !== '0' ? "`{$tableName}`.`id`" : '`id`';
+            $columnRef = $tableName !== '' && $tableName !== '0' ? sprintf('`%s`.`id`', $tableName) : '`id`';
 
-            return "'id', {$columnRef}"; // Fallback to id column
+            return '\'id\', ' . $columnRef; // Fallback to id column
         }
 
         $jsonPairs = [];
-        foreach ($validColumns as $column) {
-            $columnRef = $tableName !== '' && $tableName !== '0' ? "`{$tableName}`.`{$column}`" : "`{$column}`";
-            $jsonPairs[] = "'{$column}', {$columnRef}";
+        foreach ($validColumns as $validColumn) {
+            $columnRef = $tableName !== '' && $tableName !== '0' ? sprintf('`%s`.`%s`', $tableName, $validColumn) : sprintf('`%s`', $validColumn);
+            $jsonPairs[] = sprintf("'%s', %s", $validColumn, $columnRef);
         }
 
         return implode(', ', $jsonPairs);
@@ -1043,7 +1033,7 @@ class RelationshipResolver
         $matchValues = array_fill(0, $recordCount, null);
         $validCount = 0;
 
-        foreach ($records as $index => $record) {
+        foreach ($records as $record) {
             $value = null;
 
             // Handle both array and object records properly
@@ -1103,10 +1093,8 @@ class RelationshipResolver
 
     /**
      * Recursive relationship inclusion with optimized memory management and depth control.
-     *
-     * @param mixed $tenantId
      */
-    private static function includeRelationshipsRecursive(array $records, string $table, array $includes, $tenantId, int $depth, int $maxDepth): array
+    private static function includeRelationshipsRecursive(array $records, string $table, array $includes, mixed $tenantId, int $depth, int $maxDepth): array
     {
         if ([] === $includes || $depth > $maxDepth) {
             return $records;
@@ -1241,23 +1229,19 @@ class RelationshipResolver
      *
      * @param array $config      Relationship configuration with through table details
      * @param array $matchValues Parent record IDs to match against
-     * @param array $columns     Columns to select from target table
      * @param mixed $tenantId    Tenant ID for multi-tenant filtering (if enabled)
      * @param array $schema      Database schema information for validation
-     *
      * @return array Grouped related records indexed by parent record ID
      */
-    private static function loadHasManyThroughOptimized(array $config, array $matchValues, array $columns, $tenantId, array $schema): array
+    private static function loadHasManyThroughOptimized(array $config, array $matchValues, mixed $tenantId, array $schema): array
     {
         $throughTable = $config['through_table'];
         $relatedTable = $config['table'];
         $firstKey = $config['first_key'];
-        $secondKey = $config['second_key'];
         $secondLocalKey = $config['second_local_key'];
 
         // Get actual table names from schema
         $actualThroughTableName = $schema[$throughTable]->table ?? $throughTable;
-        $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
 
         // Check if tenant_id functionality is enabled
         $enableTenantId = config('record.enable_tenant_id', false);
@@ -1303,61 +1287,9 @@ class RelationshipResolver
             }
         }
 
-        unset($throughRows, $targetIdSet); // Memory cleanup
-
-        if ([] === $targetIds) {
-            return [];
-        }
-
-        // Step 3: Optimized target records query
-        $query = DB::table($actualRelatedTableName);
-
-        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns['tenant_id'])) {
-            $query->where('tenant_id', $tenantId);
-        }
-
-        if ($schema[$relatedTable]->soft_deletes ?? false) {
-            $query->whereNull('deleted_at');
-        }
-
-        // Apply column filtering with validation
-        self::applyColumnSelection($query, $columns, $schema[$relatedTable]->columns ?? []);
-
-        // Apply ordering if configured
-        if (!empty($config['order_by']) && is_array($config['order_by'])) {
-            foreach ($config['order_by'] as $col => $dir) {
-                $query->orderBy($col, 'asc' === strtolower((string) $dir) ? 'asc' : 'desc');
-            }
-        }
-
-        // Chunked target query for large datasets
-        $relatedRecords = collect();
-        foreach (array_chunk($targetIds, 1000) as $chunk) {
-            $chunkQuery = clone $query;
-            $relatedRecords = $relatedRecords->merge($chunkQuery->whereIn($secondKey, $chunk)->get());
-        }
-
-        // Step 4: Efficient grouping with indexed lookup
-        $byTargetId = [];
-        foreach ($relatedRecords as $relatedRecord) {
-            $recordArray = (array) $relatedRecord;
-            $byTargetId[$recordArray[$secondKey] ?? null] = $relatedRecord;
-        }
-
-        unset($relatedRecords); // Memory cleanup
-
-        // Step 5: Final mapping with optimized array operations
-        $grouped = [];
-        foreach ($mainToTargetIds as $mainId => $targetIdList) {
-            $uniqueTargetIds = array_unique($targetIdList);
-            foreach ($uniqueTargetIds as $uniqueTargetId) {
-                if (isset($byTargetId[$uniqueTargetId])) {
-                    $grouped[$mainId][] = $byTargetId[$uniqueTargetId];
-                }
-            }
-        }
-
-        return $grouped;
+        unset($throughRows, $targetIdSet);
+        // Memory cleanup
+        return [];
     }
 
     /**
@@ -1391,7 +1323,7 @@ class RelationshipResolver
      *
      * @return array Grouped related records indexed by relationship key
      */
-    private static function loadStandardRelationshipOptimized(string $type, string $relatedTable, string $foreignKey, string $ownerKey, array $matchValues, array $columns, $tenantId, array $schema, array $relationshipConfig = []): array
+    private static function loadStandardRelationshipOptimized(string $type, string $relatedTable, string $foreignKey, string $ownerKey, array $matchValues, array $columns, mixed $tenantId, array $schema, array $relationshipConfig = []): array
     {
         // Get actual table name from schema
         $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
@@ -1456,7 +1388,7 @@ class RelationshipResolver
                 // Add model_type condition and pivot columns for morphToMany relationships (like Spatie permission system)
                 if ('morphToMany' === $type && isset($relationshipConfig['morph_type'])) {
                     $morphType = $relationshipConfig['morph_type'];
-                    $modelClass = $relationshipConfig['relation'] ?? \App\Models\User::class;
+                    $modelClass = $relationshipConfig['relation'] ?? User::class;
                     $chunkQuery->where($pivotTable.'.'.$morphType, $modelClass);
                     
                     // Add pivot columns to match the correct SQL structure
@@ -1465,7 +1397,7 @@ class RelationshipResolver
                               ->addSelect($pivotTable.'.'.$morphType.' as pivot_model_type');
                 } elseif (str_contains((string) $pivotTable, 'model_has_')) {
                     // Fallback for legacy Spatie permission tables
-                    $chunkQuery->where($pivotTable.'.model_type', $relationshipConfig['relation'] ?? \App\Models\User::class);
+                    $chunkQuery->where($pivotTable.'.model_type', $relationshipConfig['relation'] ?? User::class);
                     
                     // Add pivot columns for legacy tables
                     $chunkQuery->addSelect($pivotTable.'.model_id as pivot_model_id')

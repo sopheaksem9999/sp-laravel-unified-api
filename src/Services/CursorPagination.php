@@ -2,6 +2,8 @@
 
 namespace Sopheak\Core\Services;
 
+use Exception;
+use InvalidArgumentException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\Request;
@@ -132,7 +134,7 @@ class CursorPagination
 
             // Fetch one extra item to determine if there are more pages
             $items = $paginatedQuery->limit($perPage + 1)->get();
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             Log::error('Cursor pagination query failed', [
                 'cursor' => $cursor,
                 'direction' => $direction,
@@ -265,25 +267,25 @@ class CursorPagination
                 try {
                     $decoded = base64_decode($cursor, true);
                     if ($decoded === false) {
-                        throw new \InvalidArgumentException('Invalid base64 cursor format');
+                        throw new InvalidArgumentException('Invalid base64 cursor format');
                     }
                     
                     $cursorValues = json_decode($decoded, true);
                     if (json_last_error() !== JSON_ERROR_NONE) {
-                        throw new \InvalidArgumentException('Invalid JSON in cursor: ' . json_last_error_msg());
+                        throw new InvalidArgumentException('Invalid JSON in cursor: ' . json_last_error_msg());
                     }
                     
                     if (!is_array($cursorValues) || count($cursorValues) !== count($cursorColumns)) {
-                        throw new \InvalidArgumentException('Cursor values count does not match cursor columns count');
+                        throw new InvalidArgumentException('Cursor values count does not match cursor columns count');
                     }
                     
                     // Validate cursor values
-                    foreach ($cursorValues as $value) {
-                        if (!is_scalar($value) && $value !== null) {
-                            throw new \InvalidArgumentException('Invalid cursor value type');
+                    foreach ($cursorValues as $cursorValue) {
+                        if (!is_scalar($cursorValue) && $cursorValue !== null) {
+                            throw new InvalidArgumentException('Invalid cursor value type');
                         }
                     }
-                } catch (\Exception $e) {
+                } catch (Exception $e) {
                     Log::warning('Composite cursor parsing failed', [
                         'cursor' => $cursor,
                         'error' => $e->getMessage()
@@ -302,9 +304,9 @@ class CursorPagination
             }
 
             // Apply ordering
-            foreach ($cursorColumns as $column) {
+            foreach ($cursorColumns as $cursorColumn) {
                 $order = ('prev' === $direction) ? 'asc' : 'desc';
-                $paginatedQuery->orderBy($column, $order);
+                $paginatedQuery->orderBy($cursorColumn, $order);
             }
 
             // Fetch items
@@ -312,7 +314,7 @@ class CursorPagination
         } catch (ValidationException $e) {
             // Re-throw validation exceptions
             throw $e;
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Composite cursor pagination query failed', [
                 'cursor' => $cursor,
                 'direction' => $direction,
@@ -446,7 +448,7 @@ class CursorPagination
             $estimatedCount = self::estimateRowCount($query);
 
             return $estimatedCount > $threshold;
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             Log::error('Error determining cursor pagination usage', [
                 'error' => $exception->getMessage(),
                 'trace' => $exception->getTraceAsString()
@@ -459,10 +461,8 @@ class CursorPagination
 
     /**
      * Apply composite cursor conditions recursively.
-     *
-     * @param mixed $query
      */
-    private static function applyCompositeCursorConditions($query, array $columns, array $values, string $direction, int $index = 0): void
+    private static function applyCompositeCursorConditions(mixed $query, array $columns, array $values, string $direction, int $index = 0): void
     {
         if ($index >= count($columns)) {
             return;
@@ -491,22 +491,20 @@ class CursorPagination
 
     /**
      * Get table name from query.
-     *
-     * @param mixed $query
      */
-    private static function getTableName($query): ?string
+    private static function getTableName(mixed $query): ?string
     {
         try {
             if ($query instanceof Builder) {
                 $tableName = $query->getModel()->getTable();
                 
                 if (empty($tableName)) {
-                    throw new \InvalidArgumentException('Model does not have a table name');
+                    throw new InvalidArgumentException('Model does not have a table name');
                 }
                 
                 // Validate table name format
                 if (in_array(preg_match('/^[a-zA-Z_]\w*$/', $tableName), [0, false], true)) {
-                    throw new \InvalidArgumentException('Invalid table name format: ' . $tableName);
+                    throw new InvalidArgumentException('Invalid table name format: ' . $tableName);
                 }
                 
                 return $tableName;
@@ -516,7 +514,7 @@ class CursorPagination
                 $from = $query->from;
                 
                 if (empty($from)) {
-                    throw new \InvalidArgumentException('Query does not have a FROM clause');
+                    throw new InvalidArgumentException('Query does not have a FROM clause');
                 }
                 
                 // Handle table aliases (e.g., "users as u")
@@ -524,14 +522,14 @@ class CursorPagination
                 
                 // Validate table name format
                 if (in_array(preg_match('/^[a-zA-Z_]\w*$/', $tableName), [0, false], true)) {
-                    throw new \InvalidArgumentException('Invalid table name format: ' . $tableName);
+                    throw new InvalidArgumentException('Invalid table name format: ' . $tableName);
                 }
                 
                 return $tableName;
             }
 
             return null;
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             Log::error('Failed to extract table name from query', [
                 'error' => $exception->getMessage(),
                 'query_type' => $query::class
@@ -544,10 +542,8 @@ class CursorPagination
     /**
      * Estimate row count without expensive COUNT() query.
      * Uses optimized strategies with caching and fallback mechanisms.
-     *
-     * @param mixed $query
      */
-    private static function estimateRowCount($query): int
+    private static function estimateRowCount(mixed $query): int
     {
         try {
             $tableName = self::getTableName($query);
@@ -557,12 +553,13 @@ class CursorPagination
             }
 
             // Check cache first (configurable TTL)
-            $cacheKey = "table_row_count:{$tableName}";
+            $cacheKey = 'table_row_count:' . $tableName;
             $cacheTtl = config('cursor_pagination.statistics_cache_ttl', 300);
-            $cached = cache()->remember($cacheKey, $cacheTtl, function () use ($tableName) {
+
+            return cache()->remember($cacheKey, $cacheTtl, function () use ($tableName) {
                 try {
                     return self::fetchTableRowCount($tableName);
-                } catch (\Exception $exception) {
+                } catch (Exception $exception) {
                     Log::warning('Row count estimation failed, using default', [
                         'table' => $tableName,
                         'error' => $exception->getMessage()
@@ -571,9 +568,7 @@ class CursorPagination
                     return config('cursor_pagination.default_estimate', 1000);
                 }
             });
-
-            return $cached;
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             Log::error('Critical error in row count estimation', [
                 'error' => $exception->getMessage(),
                 'trace' => $exception->getTraceAsString()
@@ -586,8 +581,6 @@ class CursorPagination
     /**
      * Fetch table row count using multiple optimized strategies.
      * Uses the most efficient approaches to avoid expensive COUNT() queries.
-     *
-     * @param string $tableName
      */
     private static function fetchTableRowCount(string $tableName): int
     {
@@ -595,7 +588,7 @@ class CursorPagination
         
         try {
             // Set query timeout to prevent long-running estimation queries
-            DB::statement("SET SESSION max_execution_time = {$timeout}");
+            DB::statement('SET SESSION max_execution_time = ' . $timeout);
             
             // Strategy 1: Use INFORMATION_SCHEMA for accurate InnoDB estimates
             $infoSchema = DB::select(
@@ -621,14 +614,14 @@ class CursorPagination
             }
 
             // Strategy 3: Use EXPLAIN SELECT for query optimizer estimates
-            $explain = DB::select("EXPLAIN SELECT COUNT(*) FROM `{$tableName}`");
+            $explain = DB::select(sprintf('EXPLAIN SELECT COUNT(*) FROM `%s`', $tableName));
             if (!empty($explain) && isset($explain[0]->rows)) {
                 return (int) $explain[0]->rows;
             }
 
             // Strategy 4: Statistical sampling fallback
             return self::estimateRowCountBySampling($tableName);
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             Log::debug('Row count estimation failed', [
                 'table' => $tableName,
                 'error' => $exception->getMessage()
@@ -640,7 +633,7 @@ class CursorPagination
             // Reset query timeout
             try {
                 DB::statement('SET SESSION max_execution_time = DEFAULT');
-            } catch (\Exception) {
+            } catch (Exception) {
                 // Ignore timeout reset errors
             }
         }
@@ -649,8 +642,6 @@ class CursorPagination
     /**
      * Estimate row count using optimized statistical sampling.
      * This is the fastest and most reliable fallback method.
-     *
-     * @param string $tableName
      */
     private static function estimateRowCountBySampling(string $tableName): int
     {
@@ -670,7 +661,7 @@ class CursorPagination
             ";
             
             // Set a shorter timeout for sampling queries
-            DB::statement("SET SESSION max_execution_time = {$timeout}");
+            DB::statement('SET SESSION max_execution_time = ' . $timeout);
             
             $sample = DB::select($sampleQuery);
             
@@ -698,7 +689,7 @@ class CursorPagination
                             // Medium table - moderate multiplier
                             $multiplier = 20;
                         }
-                    } catch (\Exception) {
+                    } catch (Exception) {
                         // Ignore table size check errors
                     }
                     
@@ -709,7 +700,7 @@ class CursorPagination
             }
             
             return 0;
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             Log::debug('Statistical sampling failed', [
                 'table' => $tableName,
                 'error' => $exception->getMessage()
@@ -720,7 +711,7 @@ class CursorPagination
         } finally {
             try {
                 DB::statement('SET SESSION max_execution_time = DEFAULT');
-            } catch (\Exception) {
+            } catch (Exception) {
                 // Ignore timeout reset errors
             }
         }
@@ -729,10 +720,7 @@ class CursorPagination
     /**
      * Validate pagination input parameters for security and correctness.
      *
-     * @param Request $request
-     * @param string $cursorColumn
-     * @param int $perPage
-     * 
+     *
      * @throws ValidationException
      */
     private static function validatePaginationInputs(Request $request, string $cursorColumn, int $perPage): void
@@ -772,8 +760,7 @@ class CursorPagination
      * Validate that the cursor column exists in the query.
      *
      * @param Builder|QueryBuilder $query
-     * @param string $cursorColumn
-     * 
+     *
      * @throws ValidationException
      */
     private static function validateCursorColumn($query, string $cursorColumn): void
@@ -786,17 +773,17 @@ class CursorPagination
 
             // Check if column exists in table schema
             $columns = Cache::remember(
-                "table_columns:{$tableName}",
+                'table_columns:' . $tableName,
                 config('cursor_pagination.schema_cache_ttl', 3600),
                 fn() => DB::getSchemaBuilder()->getColumnListing($tableName)
             );
 
             if (!in_array($cursorColumn, $columns)) {
                 throw ValidationException::withMessages([
-                    'cursor_column' => "Column '{$cursorColumn}' does not exist in table '{$tableName}'."
+                    'cursor_column' => sprintf("Column '%s' does not exist in table '%s'.", $cursorColumn, $tableName)
                 ]);
             }
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             // Log error but don't fail pagination
             Log::warning('Cursor column validation failed', [
                 'cursor_column' => $cursorColumn,
@@ -807,8 +794,6 @@ class CursorPagination
 
     /**
      * Validate cursor format for security.
-     *
-     * @param string $cursor
      */
     private static function isValidCursor(string $cursor): bool
     {
@@ -831,10 +816,7 @@ class CursorPagination
     /**
      * Validate composite cursor input parameters.
      *
-     * @param Request $request
-     * @param array $cursorColumns
-     * @param int $perPage
-     * 
+     *
      * @throws ValidationException
      */
     private static function validateCompositeCursorInputs(Request $request, array $cursorColumns, int $perPage): void
@@ -853,10 +835,10 @@ class CursorPagination
         }
 
         // Validate each cursor column name
-        foreach ($cursorColumns as $column) {
-            if (!is_string($column) || in_array(preg_match('/^[a-zA-Z_]\w*$/', $column), [0, false], true)) {
+        foreach ($cursorColumns as $cursorColumn) {
+            if (!is_string($cursorColumn) || in_array(preg_match('/^[a-zA-Z_]\w*$/', $cursorColumn), [0, false], true)) {
                 throw ValidationException::withMessages([
-                    'cursor_columns' => "Invalid cursor column name format: {$column}"
+                    'cursor_columns' => 'Invalid cursor column name format: ' . $cursorColumn
                 ]);
             }
         }

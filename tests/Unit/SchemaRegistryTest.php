@@ -3,7 +3,6 @@
 namespace Sopheak\Core\Tests\Unit;
 
 use Sopheak\Core\Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Cache;
 use Sopheak\Core\Support\SchemaRegistry;
@@ -18,7 +17,7 @@ class SchemaRegistryTest extends TestCase
     }
 
     /** @test */
-    public function it_can_get_schema_registry()
+    public function it_can_get_schema_registry(): void
     {
         // Mock config
         Config::shouldReceive('get')
@@ -37,41 +36,41 @@ class SchemaRegistryTest extends TestCase
     }
 
     /** @test */
-    public function it_can_refresh_cache()
+    public function it_can_refresh_cache(): void
     {
         // Mock cache operations
         Cache::shouldReceive('forget')
               ->andReturn(true);
-        
+
         Config::shouldReceive('get')
                ->with('record.tables', [])
                ->andReturn([]);
 
         // Should not throw any exceptions
         SchemaRegistry::refresh();
-        
+
         $this->assertTrue(true); // Test passes if no exception is thrown
     }
 
     /** @test */
-    public function it_can_clear_all_cache()
+    public function it_can_clear_all_cache(): void
     {
         // Mock cache operations
         Cache::shouldReceive('forget')
               ->andReturn(true);
-        
+
         Config::shouldReceive('get')
                ->with('record.tables', [])
                ->andReturn([]);
 
         // Should not throw any exceptions
         SchemaRegistry::clearAllCache();
-        
+
         $this->assertTrue(true); // Test passes if no exception is thrown
     }
 
     /** @test */
-    public function it_can_clear_table_cache()
+    public function it_can_clear_table_cache(): void
     {
         // Mock cache operations
         Cache::shouldReceive('forget')
@@ -79,12 +78,12 @@ class SchemaRegistryTest extends TestCase
 
         // Should not throw any exceptions
         SchemaRegistry::clearTableCache('test_table');
-        
+
         $this->assertTrue(true); // Test passes if no exception is thrown
     }
 
     /** @test */
-    public function it_returns_empty_array_when_no_tables_configured()
+    public function it_returns_empty_array_when_no_tables_configured(): void
     {
         // Mock config to return empty array
         Config::shouldReceive('get')
@@ -104,7 +103,7 @@ class SchemaRegistryTest extends TestCase
     }
 
     /** @test */
-    public function it_uses_memory_cache_when_available()
+    public function it_uses_memory_cache_when_available(): void
     {
         // First call - should hit config and cache
         Config::shouldReceive('get')
