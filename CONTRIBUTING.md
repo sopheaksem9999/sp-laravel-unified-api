@@ -8,7 +8,7 @@ Thank you for considering contributing to SP Laravel API! This document provides
 
 - PHP 8.1 or higher
 - Composer
-- Laravel 10.x or 11.x
+- Laravel 10.x / 11.x / 12.x (package compatibility)
 - MySQL 8.0+ or PostgreSQL 13+ (SQLite for testing)
 - Redis (optional, for caching and queues)
 
@@ -25,15 +25,9 @@ Thank you for considering contributing to SP Laravel API! This document provides
    composer install
    ```
 
-3. **Set Up Testing Environment**
+3. **Run Tests**
    ```bash
-   cp .env.example .env.testing
-   php artisan key:generate --env=testing
-   ```
-
-4. **Run Tests**
-   ```bash
-   vendor/bin/phpunit
+   composer test
    ```
 
 ## 🧪 Testing
@@ -42,14 +36,14 @@ Thank you for considering contributing to SP Laravel API! This document provides
 
 ```bash
 # Run all tests
-vendor/bin/phpunit
+composer test
 
 # Run specific test suites
 vendor/bin/phpunit tests/Unit
 vendor/bin/phpunit tests/Feature
 
 # Run with coverage
-vendor/bin/phpunit --coverage-html coverage
+composer test-coverage
 ```
 
 ### Writing Tests
@@ -86,14 +80,14 @@ class ExampleTest extends TestCase
 
 ### Code Style
 
-We use PHP CS Fixer for code formatting:
+We use Rector for automated refactors and formatting:
 
 ```bash
-# Check code style
-vendor/bin/php-cs-fixer fix --dry-run --diff
+# Check (dry-run)
+composer format-check
 
-# Fix code style
-vendor/bin/php-cs-fixer fix
+# Apply changes
+composer format
 ```
 
 ### Static Analysis
@@ -102,7 +96,7 @@ We use PHPStan for static analysis:
 
 ```bash
 # Run static analysis
-vendor/bin/phpstan analyse
+composer analyse
 ```
 
 ### Pre-commit Checks
@@ -116,9 +110,7 @@ Before committing, ensure:
 
 ```bash
 # Run all checks
-composer test
-composer cs-fix
-composer analyse
+composer quality
 ```
 
 ## 📝 Coding Standards
@@ -328,7 +320,7 @@ For security vulnerabilities:
 
 ### Tools
 
-- [PHP CS Fixer](https://cs.symfony.com/)
+- [Rector](https://getrector.com/)
 - [PHPStan](https://phpstan.org/)
 - [Composer](https://getcomposer.org/)
 
@@ -351,8 +343,8 @@ We are committed to providing a welcoming and inclusive environment. Please:
 
 ## 📄 License
 
-By contributing to SP Laravel API, you agree that your contributions will be licensed under the MIT License.
+By contributing to SP Laravel API, you agree that your contributions will be licensed under the project's proprietary license.
 
 ---
 
-Thank you for contributing to SP Laravel API! 🚀
+Thank you for contributing to SP Laravel API!
