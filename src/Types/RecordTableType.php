@@ -104,9 +104,9 @@ class RecordTableType
      * Handle var_export() for configuration caching.
      * This method is required for Laravel's config:cache command.
      */
-    public static function __set_state(array $properties): static
+    public static function __set_state(array $properties): self
     {
-        return new static(
+        return new self(
             pms_name: $properties['pms_name'],
             table: $properties['table'] ?? null,
             soft_deletes: $properties['soft_deletes'] ?? true,

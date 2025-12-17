@@ -49,16 +49,16 @@ class RecordHasManyThroughType
         public string $localKey = 'id',
         public string $secondLocalKey = '',
         public array $orderBy = ['date' => 'desc'],
-        public RecordRelationshipsEnum $recordRelationshipsEnum = RecordRelationshipsEnum::HAS_MANY_THROUGH,
+        public RecordRelationshipsEnum $type = RecordRelationshipsEnum::HAS_MANY_THROUGH,
     ) {}
 
     /**
      * Handle var_export() for configuration caching.
      * This method is required for Laravel's config:cache command.
      */
-    public static function __set_state(array $properties): static
+    public static function __set_state(array $properties): self
     {
-        return new static(
+        return new self(
             table: $properties['table'],
             through: $properties['through'],
             firstKey: $properties['firstKey'],

@@ -84,7 +84,7 @@ class RecordMetaBelongsToManyType
      */
     public function __construct(
         public string $related,
-        public RecordRelationshipsEnum $recordRelationshipsEnum = RecordRelationshipsEnum::BELONGS_TO_MANY,
+        public RecordRelationshipsEnum $type = RecordRelationshipsEnum::BELONGS_TO_MANY,
         public ?string $table = null,
         public ?string $foreignPivotKey = null,
         public ?string $relatedPivotKey = null,
@@ -119,9 +119,9 @@ class RecordMetaBelongsToManyType
      *
      * @throws InvalidArgumentException When required properties are missing
      */
-    public static function __set_state(array $properties): static
+    public static function __set_state(array $properties): self
     {
-        return new static(
+        return new self(
             related: $properties['related'] ?? $properties['table'] ?? throw new InvalidArgumentException('related is required'),
             type: $properties['type'] ?? RecordRelationshipsEnum::BELONGS_TO_MANY,
             table: $properties['table'] ?? null,
@@ -148,7 +148,7 @@ class RecordMetaBelongsToManyType
     {
         $config = [
             'related' => $this->related,
-            'type' => $this->recordRelationshipsEnum,
+            'type' => $this->type,
         ];
 
         // Add optional properties only if they have values
@@ -225,9 +225,9 @@ class RecordMetaBelongsToManyType
      * $relationship = RecordMetaBelongsToManyType::fromArray($config);
      * ```
      */
-    public static function fromArray(array $config): static
+    public static function fromArray(array $config): self
     {
-        return new static(
+        return new self(
             related: $config['related'] ?? $config['table'] ?? throw new InvalidArgumentException('related is required in config array'),
             type: $config['type'] ?? RecordRelationshipsEnum::BELONGS_TO_MANY,
             table: $config['table'] ?? null,

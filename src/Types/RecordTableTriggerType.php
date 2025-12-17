@@ -20,9 +20,9 @@ class RecordTableTriggerType
         }
     }
 
-    public static function __set_state(array $properties): static
+    public static function __set_state(array $properties): self
     {
-        return new static(
+        return new self(
             class: $properties['class'] ?? throw new InvalidArgumentException('class is required'),
             function_method: $properties['function_method'] ?? throw new InvalidArgumentException('function_method is required'),
             description: $properties['description'] ?? null,
@@ -43,9 +43,9 @@ class RecordTableTriggerType
         return $config;
     }
 
-    public static function fromArray(array $config): static
+    public static function fromArray(array $config): self
     {
-        return new static(
+        return new self(
             class: $config['class'] ?? throw new InvalidArgumentException('class is required in config array'),
             function_method: $config['function_method'] ?? throw new InvalidArgumentException('function_method is required in config array'),
             description: $config['description'] ?? null,

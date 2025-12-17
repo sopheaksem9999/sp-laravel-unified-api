@@ -30,9 +30,9 @@ class RecordTablePublic
      * Handle var_export() for configuration caching.
      * This method is required for Laravel's config:cache command.
      */
-    public static function __set_state(array $properties): static
+    public static function __set_state(array $properties): self
     {
-        return new static(
+        return new self(
             read: $properties['read'] ?? false,
             write: $properties['write'] ?? false,
         );

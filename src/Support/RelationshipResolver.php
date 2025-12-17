@@ -2,9 +2,9 @@
 
 namespace Sopheak\Core\Support;
 
+use Illuminate\Foundation\Auth\User;
 use Spatie\Permission\PermissionServiceProvider;
 use RuntimeException;
-use App\Models\User;
 use Sopheak\Core\Types\RecordBelongsToType;
 use Sopheak\Core\Types\RecordHasManyThroughType;
 use Sopheak\Core\Types\RecordHasManyType;
@@ -1393,17 +1393,26 @@ class RelationshipResolver
                 // Add model_type condition and pivot columns for morphToMany relationships (like Spatie permission system)
                 if ('morphToMany' === $type && isset($relationshipConfig['morph_type'])) {
                     $morphType = $relationshipConfig['morph_type'];
-                    $modelClass = $relationshipConfig['relation'] ?? User::class;
+                    $modelClass = config('auth.providers.users.model');
+                    if (!is_string($modelClass) || '' === $modelClass) {
+                        $modelClass = User::class;
+                    }
+
                     $chunkQuery->where($pivotTable.'.'.$morphType, $modelClass);
-                    
+
                     // Add pivot columns to match the correct SQL structure
                     $chunkQuery->addSelect($pivotTable.'.'.$parentKey.' as pivot_model_id')
                               ->addSelect($pivotTable.'.'.$relatedKey.' as pivot_role_id')
                               ->addSelect($pivotTable.'.'.$morphType.' as pivot_model_type');
                 } elseif (str_contains((string) $pivotTable, 'model_has_')) {
                     // Fallback for legacy Spatie permission tables
-                    $chunkQuery->where($pivotTable.'.model_type', $relationshipConfig['relation'] ?? User::class);
-                    
+                    $modelClass = config('auth.providers.users.model');
+                    if (!is_string($modelClass) || '' === $modelClass) {
+                        $modelClass = User::class;
+                    }
+
+                    $chunkQuery->where($pivotTable.'.model_type', $modelClass);
+
                     // Add pivot columns for legacy tables
                     $chunkQuery->addSelect($pivotTable.'.model_id as pivot_model_id')
                               ->addSelect($pivotTable.'.role_id as pivot_role_id')

@@ -306,7 +306,7 @@ return [
     | - 'records' → /records/users, /records/posts
     |
     */
-    'api_prefix' => env('RECORD_API_PREFIX', 'api'),
+    'api_prefix' => env('RECORD_API_PREFIX', 'api/v1'),
 
     /*
     |--------------------------------------------------------------------------

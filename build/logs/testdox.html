@@ -51,18 +51,34 @@
         </style>
     </head>
     <body>
+        <h2>Basic (Sopheak\Core\Tests\Unit\Basic)</h2>
+        <ul>
+            <li class="success">It can run basic test</li>
+            <li class="success">It has laravel application</li>
+            <li class="success">It can access config</li>
+            <li class="success">It serves openapi json without authentication</li>
+        </ul>
         <h2>Dynamic Api (Sopheak\Core\Tests\Feature\DynamicApi)</h2>
         <ul>
-            <li class="defect">It can list records via dynamic api</li>
-            <li class="defect">It can create record via dynamic api</li>
-            <li class="defect">It can show single record via dynamic api</li>
-            <li class="defect">It can update record via dynamic api</li>
-            <li class="defect">It can delete record via dynamic api</li>
-            <li class="defect">It supports query filters</li>
-            <li class="defect">It supports sorting</li>
-            <li class="defect">It supports field selection</li>
-            <li class="defect">It returns 404 for non existent record</li>
-            <li class="defect">It validates required fields on create</li>
+            <li class="success">It can list records via dynamic api</li>
+            <li class="success">It can create record via dynamic api</li>
+            <li class="success">It can show single record via dynamic api</li>
+            <li class="success">It can update record via dynamic api</li>
+            <li class="success">It can delete record via dynamic api</li>
+            <li class="success">It supports query filters</li>
+            <li class="success">It supports sorting</li>
+            <li class="success">It supports field selection</li>
+            <li class="success">It returns 404 for non existent record</li>
+            <li class="success">It validates required fields on create</li>
+        </ul>
+        <h2>Schema Registry (Sopheak\Core\Tests\Unit\SchemaRegistry)</h2>
+        <ul>
+            <li class="success">It can get schema registry</li>
+            <li class="success">It can refresh cache</li>
+            <li class="success">It can clear all cache</li>
+            <li class="success">It can clear table cache</li>
+            <li class="success">It returns empty array when no tables configured</li>
+            <li class="success">It uses memory cache when available</li>
         </ul>
     </body>
 </html>

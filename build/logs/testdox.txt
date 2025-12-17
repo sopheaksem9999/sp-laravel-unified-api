@@ -1,12 +1,26 @@
+Basic (Sopheak\Core\Tests\Unit\Basic)
+ [x] It can run basic test
+ [x] It has laravel application
+ [x] It can access config
+ [x] It serves openapi json without authentication
+
 Dynamic Api (Sopheak\Core\Tests\Feature\DynamicApi)
- [ ] It can list records via dynamic api
- [ ] It can create record via dynamic api
- [ ] It can show single record via dynamic api
- [ ] It can update record via dynamic api
- [ ] It can delete record via dynamic api
- [ ] It supports query filters
- [ ] It supports sorting
- [ ] It supports field selection
- [ ] It returns 404 for non existent record
- [ ] It validates required fields on create
+ [x] It can list records via dynamic api
+ [x] It can create record via dynamic api
+ [x] It can show single record via dynamic api
+ [x] It can update record via dynamic api
+ [x] It can delete record via dynamic api
+ [x] It supports query filters
+ [x] It supports sorting
+ [x] It supports field selection
+ [x] It returns 404 for non existent record
+ [x] It validates required fields on create
+
+Schema Registry (Sopheak\Core\Tests\Unit\SchemaRegistry)
+ [x] It can get schema registry
+ [x] It can refresh cache
+ [x] It can clear all cache
+ [x] It can clear table cache
+ [x] It returns empty array when no tables configured
+ [x] It uses memory cache when available
 

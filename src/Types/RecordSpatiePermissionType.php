@@ -59,6 +59,7 @@ use Sopheak\Core\Enums\RecordRelationshipsEnum;
 class RecordSpatiePermissionType
 {
     public $recordRelationshipsEnum;
+
     /**
      * Create a new RecordSpatiePermissionType instance.
      *
@@ -135,9 +136,9 @@ class RecordSpatiePermissionType
      *
      * @throws InvalidArgumentException When required properties are missing
      */
-    public static function __set_state(array $properties): static
+    public static function __set_state(array $properties): self
     {
-        return new static(
+        return new self(
             related: $properties['related'] ?? throw new InvalidArgumentException('related is required'),
             relation: $properties['relation'] ?? throw new InvalidArgumentException('relation is required'),
             type: $properties['type'] ?? RecordRelationshipsEnum::SPATIE_PERMISSION,
@@ -242,9 +243,9 @@ class RecordSpatiePermissionType
      * $relationship = RecordSpatiePermissionType::fromArray($config);
      * ```
      */
-    public static function fromArray(array $config): static
+    public static function fromArray(array $config): self
     {
-        return new static(
+        return new self(
             related: $config['related'] ?? throw new InvalidArgumentException('related is required in config array'),
             relation: $config['relation'] ?? throw new InvalidArgumentException('relation is required in config array'),
             type: $config['type'] ?? RecordRelationshipsEnum::SPATIE_PERMISSION,

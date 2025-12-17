@@ -2,99 +2,129 @@
 
 namespace Sopheak\Core\Tests\Unit;
 
-use Sopheak\Core\Tests\TestCase;
-use Illuminate\Support\Facades\Config;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Support\SchemaRegistry;
-use Mockery;
+use Sopheak\Core\Tests\TestCase;
+use Sopheak\Core\Types\RecordTablePublic;
+use Sopheak\Core\Types\RecordTableType;
 
 class SchemaRegistryTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        SchemaRegistry::clearAllCache();
+        Cache::flush();
+
+        if (!Schema::hasTable('users')) {
+            Schema::create('users', function (Blueprint $table): void {
+                $table->id();
+                $table->string('name');
+                $table->string('email');
+                $table->timestamps();
+            });
+        }
+    }
+
     protected function tearDown(): void
     {
-        Mockery::close();
+        SchemaRegistry::clearAllCache();
+        Cache::flush();
+
         parent::tearDown();
     }
 
-    /** @test */
-    public function it_can_get_schema_registry(): void
+    public function test_it_can_get_schema_registry(): void
     {
-        // Mock config
-        Config::shouldReceive('get')
-               ->with('record.tables', [])
-               ->andReturn([]);
-
-        // Mock cache
-        Cache::shouldReceive('get')
-              ->andReturn(null);
-        Cache::shouldReceive('put')
-              ->andReturn(true);
+        Config::set('record.tables', [
+            'users' => new RecordTableType(
+                pms_name: 'users',
+                table: 'users',
+                public: new RecordTablePublic(read: true, write: true),
+                relationships: [],
+                soft_deletes: false,
+                has_tenant_id: false,
+            ),
+        ]);
 
         $schema = SchemaRegistry::get();
 
-        $this->assertIsArray($schema);
+        $this->assertArrayHasKey('users', $schema);
+        $this->assertArrayHasKey('id', $schema['users']->columns);
+        $this->assertArrayHasKey('name', $schema['users']->columns);
+        $this->assertArrayHasKey('email', $schema['users']->columns);
     }
 
-    /** @test */
-    public function it_can_refresh_cache(): void
+    public function test_it_can_refresh_cache(): void
     {
-        // Mock cache operations
-        Cache::shouldReceive('forget')
-              ->andReturn(true);
+        Config::set('record.tables', [
+            'users' => new RecordTableType(
+                pms_name: 'users',
+                table: 'users',
+                public: new RecordTablePublic(read: true, write: true),
+                relationships: [],
+                soft_deletes: false,
+                has_tenant_id: false,
+            ),
+        ]);
 
-        Config::shouldReceive('get')
-               ->with('record.tables', [])
-               ->andReturn([]);
-
-        // Should not throw any exceptions
+        $schema1 = SchemaRegistry::get();
         SchemaRegistry::refresh();
+        $schema2 = SchemaRegistry::get();
 
-        $this->assertTrue(true); // Test passes if no exception is thrown
+        $this->assertArrayHasKey('users', $schema1);
+        $this->assertArrayHasKey('users', $schema2);
     }
 
-    /** @test */
-    public function it_can_clear_all_cache(): void
+    public function test_it_can_clear_all_cache(): void
     {
-        // Mock cache operations
-        Cache::shouldReceive('forget')
-              ->andReturn(true);
+        Config::set('record.tables', [
+            'users' => new RecordTableType(
+                pms_name: 'users',
+                table: 'users',
+                public: new RecordTablePublic(read: true, write: true),
+                relationships: [],
+                soft_deletes: false,
+                has_tenant_id: false,
+            ),
+        ]);
 
-        Config::shouldReceive('get')
-               ->with('record.tables', [])
-               ->andReturn([]);
-
-        // Should not throw any exceptions
+        $schema1 = SchemaRegistry::get();
         SchemaRegistry::clearAllCache();
+        $schema2 = SchemaRegistry::get();
 
-        $this->assertTrue(true); // Test passes if no exception is thrown
+        $this->assertArrayHasKey('users', $schema1);
+        $this->assertArrayHasKey('users', $schema2);
     }
 
-    /** @test */
-    public function it_can_clear_table_cache(): void
+    public function test_it_can_clear_table_cache(): void
     {
-        // Mock cache operations
-        Cache::shouldReceive('forget')
-              ->andReturn(true);
+        Config::set('record.tables', [
+            'users' => new RecordTableType(
+                pms_name: 'users',
+                table: 'users',
+                public: new RecordTablePublic(read: true, write: true),
+                relationships: [],
+                soft_deletes: false,
+                has_tenant_id: false,
+            ),
+        ]);
 
-        // Should not throw any exceptions
-        SchemaRegistry::clearTableCache('test_table');
+        $schema1 = SchemaRegistry::get();
+        SchemaRegistry::clearTableCache('users');
+        $schema2 = SchemaRegistry::get();
 
-        $this->assertTrue(true); // Test passes if no exception is thrown
+        $this->assertArrayHasKey('users', $schema1);
+        $this->assertArrayHasKey('users', $schema2);
     }
 
-    /** @test */
-    public function it_returns_empty_array_when_no_tables_configured(): void
+    public function test_it_returns_empty_array_when_no_tables_configured(): void
     {
-        // Mock config to return empty array
-        Config::shouldReceive('get')
-               ->with('record.tables', [])
-               ->andReturn([]);
-
-        // Mock cache
-        Cache::shouldReceive('get')
-              ->andReturn(null);
-        Cache::shouldReceive('put')
-              ->andReturn(true);
+        Config::set('record.tables', []);
 
         $schema = SchemaRegistry::get();
 
@@ -102,27 +132,24 @@ class SchemaRegistryTest extends TestCase
         $this->assertEmpty($schema);
     }
 
-    /** @test */
-    public function it_uses_memory_cache_when_available(): void
+    public function test_it_uses_memory_cache_when_available(): void
     {
-        // First call - should hit config and cache
-        Config::shouldReceive('get')
-               ->with('record.tables', [])
-               ->once()
-               ->andReturn([]);
-
-        Cache::shouldReceive('get')
-              ->once()
-              ->andReturn(null);
-        Cache::shouldReceive('put')
-              ->once()
-              ->andReturn(true);
+        Config::set('record.tables', [
+            'users' => new RecordTableType(
+                pms_name: 'users',
+                table: 'users',
+                public: new RecordTablePublic(read: true, write: true),
+                relationships: [],
+                soft_deletes: false,
+                has_tenant_id: false,
+            ),
+        ]);
 
         $schema1 = SchemaRegistry::get();
-
-        // Second call - should use memory cache (no config or cache calls)
+        Config::set('record.tables', []);
         $schema2 = SchemaRegistry::get();
 
-        $this->assertEquals($schema1, $schema2);
+        $this->assertArrayHasKey('users', $schema1);
+        $this->assertArrayHasKey('users', $schema2);
     }
 }

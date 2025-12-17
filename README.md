@@ -133,13 +133,15 @@ Use the automated setup command to configure the package:
 ```bash
 # Run the setup command
 php artisan sp-laravel-api:setup
+```
 
-# This will:
-# - Publish configuration files
-# - Run migrations
-# - Set up basic permissions
-# - Configure JWT (if selected)
-# - Create sample configuration
+This command publishes the package config files (tag: `sp-laravel-api-config`) and creates/updates `config/jwt.php`.
+
+If you want the package migrations, publish them and run migrations:
+
+```bash
+php artisan vendor:publish --tag=sp-laravel-api-migrations
+php artisan migrate
 ```
 
 ### Step 5: Validate Installation
@@ -240,6 +242,8 @@ return [
     ],
 ];
 ```
+
+The package routes are loaded automatically by `Sopheak\Core\CoreServiceProvider` using this prefix. Record endpoints authorize per-table using `RecordTablePublic` and permissions; audit endpoints always require authentication.
 
 ### Step 7: Test Your Installation
 

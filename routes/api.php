@@ -24,6 +24,29 @@ use Sopheak\Core\Http\Controllers\AuditController;
 |--------------------------------------------------------------------------
 */
 Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.id'])->group(function (): void {
+
+    Route::get('docs/openapi', function () {
+        $filePath = storage_path('api-v2.json');
+
+        if (!file_exists($filePath)) {
+            return response()->json([
+                'error' => 'OpenAPI specification not found',
+                'message' => 'Please run "php artisan sp-laravel-api:openapi" to generate the specification'
+            ], 404);
+        }
+
+        $content = file_get_contents($filePath);
+        $json = json_decode($content, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return response()->json([
+                'error' => 'Invalid OpenAPI specification',
+                'message' => 'The OpenAPI file contains invalid JSON'
+            ], 500);
+        }
+
+        return response()->json($json)->header('Content-Type', 'application/json');
+    });
     
     /*
     |--------------------------------------------------------------------------

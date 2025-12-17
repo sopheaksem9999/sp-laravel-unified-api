@@ -26,7 +26,7 @@ class RecordBelongsToType
 {
     public function __construct(
         public string $table,
-        public RecordRelationshipsEnum $recordRelationshipsEnum = RecordRelationshipsEnum::BELONGS_TO,
+        public RecordRelationshipsEnum $type = RecordRelationshipsEnum::BELONGS_TO,
         public ?string $foreignKey = null,
         public ?string $ownerKey = 'id',
     ) {}
@@ -35,9 +35,9 @@ class RecordBelongsToType
      * Handle var_export() for configuration caching.
      * This method is required for Laravel's config:cache command.
      */
-    public static function __set_state(array $properties): static
+    public static function __set_state(array $properties): self
     {
-        return new static(
+        return new self(
             table: $properties['table'],
             type: $properties['type'] ?? RecordRelationshipsEnum::BELONGS_TO,
             foreignKey: $properties['foreignKey'] ?? null,

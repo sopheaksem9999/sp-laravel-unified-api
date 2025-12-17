@@ -1800,6 +1800,7 @@ class RecordController extends Controller
             // ID + other fields = UPDATE
             return 'update';
         }
+
         // Only ID present = DELETE
         return 'delete';
     }

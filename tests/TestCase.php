@@ -4,8 +4,10 @@ namespace Sopheak\Core\Tests;
 
 use Illuminate\Foundation\Auth\User;
 use Spatie\Permission\Models\Permission;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\RateLimiter;
 use Orchestra\Testbench\TestCase as OrchestraTestCase;
 use Sopheak\Core\CoreServiceProvider;
 use Spatie\Permission\PermissionServiceProvider;
@@ -20,6 +22,7 @@ abstract class TestCase extends OrchestraTestCase
 
         $this->setUpDatabase();
         $this->setUpConfig();
+        $this->setUpRateLimiters();
     }
 
     protected function getPackageProviders($app): array
@@ -50,10 +53,10 @@ abstract class TestCase extends OrchestraTestCase
         $app['config']->set('session.driver', 'array');
 
         // Setup auth
-        $app['config']->set('auth.defaults.guard', 'api');
         $app['config']->set('auth.guards.api', [
-            'driver' => 'jwt',
+            'driver' => 'token',
             'provider' => 'users',
+            'hash' => false,
         ]);
 
         // Setup JWT
@@ -103,6 +106,13 @@ abstract class TestCase extends OrchestraTestCase
                 'has_tenant_id' => false,
             ],
         ]);
+    }
+
+    protected function setUpRateLimiters(): void
+    {
+        RateLimiter::for('api-reads', fn() => Limit::none());
+        RateLimiter::for('api-writes', fn() => Limit::none());
+        RateLimiter::for('api-functions', fn() => Limit::none());
     }
 
     /**

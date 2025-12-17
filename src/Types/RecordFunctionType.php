@@ -105,9 +105,9 @@ class RecordFunctionType
      *
      * @throws InvalidArgumentException When required properties are missing
      */
-    public static function __set_state(array $properties): static
+    public static function __set_state(array $properties): self
     {
-        return new static(
+        return new self(
             pms_name: $properties['pms_name'] ?? throw new InvalidArgumentException('pms_name is required'),
             method: $properties['method'] ?? null,
             class: $properties['class'] ?? throw new InvalidArgumentException('class is required'),
@@ -162,9 +162,9 @@ class RecordFunctionType
      * $function = RecordFunctionType::fromArray($config);
      * ```
      */
-    public static function fromArray(array $config): static
+    public static function fromArray(array $config): self
     {
-        return new static(
+        return new self(
             pms_name: $config['pms_name'] ?? throw new InvalidArgumentException('pms_name is required in config array'),
             method: $config['method'] ?? throw new InvalidArgumentException('method is required in config array'),
             class: $config['class'] ?? throw new InvalidArgumentException('class is required in config array'),

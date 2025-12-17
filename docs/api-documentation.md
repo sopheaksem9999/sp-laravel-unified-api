@@ -8,18 +8,21 @@ This document provides comprehensive documentation for the SP Laravel API packag
 All endpoints are served under a configurable prefix defined in `config/record.php`:
 
 ```php
-'api_prefix' => env('API_PREFIX', 'api'),
+'api_prefix' => env('RECORD_API_PREFIX', 'api'),
 ```
 
 **Default**: `/api`  
 **Examples**: `/api`, `/api/v1`, `/api/v2`
 
 ### Authentication
-All endpoints require JWT authentication via the `auth:api` middleware unless explicitly configured as public.
+Record endpoints use table-level access rules from `config/record.php`:
+
+- If a table/action is configured as public (`RecordTablePublic`), the endpoint is accessible without authentication.
+- Otherwise, the controller requires an authenticated user from the guard configured in `config/sp-laravel-api.php` (`sp-laravel-api.auth.guard`, default: `api`) and checks permissions.
 
 ### Middleware Stack
 - `api` - API middleware group
-- `auth:api` - JWT authentication
+- `auth:{guard}` - Authentication (for routes that enforce middleware)
 - `request.id` - Request ID tracking for audit trails
 - Rate limiting with different throttles for different operation types
 

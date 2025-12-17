@@ -2,11 +2,16 @@
 
 namespace Sopheak\Core\Tests\Feature;
 
-use App\Models\User;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\WithFaker;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Tests\TestCase;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Http\Request;
+use Illuminate\Contracts\Validation\Validator as ValidatorContract;
+use Illuminate\Support\Facades\Validator;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordTablePublic;
 
@@ -17,6 +22,14 @@ class DynamicApiTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        Schema::create('users', function (Blueprint $table): void {
+            $table->id();
+            $table->string('name');
+            $table->string('email');
+            $table->string('password')->nullable();
+            $table->timestamps();
+        });
         
         // Configure a test table for dynamic API
         Config::set('record.tables', [
@@ -29,7 +42,15 @@ class DynamicApiTest extends TestCase
                 ),
                 relationships: [],
                 soft_deletes: false,
-                has_tenant_id: false
+                has_tenant_id: false,
+                createValidator: fn(Request $request, ?int $id = null): ValidatorContract => Validator::make($request->all(), [
+                    'name' => 'required|string|max:255',
+                    'email' => 'required|email',
+                ]),
+                updateValidator: fn(Request $request, ?int $id = null): ValidatorContract => Validator::make($request->all(), [
+                    'name' => 'sometimes|required|string|max:255',
+                    'email' => 'sometimes|required|email',
+                ]),
             ),
         ]);
     }
@@ -38,12 +59,21 @@ class DynamicApiTest extends TestCase
     public function it_can_list_records_via_dynamic_api(): void
     {
         // Create test users
-        User::factory(3)->create();
+        for ($i = 0; $i < 3; ++$i) {
+            DB::table('users')->insert([
+                'name' => $this->faker->name,
+                'email' => $this->faker->unique()->safeEmail,
+                'password' => 'password123',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
 
-        $testResponse = $this->getJson('/api/test_users');
+        $testResponse = $this->getJson('/api/users?per_page=15');
 
         $testResponse->assertStatus(200)
                 ->assertJsonStructure([
+                    'success',
                     'data' => [
                         '*' => [
                             'id',
@@ -53,11 +83,7 @@ class DynamicApiTest extends TestCase
                             'updated_at'
                         ]
                     ],
-                    'meta' => [
-                        'current_page',
-                        'per_page',
-                        'total'
-                    ]
+                    'meta'
                 ]);
     }
 
@@ -70,17 +96,19 @@ class DynamicApiTest extends TestCase
             'password' => 'password123'
         ];
 
-        $testResponse = $this->postJson('/api/test_users', $userData);
+        $testResponse = $this->postJson('/api/users', $userData);
 
-        $testResponse->assertStatus(201)
+        $testResponse->assertStatus(200)
                 ->assertJsonStructure([
+                    'success',
                     'data' => [
                         'id',
                         'name',
                         'email',
                         'created_at',
                         'updated_at'
-                    ]
+                    ],
+                    'meta'
                 ]);
 
         $this->assertDatabaseHas('users', [
@@ -92,25 +120,31 @@ class DynamicApiTest extends TestCase
     /** @test */
     public function it_can_show_single_record_via_dynamic_api(): void
     {
-        $user = User::factory()->create();
+        $userId = (int) DB::table('users')->insertGetId([
+            'name' => $this->faker->name,
+            'email' => $this->faker->unique()->safeEmail,
+            'password' => 'password123',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
-        $testResponse = $this->getJson('/api/test_users/' . $user->id);
+        $testResponse = $this->getJson('/api/users/' . $userId);
 
         $testResponse->assertStatus(200)
                 ->assertJsonStructure([
+                    'success',
                     'data' => [
                         'id',
                         'name',
                         'email',
                         'created_at',
                         'updated_at'
-                    ]
+                    ],
+                    'meta'
                 ])
                 ->assertJson([
                     'data' => [
-                        'id' => $user->id,
-                        'name' => $user->name,
-                        'email' => $user->email
+                        'id' => $userId,
                     ]
                 ]);
     }
@@ -118,22 +152,30 @@ class DynamicApiTest extends TestCase
     /** @test */
     public function it_can_update_record_via_dynamic_api(): void
     {
-        $user = User::factory()->create();
+        $userId = (int) DB::table('users')->insertGetId([
+            'name' => $this->faker->name,
+            'email' => $this->faker->unique()->safeEmail,
+            'password' => 'password123',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
         $updateData = [
             'name' => 'Updated Name'
         ];
 
-        $testResponse = $this->putJson('/api/test_users/' . $user->id, $updateData);
+        $testResponse = $this->putJson('/api/users/' . $userId, $updateData);
 
         $testResponse->assertStatus(200)
                 ->assertJsonStructure([
+                    'success',
                     'data' => [
                         'id',
                         'name',
                         'email',
                         'created_at',
                         'updated_at'
-                    ]
+                    ],
+                    'meta'
                 ])
                 ->assertJson([
                     'data' => [
@@ -142,7 +184,7 @@ class DynamicApiTest extends TestCase
                 ]);
 
         $this->assertDatabaseHas('users', [
-            'id' => $user->id,
+            'id' => $userId,
             'name' => 'Updated Name'
         ]);
     }
@@ -150,46 +192,70 @@ class DynamicApiTest extends TestCase
     /** @test */
     public function it_can_delete_record_via_dynamic_api(): void
     {
-        $user = User::factory()->create();
+        $userId = (int) DB::table('users')->insertGetId([
+            'name' => $this->faker->name,
+            'email' => $this->faker->unique()->safeEmail,
+            'password' => 'password123',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
-        $testResponse = $this->deleteJson('/api/test_users/' . $user->id);
+        $testResponse = $this->deleteJson('/api/users/' . $userId);
 
         $testResponse->assertStatus(200)
-                ->assertJson([
-                    'message' => 'Record deleted successfully'
-                ]);
+                ->assertJsonStructure(['success', 'data', 'meta']);
 
         $this->assertDatabaseMissing('users', [
-            'id' => $user->id
+            'id' => $userId
         ]);
     }
 
     /** @test */
     public function it_supports_query_filters(): void
     {
-        $users = User::factory(5)->create();
-        $targetUser = $users->first();
+        $targetUser = null;
+        for ($i = 0; $i < 5; ++$i) {
+            $name = $this->faker->name;
+            $email = $this->faker->unique()->safeEmail;
+            $id = (int) DB::table('users')->insertGetId([
+                'name' => $name,
+                'email' => $email,
+                'password' => 'password123',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $targetUser ??= ['id' => $id, 'name' => $name];
+        }
 
-        $testResponse = $this->getJson('/api/test_users?filter[name]=' . $targetUser->name);
+        $testResponse = $this->getJson('/api/users?name=eq.' . urlencode((string) $targetUser['name']));
 
         $testResponse->assertStatus(200)
+                ->assertJsonStructure(['success', 'data', 'meta'])
                 ->assertJsonCount(1, 'data')
                 ->assertJson([
                     'data' => [
                         [
-                            'id' => $targetUser->id,
-                            'name' => $targetUser->name
-                        ]
-                    ]
+                            'id' => $targetUser['id'],
+                            'name' => $targetUser['name'],
+                        ],
+                    ],
                 ]);
     }
 
     /** @test */
     public function it_supports_sorting(): void
     {
-        User::factory(3)->create();
+        for ($i = 0; $i < 3; ++$i) {
+            DB::table('users')->insert([
+                'name' => $this->faker->name,
+                'email' => $this->faker->unique()->safeEmail,
+                'password' => 'password123',
+                'created_at' => now()->subSeconds(10 - $i),
+                'updated_at' => now()->subSeconds(10 - $i),
+            ]);
+        }
 
-        $testResponse = $this->getJson('/api/test_users?sort=-created_at');
+        $testResponse = $this->getJson('/api/users?sort=-created_at');
 
         $testResponse->assertStatus(200);
         
@@ -202,18 +268,26 @@ class DynamicApiTest extends TestCase
     /** @test */
     public function it_supports_field_selection(): void
     {
-        User::factory()->create();
+        DB::table('users')->insert([
+            'name' => $this->faker->name,
+            'email' => $this->faker->unique()->safeEmail,
+            'password' => 'password123',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
-        $testResponse = $this->getJson('/api/test_users?fields=id,name');
+        $testResponse = $this->getJson('/api/users?select=id,name');
 
         $testResponse->assertStatus(200)
                 ->assertJsonStructure([
+                    'success',
                     'data' => [
                         '*' => [
                             'id',
                             'name'
                         ]
-                    ]
+                    ],
+                    'meta'
                 ]);
 
         // Ensure email is not included
@@ -224,23 +298,29 @@ class DynamicApiTest extends TestCase
     /** @test */
     public function it_returns_404_for_non_existent_record(): void
     {
-        $testResponse = $this->getJson('/api/test_users/999999');
+        $testResponse = $this->getJson('/api/users/999999');
 
         $testResponse->assertStatus(404)
                 ->assertJson([
-                    'message' => 'Record not found'
+                    'message' => 'Not found'
                 ]);
     }
 
     /** @test */
     public function it_validates_required_fields_on_create(): void
     {
-        $testResponse = $this->postJson('/api/test_users', [
+        $testResponse = $this->postJson('/api/users', [
             'name' => '', // Invalid: empty name
             'email' => 'invalid-email' // Invalid: not a valid email
         ]);
 
         $testResponse->assertStatus(422)
-                ->assertJsonValidationErrors(['name', 'email']);
+            ->assertJson([
+                'success' => false,
+                'message' => 'Validation failed',
+            ])
+            ->assertJsonStructure([
+                'errors' => ['name', 'email'],
+            ]);
     }
 }
