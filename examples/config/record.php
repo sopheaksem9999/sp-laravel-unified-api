@@ -11,6 +11,7 @@
  */
 use Illuminate\Http\Request;
 use Illuminate\Contracts\Validation\Validator;
+use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordHasManyType;
 use Sopheak\Core\Types\RecordBelongsToType;
@@ -50,6 +51,42 @@ $tables = [
                 relatedPivotKey: 'role_id',
                 parentKey: 'id',
                 relatedKey: 'id'
+            ),
+        ],
+        functions: [
+            'getFullName' => new RecordFunctionType(
+                pms_name: 'view_user',
+                method: ['GET'],
+                class: 'App\\Services\\UserService',
+                function_method: 'getFullName',
+                description: 'Get the full name of a user by ID',
+                query_schema: [
+                    'type' => 'object',
+                    'properties' => [
+                        'id' => [
+                            'type' => 'integer',
+                            'description' => 'User ID',
+                            'example' => 123,
+                        ],
+                    ],
+                    'required' => ['id'],
+                ],
+                response_schema: [
+                    'type' => 'object',
+                    'properties' => [
+                        'data' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'full_name' => [
+                                    'type' => 'string',
+                                    'example' => 'John Doe',
+                                ],
+                            ],
+                            'required' => ['full_name'],
+                        ],
+                    ],
+                    'required' => ['data'],
+                ],
             ),
         ],
         soft_deletes: false,
@@ -342,12 +379,56 @@ return [
     | Define global RPC functions that can be called via POST /{api_prefix}/{function_name}
     |
     */
-    'functions' => [
-        // Example: POST /api/search-all
-        // 'search-all' => new RecordFunctionType(
-        //     handler: \App\Services\GlobalSearchService::class,
-        //     method: 'searchAll',
-        //     permissions: ['search_all']
-        // ),
+    'global_functions' => [
+        'searchAll' => new RecordFunctionType(
+            pms_name: 'search_all',
+            method: ['POST'],
+            class: 'App\\Services\\GlobalSearchService',
+            function_method: 'searchAll',
+            description: 'Search across multiple resources',
+            query_schema: [
+                'type' => 'object',
+                'properties' => [
+                    'limit' => [
+                        'type' => 'integer',
+                        'minimum' => 1,
+                        'maximum' => 100,
+                        'default' => 20,
+                        'description' => 'Maximum results to return',
+                    ],
+                ],
+            ],
+            payload_schema: [
+                'type' => 'object',
+                'properties' => [
+                    'q' => [
+                        'type' => 'string',
+                        'minLength' => 1,
+                        'description' => 'Search query',
+                        'example' => 'invoice',
+                    ],
+                    'tables' => [
+                        'type' => 'array',
+                        'items' => ['type' => 'string'],
+                        'description' => 'Optional list of tables to search',
+                        'example' => ['users', 'posts'],
+                    ],
+                ],
+                'required' => ['q'],
+            ],
+            response_schema: [
+                'type' => 'object',
+                'properties' => [
+                    'data' => [
+                        'type' => 'array',
+                        'items' => [
+                            'type' => 'object',
+                            'additionalProperties' => true,
+                        ],
+                    ],
+                ],
+                'required' => ['data'],
+            ],
+        ),
     ],
 ];

@@ -5,6 +5,7 @@ namespace Sopheak\Core\Console;
 use Throwable;
 use Illuminate\Console\Command;
 use Sopheak\Core\Services\OpenApiService;
+use Sopheak\Core\Support\SchemaRegistry;
 
 class GenerateOpenApiSpec extends Command
 {
@@ -25,6 +26,7 @@ class GenerateOpenApiSpec extends Command
         $this->info('Generating OpenAPI specification from record configuration...');
 
         $tables = config('record.tables', []);
+        SchemaRegistry::refresh();
         $spec = $this->openApiService->generateSpecification();
 
         try {

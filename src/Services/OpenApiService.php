@@ -2,6 +2,9 @@
 
 namespace Sopheak\Core\Services;
 
+use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Types\RecordFunctionType;
+
 class OpenApiService
 {
     /**
@@ -44,7 +47,7 @@ class OpenApiService
             ],
             'servers' => $servers,
             'tags' => $this->generateTags(),
-            'paths' => $paths + $this->generateRpcPaths(),
+            'paths' => array_merge($paths, $this->generateTableRpcPaths(), $this->generateRpcPaths()),
             'components' => [
                 'schemas' => $schemas,
                 'securitySchemes' => $securitySchemes,
@@ -229,7 +232,7 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
     protected function generateSchemas(): array
     {
         $schemas = [];
-        $tables = config('record.tables', []);
+        $tables = SchemaRegistry::get();
 
         foreach ($tables as $tableName => $tableConfig) {
             $schemaName = $this->schemaName($tableName);
@@ -245,6 +248,8 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
             
             // Generate write schema
             $schemas[$schemaName . 'Write'] = $this->generateTableSchemaWrite($tableName, $columns, $tableConfig);
+
+            $schemas[$schemaName . 'Update'] = $this->generateTableSchemaUpdate($tableName, $columns, $tableConfig);
         }
 
         // Add common schemas
@@ -259,6 +264,7 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
     protected function generateRpcPaths(): array
     {
         $paths = [];
+        $apiPrefix = config('record.api_prefix', 'api');
         $globalFunctions = config('record.global_functions', []);
 
         if (empty($globalFunctions)) {
@@ -266,80 +272,264 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
         }
 
         foreach ($globalFunctions as $functionName => $functionConfig) {
-            $path = '/api/v2/rpc/' . $functionName;
-            
-            $paths[$path] = [
-                'post' => [
-                    'tags' => ['RPC'],
-                    'summary' => $functionConfig['description'] ?? sprintf('Execute %s function', $functionName),
-                    'description' => $functionConfig['description'] ?? sprintf('Execute the %s global function', $functionName),
-                    'operationId' => 'rpc_' . $functionName,
-                    'requestBody' => [
-                        'required' => true,
-                        'content' => [
-                            'application/json' => [
-                                'schema' => [
-                                    'type' => 'object',
-                                    'properties' => [
-                                        'params' => [
-                                            'type' => 'object',
-                                            'description' => 'Function parameters',
-                                            'additionalProperties' => true
-                                        ]
-                                    ]
-                                ]
-                            ]
-                        ]
+            $config = $this->normalizeFunctionConfig($functionConfig);
+            $methods = $this->normalizeHttpMethods($config['method'] ?? ['POST']);
+            $path = sprintf('/%s/%s', $apiPrefix, $functionName);
+
+            foreach ($methods as $method) {
+                $methodKey = strtolower((string) $method);
+                $payloadSchema = $config['payload_schema'] ?? [
+                    'type' => 'object',
+                    'additionalProperties' => true,
+                ];
+                $responseSchema = $config['response_schema'] ?? [
+                    'type' => 'object',
+                    'properties' => [
+                        'success' => [
+                            'type' => 'boolean',
+                            'example' => true,
+                        ],
+                        'data' => [
+                            'description' => 'Function result',
+                            'oneOf' => [
+                                ['type' => 'object'],
+                                ['type' => 'array'],
+                                ['type' => 'string'],
+                                ['type' => 'number'],
+                                ['type' => 'boolean'],
+                            ],
+                        ],
                     ],
+                ];
+
+                $operation = [
+                    'tags' => ['RPC'],
+                    'summary' => $config['description'] ?? sprintf('Execute %s function', $functionName),
+                    'description' => $config['description'] ?? sprintf('Execute the %s global function', $functionName),
+                    'operationId' => sprintf('rpc_%s_%s', $functionName, $methodKey),
+                    'security' => [['bearerAuth' => []]],
                     'responses' => [
                         '200' => [
                             'description' => 'Function executed successfully',
                             'content' => [
                                 'application/json' => [
-                                    'schema' => [
-                                        'type' => 'object',
-                                        'properties' => [
-                                            'success' => [
-                                                'type' => 'boolean',
-                                                'example' => true
-                                            ],
-                                            'data' => [
-                                                'description' => 'Function result',
-                                                'oneOf' => [
-                                                    ['type' => 'object'],
-                                                    ['type' => 'array'],
-                                                    ['type' => 'string'],
-                                                    ['type' => 'number'],
-                                                    ['type' => 'boolean']
-                                                ]
-                                            ]
-                                        ]
-                                    ]
-                                ]
-                            ]
+                                    'schema' => $responseSchema,
+                                ],
+                            ],
                         ],
                         '400' => [
                             'description' => 'Bad request - invalid parameters',
                             'content' => [
                                 'application/json' => [
-                                    'schema' => ['$ref' => '#/components/schemas/Error']
-                                ]
-                            ]
+                                    'schema' => ['$ref' => '#/components/schemas/Error'],
+                                ],
+                            ],
                         ],
                         '500' => [
                             'description' => 'Internal server error',
                             'content' => [
                                 'application/json' => [
-                                    'schema' => ['$ref' => '#/components/schemas/Error']
-                                ]
-                            ]
-                        ]
-                    ]
-                ]
-            ];
+                                    'schema' => ['$ref' => '#/components/schemas/Error'],
+                                ],
+                            ],
+                        ],
+                    ],
+                ];
+
+                $queryParams = $this->generateQueryParametersFromSchema($config['query_schema'] ?? null);
+                if ([] !== $queryParams) {
+                    $operation['parameters'] = $queryParams;
+                }
+
+                if ('get' !== $methodKey) {
+                    $operation['requestBody'] = [
+                        'required' => true,
+                        'content' => [
+                            'application/json' => [
+                                'schema' => $payloadSchema,
+                            ],
+                        ],
+                    ];
+                }
+
+                $paths[$path][$methodKey] = $operation;
+            }
         }
 
         return $paths;
+    }
+
+    protected function generateTableRpcPaths(): array
+    {
+        $paths = [];
+        $apiPrefix = config('record.api_prefix', 'api');
+        $tables = config('record.tables', []);
+
+        foreach ($tables as $tableName => $tableConfig) {
+            $functions = $tableConfig->functions ?? [];
+
+            if (empty($functions)) {
+                continue;
+            }
+
+            $isPublicRead = $tableConfig && isset($tableConfig->public) && $tableConfig->public->read ?? false;
+            $isPublicWrite = $tableConfig && isset($tableConfig->public) && $tableConfig->public->write ?? false;
+
+            foreach ($functions as $functionName => $functionConfig) {
+                if (!is_string($functionName)) {
+                    continue;
+                }
+
+                if ('' === $functionName) {
+                    continue;
+                }
+
+                $config = $this->normalizeFunctionConfig($functionConfig);
+                $methods = $this->normalizeHttpMethods($config['method'] ?? ['POST']);
+                $path = sprintf('/%s/%s/rpc/%s', $apiPrefix, $tableName, $functionName);
+
+                foreach ($methods as $method) {
+                    $methodKey = strtolower((string) $method);
+                    $payloadSchema = $config['payload_schema'] ?? [
+                        'type' => 'object',
+                        'additionalProperties' => true,
+                    ];
+                    $responseSchema = $config['response_schema'] ?? [
+                        'type' => 'object',
+                        'properties' => [
+                            'success' => [
+                                'type' => 'boolean',
+                                'example' => true,
+                            ],
+                            'data' => [
+                                'description' => 'Function result',
+                                'oneOf' => [
+                                    ['type' => 'object'],
+                                    ['type' => 'array'],
+                                    ['type' => 'string'],
+                                    ['type' => 'number'],
+                                    ['type' => 'boolean'],
+                                ],
+                            ],
+                        ],
+                    ];
+
+                    $security = [];
+                    if ('get' === $methodKey) {
+                        if (!$isPublicRead) {
+                            $security = [['bearerAuth' => []]];
+                        }
+                    } elseif (!$isPublicWrite) {
+                        $security = [['bearerAuth' => []]];
+                    }
+
+                    $operation = [
+                        'tags' => [ucfirst((string) $tableName)],
+                        'summary' => $config['description'] ?? sprintf('Execute %s function', $functionName),
+                        'description' => $config['description'] ?? sprintf('Execute the %s function for %s', $functionName, $tableName),
+                        'operationId' => sprintf('%s_rpc_%s_%s', $tableName, $functionName, $methodKey),
+                        'security' => $security,
+                        'responses' => [
+                            '200' => [
+                                'description' => 'Function executed successfully',
+                                'content' => [
+                                    'application/json' => [
+                                        'schema' => $responseSchema,
+                                    ],
+                                ],
+                            ],
+                            '400' => ['$ref' => '#/components/responses/BadRequest'],
+                            '401' => ['$ref' => '#/components/responses/Unauthorized'],
+                            '403' => ['$ref' => '#/components/responses/Forbidden'],
+                            '500' => ['$ref' => '#/components/responses/InternalServerError'],
+                        ],
+                    ];
+
+                    $queryParams = $this->generateQueryParametersFromSchema($config['query_schema'] ?? null);
+                    if ([] !== $queryParams) {
+                        $operation['parameters'] = $queryParams;
+                    }
+
+                    if ('get' !== $methodKey) {
+                        $operation['requestBody'] = [
+                            'required' => true,
+                            'content' => [
+                                'application/json' => [
+                                    'schema' => $payloadSchema,
+                                ],
+                            ],
+                        ];
+                    }
+
+                    $paths[$path][$methodKey] = $operation;
+                }
+            }
+        }
+
+        return $paths;
+    }
+
+    protected function normalizeFunctionConfig(array|RecordFunctionType $functionConfig): array
+    {
+        if ($functionConfig instanceof RecordFunctionType) {
+            return $functionConfig->toArray();
+        }
+
+        return $functionConfig;
+    }
+
+    protected function normalizeHttpMethods(array|string $methods): array
+    {
+        $methodList = is_array($methods) ? $methods : [$methods];
+        $normalized = [];
+
+        foreach ($methodList as $method) {
+            $normalized[] = strtoupper((string) $method);
+        }
+
+        return array_values(array_unique($normalized));
+    }
+
+    protected function generateQueryParametersFromSchema(?array $querySchema): array
+    {
+        if (null === $querySchema) {
+            return [];
+        }
+
+        $properties = $querySchema['properties'] ?? [];
+        if (!is_array($properties) || [] === $properties) {
+            return [];
+        }
+
+        $required = $querySchema['required'] ?? [];
+        $requiredList = is_array($required) ? $required : [];
+        $parameters = [];
+
+        foreach ($properties as $name => $schema) {
+            if (!is_string($name)) {
+                continue;
+            }
+
+            if ('' === $name) {
+                continue;
+            }
+
+            $schemaObject = is_array($schema) ? $schema : ['type' => 'string'];
+            $parameter = [
+                'name' => $name,
+                'in' => 'query',
+                'required' => in_array($name, $requiredList, true),
+                'schema' => $schemaObject,
+            ];
+
+            if (isset($schemaObject['description']) && is_string($schemaObject['description'])) {
+                $parameter['description'] = $schemaObject['description'];
+            }
+
+            $parameters[] = $parameter;
+        }
+
+        return $parameters;
     }
 
     /**
@@ -366,7 +556,7 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
                 continue;
             }
 
-            $mapped = $this->mapColumnToOpenApi($info['type'] ?? 'string');
+            $mapped = $this->mapColumnToOpenApi($info);
             $properties[$name] = $mapped;
             // Avoid forcing typical system fields as required
             if (!(bool) ($info['nullable'] ?? true) && !in_array($name, ['id', 'created_at', 'updated_at', 'deleted_at'], true)) {
@@ -426,7 +616,7 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
                 continue;
             }
 
-            $mapped = $this->mapColumnToOpenApi($info['type'] ?? 'string');
+            $mapped = $this->mapColumnToOpenApi($info);
             $properties[$name] = $mapped;
             // Avoid forcing typical system fields as required
             if (!(bool) ($info['nullable'] ?? true) && !in_array($name, ['id', 'created_at', 'updated_at', 'deleted_at'], true)) {
@@ -468,7 +658,7 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
                 continue;
             }
 
-            $mapped = $this->mapColumnToOpenApi($info['type'] ?? 'string');
+            $mapped = $this->mapColumnToOpenApi($info);
             $properties[$name] = $mapped;
             // Avoid forcing typical system fields as required
             if (!(bool) ($info['nullable'] ?? true) && !in_array($name, ['id', 'created_at', 'updated_at', 'deleted_at'], true)) {
@@ -482,6 +672,15 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
             'required' => $required,
             'description' => sprintf('Write schema for table `%s` (excludes system fields)', $tableName),
         ];
+    }
+
+    protected function generateTableSchemaUpdate(string $tableName, array $columns, $tableConfig): array
+    {
+        $writeSchema = $this->generateTableSchemaWrite($tableName, $columns, $tableConfig);
+        unset($writeSchema['required']);
+        $writeSchema['description'] = sprintf('Update schema for table `%s` (excludes system fields)', $tableName);
+
+        return $writeSchema;
     }
 
     /**
@@ -725,7 +924,11 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
      */
     protected function mapColumnToOpenApi(array $columnConfig): array
     {
-        $type = $columnConfig['type'] ?? 'string';
+        $rawType = strtolower((string) ($columnConfig['type'] ?? 'string'));
+        $baseType = trim((string) preg_replace('/\([^)]*\)/', '', $rawType));
+        $baseType = trim(explode(' ', $baseType)[0] ?? $baseType);
+        $type = '' === $baseType ? 'string' : $baseType;
+
         $schema = match ($type) {
             'integer', 'bigint' => ['type' => 'integer', 'format' => 'int64'],
             'decimal', 'float', 'double' => ['type' => 'number', 'format' => 'double'],
@@ -826,7 +1029,7 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
                 'required' => true,
                 'content' => [
                     'application/json' => [
-                        'schema' => ['$ref' => '#/components/schemas/' . $this->schemaName($tableName)]
+                        'schema' => ['$ref' => '#/components/schemas/' . $this->schemaName($tableName) . 'Write']
                     ]
                 ]
             ],
@@ -895,7 +1098,7 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
                 'required' => true,
                 'content' => [
                     'application/json' => [
-                        'schema' => ['$ref' => '#/components/schemas/' . $this->schemaName($tableName)]
+                        'schema' => ['$ref' => '#/components/schemas/' . $this->schemaName($tableName) . 'Update']
                     ]
                 ]
             ],

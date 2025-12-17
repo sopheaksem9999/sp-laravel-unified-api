@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>ERP API v2 – Records Docs</title>
+    <title>Records API Docs</title>
     <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
     <style>
         html,

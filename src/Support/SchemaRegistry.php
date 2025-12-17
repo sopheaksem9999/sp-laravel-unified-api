@@ -39,7 +39,7 @@ class SchemaRegistry
         // Check Redis cache
         $cached = Cache::get(self::$schemaCacheKey);
         if ($cached) {
-            self::$cache = $cached;
+            self::$cache = self::hydrateRuntimeFields($cached);
 
             return self::$cache;
         }
@@ -67,7 +67,14 @@ class SchemaRegistry
         }
 
         // Cache the result
-        Cache::put(self::$schemaCacheKey, self::$cache, self::$cacheTtl);
+        try {
+            $cacheable = self::sanitizeForCache(self::$cache);
+            Cache::put(self::$schemaCacheKey, $cacheable, self::$cacheTtl);
+        } catch (\Throwable $throwable) {
+            Log::warning('Failed to cache schema registry', [
+                'error' => $throwable->getMessage(),
+            ]);
+        }
 
         return self::$cache;
     }
@@ -188,5 +195,55 @@ class SchemaRegistry
             // Return empty array as fallback
             return [];
         }
+    }
+
+    private static function hydrateRuntimeFields(array $schema): array
+    {
+        $tables = config('record.tables', []);
+
+        foreach ($schema as $tableName => $config) {
+            if (!isset($tables[$tableName])) {
+                continue;
+            }
+
+            $source = $tables[$tableName];
+
+            $config->createValidator = $source->createValidator ?? null;
+            $config->updateValidator = $source->updateValidator ?? null;
+            $config->deleteValidator = $source->deleteValidator ?? null;
+        }
+
+        return $schema;
+    }
+
+    private static function sanitizeForCache(mixed $value): mixed
+    {
+        if ($value instanceof \Closure) {
+            return null;
+        }
+
+        if ($value instanceof \UnitEnum) {
+            return $value;
+        }
+
+        if (is_array($value)) {
+            $sanitized = [];
+            foreach ($value as $key => $item) {
+                $sanitized[$key] = self::sanitizeForCache($item);
+            }
+
+            return $sanitized;
+        }
+
+        if (is_object($value)) {
+            $clone = clone $value;
+            foreach (get_object_vars($clone) as $property => $propertyValue) {
+                $clone->{$property} = self::sanitizeForCache($propertyValue);
+            }
+
+            return $clone;
+        }
+
+        return $value;
     }
 }

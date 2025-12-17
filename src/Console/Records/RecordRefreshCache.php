@@ -3,12 +3,11 @@
 namespace Sopheak\Core\Console\Records;
 
 use Throwable;
-use stdClass;
 use Sopheak\Core\Support\QueryBuilderFilters;
 use Sopheak\Core\Support\RelationshipResolver;
 use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Services\OpenApiService;
 use Illuminate\Console\Command;
-use Illuminate\Support\Str;
 
 class RecordRefreshCache extends Command
 {
@@ -66,21 +65,7 @@ class RecordRefreshCache extends Command
             $defaultOut = storage_path('api-v2.json');
             $out = $this->option('out') ?: $defaultOut;
 
-            $spec = [
-                'openapi' => '3.0.3',
-                'info' => [
-                    'title' => config('app.name') . ' API',
-                    'version' => 'v2'
-                ],
-                'servers' => [
-                    ['url' => config('app.url') ?: 'http://localhost']
-                ],
-                'paths' => new stdClass(),
-                'components' => new stdClass(),
-                'x-generated-at' => now()->toIso8601String(),
-                'x-request-id' => (string) Str::uuid(),
-                'x-cache-refreshed-at' => now()->toIso8601String(),
-            ];
+            $spec = app(OpenApiService::class)->generateSpecification();
 
             $dir = dirname($out);
             if (!is_dir($dir)) {

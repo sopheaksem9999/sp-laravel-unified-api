@@ -79,6 +79,9 @@ class RecordFunctionType
         public string $class,
         public string $function_method,
         public ?string $description = null,
+        public ?array $query_schema = null,
+        public ?array $payload_schema = null,
+        public ?array $response_schema = null,
     ) {
         if (empty($pms_name) || (is_array($pms_name) && [] === $pms_name)) {
             throw new InvalidArgumentException('pms_name cannot be empty');
@@ -109,10 +112,13 @@ class RecordFunctionType
     {
         return new self(
             pms_name: $properties['pms_name'] ?? throw new InvalidArgumentException('pms_name is required'),
-            method: $properties['method'] ?? null,
+            method: $properties['method'] ?? throw new InvalidArgumentException('method is required'),
             class: $properties['class'] ?? throw new InvalidArgumentException('class is required'),
             function_method: $properties['function_method'] ?? throw new InvalidArgumentException('function_method is required'),
             description: $properties['description'] ?? null,
+            query_schema: $properties['query_schema'] ?? null,
+            payload_schema: $properties['payload_schema'] ?? null,
+            response_schema: $properties['response_schema'] ?? null,
         );
     }
 
@@ -133,6 +139,18 @@ class RecordFunctionType
 
         if (null !== $this->description) {
             $config['description'] = $this->description;
+        }
+
+        if (null !== $this->query_schema) {
+            $config['query_schema'] = $this->query_schema;
+        }
+
+        if (null !== $this->payload_schema) {
+            $config['payload_schema'] = $this->payload_schema;
+        }
+
+        if (null !== $this->response_schema) {
+            $config['response_schema'] = $this->response_schema;
         }
 
         return $config;
@@ -170,6 +188,9 @@ class RecordFunctionType
             class: $config['class'] ?? throw new InvalidArgumentException('class is required in config array'),
             function_method: $config['function_method'] ?? throw new InvalidArgumentException('function_method is required in config array'),
             description: $config['description'] ?? null,
+            query_schema: $config['query_schema'] ?? null,
+            payload_schema: $config['payload_schema'] ?? null,
+            response_schema: $config['response_schema'] ?? null,
         );
     }
 }
