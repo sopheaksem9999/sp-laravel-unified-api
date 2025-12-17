@@ -8,14 +8,19 @@ A comprehensive Laravel package that provides standardized API responses, dynami
 # 1. Install the package
 composer require sopheak/sp-laravel-api
 
-# 2. Publish configuration files
+# 2. Generate/publish configs (record/audit/sp-laravel-api + jwt.php)
 php artisan sp-laravel-api:setup
 
-# 3. Run migrations
+# 3. Publish package migrations + run migrations
+php artisan vendor:publish --tag=sp-laravel-api-migrations
 php artisan migrate
 
-# 4. Test the installation
-curl -X GET http://your-app.test/api/test
+# 4. Define rate limiters in your AppServiceProvider (see below)
+
+# 5. Configure at least 1 table in config/record.php (see below)
+
+# 6. Test a public read endpoint
+curl -X GET http://your-app.test/api/users
 ```
 
 ## ✨ Features
@@ -35,8 +40,8 @@ curl -X GET http://your-app.test/api/test
 
 ## 📋 Requirements
 
-- **PHP**: 8.2 or higher
-- **Laravel**: 12.x
+- **PHP**: 8.1 or higher
+- **Laravel**: 10.x / 11.x / 12.x
 - **Database**: MySQL 8.0+, PostgreSQL 13+, or SQLite 3.8+
 - **Extensions**: BCMath, Ctype, JSON, Mbstring, OpenSSL, PDO, Tokenizer, XML
 
@@ -58,7 +63,7 @@ Optional integrations you can install in your application:
 composer require sopheak/sp-laravel-api
 ```
 
-#### Option B: Local Development (Path Repository)
+#### Option B: Local Development (VCS Repository)
 Add this to your project's `composer.json`:
 ```json
 {
@@ -79,72 +84,73 @@ Then run:
 composer update sopheak/sp-laravel-api -W
 ```
 
-### Step 2: Publish Configuration Files
+### Step 2: Publish/Generate Configuration Files
 ```bash
 php artisan sp-laravel-api:setup
 ```
 
-This command publishes the following configuration files:
+This command publishes package configs (tag: `sp-laravel-api-config`) and creates missing app config files:
 - `config/record.php` - Database table configurations and relationships
 - `config/audit.php` - Audit logging settings
 - `config/cursor_pagination.php` - Cursor pagination settings
-- `config/sp-laravel-api.php` - Main package configuration
+- `config/sp-laravel-api.php` - Package settings (auth guard, OpenAPI output)
+- `config/jwt.php` - JWT config scaffold (for JWT-based auth)
+
+To overwrite existing generated configs, run:
+
+```bash
+php artisan sp-laravel-api:setup --force
+```
 
 ### Step 3: Environment Configuration
 
 Add these environment variables to your `.env` file:
 
 ```env
-# API Configuration
+# API configuration
 RECORD_API_PREFIX=api
-RECORD_MAX_DEPTH=3
-RECORD_CACHE_TTL=3600
-RECORD_LAZY_CACHE_TTL=300
 
-# Audit Logging
+# Audit logging
 AUDIT_LOG_ENABLED=true
 AUDIT_LOG_RETENTION_DAYS=365
-AUDIT_LOG_QUEUE_ENABLED=true
 
-# Cursor Pagination
-CURSOR_PAGINATION_AUTO_THRESHOLD=1000
-CURSOR_PAGINATION_DEFAULT_PER_PAGE=15
-CURSOR_PAGINATION_MAX_PER_PAGE=100
-
-# SP Laravel API auth guard (which Laravel guard the package uses)
+# Which Laravel auth guard the package uses
 SP_LARAVEL_API_AUTH_GUARD=api
-
-# JWT Authentication (if using JWT)
-JWT_SECRET=your-jwt-secret-key
-JWT_TTL=60
-JWT_REFRESH_TTL=20160
-
-# Cache Configuration (recommended for performance)
-CACHE_DRIVER=redis
-
-# Queue Configuration (recommended)
-QUEUE_CONNECTION=redis
 ```
 
-### Step 4: Run Setup Command
-
-Use the automated setup command to configure the package:
-
-```bash
-# Run the setup command
-php artisan sp-laravel-api:setup
-```
-
-This command publishes the package config files (tag: `sp-laravel-api-config`) and creates/updates `config/jwt.php`.
-
-If you want the package migrations, publish them and run migrations:
+### Step 4: Publish Migrations and Run Migrations
 
 ```bash
 php artisan vendor:publish --tag=sp-laravel-api-migrations
 php artisan migrate
 ```
 
-### Step 5: Validate Installation
+### Step 5: Configure Rate Limiters
+
+The package routes use `throttle:api-reads`, `throttle:api-writes`, and `throttle:api-functions`. Define them in your app (example in `app/Providers/AppServiceProvider.php`):
+
+```php
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
+
+RateLimiter::for('api-reads', function (Request $request): Limit {
+    $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
+    return Limit::perMinute(120)->by((string) $key);
+});
+
+RateLimiter::for('api-writes', function (Request $request): Limit {
+    $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
+    return Limit::perMinute(60)->by((string) $key);
+});
+
+RateLimiter::for('api-functions', function (Request $request): Limit {
+    $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
+    return Limit::perMinute(30)->by((string) $key);
+});
+```
+
+### Step 6: Validate Installation
 
 Verify your installation is working correctly:
 
@@ -159,7 +165,7 @@ php artisan sp-laravel-api:validate --verbose
 php artisan sp-laravel-api:validate --fix
 ```
 
-### Step 6: Configure Database Tables
+### Step 7: Configure Database Tables
 
 Edit `config/record.php` to configure your database tables for the dynamic API. See the [examples directory](examples/config/record.php) for a complete configuration example:
 
@@ -169,7 +175,6 @@ use Sopheak\Core\Types\RecordHasManyType;
 use Sopheak\Core\Types\RecordBelongsToType;
 use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordTableTriggerType;
-```
 return [
     'api_prefix' => env('RECORD_API_PREFIX', 'api'),
 
@@ -245,7 +250,7 @@ return [
 
 The package routes are loaded automatically by `Sopheak\Core\CoreServiceProvider` using this prefix. Record endpoints authorize per-table using `RecordTablePublic` and permissions; audit endpoints always require authentication.
 
-### Step 7: Test Your Installation
+### Step 8: Test Your Installation
 
 Test the dynamic API endpoints:
 
@@ -415,20 +420,8 @@ php artisan migrate
 
 ### Middleware Configuration
 
-Add the request ID middleware to your API routes in `app/Http/Kernel.php`:
+SP Laravel API routes already include `request.id`. If you want request IDs on your own endpoints too, apply it to your routes:
 
-```php
-protected $middlewareGroups = [
-    'api' => [
-        \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
-        'throttle:api',
-        \Illuminate\Routing\Middleware\SubstituteBindings::class,
-        \Sopheak\Core\Http\Middleware\RequestId::class, // Add this line
-    ],
-];
-```
-
-Or apply it to specific route groups:
 ```php
 Route::middleware(['api', 'auth:api', 'request.id'])->group(function () {
     // Your API routes
@@ -886,30 +879,22 @@ php artisan queue:work --queue=high,default --sleep=3 --tries=3 --max-time=3600
 
 ## 📄 License
 
-This package is open-sourced software licensed under the [MIT license](LICENSE.md).
+This package is proprietary software.
 
-```php
-// routes/api.php
-Route::middleware(['api', 'request.id'])->get('/test', function () {
-    $response = app('api.response');
-    return $response->success(['message' => 'SP Laravel API is working!']);
-});
-```
+Generate and fetch OpenAPI JSON:
 
-Test the endpoint:
 ```bash
-curl -X GET http://your-app.test/api/test
+php artisan sp-laravel-api:openapi
+curl -X GET http://your-app.test/api/docs/openapi
 ```
 
 Expected response:
 ```json
 {
-    "success": true,
-    "data": {
-        "message": "SP Laravel API is working!"
-    },
-    "meta": {
-        "request_id": "req_1234567890abcdef"
+    "openapi": "3.0.3",
+    "info": {
+        "title": "Laravel API v2",
+        "version": "2.0.0"
     }
 }
 ```
