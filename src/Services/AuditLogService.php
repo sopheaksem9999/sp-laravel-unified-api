@@ -565,19 +565,19 @@ class AuditLogService
 
         switch ($driver) {
             case 'sqlite':
-                $segments = array_map(fn($p): string => preg_match('/[^A-Za-z0-9_]/', (string) $p) ? "['".str_replace("'", "''", (string) $p)."']" : ".".$p, $parts);
+                $segments = array_map(fn($p): string => preg_match('/[^A-Za-z0-9_]/', $p) ? "['".str_replace("'", "''", $p)."']" : ".".$p, $parts);
                 $sqlitePath = '$'.implode('', $segments);
                 return sprintf("json_extract(%s, '%s')", $column, $sqlitePath);
             case 'mysql':
             case 'mariadb':
-                $segments = array_map(fn($p): string => preg_match('/[^A-Za-z0-9_]/', (string) $p) ? '["'.str_replace('"', '\\"', (string) $p).'"]' : ".".$p, $parts);
+                $segments = array_map(fn($p): string => preg_match('/[^A-Za-z0-9_]/', $p) ? '["'.str_replace('"', '\\"', $p).'"]' : ".".$p, $parts);
                 $mysqlPath = '$'.implode('', $segments);
                 return sprintf("JSON_EXTRACT(%s, '%s')", $column, $mysqlPath);
             case 'pgsql':
                 $pgPath = '{'.implode(',', $parts).'}';
                 return sprintf("(%s #> '%s')", $column, $pgPath);
             default:
-                $segments = array_map(fn($p): string => preg_match('/[^A-Za-z0-9_]/', (string) $p) ? '["'.str_replace('"', '\\"', (string) $p).'"]' : ".".$p, $parts);
+                $segments = array_map(fn($p): string => preg_match('/[^A-Za-z0-9_]/', $p) ? '["'.str_replace('"', '\\"', $p).'"]' : ".".$p, $parts);
                 $pathStr = '$'.implode('', $segments);
                 return sprintf("JSON_EXTRACT(%s, '%s')", $column, $pathStr);
         }

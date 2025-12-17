@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Http\Controllers\Api;
 
+use RuntimeException;
 use Exception;
 use stdClass;
 use Illuminate\Routing\Controller;
@@ -521,8 +522,9 @@ class RecordController extends Controller
         if ($validatorCallback) {
             $validator = $validatorCallback($request, null);
             if (!$validator instanceof \Illuminate\Contracts\Validation\Validator) {
-                throw new \RuntimeException('Validator callback must return a Validator instance');
+                throw new RuntimeException('Validator callback must return a Validator instance');
             }
+
             if ($validator->fails()) {
                 return $this->error('Validation failed', 422, $validator->errors()->toArray());
             }
@@ -628,8 +630,9 @@ class RecordController extends Controller
         if ($validatorCallback) {
             $validator = $validatorCallback($request, $id);
             if (!$validator instanceof \Illuminate\Contracts\Validation\Validator) {
-                throw new \RuntimeException('Validator callback must return a Validator instance');
+                throw new RuntimeException('Validator callback must return a Validator instance');
             }
+
             if ($validator->fails()) {
                 return $this->error('Validation failed', 422, $validator->errors()->toArray());
             }
@@ -747,8 +750,9 @@ class RecordController extends Controller
         if ($validatorCallback) {
             $validator = $validatorCallback($request, $id);
             if (!$validator instanceof \Illuminate\Contracts\Validation\Validator) {
-                throw new \RuntimeException('Validator callback must return a Validator instance');
+                throw new RuntimeException('Validator callback must return a Validator instance');
             }
+
             if ($validator->fails()) {
                 return $this->error('Validation failed', 422, $validator->errors()->toArray());
             }
@@ -1796,14 +1800,8 @@ class RecordController extends Controller
             // ID + other fields = UPDATE
             return 'update';
         }
-
-        if (!$hasOtherFields) {
-            // Only ID present = DELETE
-            return 'delete';
-        }
-
-        // Default fallback
-        return 'update';
+        // Only ID present = DELETE
+        return 'delete';
     }
 
     private function authorizeAction(string $table, string $action): void
@@ -1921,7 +1919,7 @@ class RecordController extends Controller
 
     private function executeTableTrigger(?RecordTableTriggerType $trigger, array $params = []): void
     {
-        if (!$trigger) {
+        if (!$trigger instanceof RecordTableTriggerType) {
             return;
         }
 

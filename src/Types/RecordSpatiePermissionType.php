@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Types;
 
+use Spatie\Permission\PermissionServiceProvider;
 use InvalidArgumentException;
 use Sopheak\Core\Enums\RecordRelationshipsEnum;
 
@@ -57,6 +58,7 @@ use Sopheak\Core\Enums\RecordRelationshipsEnum;
  */
 class RecordSpatiePermissionType
 {
+    public $recordRelationshipsEnum;
     /**
      * Create a new RecordSpatiePermissionType instance.
      *
@@ -93,7 +95,7 @@ class RecordSpatiePermissionType
         public bool $teamsEnabled = false,
         public ?string $teamsKey = null,
     ) {
-        if (!class_exists(\Spatie\Permission\PermissionServiceProvider::class)) {
+        if (!class_exists(PermissionServiceProvider::class)) {
             throw new InvalidArgumentException('RecordSpatiePermissionType requires spatie/laravel-permission to be installed.');
         }
 

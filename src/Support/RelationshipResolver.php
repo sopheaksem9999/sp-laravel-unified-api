@@ -2,6 +2,8 @@
 
 namespace Sopheak\Core\Support;
 
+use Spatie\Permission\PermissionServiceProvider;
+use RuntimeException;
 use App\Models\User;
 use Sopheak\Core\Types\RecordBelongsToType;
 use Sopheak\Core\Types\RecordHasManyThroughType;
@@ -315,9 +317,10 @@ class RelationshipResolver
 
                 // Handle RecordSpatiePermissionType
                 if ($rel instanceof RecordSpatiePermissionType) {
-                    if (!class_exists(\Spatie\Permission\PermissionServiceProvider::class)) {
-                        throw new \RuntimeException('Spatie permission relationship configured but spatie/laravel-permission is not installed.');
+                    if (!class_exists(PermissionServiceProvider::class)) {
+                        throw new RuntimeException('Spatie permission relationship configured but spatie/laravel-permission is not installed.');
                     }
+
                     $result = [
                         'type' => 'morphToMany',
                         'table' => $rel->related,
@@ -941,7 +944,7 @@ class RelationshipResolver
         if ([] === $validColumns) {
             $columnRef = $tableName !== '' && $tableName !== '0' ? sprintf('`%s`.`id`', $tableName) : '`id`';
 
-            return '\'id\', ' . $columnRef; // Fallback to id column
+            return "'id', " . $columnRef; // Fallback to id column
         }
 
         $jsonPairs = [];
@@ -1083,7 +1086,7 @@ class RelationshipResolver
         unset($records);
 
         if ('hasManyThrough' === $type) {
-            return self::loadHasManyThroughOptimized($config, $matchValues, $columns, $tenantId, $schema);
+            return self::loadHasManyThroughOptimized($config, $matchValues, $columns, $tenantId);
         }
 
         // Optimized non-through relationships with advanced bulk loading
@@ -1239,7 +1242,6 @@ class RelationshipResolver
     private static function loadHasManyThroughOptimized(array $config, array $matchValues, mixed $tenantId, array $schema): array
     {
         $throughTable = $config['through_table'];
-        $relatedTable = $config['table'];
         $firstKey = $config['first_key'];
         $secondLocalKey = $config['second_local_key'];
 

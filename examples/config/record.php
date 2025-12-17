@@ -9,7 +9,8 @@
  * Copy this to your Laravel app's config/record.php and modify
  * according to your database schema and requirements.
  */
-
+use Illuminate\Http\Request;
+use Illuminate\Contracts\Validation\Validator;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordHasManyType;
 use Sopheak\Core\Types\RecordBelongsToType;
@@ -53,22 +54,16 @@ $tables = [
         ],
         soft_deletes: false,
         has_tenant_id: false,
-        createValidator: function (\Illuminate\Http\Request $request, ?int $id = null): \Illuminate\Contracts\Validation\Validator {
-            return \Illuminate\Support\Facades\Validator::make($request->all(), [
-                'name' => 'required|string|max:255',
-                'email' => 'required|email',
-            ]);
-        },
-        updateValidator: function (\Illuminate\Http\Request $request, ?int $id = null): \Illuminate\Contracts\Validation\Validator {
-            return \Illuminate\Support\Facades\Validator::make($request->all(), [
-                'name' => 'sometimes|required|string|max:255',
-            ]);
-        },
-        deleteValidator: function (\Illuminate\Http\Request $request, ?int $id = null): \Illuminate\Contracts\Validation\Validator {
-            return \Illuminate\Support\Facades\Validator::make(['id' => $id], [
-                'id' => 'required|integer',
-            ]);
-        },
+        createValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'email' => 'required|email',
+        ]),
+        updateValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'name' => 'sometimes|required|string|max:255',
+        ]),
+        deleteValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make(['id' => $id], [
+            'id' => 'required|integer',
+        ]),
         beforeCreate: new RecordTableTriggerType(
             class: 'App\\Record\\Triggers\\UserTriggers',
             function_method: 'beforeCreate'

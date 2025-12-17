@@ -361,11 +361,12 @@ class ValidateSetup extends Command
     {
         try {
             $driver = DB::getDriverName();
-            
+
             if ($driver === 'sqlite') {
                 $columns = DB::select(sprintf('PRAGMA table_info(%s)', $tableName));
                 return array_map(fn($col) => $col->name, $columns);
             }
+
             $columns = DB::select(sprintf('DESCRIBE `%s`', $tableName));
             return array_map(fn($col) => $col->Field, $columns);
         } catch (Exception) {
