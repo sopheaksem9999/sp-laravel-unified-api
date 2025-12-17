@@ -104,15 +104,15 @@ class SetupPackage extends Command
         return <<<'PHP'
 <?php
 
-use Sopheak\Core\Utilities\Enums\HttpMethodEnum;
-use Sopheak\Core\Utilities\Types\RecordBelongsToType;
-use Sopheak\Core\Utilities\Types\RecordFunctionType;
-use Sopheak\Core\Utilities\Types\RecordHasManyThroughType;
-use Sopheak\Core\Utilities\Types\RecordHasManyType;
-use Sopheak\Core\Utilities\Types\RecordMetaBelongsToManyType;
-use Sopheak\Core\Utilities\Types\RecordSpatiePermissionType;
-use Sopheak\Core\Utilities\Types\RecordTablePublic;
-use Sopheak\Core\Utilities\Types\RecordTableType;
+use Sopheak\Core\Types\RecordBelongsToType;
+use Sopheak\Core\Types\RecordFunctionType;
+use Sopheak\Core\Types\RecordHasManyThroughType;
+use Sopheak\Core\Types\RecordHasManyType;
+use Sopheak\Core\Types\RecordMetaBelongsToManyType;
+use Sopheak\Core\Types\RecordSpatiePermissionType;
+use Sopheak\Core\Types\RecordTablePublic;
+use Sopheak\Core\Types\RecordTableType;
+use Sopheak\Core\Types\RecordTableTriggerType;
 
 /*
  * Record API Configuration.

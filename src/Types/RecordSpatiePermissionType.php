@@ -80,7 +80,7 @@ class RecordSpatiePermissionType
     public function __construct(
         public string $related,
         public string $relation,
-        public RecordRelationshipsEnum $recordRelationshipsEnum = RecordRelationshipsEnum::SPATIE_PERMISSION,
+        public RecordRelationshipsEnum $type = RecordRelationshipsEnum::SPATIE_PERMISSION,
         public ?string $table = null,
         public ?string $foreignPivotKey = null,
         public ?string $relatedPivotKey = null,
@@ -93,6 +93,10 @@ class RecordSpatiePermissionType
         public bool $teamsEnabled = false,
         public ?string $teamsKey = null,
     ) {
+        if (!class_exists(\Spatie\Permission\PermissionServiceProvider::class)) {
+            throw new InvalidArgumentException('RecordSpatiePermissionType requires spatie/laravel-permission to be installed.');
+        }
+
         if (empty($related)) {
             throw new InvalidArgumentException('related model class name cannot be empty');
         }

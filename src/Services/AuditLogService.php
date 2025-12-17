@@ -2,10 +2,9 @@
 
 namespace Sopheak\Core\Services;
 
-use App\Models\AuditLog;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 use Carbon\Carbon;
-use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -16,7 +15,7 @@ class AuditLogService
      * Handle audit data entry based on the provided event.
      * Only creates audit log entry if there are actual differences between old and new data.
      */
-    public static function handleAuditDataEntry(AuditLogEventEnum $auditLogEventEnum, string $entityName, string $entityType, array $queryData, ?string $subject = null, ?string $recap = null): void
+    public static function handleAuditDataEntry(AuditLogEventEnum $event, string $entityName, string $entityType, array $queryData, ?string $subject = null, ?string $recap = null): void
     {
         if (!static::isAuditEnabled()) {
             return;
@@ -25,7 +24,7 @@ class AuditLogService
         $oldData = [];
         $newData = [];
 
-        switch ($auditLogEventEnum) {
+        switch ($event) {
             case AuditLogEventEnum::CREATED:
                 $newData = $queryData;
 
@@ -53,14 +52,14 @@ class AuditLogService
 
         // Create audit log entry only when there are changes or for CREATE/DELETE events
         static::createAuditLogEntry([
-            'title' => static::getAuditTitle($auditLogEventEnum, $entityName),
+            'title' => static::getAuditTitle($event, $entityName),
             'old_data' => $oldData,
             'new_data' => $newData,
-            'recap' => null != $recap ? $recap : static::generateRecap($auditLogEventEnum, $entityName, $oldData, $newData),
+            'recap' => null != $recap ? $recap : static::generateRecap($event, $entityName, $oldData, $newData),
             'subject' => null != $subject ? $subject : static::getAuditSubject([] === $newData ? ([] !== $oldData ? $oldData : $queryData) : ($newData)),
             'entity_type' => $entityType ?? null,
             'entity_id' => $queryData['id'] ?? null,
-            'event' => $auditLogEventEnum->value,
+            'event' => $event->value,
         ]);
     }
 
@@ -84,7 +83,6 @@ class AuditLogService
             }
         }
 
-        // Get table name from entity type
         $tableName = static::getTableNameFromEntityType($data['entity_type']);
 
         // Determine changed fields for enhanced metadata
@@ -98,9 +96,9 @@ class AuditLogService
             'recap' => $data['recap'] ?? '',
             'subject' => $data['subject'] ?? '',
             'user_id' => $data['user_id'] ?? Auth::id(),
-            'entity_type' => $data['entity_type'],
+            'entity_type' => $tableName,
             'entity_id' => $data['entity_id'],
-            'entity_name' => $tableName, // Use table name instead of class basename
+            'entity_name' => $tableName,
             'event' => $data['event'],
             'metadata' => json_encode(static::getAuditMetadata($changedFields, $data['old_data'] ?? [], $data['new_data'] ?? [], $data['entity_type'] ?? null, $data['entity_id'] ?? null)),
             'created_at' => now()->toDateTimeString(),
@@ -164,7 +162,7 @@ class AuditLogService
     /**
      * Log user authentication events.
      */
-    public static function authEvent(AuditLogEventEnum $auditLogEventEnum, array $data = []): void
+    public static function authEvent(AuditLogEventEnum $event, array $data = []): void
     {
         if (!static::isAuditEnabled()) {
             return;
@@ -173,18 +171,20 @@ class AuditLogService
         $userModel = config('audit.user_model', 'App\Models\User');
         $auditLogJobClass = config('audit.audit_log_job', 'App\Jobs\AuditLogJob');
 
+        $entityName = static::getTableNameFromEntityType($userModel);
+
         if (static::isAuditQueueEnabled()) {
             $auditLogJobClass::dispatch(
-                event: $auditLogEventEnum,
-                entityName: 'users',
-                entityType: $userModel,
+                event: $event,
+                entityName: $entityName,
+                entityType: $entityName,
                 queryData: $data
             );
         } else {
             static::handleAuditDataEntry(
-                event: $auditLogEventEnum,
-                entityName: 'users',
-                entityType: $userModel,
+                event: $event,
+                entityName: $entityName,
+                entityType: $entityName,
                 queryData: $data
             );
         }
@@ -202,7 +202,7 @@ class AuditLogService
         }
 
         $entityName = AuditLogService::getTableNameFromEntityType($entityClass);
-        $entityType = $entityClass;
+        $entityType = $entityName;
 
         // Remove timestamp fields from nested arrays before comparison
         $queryData = static::removeTimestampFields($queryData);
@@ -249,10 +249,8 @@ class AuditLogService
      */
     public static function getAuditStats(array $filters = []): array
     {
-        $auditLogModel = config('audit.audit_log_model', AuditLog::class);
-        $query = $auditLogModel::query();
+        $query = DB::table('audit_logs');
 
-        // Apply date filter if provided
         if (!empty($filters['start_date']) && !empty($filters['end_date'])) {
             $query->whereBetween('created_at', [
                 Carbon::parse($filters['start_date'])->startOfDay(),
@@ -260,30 +258,76 @@ class AuditLogService
             ]);
         }
 
+        if (!empty($filters['entity_type'])) {
+            $query->where('entity_type', $filters['entity_type']);
+        }
+
+        if (!empty($filters['entity_id'])) {
+            $query->where('entity_id', $filters['entity_id']);
+        }
+
+        if (!empty($filters['event'])) {
+            $query->where('event', $filters['event']);
+        }
+
+        $baseQuery = clone $query;
+
+        $totalLogs = (clone $baseQuery)->count();
+
+        $actionsBreakdown = (clone $baseQuery)
+            ->select('event', DB::raw('count(*) as count'))
+            ->groupBy('event')
+            ->pluck('count', 'event')
+            ->toArray();
+
+        $topUsersQuery = (clone $baseQuery)
+            ->whereNotNull('user_id')
+            ->select('user_id', DB::raw('count(*) as count'))
+            ->groupBy('user_id')
+            ->orderByDesc('count')
+            ->limit(10)
+            ->get();
+
+        $userIds = $topUsersQuery->pluck('user_id')->filter()->unique()->values();
+        $userNames = [];
+
+        if ($userIds->isNotEmpty()) {
+            $userModelClass = config('auth.providers.users.model', 'App\Models\User');
+
+            if (class_exists($userModelClass)) {
+                $userModel = new $userModelClass();
+                if (method_exists($userModel, 'getTable')) {
+                    $userTable = $userModel->getTable();
+                    $userNames = DB::table($userTable)
+                        ->whereIn('id', $userIds)
+                        ->pluck('name', 'id')
+                        ->toArray();
+                }
+            }
+        }
+
+        $topUsers = $topUsersQuery->map(function ($item) use ($userNames): array {
+            $userId = $item->user_id;
+
+            return [
+                'user_name' => $userId && isset($userNames[$userId]) ? $userNames[$userId] : 'Unknown',
+                'count' => $item->count,
+            ];
+        })->toArray();
+
+        $entityTypes = (clone $baseQuery)
+            ->whereNotNull('entity_type')
+            ->select('entity_type', DB::raw('count(*) as count'))
+            ->groupBy('entity_type')
+            ->orderByDesc('count')
+            ->pluck('count', 'entity_type')
+            ->toArray();
+
         return [
-            'total_logs' => $query->count(),
-            'actions_breakdown' => $query->groupBy('event')
-                ->selectRaw('event, count(*) as count')
-                ->pluck('count', 'event')
-                ->toArray(),
-            'top_users' => $query->whereNotNull('user_id')
-                ->with('user')
-                ->groupBy('user_id')
-                ->selectRaw('user_id, count(*) as count')
-                ->orderByDesc('count')
-                ->limit(10)
-                ->get()
-                ->map(fn($item): array => [
-                    'user_name' => $item->user?->name ?? 'Unknown',
-                    'count' => $item->count,
-                ])
-                ->toArray(),
-            'entity_types' => $query->whereNotNull('entity_type')
-                ->groupBy('entity_type')
-                ->selectRaw('entity_type, count(*) as count')
-                ->orderByDesc('count')
-                ->pluck('count', 'entity_type')
-                ->toArray(),
+            'total_logs' => $totalLogs,
+            'actions_breakdown' => $actionsBreakdown,
+            'top_users' => $topUsers,
+            'entity_types' => $entityTypes,
         ];
     }
 
@@ -292,14 +336,12 @@ class AuditLogService
      */
     public static function getEntityAuditLogs(string $entityType, mixed $entityId, int $limit = 50): Collection
     {
-        $auditLogModel = config('audit.audit_log_model', AuditLog::class);
-        return $auditLogModel::with(['user', 'module'])
+        return DB::table('audit_logs')
             ->where('entity_type', $entityType)
             ->where('entity_id', $entityId)
             ->orderBy('created_at', 'desc')
             ->limit($limit)
-            ->get()
-        ;
+            ->get();
     }
 
     /**
@@ -310,9 +352,10 @@ class AuditLogService
     public static function cleanupOldLogs(int $daysToKeep = 365): int
     {
         $cutoffDate = Carbon::now()->subDays($daysToKeep);
-        $auditLogModel = config('audit.audit_log_model', AuditLog::class);
 
-        return $auditLogModel::where('created_at', '<', $cutoffDate)->delete();
+        return DB::table('audit_logs')
+            ->where('created_at', '<', $cutoffDate)
+            ->delete();
     }
 
     /**
@@ -339,12 +382,12 @@ class AuditLogService
     /**
      * Get the audit log title for the given action.
      *
-     * @param string $auditLogEventEnum The action performed
+     * @param string $event The action performed
      */
-    public static function getAuditTitle(AuditLogEventEnum $auditLogEventEnum, string $entityName): string
+    public static function getAuditTitle(AuditLogEventEnum $event, string $entityName): string
     {
         $eventLabel = '';
-        match ($auditLogEventEnum) {
+        match ($event) {
             AuditLogEventEnum::CREATED => $eventLabel = 'created',
             AuditLogEventEnum::UPDATED => $eventLabel = 'updated',
             AuditLogEventEnum::DELETED => $eventLabel = 'deleted',
@@ -355,7 +398,7 @@ class AuditLogService
         };
 
         $entityLabel = '';
-        match ($auditLogEventEnum) {
+        match ($event) {
             AuditLogEventEnum::LOGIN => $entityLabel = '',
             AuditLogEventEnum::LOGOUT => $entityLabel = '',
             AuditLogEventEnum::FAILED_LOGIN => $entityLabel = '',
@@ -390,16 +433,16 @@ class AuditLogService
     /**
      * Generate a human-readable recap of audit log events.
      *
-     * @param AuditLogEventEnum $auditLogEventEnum The type of audit event
+     * @param AuditLogEventEnum $event The type of audit event
      * @param null|string       $entityName        The name of the entity being audited
      * @param null|array        $oldData           The previous state of the entity
      * @param null|array        $newData           The new state of the entity
      *
      * @return string A formatted recap string
      */
-    public static function generateRecap(AuditLogEventEnum $auditLogEventEnum, ?string $entityName = '', ?array $oldData = [], ?array $newData = []): string
+    public static function generateRecap(AuditLogEventEnum $event, ?string $entityName = '', ?array $oldData = [], ?array $newData = []): string
     {
-        switch ($auditLogEventEnum) {
+        switch ($event) {
             case AuditLogEventEnum::CREATED:
 
             case AuditLogEventEnum::DELETED:
@@ -457,7 +500,13 @@ class AuditLogService
      */
     public static function getTableNameFromEntityType(string $entityType): string
     {
-        // Fallback to pluralized snake_case of class basename
+        if (class_exists($entityType)) {
+            $model = new $entityType();
+            if (method_exists($model, 'getTable')) {
+                return $model->getTable();
+            }
+        }
+
         $className = class_basename($entityType);
 
         return Str::snake(Str::plural($className));
@@ -539,9 +588,9 @@ class AuditLogService
      */
     public static function getFieldTimeline(string $entityType, mixed $entityId, string $field, int $limit = 10): array
     {
-        $auditLogModel = config('audit.audit_log_model', AuditLog::class);
         $driver = DB::getDriverName();
-        $query = $auditLogModel::where('entity_type', $entityType)
+        $query = DB::table('audit_logs')
+            ->where('entity_type', $entityType)
             ->where('entity_id', $entityId);
 
         if ('sqlite' === $driver) {
@@ -579,9 +628,9 @@ class AuditLogService
      */
     public static function getFieldStats(string $entityType, mixed $entityId, string $field): array
     {
-        $auditLogModel = config('audit.audit_log_model', AuditLog::class);
         $driver = DB::getDriverName();
-        $query = $auditLogModel::where('entity_type', $entityType)
+        $query = DB::table('audit_logs')
+            ->where('entity_type', $entityType)
             ->where('entity_id', $entityId);
 
         if ('sqlite' === $driver) {
@@ -721,9 +770,9 @@ class AuditLogService
             ];
         }
 
-        $auditLogModel = config('audit.audit_log_model', AuditLog::class);
         $driver = DB::getDriverName();
-        $baseQuery = $auditLogModel::where('entity_type', $entityType)
+        $baseQuery = DB::table('audit_logs')
+            ->where('entity_type', $entityType)
             ->where('entity_id', $entityId);
 
         if ('sqlite' === $driver) {
@@ -755,7 +804,7 @@ class AuditLogService
         $totalChanges = $totalQuery->count();
 
         return [
-            'previous_change' => $previousLog ? $previousLog->created_at->toISOString() : null,
+            'previous_change' => $previousLog ? Carbon::parse($previousLog->created_at)->toISOString() : null,
             'change_count' => $totalChanges,
             'previous_user' => $previousLog ? 'user_' . $previousLog->user_id : null,
         ];

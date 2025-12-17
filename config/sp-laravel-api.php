@@ -8,4 +8,7 @@ return [
         // default output path relative to storage
         'output' => 'api-v2.json',
     ],
+    'auth' => [
+        'guard' => env('SP_LARAVEL_API_AUTH_GUARD', 'api'),
+    ],
 ];

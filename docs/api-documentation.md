@@ -23,6 +23,118 @@ All endpoints require JWT authentication via the `auth:api` middleware unless ex
 - `request.id` - Request ID tracking for audit trails
 - Rate limiting with different throttles for different operation types
 
+### Table-Level Validation
+Each table configured in `config/record.php` (or in per-table files under `config/record/tables`) can define event-specific validators using the `RecordTableType` configuration:
+
+```php
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Contracts\Validation\Validator as ValidatorContract;
+use Sopheak\Core\Types\RecordTableType;
+
+return [
+    'invoices' => new RecordTableType(
+        pms_name: 'invoice',
+        createValidator: function (Request $request, ?int $id = null): ValidatorContract {
+            return Validator::make($request->all(), [
+                'invoice_number' => 'required|string|max:50',
+                'customer_id' => 'required|integer',
+                'total' => 'required|numeric|min:0',
+            ]);
+        },
+        updateValidator: function (Request $request, ?int $id = null): ValidatorContract {
+            return Validator::make($request->all(), [
+                'status' => 'sometimes|required|in:draft,pending,paid,cancelled',
+            ]);
+        },
+        deleteValidator: function (Request $request, ?int $id = null): ValidatorContract {
+            return Validator::make(['id' => $id], [
+                'id' => 'required|integer',
+            ]);
+        },
+    ),
+];
+```
+
+- `createValidator` runs before `POST /{api_prefix}/{table}`.
+- `updateValidator` runs before `PUT`/`PATCH /{api_prefix}/{table}/{id}`.
+- `deleteValidator` runs before `DELETE /{api_prefix}/{table}/{id}`.
+
+If a validator fails, the API returns a `422 Validation Error` with the standard error format described in the **Error Responses** section.
+
+### Table-Level Triggers
+In addition to validators, you can configure lifecycle triggers per table using `RecordTableTriggerType`. Triggers allow you to run custom code before and after core CRUD operations.
+
+```php
+use Illuminate\Http\Request;
+use Sopheak\Core\Types\RecordTableType;
+use Sopheak\Core\Types\RecordTablePublic;
+use Sopheak\Core\Types\RecordTableTriggerType;
+
+return [
+    'users' => new RecordTableType(
+        pms_name: 'user',
+        public: new RecordTablePublic(
+            read: false,
+            write: false,
+        ),
+        beforeRead: new RecordTableTriggerType(
+            class: \App\Record\Triggers\UserTriggers::class,
+            function_method: 'beforeRead',
+        ),
+        afterRead: new RecordTableTriggerType(
+            class: \App\Record\Triggers\UserTriggers::class,
+            function_method: 'afterRead',
+        ),
+        beforeCreate: new RecordTableTriggerType(
+            class: \App\Record\Triggers\UserTriggers::class,
+            function_method: 'beforeCreate',
+        ),
+        afterCreate: new RecordTableTriggerType(
+            class: \App\Record\Triggers\UserTriggers::class,
+            function_method: 'afterCreate',
+        ),
+        beforeUpdate: new RecordTableTriggerType(
+            class: \App\Record\Triggers\UserTriggers::class,
+            function_method: 'beforeUpdate',
+        ),
+        afterUpdate: new RecordTableTriggerType(
+            class: \App\Record\Triggers\UserTriggers::class,
+            function_method: 'afterUpdate',
+        ),
+        beforeDelete: new RecordTableTriggerType(
+            class: \App\Record\Triggers\UserTriggers::class,
+            function_method: 'beforeDelete',
+        ),
+        afterDelete: new RecordTableTriggerType(
+            class: \App\Record\Triggers\UserTriggers::class,
+            function_method: 'afterDelete',
+        ),
+    ),
+];
+```
+
+Each trigger method is called with the following signature:
+
+```php
+public static function someTrigger(Request $request, string $table, array $context): void
+```
+
+The `$context` payload depends on the event:
+
+- `beforeRead` on list (`GET /{prefix}/{table}`): `['type' => 'index', 'filters' => [...], 'includes' => [...], 'page' => int, 'per_page' => ?int, 'limit' => int, 'tenant_id' => mixed]`
+- `afterRead` on list: `['type' => 'index', 'filters' => [...], 'data' => [...], 'meta' => [...], 'tenant_id' => mixed]`
+- `beforeRead` on show (`GET /{prefix}/{table}/{id}`): `['type' => 'show', 'id' => mixed]`
+- `afterRead` on show: `['type' => 'show', 'id' => mixed, 'record' => object|array]`
+- `beforeCreate` (`POST /{prefix}/{table}`): `['payload' => [...], 'tenant_id' => mixed]`
+- `afterCreate`: `['id' => mixed, 'payload' => [...], 'tenant_id' => mixed]`
+- `beforeUpdate` (`PUT|PATCH /{prefix}/{table}/{id}`): `['id' => mixed, 'payload' => [...], 'tenant_id' => mixed]`
+- `afterUpdate`: `['id' => mixed, 'payload' => [...], 'tenant_id' => mixed, 'updated' => int]`
+- `beforeDelete` (`DELETE /{prefix}/{table}/{id}`): `['id' => mixed, 'tenant_id' => mixed]`
+- `afterDelete`: `['id' => mixed, 'tenant_id' => mixed, 'affected' => int, 'soft_deleted' => bool]`
+
+Trigger handlers are best-effort: if the configured class or method does not exist, or if the handler throws an exception, the error is logged and the main API operation still completes. Use validators when you need to block operations.
+
 ## Standard CRUD Operations
 
 ### List Records
@@ -162,6 +274,8 @@ POST /{api_prefix}/{table}
 
 Create a new record.
 
+If a `createValidator` is defined for the target table in `config/record.php`, the request body is validated using that validator before any database changes. On validation failure, the endpoint returns `422` with detailed error messages.
+
 #### Request Body
 JSON object with field values:
 
@@ -207,6 +321,8 @@ PATCH /{api_prefix}/{table}/{id}
 
 Update an existing record. `PUT` expects complete data, `PATCH` allows partial updates.
 
+If an `updateValidator` is defined for the target table, the request is validated with access to both the incoming payload and the current record ID. Validation failures return `422` with error details.
+
 #### Request Body
 ```json
 {
@@ -237,6 +353,8 @@ DELETE /{api_prefix}/{table}/{id}
 ```
 
 Delete a record (soft delete if enabled, otherwise hard delete).
+
+If a `deleteValidator` is defined for the target table, the request is validated (typically against the ID and context) before the record is deleted. Validation failures return `422` with error details.
 
 #### Response Format
 ```json
@@ -388,7 +506,7 @@ GET /{api_prefix}/audit/logs
 Retrieve audit logs with filtering options.
 
 #### Query Parameters
-- `entity_type` (string) - Filter by entity type
+- `entity_type` (string) - Filter by entity type (table name, e.g. `invoices`)
 - `entity_id` (integer) - Filter by specific entity ID
 - `event` (string) - Filter by event type (created, updated, deleted, etc.)
 - `user_id` (integer) - Filter by user who performed the action
@@ -399,7 +517,7 @@ Retrieve audit logs with filtering options.
 
 #### Example Request
 ```http
-GET /api/audit/logs?entity_type=Invoice&entity_id=123&event=updated&per_page=20
+GET /api/audit/logs?entity_type=invoices&entity_id=123&event=updated&per_page=20
 Authorization: Bearer {jwt_token}
 ```
 
@@ -410,7 +528,7 @@ Authorization: Bearer {jwt_token}
   "data": [
     {
       "id": 1001,
-      "entity_type": "Invoice",
+      "entity_type": "invoices",
       "entity_id": 123,
       "event": "updated",
       "old_data": {
@@ -530,7 +648,7 @@ Get statistics for a specific field across entities.
   "success": true,
   "data": {
     "field": "status",
-    "entity_type": "Invoice",
+    "entity_type": "invoices",
     "total_changes": 150,
     "value_distribution": {
       "draft": 45,
@@ -559,7 +677,7 @@ Manually create an audit log entry.
 #### Request Body
 ```json
 {
-  "entity_type": "Invoice",
+  "entity_type": "invoices",
   "entity_id": 123,
   "event": "status_changed",
   "old_data": {

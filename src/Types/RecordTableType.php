@@ -79,7 +79,7 @@ class RecordTableType
         public ?string $table = null,
         public bool $soft_deletes = true,
         public bool $disable_auditLog = false,
-        public RecordTablePublic $recordTablePublic = new RecordTablePublic(),
+        public RecordTablePublic $public = new RecordTablePublic(),
         public ?array $relationships = [],
         public ?array $functions = [],
         public ?string $primary_key = 'id',
@@ -87,6 +87,17 @@ class RecordTableType
         public ?array $columns = [],
         public ?array $fulltext_indexes = [],
         public ?string $auditLogFn = null,
+        public $createValidator = null,
+        public $updateValidator = null,
+        public $deleteValidator = null,
+        public ?RecordTableTriggerType $beforeRead = null,
+        public ?RecordTableTriggerType $afterRead = null,
+        public ?RecordTableTriggerType $beforeCreate = null,
+        public ?RecordTableTriggerType $afterCreate = null,
+        public ?RecordTableTriggerType $beforeUpdate = null,
+        public ?RecordTableTriggerType $afterUpdate = null,
+        public ?RecordTableTriggerType $beforeDelete = null,
+        public ?RecordTableTriggerType $afterDelete = null,
     ) {}
 
     /**
@@ -108,6 +119,17 @@ class RecordTableType
             columns: $properties['columns'] ?? [],
             fulltext_indexes: $properties['fulltext_indexes'] ?? [],
             auditLogFn: $properties['auditLogFn'] ?? null,
+            createValidator: $properties['createValidator'] ?? null,
+            updateValidator: $properties['updateValidator'] ?? null,
+            deleteValidator: $properties['deleteValidator'] ?? null,
+            beforeRead: $properties['beforeRead'] ?? null,
+            afterRead: $properties['afterRead'] ?? null,
+            beforeCreate: $properties['beforeCreate'] ?? null,
+            afterCreate: $properties['afterCreate'] ?? null,
+            beforeUpdate: $properties['beforeUpdate'] ?? null,
+            afterUpdate: $properties['afterUpdate'] ?? null,
+            beforeDelete: $properties['beforeDelete'] ?? null,
+            afterDelete: $properties['afterDelete'] ?? null,
         );
     }
 }

@@ -1,6 +1,6 @@
 # SP Laravel API - Dynamic ERP SaaS Package
 
-A comprehensive Laravel package that provides standardized API responses, dynamic API controllers, query helpers, audit logging, permission system, JWT authentication, and OpenAPI specification generation for ERP SaaS applications.
+A comprehensive Laravel package that provides standardized API responses, dynamic API controllers, query helpers, audit logging, optional permission integration, flexible authentication via Laravel guards, and OpenAPI specification generation for ERP SaaS applications.
 
 ## 🚀 Quick Start
 
@@ -24,8 +24,8 @@ curl -X GET http://your-app.test/api/test
 - **📊 Standardized API Responses**: Consistent JSON response format across your application
 - **🔍 QueryHelpers Trait**: Powerful trait for advanced query filtering and manipulation
 - **📝 Audit Logging**: Comprehensive audit trail for all data changes with queue-based processing
-- **🔐 Permission System**: Built-in Spatie Laravel Permission for role-based access control
-- **🔑 JWT Authentication**: Integrated JWT authentication support
+- **🔐 Permission System**: Optional Spatie Laravel Permission integration for role-based access control
+- **🔑 Authentication Driver Agnostic**: Works with any Laravel auth guard (JWT, Sanctum, Passport, etc.)
 - **📚 OpenAPI Spec Generation**: CLI command to generate API documentation
 - **🎯 Request ID Middleware**: Automatic request tracking for debugging and monitoring
 - **⚡ Performance Optimized**: Query caching, lazy loading, and cursor pagination
@@ -40,12 +40,14 @@ curl -X GET http://your-app.test/api/test
 - **Database**: MySQL 8.0+, PostgreSQL 13+, or SQLite 3.8+
 - **Extensions**: BCMath, Ctype, JSON, Mbstring, OpenSSL, PDO, Tokenizer, XML
 
-## 📦 Included Dependencies
+## 📦 Dependencies and Optional Integrations
 
-The package automatically installs these dependencies:
-- **Spatie Laravel Permission** (^6.21) - Role and permission management
-- **JWT Auth** (^2.8.2) - JSON Web Token authentication
+Core dependency installed with the package:
 - **Carbon** (^3.0) - Date manipulation library
+
+Optional integrations you can install in your application:
+- **Spatie Laravel Permission** (^6.21) - Role and permission management
+- **PHP Open Source Saver JWT Auth** (^2.8.2) - JSON Web Token authentication
 
 ## 📥 Installation & Setup
 
@@ -109,6 +111,9 @@ CURSOR_PAGINATION_AUTO_THRESHOLD=1000
 CURSOR_PAGINATION_DEFAULT_PER_PAGE=15
 CURSOR_PAGINATION_MAX_PER_PAGE=100
 
+# SP Laravel API auth guard (which Laravel guard the package uses)
+SP_LARAVEL_API_AUTH_GUARD=api
+
 # JWT Authentication (if using JWT)
 JWT_SECRET=your-jwt-secret-key
 JWT_TTL=60
@@ -158,30 +163,79 @@ Edit `config/record.php` to configure your database tables for the dynamic API. 
 
 ```php
 use Sopheak\Core\Types\RecordTableType;
-use Sopheak\Core\Types\RecordSpatiePermissionType;
 use Sopheak\Core\Types\RecordHasManyType;
 use Sopheak\Core\Types\RecordBelongsToType;
-
+use Sopheak\Core\Types\RecordTablePublic;
+use Sopheak\Core\Types\RecordTableTriggerType;
+```
 return [
     'api_prefix' => env('RECORD_API_PREFIX', 'api'),
+
     'tables' => [
         'users' => new RecordTableType(
-            model: \App\Models\User::class,
-            permissions: new RecordSpatiePermissionType(
-                view: 'view_users',
-                create: 'create_users',
-                update: 'update_users',
-                delete: 'delete_users'
+            pms_name: 'user',
+            table: 'users',
+            public: new RecordTablePublic(
+                read: false,
+                write: false,
             ),
             relationships: [
                 'posts' => new RecordHasManyType(
-                    table: 'users',
-                    foreign_key: 'user_id',
-                    local_key: 'id'
+                    table: 'posts',
+                    foreignKey: 'user_id',
+                    localKey: 'id',
                 ),
             ],
             soft_deletes: false,
-            has_tenant_id: false
+            has_tenant_id: false,
+            createValidator: function (\Illuminate\Http\Request $request, ?int $id = null): \Illuminate\Contracts\Validation\Validator {
+                return \Illuminate\Support\Facades\Validator::make($request->all(), [
+                    'name' => 'required|string|max:255',
+                    'email' => 'required|email',
+                ]);
+            },
+            updateValidator: function (\Illuminate\Http\Request $request, ?int $id = null): \Illuminate\Contracts\Validation\Validator {
+                return \Illuminate\Support\Facades\Validator::make($request->all(), [
+                    'name' => 'sometimes|required|string|max:255',
+                ]);
+            },
+            deleteValidator: function (\Illuminate\Http\Request $request, ?int $id = null): \Illuminate\Contracts\Validation\Validator {
+                return \Illuminate\Support\Facades\Validator::make(['id' => $id], [
+                    'id' => 'required|integer',
+                ]);
+            },
+            beforeCreate: new RecordTableTriggerType(
+                class: \App\Record\Triggers\UserTriggers::class,
+                function_method: 'beforeCreate',
+            ),
+            afterCreate: new RecordTableTriggerType(
+                class: \App\Record\Triggers\UserTriggers::class,
+                function_method: 'afterCreate',
+            ),
+            beforeUpdate: new RecordTableTriggerType(
+                class: \App\Record\Triggers\UserTriggers::class,
+                function_method: 'beforeUpdate',
+            ),
+            afterUpdate: new RecordTableTriggerType(
+                class: \App\Record\Triggers\UserTriggers::class,
+                function_method: 'afterUpdate',
+            ),
+            beforeDelete: new RecordTableTriggerType(
+                class: \App\Record\Triggers\UserTriggers::class,
+                function_method: 'beforeDelete',
+            ),
+            afterDelete: new RecordTableTriggerType(
+                class: \App\Record\Triggers\UserTriggers::class,
+                function_method: 'afterDelete',
+            ),
+            beforeRead: new RecordTableTriggerType(
+                class: \App\Record\Triggers\UserTriggers::class,
+                function_method: 'beforeRead',
+            ),
+            afterRead: new RecordTableTriggerType(
+                class: \App\Record\Triggers\UserTriggers::class,
+                function_method: 'afterRead',
+            ),
         ),
     ],
 ];
@@ -268,20 +322,70 @@ return [
 ];
 ```
 
+#### Large Schemas (Many Tables)
+
+For applications with many tables, you can split the table configuration into multiple files and merge them in `config/record.php`. For example:
+
+```php
+use Sopheak\Core\Types\RecordTableType;
+
+$tables = [
+    // Core tables defined inline
+];
+
+$tablesDirectory = __DIR__ . '/record/tables';
+
+if (is_dir($tablesDirectory)) {
+    foreach (glob($tablesDirectory . '/*.php') as $path) {
+        $config = require $path;
+
+        if ($config instanceof RecordTableType) {
+            $name = pathinfo($path, PATHINFO_FILENAME);
+            $tables[$name] = $config;
+        } elseif (is_array($config)) {
+            $tables = array_merge($tables, $config);
+        }
+    }
+}
+
+return [
+    'api_prefix' => env('RECORD_API_PREFIX', 'api'),
+    'max_depth' => env('RECORD_MAX_DEPTH', 3),
+    'cache_ttl' => env('RECORD_CACHE_TTL', 3600),
+    'lazy_cache_ttl' => env('RECORD_LAZY_CACHE_TTL', 300),
+    'enable_tenant_id' => env('RECORD_ENABLE_TENANT_ID', false),
+    'tables' => $tables,
+];
+```
+
+Each file under `config/record/tables` can return a single `RecordTableType` or an array of `[table_name => RecordTableType]`.
+
 ### Authentication Setup
+
+SP Laravel API does not ship its own authentication driver. Instead, it uses the Laravel `auth` guard you configure in `config/sp-laravel-api.php`, which can point to any driver (JWT, Sanctum, Passport, etc.):
+
+```php
+return [
+    'auth' => [
+        'guard' => env('SP_LARAVEL_API_AUTH_GUARD', 'api'),
+    ],
+];
+```
+
+Configure your desired guard in `config/auth.php` and set `SP_LARAVEL_API_AUTH_GUARD` accordingly.
 
 #### Option A: JWT Authentication
 
 ```bash
 # Install JWT package
-composer require tymon/jwt-auth
-php artisan vendor:publish --provider="Tymon\JWTAuth\Providers\LaravelServiceProvider"
+composer require php-open-source-saver/jwt-auth
+php artisan vendor:publish --provider="PHPOpenSourceSaver\JWTAuth\Providers\LaravelServiceProvider"
 php artisan jwt:secret
 ```
 
 Configure your User model:
 ```php
-use Tymon\JWTAuth\Contracts\JWTSubject;
+use PHPOpenSourceSaver\JWTAuth\Contracts\JWTSubject;
 
 class User extends Authenticatable implements JWTSubject
 {
@@ -352,9 +456,9 @@ Start the queue worker:
 php artisan queue:work
 ```
 
-### Step 8: Permissions Setup (Included)
+### Step 8: Permissions Setup (Optional)
 
-The package includes Spatie Laravel Permission as a dependency. Set it up:
+If you install Spatie Laravel Permission, you can set it up like this:
 
 ```bash
 # Publish the permission migration
@@ -470,9 +574,9 @@ php artisan config:show database.connections.mysql
 php artisan migrate:status
 ```
 
-#### 4. "Permission denied errors"
+#### 4. "Permission denied errors" (using Spatie Permission)
 
-**Solution:**
+**Solution (if you are using Spatie Laravel Permission):**
 ```bash
 # Ensure permissions are created
 php artisan permission:create-permission view_users
@@ -671,14 +775,14 @@ vendor/bin/phpunit
 ```bash
 # Install development tools
 composer require --dev phpstan/phpstan
-composer require --dev friendsofphp/php-cs-fixer
+composer require --dev rector/rector
 composer require --dev phpunit/phpunit
 
 # Run code analysis
 vendor/bin/phpstan analyse src
 
 # Fix code style
-vendor/bin/php-cs-fixer fix src
+vendor/bin/rector process src
 ```
 
 ### Contributing Guidelines
@@ -723,7 +827,7 @@ php artisan migrate
 
 ```sql
 -- Add indexes for better performance
-CREATE INDEX idx_audit_logs_auditable ON audit_logs(auditable_type, auditable_id);
+CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
 CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at);
 CREATE INDEX idx_users_email ON users(email);
 ```

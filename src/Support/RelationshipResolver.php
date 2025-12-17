@@ -315,6 +315,9 @@ class RelationshipResolver
 
                 // Handle RecordSpatiePermissionType
                 if ($rel instanceof RecordSpatiePermissionType) {
+                    if (!class_exists(\Spatie\Permission\PermissionServiceProvider::class)) {
+                        throw new \RuntimeException('Spatie permission relationship configured but spatie/laravel-permission is not installed.');
+                    }
                     $result = [
                         'type' => 'morphToMany',
                         'table' => $rel->related,

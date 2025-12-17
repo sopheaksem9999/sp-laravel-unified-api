@@ -3,7 +3,7 @@
 namespace Sopheak\Core\Traits;
 
 use BadMethodCallException;
-use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Collection;
 use Exception;
 use Sopheak\Core\Services\AuditLogService;
 use Sopheak\Core\Enums\AuditLogEventEnum;
@@ -46,11 +46,12 @@ trait HasAuditQuery
         $queryData = $this->getAuditQuery($id);
         $entityName = $this->getAuditEntityName();
         $entityClass = $this->getAuditEntityClass();
+        $entityType = AuditLogService::getTableNameFromEntityType($entityClass);
 
         AuditLogService::handleAuditDataEntry(
             event: $auditLogEventEnum,
             entityName: $entityName,
-            entityType: $entityClass,
+            entityType: $entityType,
             queryData: $queryData,
             subject: $subject,
             recap: $recap
@@ -70,8 +71,9 @@ trait HasAuditQuery
         }
 
         $entityClass = $this->getAuditEntityClass();
+        $entityType = AuditLogService::getTableNameFromEntityType($entityClass);
         
-        return AuditLogService::getEntityAuditLogs($entityClass, $id, $limit);
+        return AuditLogService::getEntityAuditLogs($entityType, $id, $limit);
     }
 
     /**
@@ -110,9 +112,10 @@ trait HasAuditQuery
             }
 
             $entityClass = $this->getAuditEntityClass();
+            $entityType = AuditLogService::getTableNameFromEntityType($entityClass);
             
             $stats = AuditLogService::getAuditStats([
-                'entity_type' => $entityClass,
+                'entity_type' => $entityType,
                 'entity_id' => $id
             ]);
             
@@ -144,8 +147,9 @@ trait HasAuditQuery
             }
 
             $entityClass = $this->getAuditEntityClass();
+            $entityType = AuditLogService::getTableNameFromEntityType($entityClass);
             
-            $timeline = AuditLogService::getFieldTimeline($entityClass, $id, $field, $limit);
+            $timeline = AuditLogService::getFieldTimeline($entityType, $id, $field, $limit);
             
             return response()->json([
                 'success' => true,
@@ -174,8 +178,9 @@ trait HasAuditQuery
             }
 
             $entityClass = $this->getAuditEntityClass();
+            $entityType = AuditLogService::getTableNameFromEntityType($entityClass);
             
-            $stats = AuditLogService::getFieldStats($entityClass, $id, $field);
+            $stats = AuditLogService::getFieldStats($entityType, $id, $field);
             
             return response()->json([
                 'success' => true,

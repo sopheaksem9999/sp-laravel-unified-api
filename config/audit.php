@@ -1,7 +1,5 @@
 <?php
 
-use Sopheak\Core\Models\AuditLog;
-
 return [
     /*
     |--------------------------------------------------------------------------
@@ -30,11 +28,11 @@ return [
     | Audit Log Model
     |--------------------------------------------------------------------------
     |
-    | This option specifies which model should be used for audit logs.
-    | By default, it uses the package's AuditLog model.
+    | This option is kept for backward compatibility but is no longer used.
+    | Audit logs are stored directly in the audit_logs table.
     |
     */
-    'audit_log_model' => env('AUDIT_LOG_MODEL', AuditLog::class),
+    'audit_log_model' => env('AUDIT_LOG_MODEL', 'audit_logs'),
 
     /*
     |--------------------------------------------------------------------------

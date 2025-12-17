@@ -3,10 +3,10 @@
 namespace Sopheak\Core\Http\Controllers;
 
 use Exception;
-use App\Models\AuditLog;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\DB;
 use Sopheak\Core\Services\AuditLogService;
 use Sopheak\Core\Services\ApiResponseService;
 use Sopheak\Core\Enums\AuditLogEventEnum;
@@ -216,8 +216,11 @@ class AuditController extends Controller
     public function show(int $id): JsonResponse
     {
         try {
-            $auditLogModel = config('audit.audit_log_model', AuditLog::class);
-            $log = $auditLogModel::with(['user'])->findOrFail($id);
+            $log = DB::table('audit_logs')->where('id', $id)->first();
+
+            if (null === $log) {
+                return $this->apiResponseService->notFound('Audit log not found');
+            }
 
             return $this->apiResponseService->success($log, ['message' => 'Audit log retrieved successfully']);
         } catch (Exception) {

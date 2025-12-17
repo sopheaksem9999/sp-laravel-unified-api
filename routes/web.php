@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/api-docs', fn(): View|Factory => view('sp-laravel-api::scalar'))->middleware(['web']);
 
 // OpenAPI JSON specification endpoint
-Route::get('/api/docs/openapi/v2/record', function () {
+Route::get('/api/docs/openapi', function () {
     $filePath = storage_path('api-v2.json');
     
     if (!file_exists($filePath)) {

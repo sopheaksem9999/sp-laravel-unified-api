@@ -13,17 +13,17 @@ return new class extends Migration
     {
         Schema::create('audit_logs', function (Blueprint $blueprint): void {
             $blueprint->id();
+            $blueprint->string('entity_name')->nullable();
+            $blueprint->string('entity_type')->nullable();
+            $blueprint->unsignedBigInteger('entity_id')->nullable();
+            $blueprint->unsignedBigInteger('user_id')->nullable();
+            $blueprint->string('event')->nullable();
             $blueprint->string('title')->nullable();
             $blueprint->string('subject')->nullable();
             $blueprint->text('recap')->nullable();
             $blueprint->json('old_data')->nullable();
             $blueprint->json('new_data')->nullable();
-            $blueprint->string('entity_name')->nullable();
-            $blueprint->string('entity_type')->nullable();
-            $blueprint->unsignedBigInteger('entity_id')->nullable();
-            $blueprint->unsignedBigInteger('user_id')->nullable();
             $blueprint->json('metadata')->nullable();
-            $blueprint->string('event')->nullable();
             $blueprint->timestamps();
 
             $blueprint->index(['entity_type', 'entity_id']);

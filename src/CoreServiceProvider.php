@@ -43,10 +43,6 @@ class CoreServiceProvider extends ServiceProvider
             __DIR__ . '/../database/migrations/' => database_path('migrations'),
         ], 'sp-laravel-api-migrations');
 
-        $this->publishes([
-            __DIR__ . '/Models/AuditLogPublishable.php' => app_path('Models/AuditLog.php'),
-        ], 'sp-laravel-api-models');
-
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'sp-laravel-api');
         
         // Load package routes

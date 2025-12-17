@@ -69,7 +69,11 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.i
 | Authenticated API Routes (Always require authentication)
 |--------------------------------------------------------------------------
 */
-Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'auth:api', 'request.id'])->group(function (): void {
+Route::prefix(config('record.api_prefix', 'api'))->middleware([
+    'api',
+    'auth:'.config('sp-laravel-api.auth.guard', 'api'),
+    'request.id',
+])->group(function (): void {
     
     /*
     |--------------------------------------------------------------------------

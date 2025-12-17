@@ -14,10 +14,12 @@ use Sopheak\Core\Support\QueryBuilderFilters;
 use Sopheak\Core\Support\RelationshipResolver;
 use Sopheak\Core\Support\SchemaRegistry;
 use Sopheak\Core\Types\RecordFunctionType;
+use Sopheak\Core\Types\RecordTableTriggerType;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -92,6 +94,23 @@ class RecordController extends Controller
         $page = max((int) $request->get('page', 1), 1);
         $perPage = $request->has('per_page') ? max(1, min((int) $request->get('per_page', 25), (int) config('record.per_page_max', 100))) : null;
         $limit = $request->has('limit') ? max(1, min((int) $request->get('limit'), (int) config('record.limit_max', 1000))) : config('record.limit_max', 1000);
+
+        $this->executeTableTrigger(
+            $schema[$table]->beforeRead ?? null,
+            [
+                $request,
+                $table,
+                [
+                    'type' => 'index',
+                    'filters' => $filters,
+                    'includes' => $includes,
+                    'page' => $page,
+                    'per_page' => $perPage,
+                    'limit' => $limit,
+                    'tenant_id' => $tenantId,
+                ],
+            ]
+        );
 
         // Enhanced caching with request fingerprinting
         $isCacheable = $this->isCacheableRequest($request, $table);
@@ -327,6 +346,21 @@ class RecordController extends Controller
             QueryCacheService::put($cacheKey, $cacheData, $table, $ttl);
         }
 
+        $this->executeTableTrigger(
+            $schema[$table]->afterRead ?? null,
+            [
+                $request,
+                $table,
+                [
+                    'type' => 'index',
+                    'filters' => $filters,
+                    'data' => $data,
+                    'meta' => $meta,
+                    'tenant_id' => $tenantId,
+                ],
+            ]
+        );
+
         return $this->success($data, $meta, status: 200, headers: $headers);
     }
 
@@ -340,6 +374,18 @@ class RecordController extends Controller
         if (!isset($schema[$table])) {
             return $this->error('Resource not available', 404);
         }
+
+        $this->executeTableTrigger(
+            $schema[$table]->beforeRead ?? null,
+            [
+                $request,
+                $table,
+                [
+                    'type' => 'show',
+                    'id' => $id,
+                ],
+            ]
+        );
 
         // Resolve actual table name from RecordTableType configuration
         $actualTableName = $this->resolveActualTableName($table);
@@ -444,6 +490,19 @@ class RecordController extends Controller
             Cache::put($recordCacheKey, $record, $ttl);
         }
 
+        $this->executeTableTrigger(
+            $schema[$table]->afterRead ?? null,
+            [
+                $request,
+                $table,
+                [
+                    'type' => 'show',
+                    'id' => $id,
+                    'record' => $record,
+                ],
+            ]
+        );
+
         return $this->success($record);
     }
 
@@ -457,6 +516,17 @@ class RecordController extends Controller
 
         // Resolve actual table name from RecordTableType configuration
         $actualTableName = $this->resolveActualTableName($table);
+        
+        $validatorCallback = $schema[$table]->createValidator ?? null;
+        if ($validatorCallback) {
+            $validator = $validatorCallback($request, null);
+            if (!$validator instanceof \Illuminate\Contracts\Validation\Validator) {
+                throw new \RuntimeException('Validator callback must return a Validator instance');
+            }
+            if ($validator->fails()) {
+                return $this->error('Validation failed', 422, $validator->errors()->toArray());
+            }
+        }
 
         $payload = $request->all();
 
@@ -471,6 +541,18 @@ class RecordController extends Controller
 
         // Apply timestamps and audit fields
         $payloadMain = $this->applyTimestampsAndAuditFields($payloadMain, $schema[$table], false);
+
+        $this->executeTableTrigger(
+            $schema[$table]->beforeCreate ?? null,
+            [
+                $request,
+                $table,
+                [
+                    'payload' => $payloadMain,
+                    'tenant_id' => $tenantId,
+                ],
+            ]
+        );
 
         $insertedId = null;
         $record = null;
@@ -512,9 +594,25 @@ class RecordController extends Controller
             return $this->error('Failed to create record: '.$exception->getMessage(), 500);
         }
 
+        if (null !== $insertedId) {
+            $this->executeTableTrigger(
+                $schema[$table]->afterCreate ?? null,
+                [
+                    $request,
+                    $table,
+                    [
+                        'id' => $insertedId,
+                        'payload' => $payloadMain,
+                        'tenant_id' => $tenantId,
+                    ],
+                ]
+            );
+        }
+
         return $record;
     }
 
+    // Update a record
     public function update(Request $request, string $table, $id): JsonResponse
     {
         $this->authorizeAction($table, 'update');
@@ -525,6 +623,17 @@ class RecordController extends Controller
 
         // Resolve actual table name from RecordTableType configuration
         $actualTableName = $this->resolveActualTableName($table);
+
+        $validatorCallback = $schema[$table]->updateValidator ?? null;
+        if ($validatorCallback) {
+            $validator = $validatorCallback($request, $id);
+            if (!$validator instanceof \Illuminate\Contracts\Validation\Validator) {
+                throw new \RuntimeException('Validator callback must return a Validator instance');
+            }
+            if ($validator->fails()) {
+                return $this->error('Validation failed', 422, $validator->errors()->toArray());
+            }
+        }
 
         $payload = $request->all();
 
@@ -537,6 +646,19 @@ class RecordController extends Controller
 
         // Apply timestamps and audit fields
         $payloadMain = $this->applyTimestampsAndAuditFields($payloadMain, $schema[$table], true);
+
+        $this->executeTableTrigger(
+            $schema[$table]->beforeUpdate ?? null,
+            [
+                $request,
+                $table,
+                [
+                    'id' => $id,
+                    'payload' => $payloadMain,
+                    'tenant_id' => $tenantId,
+                ],
+            ]
+        );
 
         $updated = 0;
         $record = null;
@@ -590,9 +712,26 @@ class RecordController extends Controller
             return $this->error('Failed to update record: '.$exception->getMessage(), 500);
         }
 
+        if ($updated > 0) {
+            $this->executeTableTrigger(
+                $schema[$table]->afterUpdate ?? null,
+                [
+                    $request,
+                    $table,
+                    [
+                        'id' => $id,
+                        'payload' => $payloadMain,
+                        'tenant_id' => $tenantId,
+                        'updated' => $updated,
+                    ],
+                ]
+            );
+        }
+
         return $record;
     }
 
+    //
     public function destroy(Request $request, string $table, $id): JsonResponse
     {
         $this->authorizeAction($table, 'delete');
@@ -604,10 +743,33 @@ class RecordController extends Controller
         // Resolve actual table name from RecordTableType configuration
         $actualTableName = $this->resolveActualTableName($table);
 
+        $validatorCallback = $schema[$table]->deleteValidator ?? null;
+        if ($validatorCallback) {
+            $validator = $validatorCallback($request, $id);
+            if (!$validator instanceof \Illuminate\Contracts\Validation\Validator) {
+                throw new \RuntimeException('Validator callback must return a Validator instance');
+            }
+            if ($validator->fails()) {
+                return $this->error('Validation failed', 422, $validator->errors()->toArray());
+            }
+        }
+
         $tenantId = $request->attributes->get('tenant_id');
         $pk = $schema[$table]->primary_key ?? 'id';
 
         $affected = 0;
+
+        $this->executeTableTrigger(
+            $schema[$table]->beforeDelete ?? null,
+            [
+                $request,
+                $table,
+                [
+                    'id' => $id,
+                    'tenant_id' => $tenantId,
+                ],
+            ]
+        );
 
         // Begin transaction
         DB::beginTransaction();
@@ -648,6 +810,22 @@ class RecordController extends Controller
             ]);
 
             return $this->error('Failed to delete record: '.$exception->getMessage(), 500);
+        }
+
+        if (0 !== $affected) {
+            $this->executeTableTrigger(
+                $schema[$table]->afterDelete ?? null,
+                [
+                    $request,
+                    $table,
+                    [
+                        'id' => $id,
+                        'tenant_id' => $tenantId,
+                        'affected' => $affected,
+                        'soft_deleted' => $schema[$table]->soft_deletes,
+                    ],
+                ]
+            );
         }
 
         return $this->success(['deleted' => $affected]);
@@ -1635,14 +1813,15 @@ class RecordController extends Controller
             return;
         }
 
-        $user = auth('api')->user();
+        $guard = config('sp-laravel-api.auth.guard', 'api');
+        $user = auth($guard)->user();
         if (!$user) {
             abort(401, 'Unauthenticated');
         }
 
         $perm = PermissionHelper::mapPermission($table, $action);
 
-        if (!$user->can($perm)) {
+        if (!Gate::forUser($user)->allows($perm)) {
             abort(403, 'Forbidden');
         }
     }
@@ -1740,6 +1919,35 @@ class RecordController extends Controller
         return 'record_show_'.md5(serialize($keyData));
     }
 
+    private function executeTableTrigger(?RecordTableTriggerType $trigger, array $params = []): void
+    {
+        if (!$trigger) {
+            return;
+        }
+
+        $className = $trigger->class;
+        $method = $trigger->function_method;
+
+        if (!class_exists($className) || !method_exists($className, $method)) {
+            Log::warning('Record table trigger handler not found', [
+                'class' => $className,
+                'method' => $method,
+            ]);
+
+            return;
+        }
+
+        try {
+            call_user_func_array([$className, $method], $params);
+        } catch (Exception $exception) {
+            Log::error('Record table trigger execution failed', [
+                'class' => $className,
+                'method' => $method,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+    }
+
     /**
      * Calculate optimal cache TTL based on data characteristics.
      */
@@ -1813,7 +2021,8 @@ class RecordController extends Controller
 
         // Check permissions if pms_name is specified
         if (isset($config['pms_name']) && !empty($config['pms_name'])) {
-            $user = auth('api')->user();
+            $guard = config('sp-laravel-api.auth.guard', 'api');
+            $user = auth($guard)->user();
             if (!$user) {
                 return response()->json([
                     'error' => 'Unauthenticated',
@@ -1827,7 +2036,7 @@ class RecordController extends Controller
 
             // Check if user has at least one of the required permissions
             foreach ($permissions as $permission) {
-                if ($user->can($permission)) {
+                if (Gate::forUser($user)->allows($permission)) {
                     $hasPermission = true;
 
                     break;
