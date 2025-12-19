@@ -1,6 +1,6 @@
 <?php
 
-namespace Sopheak\Core\Http\Controllers\Api;
+namespace Sopheak\Core\Http\Controllers;
 
 use BackedEnum;
 use RuntimeException;
