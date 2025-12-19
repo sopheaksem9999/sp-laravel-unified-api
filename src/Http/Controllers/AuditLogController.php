@@ -155,7 +155,7 @@ class AuditLogController extends Controller
         if ($validator->fails()) {
             return $this->apiResponseService->validationError($validator->errors()->toArray());
         }
-
+   
         try {
             $event = AuditLogEventEnum::from($request->input('event'));
             $entityType = $request->input('entity_type');

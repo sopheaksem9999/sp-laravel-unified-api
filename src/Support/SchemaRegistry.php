@@ -159,9 +159,8 @@ class SchemaRegistry
             $columnInfo = [];
 
             if ($driver === 'sqlite') {
-                // SQLite syntax
                 $columns = DB::select(sprintf('PRAGMA table_info(%s)', $tableName));
-                
+
                 foreach ($columns as $column) {
                     $columnInfo[$column->name] = [
                         'type' => $column->type,
@@ -171,10 +170,24 @@ class SchemaRegistry
                         'extra' => '',
                     ];
                 }
+            } elseif ($driver === 'pgsql') {
+                $columns = DB::select(
+                    'select column_name, data_type, is_nullable, column_default from information_schema.columns where table_name = ? and table_schema = current_schema()',
+                    [$tableName]
+                );
+
+                foreach ($columns as $column) {
+                    $columnInfo[$column->column_name] = [
+                        'type' => $column->data_type,
+                        'nullable' => 'YES' === $column->is_nullable,
+                        'key' => '',
+                        'default' => $column->column_default,
+                        'extra' => '',
+                    ];
+                }
             } else {
-                // MySQL syntax (default)
                 $columns = DB::select(sprintf('DESCRIBE `%s`', $tableName));
-                
+
                 foreach ($columns as $column) {
                     $columnInfo[$column->Field] = [
                         'type' => $column->Type,

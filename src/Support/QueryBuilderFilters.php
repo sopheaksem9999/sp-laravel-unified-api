@@ -6,6 +6,7 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Sopheak\Core\Support\RelationshipResolver;
 use Sopheak\Core\Support\SchemaRegistry;
 
@@ -156,7 +157,7 @@ class QueryBuilderFilters
 
         if ($pmsName && Auth::check()) {
             $permission = 'viewOnlyCreateBy_'.$pmsName;
-            if (Auth::user()->can($permission)) {
+            if (Auth::check() && Gate::check($permission)) {
                 $builder->where($table.'.created_by', Auth::user()->id);
             }
         }

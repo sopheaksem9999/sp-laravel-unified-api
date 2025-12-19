@@ -36,13 +36,10 @@ class AuditLogJob implements ShouldQueue
         public AuditLogEventEnum $event,
         public string $entityName,
         public ?string $entityType = null,
-        public ?array $queryData = null
-    ) {
-        $this->queryData = $queryData;
-        $this->event = $event;
-        $this->entityName = $entityName;
-        $this->entityType = $entityType;
-    }
+        public ?array $queryData = null,
+        public ?string $subject = null,
+        public ?string $recap = null,
+    ) {}
 
     /**
      * Execute the job.
@@ -55,6 +52,8 @@ class AuditLogJob implements ShouldQueue
                 entityName: $this->entityName,
                 entityType: $this->entityType,
                 queryData: $this->queryData,
+                subject: $this->subject,
+                recap: $this->recap,
             );
         } catch (Exception $exception) {
             Log::error('Failed to process audit log job', [

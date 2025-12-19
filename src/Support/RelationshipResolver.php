@@ -635,12 +635,13 @@ class RelationshipResolver
 
         // Build column selection for JSON object
         $jsonColumns = self::buildJsonObjectColumns($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
+        $jsonObjectExpr = self::buildJsonObjectExpression($jsonColumns);
 
         // Use alias for subquery to avoid conflicts when main table = related table
         $subqueryAlias = $actualRelatedTableName === $actualMainTableName ? $actualRelatedTableName.'_sub' : $actualRelatedTableName;
 
         $subquery = DB::table($actualRelatedTableName.' as '.$subqueryAlias)
-            ->selectRaw(sprintf('JSON_OBJECT(%s)', $jsonColumns))
+            ->selectRaw($jsonObjectExpr)
             ->whereColumn(sprintf('%s.%s', $subqueryAlias, $ownerKey), sprintf('%s.%s', $actualMainTableName, $foreignKey))
         ;
 
@@ -677,12 +678,11 @@ class RelationshipResolver
 
         // Build column selection for JSON object
         $jsonColumns = self::buildJsonObjectColumns($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
+        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($jsonColumns);
 
         // Build the JSON array aggregation subquery
         $subqueryRaw = "(
-            SELECT JSON_ARRAYAGG(
-                JSON_OBJECT({$jsonColumns})
-            )
+            SELECT {$jsonArrayAggExpr}
             FROM {$actualRelatedTableName}
             WHERE {$actualRelatedTableName}.{$foreignKey} = {$actualMainTableName}.{$localKey}";
 
@@ -727,12 +727,11 @@ class RelationshipResolver
 
         // Build column selection for JSON object
         $jsonColumns = self::buildJsonObjectColumns($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
+        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($jsonColumns);
 
         // Build the JSON array aggregation subquery for many-to-many
         $subqueryRaw = "(
-            SELECT JSON_ARRAYAGG(
-                JSON_OBJECT({$jsonColumns})
-            )
+            SELECT {$jsonArrayAggExpr}
             FROM {$actualRelatedTableName}
             INNER JOIN {$actualPivotTableName} ON {$actualPivotTableName}.{$relatedPivotKey} = {$actualRelatedTableName}.{$relatedKey}
             WHERE {$actualPivotTableName}.{$foreignPivotKey} = {$actualMainTableName}.{$parentKey}";
@@ -810,18 +809,12 @@ class RelationshipResolver
 
         // Build column selection for JSON object
         $jsonColumns = self::buildJsonObjectColumns($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
+        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($jsonColumns);
 
         // Build the JSON array aggregation subquery for morph-to-many
         // Use DB::raw with parameter binding to handle model_type correctly
         $subqueryRaw = "(
-            SELECT COALESCE(
-                JSON_ARRAYAGG(
-                    JSON_OBJECT(
-                        {$jsonColumns}
-                    )
-                ),
-                JSON_ARRAY()
-            )
+            SELECT {$jsonArrayAggExpr}
             FROM {$actualRelatedTableName}
             INNER JOIN {$actualPivotTableName} ON {$actualPivotTableName}.{$relatedPivotKey} = {$actualRelatedTableName}.{$relatedKey}
             WHERE {$actualPivotTableName}.{$foreignPivotKey} = {$actualMainTableName}.{$parentKey}
@@ -885,12 +878,11 @@ class RelationshipResolver
 
         // Build column selection for JSON object
         $jsonColumns = self::buildJsonObjectColumns($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
+        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($jsonColumns);
 
         // Build the JSON array aggregation subquery with join
         $subqueryRaw = "(
-            SELECT JSON_ARRAYAGG(
-                JSON_OBJECT({$jsonColumns})
-            )
+            SELECT {$jsonArrayAggExpr}
             FROM {$actualRelatedTableName}
             INNER JOIN {$actualThroughTableName} ON {$actualThroughTableName}.{$secondKey} = {$actualRelatedTableName}.{$secondLocalKey}
             WHERE {$actualThroughTableName}.{$firstKey} = {$actualMainTableName}.{$localKey}";
@@ -942,18 +934,47 @@ class RelationshipResolver
         }
 
         if ([] === $validColumns) {
-            $columnRef = $tableName !== '' && $tableName !== '0' ? sprintf('`%s`.`id`', $tableName) : '`id`';
+            $columnRef = $tableName !== '' && $tableName !== '0' ? sprintf('%s.id', $tableName) : 'id';
 
             return "'id', " . $columnRef; // Fallback to id column
         }
 
         $jsonPairs = [];
         foreach ($validColumns as $validColumn) {
-            $columnRef = $tableName !== '' && $tableName !== '0' ? sprintf('`%s`.`%s`', $tableName, $validColumn) : sprintf('`%s`', $validColumn);
+            $columnRef = $tableName !== '' && $tableName !== '0' ? sprintf('%s.%s', $tableName, $validColumn) : $validColumn;
             $jsonPairs[] = sprintf("'%s', %s", $validColumn, $columnRef);
         }
 
         return implode(', ', $jsonPairs);
+    }
+
+    /**
+     * Build database-specific JSON object expression from column specification.
+     */
+    private static function buildJsonObjectExpression(string $jsonColumns): string
+    {
+        $driver = DB::getDriverName();
+
+        return match ($driver) {
+            'pgsql' => sprintf('json_build_object(%s)', $jsonColumns),
+            'sqlite' => sprintf('json_object(%s)', $jsonColumns),
+            default => sprintf('JSON_OBJECT(%s)', $jsonColumns),
+        };
+    }
+
+    /**
+     * Build database-specific JSON array aggregation expression of JSON objects.
+     */
+    private static function buildJsonArrayAggExpression(string $jsonColumns): string
+    {
+        $jsonObjectExpr = self::buildJsonObjectExpression($jsonColumns);
+        $driver = DB::getDriverName();
+
+        return match ($driver) {
+            'pgsql' => sprintf('json_agg(%s)', $jsonObjectExpr),
+            'sqlite' => sprintf('json_group_array(%s)', $jsonObjectExpr),
+            default => sprintf('JSON_ARRAYAGG(%s)', $jsonObjectExpr),
+        };
     }
 
     /**

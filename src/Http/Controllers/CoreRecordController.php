@@ -2,12 +2,16 @@
 
 namespace Sopheak\Core\Http\Controllers;
 
-use BackedEnum;
-use RuntimeException;
-use Exception;
-use stdClass;
-use UnitEnum;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 use Sopheak\Core\Services\AuditLogService;
 use Sopheak\Core\Services\CursorPagination;
@@ -18,15 +22,6 @@ use Sopheak\Core\Support\RelationshipResolver;
 use Sopheak\Core\Support\SchemaRegistry;
 use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Types\RecordTableTriggerType;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 
 class CoreRecordController extends Controller
 {
@@ -143,7 +138,7 @@ class CoreRecordController extends Controller
 
         // Apply soft delete filtering
         if ($schema[$table]->soft_deletes) {
-            $builder->whereNull($actualTableName . '.deleted_at');
+            $builder->whereNull($actualTableName.'.deleted_at');
         }
 
         // Apply filters, including base select of main table columns
@@ -212,10 +207,10 @@ class CoreRecordController extends Controller
                     // Apply column selection based on select parameter
                     $mainCols = RelationshipResolver::getMainTableColumns($selectParam);
                     if ([] !== $mainCols) {
-                        $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $mainCols);
+                        $prefixedCols = array_map(fn ($col) => '*' === $col ? $actualTableName.'.*' : (str_contains((string) $col, '.') ? $col : $actualTableName.'.'.$col), $mainCols);
                         $optimizedBuilder->select($prefixedCols);
                     } else {
-                        $optimizedBuilder->select($actualTableName . '.*');
+                        $optimizedBuilder->select($actualTableName.'.*');
                     }
 
                     // Apply tenant filtering
@@ -223,7 +218,7 @@ class CoreRecordController extends Controller
 
                     // Apply soft delete filtering
                     if ($schema[$table]->soft_deletes) {
-                        $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
+                        $optimizedBuilder->whereNull($actualTableName.'.deleted_at');
                     }
 
                     // Add subquery relationships
@@ -235,7 +230,7 @@ class CoreRecordController extends Controller
                     );
 
                     // Get records with relationships in single query
-                    $optimizedData = $optimizedBuilder->whereIn($actualTableName . '.' . $primaryKey, $recordIds)->get()->all();
+                    $optimizedData = $optimizedBuilder->whereIn($actualTableName.'.'.$primaryKey, $recordIds)->get()->all();
 
                     // Process JSON relationships
                     $data = RelationshipResolver::processJsonRelationships($optimizedData, $includes, $table);
@@ -278,14 +273,14 @@ class CoreRecordController extends Controller
                     $queryParams['cursor'] = $cursorMeta['cursors']['next'];
                     $queryParams['direction'] = 'next';
                     unset($queryParams['page']); // Remove page parameter for cursor pagination
-                    $links[] = '<' . $baseUrl . '?' . http_build_query($queryParams) . '>; rel="next"';
+                    $links[] = '<'.$baseUrl.'?'.http_build_query($queryParams).'>; rel="next"';
                 }
 
                 if ($cursorMeta['cursors']['prev']) {
                     $queryParams['cursor'] = $cursorMeta['cursors']['prev'];
                     $queryParams['direction'] = 'prev';
                     unset($queryParams['page']);
-                    $links[] = '<' . $baseUrl . '?' . http_build_query($queryParams) . '>; rel="prev"';
+                    $links[] = '<'.$baseUrl.'?'.http_build_query($queryParams).'>; rel="prev"';
                 }
 
                 if ([] !== $links) {
@@ -305,7 +300,7 @@ class CoreRecordController extends Controller
                 $buildLink = function ($pageNum, string $rel) use ($baseUrl, $queryParams): string {
                     $queryParams['page'] = $pageNum;
 
-                    return '<' . $baseUrl . '?' . http_build_query($queryParams) . '>; rel="' . $rel . '"';
+                    return '<'.$baseUrl.'?'.http_build_query($queryParams).'>; rel="'.$rel.'"';
                 };
                 $links[] = $buildLink(max($page - 1, 1), 'prev');
                 $links[] = $buildLink(min($page + 1, 0 !== $lastPage ? $lastPage : 1), 'next');
@@ -413,7 +408,7 @@ class CoreRecordController extends Controller
         $this->applyTenantFilter($builder, $actualTableName, $tenantId);
 
         if ($schema[$table]->soft_deletes) {
-            $builder->whereNull($actualTableName . '.deleted_at');
+            $builder->whereNull($actualTableName.'.deleted_at');
         }
 
         // Ensure base columns if select contains relationships
@@ -443,10 +438,10 @@ class CoreRecordController extends Controller
 
                 // Apply column selection based on select parameter
                 if ([] !== $mainCols) {
-                    $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $mainCols);
+                    $prefixedCols = array_map(fn ($col) => '*' === $col ? $actualTableName.'.*' : (str_contains((string) $col, '.') ? $col : $actualTableName.'.'.$col), $mainCols);
                     $optimizedBuilder->select($prefixedCols);
                 } else {
-                    $optimizedBuilder->select($actualTableName . '.*');
+                    $optimizedBuilder->select($actualTableName.'.*');
                 }
 
                 // Apply tenant filtering
@@ -454,7 +449,7 @@ class CoreRecordController extends Controller
 
                 // Apply soft delete filtering
                 if ($schema[$table]->soft_deletes) {
-                    $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
+                    $optimizedBuilder->whereNull($actualTableName.'.deleted_at');
                 }
 
                 // Add subquery relationships
@@ -544,7 +539,7 @@ class CoreRecordController extends Controller
         if ($validatorCallback) {
             $validator = $validatorCallback($request, null);
             if (!$validator instanceof \Illuminate\Contracts\Validation\Validator) {
-                throw new RuntimeException('Validator callback must return a Validator instance');
+                throw new \RuntimeException('Validator callback must return a Validator instance');
             }
 
             if ($validator->fails()) {
@@ -575,9 +570,28 @@ class CoreRecordController extends Controller
             $pk = $schema[$table]->primary_key ?? 'id';
             $insertedId = DB::table($actualTableName)->insertGetId($payloadMain, $pk);
 
+            QueryCacheService::invalidateTable($table);
+            $record = $this->show($request, $table, $insertedId);
+            if (!($schema[$table]->disable_auditLog ?? false)) {
+                try {
+                    $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
+                    AuditLogService::insertAuditLog(
+                        auditLogEventEnum: AuditLogEventEnum::CREATED,
+                        entityClass: $entityClass,
+                        queryData: json_decode(json_encode($record->getData()->data), true),
+                    );
+                } catch (\Exception $exception) {
+                    Log::error('Audit log insert failed (create)', [
+                        'table' => $table,
+                        'id' => $insertedId,
+                        'error' => $exception->getMessage(),
+                    ]);
+                }
+            }
+
             // Commit transaction
             DB::commit();
-        } catch (Exception $exception) {
+        } catch (\Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
 
@@ -589,12 +603,8 @@ class CoreRecordController extends Controller
                 'trace' => $exception->getTraceAsString(),
             ]);
 
-            return $this->error('Failed to create record: ' . $exception->getMessage(), 500);
+            return $this->error('Failed to create record: '.$exception->getMessage(), 500);
         }
-
-        QueryCacheService::invalidateTable($table);
-
-        $record = $this->show($request, $table, $insertedId);
 
         $this->executeTableTrigger(
             $schema[$table]->afterCreate ?? null,
@@ -609,19 +619,6 @@ class CoreRecordController extends Controller
                 ],
             ]
         );
-
-        if (!($schema[$table]->disable_auditLog ?? false)) {
-            try {
-                $entityClass = 'App\\Models\\' . Str::studly(Str::singular($table));
-                AuditLogService::insertAuditLog(AuditLogEventEnum::CREATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
-            } catch (Exception $exception) {
-                Log::error('Audit log insert failed (create)', [
-                    'table' => $table,
-                    'id' => $insertedId,
-                    'error' => $exception->getMessage(),
-                ]);
-            }
-        }
 
         return $record;
     }
@@ -659,7 +656,7 @@ class CoreRecordController extends Controller
         if ($validatorCallback) {
             $validator = $validatorCallback($request, $id);
             if (!$validator instanceof \Illuminate\Contracts\Validation\Validator) {
-                throw new RuntimeException('Validator callback must return a Validator instance');
+                throw new \RuntimeException('Validator callback must return a Validator instance');
             }
 
             if ($validator->fails()) {
@@ -678,8 +675,6 @@ class CoreRecordController extends Controller
         // Apply timestamps and audit fields
         $payloadMain = $this->applyTimestampsAndAuditFields($payloadMain, $schema[$table], true);
 
-
-
         $updated = 0;
         $record = null;
 
@@ -693,7 +688,7 @@ class CoreRecordController extends Controller
             $this->applyTenantFilter($query, $actualTableName, $tenantId);
 
             if ($schema[$table]->soft_deletes) {
-                $query->whereNull($actualTableName . '.deleted_at');
+                $query->whereNull($actualTableName.'.deleted_at');
             }
 
             $updated = $query->update($payloadMain);
@@ -704,9 +699,43 @@ class CoreRecordController extends Controller
                 return $this->error('Not found or no changes', 404);
             }
 
+            QueryCacheService::invalidateTable($table);
+
+            $record = $this->show($request, $table, $id);
+
+            $this->executeTableTrigger(
+                $schema[$table]->afterUpdate ?? null,
+                [
+                    $request,
+                    $table,
+                    [
+                        'id' => $id,
+                        'payload' => $payloadMain,
+                        'tenant_id' => $tenantId,
+                        'updated' => $updated,
+                        'response' => $record,
+                    ],
+                ]
+            );
+
+            if (!($schema[$table]->disable_auditLog ?? false)) {
+                try {
+                    $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
+                    AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
+                } catch (\Exception $exception) {
+                    Log::error('Audit log insert failed (update)', [
+                        'table' => $table,
+                        'id' => $id,
+                        'error' => $exception->getMessage(),
+                    ]);
+                }
+            }
+
             // Commit transaction
             DB::commit();
-        } catch (Exception $exception) {
+
+            return $record;
+        } catch (\Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
 
@@ -719,45 +748,12 @@ class CoreRecordController extends Controller
                 'trace' => $exception->getTraceAsString(),
             ]);
 
-            return $this->error('Failed to update record: ' . $exception->getMessage(), 500);
-        }
-
-        QueryCacheService::invalidateTable($table);
-
-        $record = $this->show($request, $table, $id);
-
-        $this->executeTableTrigger(
-            $schema[$table]->afterUpdate ?? null,
-            [
-                $request,
-                $table,
-                [
-                    'id' => $id,
-                    'payload' => $payloadMain,
-                    'tenant_id' => $tenantId,
-                    'updated' => $updated,
-                    'response' => $record,
-                ],
-            ]
-        );
-
-        if (!($schema[$table]->disable_auditLog ?? false)) {
-            try {
-                $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
-            } catch (Exception $exception) {
-                Log::error('Audit log insert failed (update)', [
-                    'table' => $table,
-                    'id' => $id,
-                    'error' => $exception->getMessage(),
-                ]);
-            }
+            return $this->error('Failed to update record: '.$exception->getMessage(), 500);
         }
 
         return $record;
     }
 
-    //
     public function destroy(Request $request, string $table, $id): JsonResponse
     {
         $this->authorizeAction($table, 'delete');
@@ -791,7 +787,7 @@ class CoreRecordController extends Controller
         if ($validatorCallback) {
             $validator = $validatorCallback($request, $id);
             if (!$validator instanceof \Illuminate\Contracts\Validation\Validator) {
-                throw new RuntimeException('Validator callback must return a Validator instance');
+                throw new \RuntimeException('Validator callback must return a Validator instance');
             }
 
             if ($validator->fails()) {
@@ -817,9 +813,41 @@ class CoreRecordController extends Controller
                 return $this->error('Not found', 404);
             }
 
+            QueryCacheService::invalidateTable($table);
+
+            $response = $this->success(['deleted' => $affected]);
+
+            $this->executeTableTrigger(
+                $schema[$table]->afterDelete ?? null,
+                [
+                    $request,
+                    $table,
+                    [
+                        'id' => $id,
+                        'tenant_id' => $tenantId,
+                        'affected' => $affected,
+                        'soft_deleted' => $schema[$table]->soft_deletes,
+                        'response' => $response,
+                    ],
+                ]
+            );
+
+            if (!($schema[$table]->disable_auditLog ?? false)) {
+                try {
+                    $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
+                    AuditLogService::insertAuditLog(AuditLogEventEnum::DELETED, $entityClass, ['id' => $id]);
+                } catch (\Exception $exception) {
+                    Log::error('Audit log insert failed (delete)', [
+                        'table' => $table,
+                        'id' => $id,
+                        'error' => $exception->getMessage(),
+                    ]);
+                }
+            }
+
             // Commit transaction
             DB::commit();
-        } catch (Exception $exception) {
+        } catch (\Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
 
@@ -831,39 +859,7 @@ class CoreRecordController extends Controller
                 'trace' => $exception->getTraceAsString(),
             ]);
 
-            return $this->error('Failed to delete record: ' . $exception->getMessage(), 500);
-        }
-
-        QueryCacheService::invalidateTable($table);
-
-        $response = $this->success(['deleted' => $affected]);
-
-        $this->executeTableTrigger(
-            $schema[$table]->afterDelete ?? null,
-            [
-                $request,
-                $table,
-                [
-                    'id' => $id,
-                    'tenant_id' => $tenantId,
-                    'affected' => $affected,
-                    'soft_deleted' => $schema[$table]->soft_deletes,
-                    'response' => $response,
-                ],
-            ]
-        );
-
-        if (!($schema[$table]->disable_auditLog ?? false)) {
-            try {
-                $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                AuditLogService::insertAuditLog(AuditLogEventEnum::DELETED, $entityClass, ['id' => $id]);
-            } catch (Exception $exception) {
-                Log::error('Audit log insert failed (delete)', [
-                    'table' => $table,
-                    'id' => $id,
-                    'error' => $exception->getMessage(),
-                ]);
-            }
+            return $this->error('Failed to delete record: '.$exception->getMessage(), 500);
         }
 
         return $response;
@@ -907,7 +903,7 @@ class CoreRecordController extends Controller
 
             // Audit log for restore as an update event (if not disabled)
             if (!($schema[$table]->disable_auditLog ?? false)) {
-                $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
+                $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
                 $query = DB::table($actualTableName)->where($pk, $id);
                 if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
                     $query->where('tenant_id', $tenantId);
@@ -919,7 +915,7 @@ class CoreRecordController extends Controller
 
             // Commit transaction
             DB::commit();
-        } catch (Exception $exception) {
+        } catch (\Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
 
@@ -931,7 +927,7 @@ class CoreRecordController extends Controller
                 'trace' => $exception->getTraceAsString(),
             ]);
 
-            return $this->error('Failed to restore record: ' . $exception->getMessage(), 500);
+            return $this->error('Failed to restore record: '.$exception->getMessage(), 500);
         }
 
         return $this->success(['restored' => $affected]);
@@ -972,13 +968,13 @@ class CoreRecordController extends Controller
 
             // Audit log for deletion (if not disabled)
             if (!($schema[$table]->disable_auditLog ?? false)) {
-                $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
+                $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
                 AuditLogService::insertAuditLog(AuditLogEventEnum::DELETED, $entityClass, ['id' => $id]);
             }
 
             // Commit transaction
             DB::commit();
-        } catch (Exception $exception) {
+        } catch (\Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
 
@@ -990,7 +986,7 @@ class CoreRecordController extends Controller
                 'trace' => $exception->getTraceAsString(),
             ]);
 
-            return $this->error('Failed to force delete record: ' . $exception->getMessage(), 500);
+            return $this->error('Failed to force delete record: '.$exception->getMessage(), 500);
         }
 
         return $this->success(['deleted' => $deleted]);
@@ -1034,7 +1030,7 @@ class CoreRecordController extends Controller
 
         $maxBatch = (int) config('record.bulk_max', 100);
         if (count($items) > $maxBatch) {
-            return $this->error('Batch too large, max ' . $maxBatch, 413);
+            return $this->error('Batch too large, max '.$maxBatch, 413);
         }
 
         $tenantId = $request->attributes->get('tenant_id');
@@ -1072,7 +1068,7 @@ class CoreRecordController extends Controller
                     ++$affected;
                     // Audit log for insert with complete record data (if not disabled)
                     if (!($schema[$table]->disable_auditLog ?? false)) {
-                        $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
+                        $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
                         AuditLogService::insertAuditLog(AuditLogEventEnum::CREATED, $entityClass, $recordData);
                     }
                 } elseif ('update' === $operation) {
@@ -1104,7 +1100,7 @@ class CoreRecordController extends Controller
                         $affected += $updateCount;
                         // Audit log per updated row with complete record data (if not disabled)
                         if (!($schema[$table]->disable_auditLog ?? false)) {
-                            $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
+                            $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
                             AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, $recordData);
                         }
                     }
@@ -1125,7 +1121,7 @@ class CoreRecordController extends Controller
                         $affected += $deleteCount;
                         // Audit log per deleted row (if not disabled)
                         if (!($schema[$table]->disable_auditLog ?? false)) {
-                            $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
+                            $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
                             AuditLogService::insertAuditLog(AuditLogEventEnum::DELETED, $entityClass, ['id' => $item[$pk]]);
                         }
                     }
@@ -1149,7 +1145,7 @@ class CoreRecordController extends Controller
                     ++$affected;
                     // Audit log for upsert with complete record data (if not disabled)
                     if (!($schema[$table]->disable_auditLog ?? false)) {
-                        $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
+                        $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
                         AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, $recordData);
                     }
                 }
@@ -1157,7 +1153,7 @@ class CoreRecordController extends Controller
 
             // Commit transaction
             DB::commit();
-        } catch (Exception $exception) {
+        } catch (\Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
 
@@ -1170,7 +1166,7 @@ class CoreRecordController extends Controller
                 'trace' => $exception->getTraceAsString(),
             ]);
 
-            return $this->error('Failed to perform bulk operation: ' . $exception->getMessage(), 500);
+            return $this->error('Failed to perform bulk operation: '.$exception->getMessage(), 500);
         }
 
         // Consolidate created and updated records into a single data array
@@ -1227,7 +1223,7 @@ class CoreRecordController extends Controller
                 foreach ($tableFunctions as $configuredFunctionName => $config) {
                     // Convert function name pattern to regex (e.g., 'role_permission/{id}' -> 'role_permission/(\d+)')
                     $pattern = preg_replace('/\{[^}]+\}/', '(\d+)', $configuredFunctionName);
-                    $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/';
+                    $pattern = '/^'.str_replace('/', '\/', $pattern).'$/';
 
                     if (preg_match($pattern, $functionName, $matches)) {
                         $functionConfig = $config;
@@ -1256,7 +1252,7 @@ class CoreRecordController extends Controller
 
             // Execute the custom function with extracted ID parameter
             return $this->executeCustomFunction($request, $functionConfig, $extractedId);
-        } catch (Exception $exception) {
+        } catch (\Exception $exception) {
             Log::error('Table function execution failed', [
                 'table' => $table,
                 'function' => $functionName,
@@ -1291,7 +1287,7 @@ class CoreRecordController extends Controller
                 foreach ($globalFunctions as $configuredFunctionName => $config) {
                     // Convert function name pattern to regex (e.g., 'role_permission/{id}' -> 'role_permission/(\d+)')
                     $pattern = preg_replace('/\{[^}]+\}/', '(\d+)', (string) $configuredFunctionName);
-                    $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/';
+                    $pattern = '/^'.str_replace('/', '\/', $pattern).'$/';
 
                     if (preg_match($pattern, $functionName, $matches)) {
                         $functionConfig = $config;
@@ -1315,7 +1311,7 @@ class CoreRecordController extends Controller
 
             // Execute the custom function with extracted ID parameter
             return $this->executeCustomFunction($request, $functionConfig, $extractedId);
-        } catch (Exception $exception) {
+        } catch (\Exception $exception) {
             Log::error('Table function execution failed', [
                 'function' => $functionName,
                 'error' => $exception->getMessage(),
@@ -1361,13 +1357,13 @@ class CoreRecordController extends Controller
         }
 
         $validator = Validator::make(['items' => $items], [
-            'items' => 'required|array|min:1|max:' . config('record.bulk_max', 100),
+            'items' => 'required|array|min:1|max:'.config('record.bulk_max', 100),
             'items.*' => 'required|array',
         ], [
             'items.required' => 'Payload must be an array',
             'items.array' => 'Payload must be an array',
             'items.min' => 'At least one item is required',
-            'items.max' => 'Maximum ' . config('record.bulk_max', 100) . ' items allowed',
+            'items.max' => 'Maximum '.config('record.bulk_max', 100).' items allowed',
             'items.*.required' => 'Each item is required',
             'items.*.array' => 'Each item must be an object',
         ]);
@@ -1413,7 +1409,7 @@ class CoreRecordController extends Controller
 
                 // Audit log for insert with complete record data (if not disabled)
                 if (!($schema[$table]->disable_auditLog ?? false)) {
-                    $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
+                    $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
                     AuditLogService::insertAuditLog(AuditLogEventEnum::CREATED, $entityClass, $recordData);
                 }
             }
@@ -1421,7 +1417,7 @@ class CoreRecordController extends Controller
             DB::commit();
 
             return $this->success($createdData, ['affected' => $affected]);
-        } catch (Exception $exception) {
+        } catch (\Exception $exception) {
             DB::rollBack();
 
             Log::error('Bulk create operation failed', [
@@ -1435,7 +1431,7 @@ class CoreRecordController extends Controller
                 return $this->error('Validation failed', 422, $exception->errors());
             }
 
-            return $this->error('Failed to perform bulk create operation: ' . $exception->getMessage(), 500);
+            return $this->error('Failed to perform bulk create operation: '.$exception->getMessage(), 500);
         }
     }
 
@@ -1472,14 +1468,14 @@ class CoreRecordController extends Controller
         }
 
         $validator = Validator::make(['items' => $items], [
-            'items' => 'required|array|min:1|max:' . config('record.bulk_max', 100),
+            'items' => 'required|array|min:1|max:'.config('record.bulk_max', 100),
             'items.*' => 'required|array',
-            'items.*.' . $pk => 'required',
+            'items.*.'.$pk => 'required',
         ], [
             'items.required' => 'Payload must be an array',
             'items.array' => 'Payload must be an array',
             'items.min' => 'At least one item is required',
-            'items.max' => 'Maximum ' . config('record.bulk_max', 100) . ' items allowed',
+            'items.max' => 'Maximum '.config('record.bulk_max', 100).' items allowed',
             'items.*.required' => 'Each item is required',
             'items.*.array' => 'Each item must be an object',
             sprintf('items.*.%s.required', $pk) => sprintf('Primary key (%s) is required for update operation', $pk),
@@ -1509,7 +1505,7 @@ class CoreRecordController extends Controller
                 $updateFields = array_diff_key($item, [$pk => true]);
                 if (empty($updateFields)) {
                     throw ValidationException::withMessages([
-                        'items.' . $index => 'At least one field besides the primary key must be provided for update',
+                        'items.'.$index => 'At least one field besides the primary key must be provided for update',
                     ]);
                 }
 
@@ -1542,7 +1538,7 @@ class CoreRecordController extends Controller
 
                     // Audit log per updated row with complete record data (if not disabled)
                     if (!($schema[$table]->disable_auditLog ?? false)) {
-                        $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
+                        $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
                         AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, $recordData);
                     }
                 } else {
@@ -1556,7 +1552,7 @@ class CoreRecordController extends Controller
             DB::commit();
 
             return $this->success($updatedData, ['affected' => $affected]);
-        } catch (Exception $exception) {
+        } catch (\Exception $exception) {
             DB::rollBack();
 
             Log::error('Bulk update operation failed', [
@@ -1570,7 +1566,7 @@ class CoreRecordController extends Controller
                 return $this->error('Validation failed', 422, $exception->errors());
             }
 
-            return $this->error('Failed to perform bulk update operation: ' . $exception->getMessage(), 500);
+            return $this->error('Failed to perform bulk update operation: '.$exception->getMessage(), 500);
         }
     }
 
@@ -1607,12 +1603,12 @@ class CoreRecordController extends Controller
         }
 
         $validator = Validator::make(['items' => $items], [
-            'items' => 'required|array|min:1|max:' . config('record.bulk_max', 100),
+            'items' => 'required|array|min:1|max:'.config('record.bulk_max', 100),
         ], [
             'items.required' => 'Payload must be an array',
             'items.array' => 'Payload must be an array',
             'items.min' => 'At least one item is required',
-            'items.max' => 'Maximum ' . config('record.bulk_max', 100) . ' items allowed',
+            'items.max' => 'Maximum '.config('record.bulk_max', 100).' items allowed',
         ]);
 
         if ($validator->fails()) {
@@ -1637,7 +1633,7 @@ class CoreRecordController extends Controller
                 // Direct ID format: [123, 456, 789]
                 if (empty($item)) {
                     throw ValidationException::withMessages([
-                        'items.' . $index => 'ID value cannot be empty',
+                        'items.'.$index => 'ID value cannot be empty',
                     ]);
                 }
 
@@ -1679,7 +1675,7 @@ class CoreRecordController extends Controller
 
                     // Audit log per deleted row (if not disabled)
                     if (!($schema[$table]->disable_auditLog ?? false) && $recordToDelete) {
-                        $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
+                        $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
                         AuditLogService::insertAuditLog(AuditLogEventEnum::DELETED, $entityClass, $recordToDelete);
                     }
                 }
@@ -1688,7 +1684,7 @@ class CoreRecordController extends Controller
             DB::commit();
 
             return $this->success($deletedData, ['affected' => $affected]);
-        } catch (Exception $exception) {
+        } catch (\Exception $exception) {
             DB::rollBack();
 
             Log::error('Bulk delete operation failed', [
@@ -1702,7 +1698,7 @@ class CoreRecordController extends Controller
                 return $this->error('Validation failed', 422, $exception->errors());
             }
 
-            return $this->error('Failed to perform bulk delete operation: ' . $exception->getMessage(), 500);
+            return $this->error('Failed to perform bulk delete operation: '.$exception->getMessage(), 500);
         }
     }
 
@@ -1806,7 +1802,7 @@ class CoreRecordController extends Controller
         if ($this->isTenantIdEnabled() && $tenantId) {
             $schema = $this->getCachedSchema();
             if ($schema[$table]->has_tenant_id ?? false) {
-                $query->where($table . '.tenant_id', $tenantId);
+                $query->where($table.'.tenant_id', $tenantId);
             }
         }
     }
@@ -1862,10 +1858,13 @@ class CoreRecordController extends Controller
     private function sanitizePayload(array $input, $meta): array
     {
         $columns = array_keys($meta->columns ?? []);
-        // Only allow known columns; prevent mass assignment to meta/system columns
-        $payload = array_intersect_key($input, array_flip($columns));
 
-        // Never allow setting these explicitly
+        if ([] === $columns) {
+            $payload = $input;
+        } else {
+            $payload = array_intersect_key($input, array_flip($columns));
+        }
+
         unset($payload['id'], $payload['deleted_at'], $payload['created_at'], $payload['updated_at']);
 
         return $payload;
@@ -1933,7 +1932,7 @@ class CoreRecordController extends Controller
             'tenant_enabled' => $this->isTenantIdEnabled(),
         ];
 
-        return 'record_index_' . md5(serialize($keyData));
+        return 'record_index_'.md5(serialize($keyData));
     }
 
     /**
@@ -1949,10 +1948,10 @@ class CoreRecordController extends Controller
             'tenant_enabled' => $this->isTenantIdEnabled(),
         ];
 
-        return 'record_show_' . md5(serialize($keyData));
+        return 'record_show_'.md5(serialize($keyData));
     }
 
-    private function executeTableTrigger(RecordTableTriggerType|array|null $trigger, array $params = []): array
+    private function executeTableTrigger(array|RecordTableTriggerType|null $trigger, array $params = []): array
     {
         if (null === $trigger) {
             return $params;
@@ -1968,7 +1967,7 @@ class CoreRecordController extends Controller
             if (is_array($item)) {
                 try {
                     $item = RecordTableTriggerType::fromArray($item);
-                } catch (Exception $exception) {
+                } catch (\Exception $exception) {
                     Log::error('Record table trigger config invalid', [
                         'error' => $exception->getMessage(),
                     ]);
@@ -2000,7 +1999,7 @@ class CoreRecordController extends Controller
                 } elseif (is_array($result) && isset($params[0]) && $params[0] instanceof Request) {
                     $params[0]->merge($result);
                 }
-            } catch (Exception $exception) {
+            } catch (\Exception $exception) {
                 Log::error('Record table trigger execution failed', [
                     'class' => $className,
                     'method' => $method,
@@ -2041,7 +2040,6 @@ class CoreRecordController extends Controller
     /**
      * Recursively remove deleted_at fields from response data.
      *
-     *
      * @return mixed
      */
     private function removeDeletedAtFields(mixed $data)
@@ -2058,7 +2056,7 @@ class CoreRecordController extends Controller
         }
 
         if (is_object($data)) {
-            $result = new stdClass();
+            $result = new \stdClass();
             foreach ($data as $key => $value) {
                 if ('deleted_at' !== $key) {
                     $result->{$key} = $this->removeDeletedAtFields($value);
@@ -2119,9 +2117,9 @@ class CoreRecordController extends Controller
         if (isset($config['method'])) {
             $allowedMethods = is_array($config['method']) ? $config['method'] : [$config['method']];
             $allowedMethods = array_map(function (mixed $method): string {
-                if ($method instanceof BackedEnum) {
+                if ($method instanceof \BackedEnum) {
                     $method = $method->value;
-                } elseif ($method instanceof UnitEnum) {
+                } elseif ($method instanceof \UnitEnum) {
                     $method = $method->name;
                 }
 
@@ -2148,7 +2146,7 @@ class CoreRecordController extends Controller
             if ([] !== $missingParams) {
                 return response()->json([
                     'error' => 'Missing required parameters',
-                    'message' => 'Missing parameters: ' . implode(', ', $missingParams),
+                    'message' => 'Missing parameters: '.implode(', ', $missingParams),
                 ], 400);
             }
         }
@@ -2206,7 +2204,7 @@ class CoreRecordController extends Controller
             }
 
             return response()->json($result);
-        } catch (Exception $exception) {
+        } catch (\Exception $exception) {
             return response()->json([
                 'error' => 'Function execution failed',
                 'message' => $exception->getMessage(),
