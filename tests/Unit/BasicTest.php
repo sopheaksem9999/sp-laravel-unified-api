@@ -28,7 +28,7 @@ class BasicTest extends TestCase
     /** @test */
     public function it_serves_openapi_json_without_authentication(): void
     {
-        $filePath = storage_path('api-v2.json');
+        $filePath = storage_path('openapi-schema.json');
 
         if (!is_dir(dirname($filePath))) {
             mkdir(dirname($filePath), 0777, true);

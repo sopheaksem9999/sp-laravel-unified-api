@@ -2,9 +2,11 @@
 
 namespace Sopheak\Core\Http\Controllers\Api;
 
+use BackedEnum;
 use RuntimeException;
 use Exception;
 use stdClass;
+use UnitEnum;
 use Illuminate\Routing\Controller;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 use Sopheak\Core\Services\AuditLogService;
@@ -26,7 +28,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
-class RecordController extends Controller
+class CoreRecordController extends Controller
 {
     /**
      * Cache for schema lookups to reduce repeated calls.
@@ -79,15 +81,29 @@ class RecordController extends Controller
             return $this->error('Resource not available', 404);
         }
 
-        // Resolve actual table name from RecordTableType configuration
-        $actualTableName = $this->resolveActualTableName($table);
+        $tenantId = $request->attributes->get('tenant_id');
+
+        $triggerParams = [
+            $request,
+            $table,
+            [
+                'type' => 'index',
+                'tenant_id' => $tenantId,
+            ],
+        ];
+        $triggerParams = $this->executeTableTrigger($schema[$table]->beforeRead ?? null, $triggerParams);
+        if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
+            $request = $triggerParams[0];
+        }
 
         $tenantId = $request->attributes->get('tenant_id');
+
+        // Resolve actual table name from RecordTableType configuration
+        $actualTableName = $this->resolveActualTableName($table);
 
         // Generate cache key for this query
         $filters = $request->except(['page', 'per_page', 'limit']);
         $includes = $request->query('select', []);
-        // Ensure includes is always an array for cache key generation
         if (is_string($includes)) {
             $includes = explode(',', $includes);
         }
@@ -95,23 +111,6 @@ class RecordController extends Controller
         $page = max((int) $request->get('page', 1), 1);
         $perPage = $request->has('per_page') ? max(1, min((int) $request->get('per_page', 25), (int) config('record.per_page_max', 100))) : null;
         $limit = $request->has('limit') ? max(1, min((int) $request->get('limit'), (int) config('record.limit_max', 1000))) : config('record.limit_max', 1000);
-
-        $this->executeTableTrigger(
-            $schema[$table]->beforeRead ?? null,
-            [
-                $request,
-                $table,
-                [
-                    'type' => 'index',
-                    'filters' => $filters,
-                    'includes' => $includes,
-                    'page' => $page,
-                    'per_page' => $perPage,
-                    'limit' => $limit,
-                    'tenant_id' => $tenantId,
-                ],
-            ]
-        );
 
         // Enhanced caching with request fingerprinting
         $isCacheable = $this->isCacheableRequest($request, $table);
@@ -144,7 +143,7 @@ class RecordController extends Controller
 
         // Apply soft delete filtering
         if ($schema[$table]->soft_deletes) {
-            $builder->whereNull($actualTableName.'.deleted_at');
+            $builder->whereNull($actualTableName . '.deleted_at');
         }
 
         // Apply filters, including base select of main table columns
@@ -213,10 +212,10 @@ class RecordController extends Controller
                     // Apply column selection based on select parameter
                     $mainCols = RelationshipResolver::getMainTableColumns($selectParam);
                     if ([] !== $mainCols) {
-                        $prefixedCols = array_map(fn ($col) => '*' === $col ? $actualTableName.'.*' : (str_contains((string) $col, '.') ? $col : $actualTableName.'.'.$col), $mainCols);
+                        $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $mainCols);
                         $optimizedBuilder->select($prefixedCols);
                     } else {
-                        $optimizedBuilder->select($actualTableName.'.*');
+                        $optimizedBuilder->select($actualTableName . '.*');
                     }
 
                     // Apply tenant filtering
@@ -224,7 +223,7 @@ class RecordController extends Controller
 
                     // Apply soft delete filtering
                     if ($schema[$table]->soft_deletes) {
-                        $optimizedBuilder->whereNull($actualTableName.'.deleted_at');
+                        $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
                     }
 
                     // Add subquery relationships
@@ -236,7 +235,7 @@ class RecordController extends Controller
                     );
 
                     // Get records with relationships in single query
-                    $optimizedData = $optimizedBuilder->whereIn($actualTableName.'.'.$primaryKey, $recordIds)->get()->all();
+                    $optimizedData = $optimizedBuilder->whereIn($actualTableName . '.' . $primaryKey, $recordIds)->get()->all();
 
                     // Process JSON relationships
                     $data = RelationshipResolver::processJsonRelationships($optimizedData, $includes, $table);
@@ -279,14 +278,14 @@ class RecordController extends Controller
                     $queryParams['cursor'] = $cursorMeta['cursors']['next'];
                     $queryParams['direction'] = 'next';
                     unset($queryParams['page']); // Remove page parameter for cursor pagination
-                    $links[] = '<'.$baseUrl.'?'.http_build_query($queryParams).'>; rel="next"';
+                    $links[] = '<' . $baseUrl . '?' . http_build_query($queryParams) . '>; rel="next"';
                 }
 
                 if ($cursorMeta['cursors']['prev']) {
                     $queryParams['cursor'] = $cursorMeta['cursors']['prev'];
                     $queryParams['direction'] = 'prev';
                     unset($queryParams['page']);
-                    $links[] = '<'.$baseUrl.'?'.http_build_query($queryParams).'>; rel="prev"';
+                    $links[] = '<' . $baseUrl . '?' . http_build_query($queryParams) . '>; rel="prev"';
                 }
 
                 if ([] !== $links) {
@@ -306,7 +305,7 @@ class RecordController extends Controller
                 $buildLink = function ($pageNum, string $rel) use ($baseUrl, $queryParams): string {
                     $queryParams['page'] = $pageNum;
 
-                    return '<'.$baseUrl.'?'.http_build_query($queryParams).'>; rel="'.$rel.'"';
+                    return '<' . $baseUrl . '?' . http_build_query($queryParams) . '>; rel="' . $rel . '"';
                 };
                 $links[] = $buildLink(max($page - 1, 1), 'prev');
                 $links[] = $buildLink(min($page + 1, 0 !== $lastPage ? $lastPage : 1), 'next');
@@ -347,6 +346,8 @@ class RecordController extends Controller
             QueryCacheService::put($cacheKey, $cacheData, $table, $ttl);
         }
 
+        $response = $this->success($data, $meta, status: 200, headers: $headers);
+
         $this->executeTableTrigger(
             $schema[$table]->afterRead ?? null,
             [
@@ -358,11 +359,12 @@ class RecordController extends Controller
                     'data' => $data,
                     'meta' => $meta,
                     'tenant_id' => $tenantId,
+                    'response' => $response,
                 ],
             ]
         );
 
-        return $this->success($data, $meta, status: 200, headers: $headers);
+        return $response;
     }
 
     /**
@@ -376,17 +378,18 @@ class RecordController extends Controller
             return $this->error('Resource not available', 404);
         }
 
-        $this->executeTableTrigger(
-            $schema[$table]->beforeRead ?? null,
+        $triggerParams = [
+            $request,
+            $table,
             [
-                $request,
-                $table,
-                [
-                    'type' => 'show',
-                    'id' => $id,
-                ],
-            ]
-        );
+                'type' => 'show',
+                'id' => $id,
+            ],
+        ];
+        $triggerParams = $this->executeTableTrigger($schema[$table]->beforeRead ?? null, $triggerParams);
+        if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
+            $request = $triggerParams[0];
+        }
 
         // Resolve actual table name from RecordTableType configuration
         $actualTableName = $this->resolveActualTableName($table);
@@ -410,7 +413,7 @@ class RecordController extends Controller
         $this->applyTenantFilter($builder, $actualTableName, $tenantId);
 
         if ($schema[$table]->soft_deletes) {
-            $builder->whereNull($actualTableName.'.deleted_at');
+            $builder->whereNull($actualTableName . '.deleted_at');
         }
 
         // Ensure base columns if select contains relationships
@@ -440,10 +443,10 @@ class RecordController extends Controller
 
                 // Apply column selection based on select parameter
                 if ([] !== $mainCols) {
-                    $prefixedCols = array_map(fn ($col) => '*' === $col ? $actualTableName.'.*' : (str_contains((string) $col, '.') ? $col : $actualTableName.'.'.$col), $mainCols);
+                    $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $mainCols);
                     $optimizedBuilder->select($prefixedCols);
                 } else {
-                    $optimizedBuilder->select($actualTableName.'.*');
+                    $optimizedBuilder->select($actualTableName . '.*');
                 }
 
                 // Apply tenant filtering
@@ -451,7 +454,7 @@ class RecordController extends Controller
 
                 // Apply soft delete filtering
                 if ($schema[$table]->soft_deletes) {
-                    $optimizedBuilder->whereNull($actualTableName.'.deleted_at');
+                    $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
                 }
 
                 // Add subquery relationships
@@ -491,6 +494,8 @@ class RecordController extends Controller
             Cache::put($recordCacheKey, $record, $ttl);
         }
 
+        $response = $this->success($record);
+
         $this->executeTableTrigger(
             $schema[$table]->afterRead ?? null,
             [
@@ -500,11 +505,12 @@ class RecordController extends Controller
                     'type' => 'show',
                     'id' => $id,
                     'record' => $record,
+                    'response' => $response,
                 ],
             ]
         );
 
-        return $this->success($record);
+        return $response;
     }
 
     public function store(Request $request, string $table): JsonResponse
@@ -517,7 +523,23 @@ class RecordController extends Controller
 
         // Resolve actual table name from RecordTableType configuration
         $actualTableName = $this->resolveActualTableName($table);
-        
+
+        $tenantId = $request->attributes->get('tenant_id');
+
+        $triggerParams = [
+            $request,
+            $table,
+            [
+                'tenant_id' => $tenantId,
+            ],
+        ];
+        $triggerParams = $this->executeTableTrigger($schema[$table]->beforeCreate ?? null, $triggerParams);
+        if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
+            $request = $triggerParams[0];
+        }
+
+        $tenantId = $request->attributes->get('tenant_id');
+
         $validatorCallback = $schema[$table]->createValidator ?? null;
         if ($validatorCallback) {
             $validator = $validatorCallback($request, null);
@@ -533,10 +555,10 @@ class RecordController extends Controller
         $payload = $request->all();
 
         // Strip relationship data from main payload
+
         $payloadMain = RelationshipResolver::stripRelationshipData($table, $payload);
         $payloadMain = $this->sanitizePayload($payloadMain, $schema[$table]);
 
-        $tenantId = $request->attributes->get('tenant_id');
         if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
             $payloadMain['tenant_id'] = $tenantId;
         }
@@ -544,20 +566,7 @@ class RecordController extends Controller
         // Apply timestamps and audit fields
         $payloadMain = $this->applyTimestampsAndAuditFields($payloadMain, $schema[$table], false);
 
-        $this->executeTableTrigger(
-            $schema[$table]->beforeCreate ?? null,
-            [
-                $request,
-                $table,
-                [
-                    'payload' => $payloadMain,
-                    'tenant_id' => $tenantId,
-                ],
-            ]
-        );
-
         $insertedId = null;
-        $record = null;
 
         // Begin transaction
         DB::beginTransaction();
@@ -565,19 +574,6 @@ class RecordController extends Controller
         try {
             $pk = $schema[$table]->primary_key ?? 'id';
             $insertedId = DB::table($actualTableName)->insertGetId($payloadMain, $pk);
-
-            $isCacheable = $this->isCacheableRequest($request, $table);
-            if ($isCacheable) {
-                // Invalidate cache for this table
-                QueryCacheService::invalidateTable($table);
-            }
-
-            // Audit log for creation (if not disabled)
-            if (!($schema[$table]->disable_auditLog ?? false)) {
-                $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
-                $record = $this->show($request, $table, $insertedId);
-                AuditLogService::insertAuditLog(AuditLogEventEnum::CREATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
-            }
 
             // Commit transaction
             DB::commit();
@@ -593,22 +589,38 @@ class RecordController extends Controller
                 'trace' => $exception->getTraceAsString(),
             ]);
 
-            return $this->error('Failed to create record: '.$exception->getMessage(), 500);
+            return $this->error('Failed to create record: ' . $exception->getMessage(), 500);
         }
 
-        if (null !== $insertedId) {
-            $this->executeTableTrigger(
-                $schema[$table]->afterCreate ?? null,
+        QueryCacheService::invalidateTable($table);
+
+        $record = $this->show($request, $table, $insertedId);
+
+        $this->executeTableTrigger(
+            $schema[$table]->afterCreate ?? null,
+            [
+                $request,
+                $table,
                 [
-                    $request,
-                    $table,
-                    [
-                        'id' => $insertedId,
-                        'payload' => $payloadMain,
-                        'tenant_id' => $tenantId,
-                    ],
-                ]
-            );
+                    'id' => $insertedId,
+                    'payload' => $payloadMain,
+                    'tenant_id' => $tenantId,
+                    'response' => $record,
+                ],
+            ]
+        );
+
+        if (!($schema[$table]->disable_auditLog ?? false)) {
+            try {
+                $entityClass = 'App\\Models\\' . Str::studly(Str::singular($table));
+                AuditLogService::insertAuditLog(AuditLogEventEnum::CREATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
+            } catch (Exception $exception) {
+                Log::error('Audit log insert failed (create)', [
+                    'table' => $table,
+                    'id' => $insertedId,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
         }
 
         return $record;
@@ -625,6 +637,23 @@ class RecordController extends Controller
 
         // Resolve actual table name from RecordTableType configuration
         $actualTableName = $this->resolveActualTableName($table);
+
+        $tenantId = $request->attributes->get('tenant_id');
+
+        $triggerParams = [
+            $request,
+            $table,
+            [
+                'id' => $id,
+                'tenant_id' => $tenantId,
+            ],
+        ];
+        $triggerParams = $this->executeTableTrigger($schema[$table]->beforeUpdate ?? null, $triggerParams);
+        if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
+            $request = $triggerParams[0];
+        }
+
+        $tenantId = $request->attributes->get('tenant_id');
 
         $validatorCallback = $schema[$table]->updateValidator ?? null;
         if ($validatorCallback) {
@@ -644,24 +673,12 @@ class RecordController extends Controller
         $payloadMain = RelationshipResolver::stripRelationshipData($table, $payload);
         $payloadMain = $this->sanitizePayload($payloadMain, $schema[$table]);
 
-        $tenantId = $request->attributes->get('tenant_id');
         $pk = $schema[$table]->primary_key ?? 'id';
 
         // Apply timestamps and audit fields
         $payloadMain = $this->applyTimestampsAndAuditFields($payloadMain, $schema[$table], true);
 
-        $this->executeTableTrigger(
-            $schema[$table]->beforeUpdate ?? null,
-            [
-                $request,
-                $table,
-                [
-                    'id' => $id,
-                    'payload' => $payloadMain,
-                    'tenant_id' => $tenantId,
-                ],
-            ]
-        );
+
 
         $updated = 0;
         $record = null;
@@ -676,7 +693,7 @@ class RecordController extends Controller
             $this->applyTenantFilter($query, $actualTableName, $tenantId);
 
             if ($schema[$table]->soft_deletes) {
-                $query->whereNull($actualTableName.'.deleted_at');
+                $query->whereNull($actualTableName . '.deleted_at');
             }
 
             $updated = $query->update($payloadMain);
@@ -685,16 +702,6 @@ class RecordController extends Controller
                 DB::rollBack();
 
                 return $this->error('Not found or no changes', 404);
-            }
-
-            // Invalidate cache for this table
-            QueryCacheService::invalidateTable($table);
-
-            // Audit log for update (if not disabled)
-            if (!($schema[$table]->disable_auditLog ?? false)) {
-                $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
-                $record = $this->show($request, $table, $id);
-                AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
             }
 
             // Commit transaction
@@ -712,23 +719,39 @@ class RecordController extends Controller
                 'trace' => $exception->getTraceAsString(),
             ]);
 
-            return $this->error('Failed to update record: '.$exception->getMessage(), 500);
+            return $this->error('Failed to update record: ' . $exception->getMessage(), 500);
         }
 
-        if ($updated > 0) {
-            $this->executeTableTrigger(
-                $schema[$table]->afterUpdate ?? null,
+        QueryCacheService::invalidateTable($table);
+
+        $record = $this->show($request, $table, $id);
+
+        $this->executeTableTrigger(
+            $schema[$table]->afterUpdate ?? null,
+            [
+                $request,
+                $table,
                 [
-                    $request,
-                    $table,
-                    [
-                        'id' => $id,
-                        'payload' => $payloadMain,
-                        'tenant_id' => $tenantId,
-                        'updated' => $updated,
-                    ],
-                ]
-            );
+                    'id' => $id,
+                    'payload' => $payloadMain,
+                    'tenant_id' => $tenantId,
+                    'updated' => $updated,
+                    'response' => $record,
+                ],
+            ]
+        );
+
+        if (!($schema[$table]->disable_auditLog ?? false)) {
+            try {
+                $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
+                AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
+            } catch (Exception $exception) {
+                Log::error('Audit log insert failed (update)', [
+                    'table' => $table,
+                    'id' => $id,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
         }
 
         return $record;
@@ -746,6 +769,24 @@ class RecordController extends Controller
         // Resolve actual table name from RecordTableType configuration
         $actualTableName = $this->resolveActualTableName($table);
 
+        $tenantId = $request->attributes->get('tenant_id');
+        $pk = $schema[$table]->primary_key ?? 'id';
+
+        $triggerParams = [
+            $request,
+            $table,
+            [
+                'id' => $id,
+                'tenant_id' => $tenantId,
+            ],
+        ];
+        $triggerParams = $this->executeTableTrigger($schema[$table]->beforeDelete ?? null, $triggerParams);
+        if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
+            $request = $triggerParams[0];
+        }
+
+        $tenantId = $request->attributes->get('tenant_id');
+
         $validatorCallback = $schema[$table]->deleteValidator ?? null;
         if ($validatorCallback) {
             $validator = $validatorCallback($request, $id);
@@ -758,23 +799,7 @@ class RecordController extends Controller
             }
         }
 
-        $tenantId = $request->attributes->get('tenant_id');
-        $pk = $schema[$table]->primary_key ?? 'id';
-
         $affected = 0;
-
-        $this->executeTableTrigger(
-            $schema[$table]->beforeDelete ?? null,
-            [
-                $request,
-                $table,
-                [
-                    'id' => $id,
-                    'tenant_id' => $tenantId,
-                ],
-            ]
-        );
-
         // Begin transaction
         DB::beginTransaction();
 
@@ -792,13 +817,6 @@ class RecordController extends Controller
                 return $this->error('Not found', 404);
             }
 
-            // Invalidate cache for this table
-            QueryCacheService::invalidateTable($table);
-
-            // Audit log for deletion (soft or hard)
-            $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
-            AuditLogService::insertAuditLog(AuditLogEventEnum::DELETED, $entityClass, ['id' => $id]);
-
             // Commit transaction
             DB::commit();
         } catch (Exception $exception) {
@@ -813,26 +831,42 @@ class RecordController extends Controller
                 'trace' => $exception->getTraceAsString(),
             ]);
 
-            return $this->error('Failed to delete record: '.$exception->getMessage(), 500);
+            return $this->error('Failed to delete record: ' . $exception->getMessage(), 500);
         }
 
-        if (0 !== $affected) {
-            $this->executeTableTrigger(
-                $schema[$table]->afterDelete ?? null,
+        QueryCacheService::invalidateTable($table);
+
+        $response = $this->success(['deleted' => $affected]);
+
+        $this->executeTableTrigger(
+            $schema[$table]->afterDelete ?? null,
+            [
+                $request,
+                $table,
                 [
-                    $request,
-                    $table,
-                    [
-                        'id' => $id,
-                        'tenant_id' => $tenantId,
-                        'affected' => $affected,
-                        'soft_deleted' => $schema[$table]->soft_deletes,
-                    ],
-                ]
-            );
+                    'id' => $id,
+                    'tenant_id' => $tenantId,
+                    'affected' => $affected,
+                    'soft_deleted' => $schema[$table]->soft_deletes,
+                    'response' => $response,
+                ],
+            ]
+        );
+
+        if (!($schema[$table]->disable_auditLog ?? false)) {
+            try {
+                $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
+                AuditLogService::insertAuditLog(AuditLogEventEnum::DELETED, $entityClass, ['id' => $id]);
+            } catch (Exception $exception) {
+                Log::error('Audit log insert failed (delete)', [
+                    'table' => $table,
+                    'id' => $id,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
         }
 
-        return $this->success(['deleted' => $affected]);
+        return $response;
     }
 
     public function restore(Request $request, string $table, $id): JsonResponse
@@ -873,7 +907,7 @@ class RecordController extends Controller
 
             // Audit log for restore as an update event (if not disabled)
             if (!($schema[$table]->disable_auditLog ?? false)) {
-                $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
+                $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
                 $query = DB::table($actualTableName)->where($pk, $id);
                 if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
                     $query->where('tenant_id', $tenantId);
@@ -897,7 +931,7 @@ class RecordController extends Controller
                 'trace' => $exception->getTraceAsString(),
             ]);
 
-            return $this->error('Failed to restore record: '.$exception->getMessage(), 500);
+            return $this->error('Failed to restore record: ' . $exception->getMessage(), 500);
         }
 
         return $this->success(['restored' => $affected]);
@@ -938,7 +972,7 @@ class RecordController extends Controller
 
             // Audit log for deletion (if not disabled)
             if (!($schema[$table]->disable_auditLog ?? false)) {
-                $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
+                $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
                 AuditLogService::insertAuditLog(AuditLogEventEnum::DELETED, $entityClass, ['id' => $id]);
             }
 
@@ -956,7 +990,7 @@ class RecordController extends Controller
                 'trace' => $exception->getTraceAsString(),
             ]);
 
-            return $this->error('Failed to force delete record: '.$exception->getMessage(), 500);
+            return $this->error('Failed to force delete record: ' . $exception->getMessage(), 500);
         }
 
         return $this->success(['deleted' => $deleted]);
@@ -1038,7 +1072,7 @@ class RecordController extends Controller
                     ++$affected;
                     // Audit log for insert with complete record data (if not disabled)
                     if (!($schema[$table]->disable_auditLog ?? false)) {
-                        $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
+                        $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
                         AuditLogService::insertAuditLog(AuditLogEventEnum::CREATED, $entityClass, $recordData);
                     }
                 } elseif ('update' === $operation) {
@@ -1070,7 +1104,7 @@ class RecordController extends Controller
                         $affected += $updateCount;
                         // Audit log per updated row with complete record data (if not disabled)
                         if (!($schema[$table]->disable_auditLog ?? false)) {
-                            $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
+                            $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
                             AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, $recordData);
                         }
                     }
@@ -1091,7 +1125,7 @@ class RecordController extends Controller
                         $affected += $deleteCount;
                         // Audit log per deleted row (if not disabled)
                         if (!($schema[$table]->disable_auditLog ?? false)) {
-                            $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
+                            $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
                             AuditLogService::insertAuditLog(AuditLogEventEnum::DELETED, $entityClass, ['id' => $item[$pk]]);
                         }
                     }
@@ -1115,7 +1149,7 @@ class RecordController extends Controller
                     ++$affected;
                     // Audit log for upsert with complete record data (if not disabled)
                     if (!($schema[$table]->disable_auditLog ?? false)) {
-                        $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
+                        $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
                         AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, $recordData);
                     }
                 }
@@ -1136,7 +1170,7 @@ class RecordController extends Controller
                 'trace' => $exception->getTraceAsString(),
             ]);
 
-            return $this->error('Failed to perform bulk operation: '.$exception->getMessage(), 500);
+            return $this->error('Failed to perform bulk operation: ' . $exception->getMessage(), 500);
         }
 
         // Consolidate created and updated records into a single data array
@@ -1193,7 +1227,7 @@ class RecordController extends Controller
                 foreach ($tableFunctions as $configuredFunctionName => $config) {
                     // Convert function name pattern to regex (e.g., 'role_permission/{id}' -> 'role_permission/(\d+)')
                     $pattern = preg_replace('/\{[^}]+\}/', '(\d+)', $configuredFunctionName);
-                    $pattern = '/^'.str_replace('/', '\/', $pattern).'$/';
+                    $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/';
 
                     if (preg_match($pattern, $functionName, $matches)) {
                         $functionConfig = $config;
@@ -1257,7 +1291,7 @@ class RecordController extends Controller
                 foreach ($globalFunctions as $configuredFunctionName => $config) {
                     // Convert function name pattern to regex (e.g., 'role_permission/{id}' -> 'role_permission/(\d+)')
                     $pattern = preg_replace('/\{[^}]+\}/', '(\d+)', (string) $configuredFunctionName);
-                    $pattern = '/^'.str_replace('/', '\/', $pattern).'$/';
+                    $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/';
 
                     if (preg_match($pattern, $functionName, $matches)) {
                         $functionConfig = $config;
@@ -1327,13 +1361,13 @@ class RecordController extends Controller
         }
 
         $validator = Validator::make(['items' => $items], [
-            'items' => 'required|array|min:1|max:'.config('record.bulk_max', 100),
+            'items' => 'required|array|min:1|max:' . config('record.bulk_max', 100),
             'items.*' => 'required|array',
         ], [
             'items.required' => 'Payload must be an array',
             'items.array' => 'Payload must be an array',
             'items.min' => 'At least one item is required',
-            'items.max' => 'Maximum '.config('record.bulk_max', 100).' items allowed',
+            'items.max' => 'Maximum ' . config('record.bulk_max', 100) . ' items allowed',
             'items.*.required' => 'Each item is required',
             'items.*.array' => 'Each item must be an object',
         ]);
@@ -1379,7 +1413,7 @@ class RecordController extends Controller
 
                 // Audit log for insert with complete record data (if not disabled)
                 if (!($schema[$table]->disable_auditLog ?? false)) {
-                    $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
+                    $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
                     AuditLogService::insertAuditLog(AuditLogEventEnum::CREATED, $entityClass, $recordData);
                 }
             }
@@ -1401,7 +1435,7 @@ class RecordController extends Controller
                 return $this->error('Validation failed', 422, $exception->errors());
             }
 
-            return $this->error('Failed to perform bulk create operation: '.$exception->getMessage(), 500);
+            return $this->error('Failed to perform bulk create operation: ' . $exception->getMessage(), 500);
         }
     }
 
@@ -1438,14 +1472,14 @@ class RecordController extends Controller
         }
 
         $validator = Validator::make(['items' => $items], [
-            'items' => 'required|array|min:1|max:'.config('record.bulk_max', 100),
+            'items' => 'required|array|min:1|max:' . config('record.bulk_max', 100),
             'items.*' => 'required|array',
             'items.*.' . $pk => 'required',
         ], [
             'items.required' => 'Payload must be an array',
             'items.array' => 'Payload must be an array',
             'items.min' => 'At least one item is required',
-            'items.max' => 'Maximum '.config('record.bulk_max', 100).' items allowed',
+            'items.max' => 'Maximum ' . config('record.bulk_max', 100) . ' items allowed',
             'items.*.required' => 'Each item is required',
             'items.*.array' => 'Each item must be an object',
             sprintf('items.*.%s.required', $pk) => sprintf('Primary key (%s) is required for update operation', $pk),
@@ -1508,7 +1542,7 @@ class RecordController extends Controller
 
                     // Audit log per updated row with complete record data (if not disabled)
                     if (!($schema[$table]->disable_auditLog ?? false)) {
-                        $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
+                        $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
                         AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, $recordData);
                     }
                 } else {
@@ -1536,7 +1570,7 @@ class RecordController extends Controller
                 return $this->error('Validation failed', 422, $exception->errors());
             }
 
-            return $this->error('Failed to perform bulk update operation: '.$exception->getMessage(), 500);
+            return $this->error('Failed to perform bulk update operation: ' . $exception->getMessage(), 500);
         }
     }
 
@@ -1573,12 +1607,12 @@ class RecordController extends Controller
         }
 
         $validator = Validator::make(['items' => $items], [
-            'items' => 'required|array|min:1|max:'.config('record.bulk_max', 100),
+            'items' => 'required|array|min:1|max:' . config('record.bulk_max', 100),
         ], [
             'items.required' => 'Payload must be an array',
             'items.array' => 'Payload must be an array',
             'items.min' => 'At least one item is required',
-            'items.max' => 'Maximum '.config('record.bulk_max', 100).' items allowed',
+            'items.max' => 'Maximum ' . config('record.bulk_max', 100) . ' items allowed',
         ]);
 
         if ($validator->fails()) {
@@ -1645,7 +1679,7 @@ class RecordController extends Controller
 
                     // Audit log per deleted row (if not disabled)
                     if (!($schema[$table]->disable_auditLog ?? false) && $recordToDelete) {
-                        $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
+                        $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
                         AuditLogService::insertAuditLog(AuditLogEventEnum::DELETED, $entityClass, $recordToDelete);
                     }
                 }
@@ -1668,7 +1702,7 @@ class RecordController extends Controller
                 return $this->error('Validation failed', 422, $exception->errors());
             }
 
-            return $this->error('Failed to perform bulk delete operation: '.$exception->getMessage(), 500);
+            return $this->error('Failed to perform bulk delete operation: ' . $exception->getMessage(), 500);
         }
     }
 
@@ -1772,7 +1806,7 @@ class RecordController extends Controller
         if ($this->isTenantIdEnabled() && $tenantId) {
             $schema = $this->getCachedSchema();
             if ($schema[$table]->has_tenant_id ?? false) {
-                $query->where($table.'.tenant_id', $tenantId);
+                $query->where($table . '.tenant_id', $tenantId);
             }
         }
     }
@@ -1899,7 +1933,7 @@ class RecordController extends Controller
             'tenant_enabled' => $this->isTenantIdEnabled(),
         ];
 
-        return 'record_index_'.md5(serialize($keyData));
+        return 'record_index_' . md5(serialize($keyData));
     }
 
     /**
@@ -1915,36 +1949,67 @@ class RecordController extends Controller
             'tenant_enabled' => $this->isTenantIdEnabled(),
         ];
 
-        return 'record_show_'.md5(serialize($keyData));
+        return 'record_show_' . md5(serialize($keyData));
     }
 
-    private function executeTableTrigger(?RecordTableTriggerType $trigger, array $params = []): void
+    private function executeTableTrigger(RecordTableTriggerType|array|null $trigger, array $params = []): array
     {
-        if (!$trigger instanceof RecordTableTriggerType) {
-            return;
+        if (null === $trigger) {
+            return $params;
         }
 
-        $className = $trigger->class;
-        $method = $trigger->function_method;
+        $triggers = $trigger instanceof RecordTableTriggerType ? [$trigger] : $trigger;
 
-        if (!class_exists($className) || !method_exists($className, $method)) {
-            Log::warning('Record table trigger handler not found', [
-                'class' => $className,
-                'method' => $method,
-            ]);
-
-            return;
+        if (!is_array($triggers)) {
+            return $params;
         }
 
-        try {
-            call_user_func_array([$className, $method], $params);
-        } catch (Exception $exception) {
-            Log::error('Record table trigger execution failed', [
-                'class' => $className,
-                'method' => $method,
-                'error' => $exception->getMessage(),
-            ]);
+        foreach ($triggers as $item) {
+            if (is_array($item)) {
+                try {
+                    $item = RecordTableTriggerType::fromArray($item);
+                } catch (Exception $exception) {
+                    Log::error('Record table trigger config invalid', [
+                        'error' => $exception->getMessage(),
+                    ]);
+
+                    continue;
+                }
+            }
+
+            if (!$item instanceof RecordTableTriggerType) {
+                continue;
+            }
+
+            $className = $item->class;
+            $method = $item->function_method;
+
+            if (!class_exists($className) || !method_exists($className, $method)) {
+                Log::warning('Record table trigger handler not found', [
+                    'class' => $className,
+                    'method' => $method,
+                ]);
+
+                continue;
+            }
+
+            try {
+                $result = call_user_func_array([$className, $method], $params);
+                if ($result instanceof Request && isset($params[0]) && $params[0] instanceof Request) {
+                    $params[0] = $result;
+                } elseif (is_array($result) && isset($params[0]) && $params[0] instanceof Request) {
+                    $params[0]->merge($result);
+                }
+            } catch (Exception $exception) {
+                Log::error('Record table trigger execution failed', [
+                    'class' => $className,
+                    'method' => $method,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
         }
+
+        return $params;
     }
 
     /**
@@ -2053,7 +2118,17 @@ class RecordController extends Controller
         // Validate HTTP method if specified
         if (isset($config['method'])) {
             $allowedMethods = is_array($config['method']) ? $config['method'] : [$config['method']];
-            if (!in_array(strtoupper($request->method()), array_map('strtoupper', $allowedMethods))) {
+            $allowedMethods = array_map(function (mixed $method): string {
+                if ($method instanceof BackedEnum) {
+                    $method = $method->value;
+                } elseif ($method instanceof UnitEnum) {
+                    $method = $method->name;
+                }
+
+                return strtoupper((string) $method);
+            }, $allowedMethods);
+
+            if (!in_array(strtoupper($request->method()), $allowedMethods, true)) {
                 return response()->json([
                     'error' => 'Method not allowed',
                     'message' => sprintf("Method '%s' not allowed for this function", $request->method()),
@@ -2073,7 +2148,7 @@ class RecordController extends Controller
             if ([] !== $missingParams) {
                 return response()->json([
                     'error' => 'Missing required parameters',
-                    'message' => 'Missing parameters: '.implode(', ', $missingParams),
+                    'message' => 'Missing parameters: ' . implode(', ', $missingParams),
                 ], 400);
             }
         }
@@ -2139,3 +2214,5 @@ class RecordController extends Controller
         }
     }
 }
+
+class RecordController extends CoreRecordController {}

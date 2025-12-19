@@ -21,7 +21,7 @@ return [
     | When set to false, no audit logs will be created.
     |
     */
-    'enabled' => env('AUDIT_LOG_ENABLED', true),
+    'enabled' => env('AUDIT_LOG_ENABLED', false),
 
     /*
     |--------------------------------------------------------------------------

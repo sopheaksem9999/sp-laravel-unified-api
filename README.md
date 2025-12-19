@@ -1070,7 +1070,7 @@ Generates a comprehensive OpenAPI 3.0 specification for your API with the follow
 - Supports custom table configurations
 
 **Output Options:**
-- Default: `storage/api-v2.json`
+- Default: `storage/openapi-schema.json`
 - Configurable via `config('sp-laravel-api.openapi.output')`
 - Compatible with Swagger UI, Postman, and other OpenAPI tools
 
@@ -1163,7 +1163,7 @@ return [
         'include_request_id' => env('SP_LARAVEL_API_INCLUDE_REQUEST_ID', true),
     ],
     'openapi' => [
-        'output' => env('SP_LARAVEL_API_OPENAPI_OUTPUT', 'storage/api-v2.json'),
+        'output' => env('SP_LARAVEL_API_OPENAPI_OUTPUT', 'storage/openapi-schema.json'),
         'info' => [
             'title' => env('APP_NAME', 'Laravel API'),
             'version' => '2.0.0',

@@ -56,7 +56,7 @@ return [
     | You can customize this prefix to match your application's routing structure.
     |
     */
-    'api_prefix' => env('RECORD_API_PREFIX', 'api'),
+    'api_prefix' => env('RECORD_API_PREFIX', 'api/v1'),
 
     // Maximum items returned per page for list endpoints
     'per_page_max' => 10000,

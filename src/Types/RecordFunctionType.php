@@ -3,6 +3,7 @@
 namespace Sopheak\Core\Types;
 
 use InvalidArgumentException;
+use Sopheak\Core\Enums\RecordFunctionMethodEnum;
 
 /**
  * Class RecordFunctionType.
@@ -75,7 +76,7 @@ class RecordFunctionType
      */
     public function __construct(
         public array|string $pms_name,
-        public array|string $method,
+        public array|string|RecordFunctionMethodEnum $method,
         public string $class,
         public string $function_method,
         public ?string $description = null,

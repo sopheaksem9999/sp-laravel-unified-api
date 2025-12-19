@@ -2,7 +2,10 @@
 
 namespace Sopheak\Core\Support;
 
+use Closure;
 use Exception;
+use Throwable;
+use UnitEnum;
 use Sopheak\Core\Types\RecordTableType;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -70,7 +73,7 @@ class SchemaRegistry
         try {
             $cacheable = self::sanitizeForCache(self::$cache);
             Cache::put(self::$schemaCacheKey, $cacheable, self::$cacheTtl);
-        } catch (\Throwable $throwable) {
+        } catch (Throwable $throwable) {
             Log::warning('Failed to cache schema registry', [
                 'error' => $throwable->getMessage(),
             ]);
@@ -218,11 +221,11 @@ class SchemaRegistry
 
     private static function sanitizeForCache(mixed $value): mixed
     {
-        if ($value instanceof \Closure) {
+        if ($value instanceof Closure) {
             return null;
         }
 
-        if ($value instanceof \UnitEnum) {
+        if ($value instanceof UnitEnum) {
             return $value;
         }
 

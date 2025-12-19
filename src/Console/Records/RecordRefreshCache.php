@@ -62,7 +62,7 @@ class RecordRefreshCache extends Command
     protected function generateOpenApiSpec(): void
     {
         try {
-            $defaultOut = storage_path('api-v2.json');
+            $defaultOut = storage_path('openapi-schema.json');
             $out = $this->option('out') ?: $defaultOut;
 
             $spec = app(OpenApiService::class)->generateSpecification();

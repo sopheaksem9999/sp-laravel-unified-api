@@ -90,14 +90,14 @@ class RecordTableType
         public $createValidator = null,
         public $updateValidator = null,
         public $deleteValidator = null,
-        public ?RecordTableTriggerType $beforeRead = null,
-        public ?RecordTableTriggerType $afterRead = null,
-        public ?RecordTableTriggerType $beforeCreate = null,
-        public ?RecordTableTriggerType $afterCreate = null,
-        public ?RecordTableTriggerType $beforeUpdate = null,
-        public ?RecordTableTriggerType $afterUpdate = null,
-        public ?RecordTableTriggerType $beforeDelete = null,
-        public ?RecordTableTriggerType $afterDelete = null,
+        public RecordTableTriggerType|array|null $beforeRead = null,
+        public RecordTableTriggerType|array|null $afterRead = null,
+        public RecordTableTriggerType|array|null $beforeCreate = null,
+        public RecordTableTriggerType|array|null $afterCreate = null,
+        public RecordTableTriggerType|array|null $beforeUpdate = null,
+        public RecordTableTriggerType|array|null $afterUpdate = null,
+        public RecordTableTriggerType|array|null $beforeDelete = null,
+        public RecordTableTriggerType|array|null $afterDelete = null,
     ) {}
 
     /**

@@ -37,6 +37,8 @@ class SetupPackage extends Command
         $created = 0;
 
         try {
+            $this->ensureDirectory('config/record/tables');
+            $created += $this->ensureFile('config/record/tables/README.md', $this->defaultRecordTablesReadme(), $force);
             $created += $this->ensureFile('config/record.php', $this->defaultRecordConfig(), $force);
             $created += $this->ensureFile('config/audit.php', $this->defaultAuditConfig(), $force);
             $created += $this->ensureFile('config/jwt.php', $this->defaultJwtConfig(), $force);
@@ -99,11 +101,97 @@ class SetupPackage extends Command
         }
     }
 
+    private function ensureDirectory(string $path): void
+    {
+        if (is_dir($path)) {
+            return;
+        }
+
+        if (file_exists($path) && !is_dir($path)) {
+            throw new RuntimeException('Path exists and is not a directory: ' . $path);
+        }
+
+        if (!mkdir($path, 0755, true) && !is_dir($path)) {
+            throw new RuntimeException('Failed to create directory: ' . $path);
+        }
+    }
+
+    private function defaultRecordTablesReadme(): string
+    {
+        return <<<'MD'
+# Record Table Configs
+
+Put table config files in this folder to keep `config/record.php` clean.
+
+## Rules
+
+- Each `*.php` file can return:
+  - a single `RecordTableType`, or
+  - an array like `['table_name' => RecordTableType, ...]`
+- The filename (without `.php`) is used as the table key when returning a single `RecordTableType`.
+
+## Example (single table)
+
+Create `config/record/tables/customers.php`:
+
+```php
+<?php
+
+use Illuminate\Http\Request;
+use Illuminate\Contracts\Validation\Validator as ValidatorContract;
+use Illuminate\Support\Facades\Validator;
+use Sopheak\Core\Types\RecordTablePublic;
+use Sopheak\Core\Types\RecordTableType;
+
+return new RecordTableType(
+    pms_name: 'customer',
+    table: 'customers',
+    public: new RecordTablePublic(
+        read: false,
+        write: false,
+    ),
+    relationships: [],
+    soft_deletes: true,
+    has_tenant_id: false,
+    createValidator: function (Request $request, ?int $id = null): ValidatorContract {
+        return Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+        ]);
+    },
+);
+```
+
+## Example (multiple tables in one file)
+
+Create `config/record/tables/core.php`:
+
+```php
+<?php
+
+use Sopheak\Core\Types\RecordTablePublic;
+use Sopheak\Core\Types\RecordTableType;
+
+return [
+    'invoices' => new RecordTableType(
+        pms_name: 'invoice',
+        table: 'invoices',
+        public: new RecordTablePublic(read: false, write: false),
+        relationships: [],
+        soft_deletes: true,
+        has_tenant_id: false,
+    ),
+];
+```
+MD;
+    }
+
     private function defaultRecordConfig(): string
     {
         return <<<'PHP'
 <?php
 
+use Illuminate\Http\Request;
+use Illuminate\Contracts\Validation\Validator;
 use Sopheak\Core\Types\RecordBelongsToType;
 use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Types\RecordHasManyThroughType;
@@ -114,14 +202,49 @@ use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordTableTriggerType;
 
-/*
- * Record API Configuration.
- *
- * This configuration file defines the settings and table configurations for the
- * /api/v2/record endpoints in the ERP system. It controls access permissions,
- * static relationship definitions, table metadata, and various operational limits
- * for the generic record API that provides CRUD operations across multiple database tables.
- */
+$tables = [
+    'users' => new RecordTableType(
+        pms_name: 'user',
+        table: 'users',
+        public: new RecordTablePublic(
+            read: false,
+            write: false
+        ),
+        relationships: [],
+        functions: [],
+        soft_deletes: false,
+        has_tenant_id: false,
+        createValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'email' => 'required|email',
+            'password' => 'required|string|min:8',
+        ]),
+        updateValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'name' => 'sometimes|required|string|max:255',
+            'email' => 'sometimes|required|email',
+            'password' => 'sometimes|required|string|min:8',
+        ]),
+        deleteValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make(['id' => $id], [
+            'id' => 'required|integer',
+        ]),
+    ),
+];
+
+$tablesDirectory = __DIR__ . '/record/tables';
+
+if (is_dir($tablesDirectory)) {
+    foreach (glob($tablesDirectory . '/*.php') as $path) {
+        $config = require $path;
+
+        if ($config instanceof RecordTableType) {
+            $name = pathinfo($path, PATHINFO_FILENAME);
+            $tables[$name] = $config;
+        } elseif (is_array($config)) {
+            $tables = array_merge($tables, $config);
+        }
+    }
+}
+
 return [
     /*
     |--------------------------------------------------------------------------
@@ -163,19 +286,8 @@ return [
     // Cascade behavior for nested operations
     'cascade_operations' => false,
 
-    // Table configurations (add your tables here)
-    'tables' => [
-        // Example table configuration:
-        // 'users' => new RecordTableType(
-        //     read: true,
-        //     write: true,
-        //     primary_key: 'id',
-        //     soft_deletes: true,
-        //     has_tenant_id: false,
-        //     relationships: [],
-        //     functions: []
-        // ),
-    ],
+    // Table configurations
+    'tables' => $tables,
 ];
 PHP;
     }

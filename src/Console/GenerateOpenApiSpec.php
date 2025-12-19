@@ -20,7 +20,7 @@ class GenerateOpenApiSpec extends Command
 
     public function handle(): int
     {
-        $defaultOut = storage_path('api-v2.json');
+        $defaultOut = storage_path('openapi-schema.json');
         $out = $this->option('out') ?: $defaultOut;
 
         $this->info('Generating OpenAPI specification from record configuration...');

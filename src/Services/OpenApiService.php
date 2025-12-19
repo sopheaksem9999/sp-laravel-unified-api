@@ -2,8 +2,10 @@
 
 namespace Sopheak\Core\Services;
 
+use BackedEnum;
 use Sopheak\Core\Support\SchemaRegistry;
 use Sopheak\Core\Types\RecordFunctionType;
+use UnitEnum;
 
 class OpenApiService
 {
@@ -478,12 +480,18 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
         return $functionConfig;
     }
 
-    protected function normalizeHttpMethods(array|string $methods): array
+    protected function normalizeHttpMethods(array|string|UnitEnum $methods): array
     {
         $methodList = is_array($methods) ? $methods : [$methods];
         $normalized = [];
 
         foreach ($methodList as $method) {
+            if ($method instanceof BackedEnum) {
+                $method = $method->value;
+            } elseif ($method instanceof UnitEnum) {
+                $method = $method->name;
+            }
+
             $normalized[] = strtoupper((string) $method);
         }
 
@@ -927,6 +935,7 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
         $rawType = strtolower((string) ($columnConfig['type'] ?? 'string'));
         $baseType = trim((string) preg_replace('/\([^)]*\)/', '', $rawType));
         $baseType = trim(explode(' ', $baseType)[0] ?? $baseType);
+
         $type = '' === $baseType ? 'string' : $baseType;
 
         $schema = match ($type) {

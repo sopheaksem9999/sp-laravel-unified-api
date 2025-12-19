@@ -6,7 +6,7 @@ return [
     ],
     'openapi' => [
         // default output path relative to storage
-        'output' => 'api-v2.json',
+        'output' => 'openapi-schema.json',
     ],
     'auth' => [
         'guard' => env('SP_LARAVEL_API_AUTH_GUARD', 'api'),

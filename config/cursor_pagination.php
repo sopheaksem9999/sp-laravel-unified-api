@@ -32,7 +32,7 @@ return [
     | The default number of items per page when using cursor pagination.
     |
     */
-    'default_per_page' => env('CURSOR_PAGINATION_PER_PAGE', 25),
+    'default_per_page' => env('CURSOR_PAGINATION_PER_PAGE', 15),
 
     /*
     |--------------------------------------------------------------------------
@@ -42,7 +42,7 @@ return [
     | The maximum number of items that can be requested per page.
     |
     */
-    'max_per_page' => env('CURSOR_PAGINATION_MAX_PER_PAGE', 100),
+    'max_per_page' => env('CURSOR_PAGINATION_MAX_PER_PAGE', 1000),
 
     /*
     |--------------------------------------------------------------------------
