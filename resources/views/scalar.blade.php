@@ -34,7 +34,7 @@
         function initializeScalar() {
             const config = {
                 spec: {
-                    url: '{{ url('/api/docs/openapi') }}'
+                    url: '{{ url(trim(config('record.api_prefix', 'api/v1'), '/') . '/docs/openapi') }}'
                 },
                 "theme": "default",
                 "expandAllResponses": true,
