@@ -5,7 +5,7 @@ namespace Sopheak\Core\Services;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Arr;
 
-class ApiResponseService
+class RecordApiResponseService
 {
     public function success($data = null, array $metaExtra = [], int $status = 200): JsonResponse
     {

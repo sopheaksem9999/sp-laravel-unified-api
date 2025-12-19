@@ -7,7 +7,7 @@ The `sp-laravel-api` package provides a comprehensive audit interface that allow
 The audit interface consists of:
 - `AuditQueryInterface` - Interface for controllers to implement custom audit queries
 - `HasAuditQuery` trait - Provides common audit functionality for controllers
-- `AuditController` - Dedicated controller for audit operations
+- `AuditLogController` - Dedicated controller for audit operations
 - Audit routes - API endpoints for audit functionality
 
 ## AuditQueryInterface

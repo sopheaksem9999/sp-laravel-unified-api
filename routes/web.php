@@ -16,6 +16,6 @@ use Illuminate\Support\Facades\Route;
 */
 
 // Custom Scalar documentation route using our custom template
-Route::get('/api-docs', fn(): View|Factory => view('sp-laravel-api::scalar'))->middleware(['web']);
+Route::get('/api-docs', fn(): View|Factory => view('sp-laravel-api::scalar'));
 
  

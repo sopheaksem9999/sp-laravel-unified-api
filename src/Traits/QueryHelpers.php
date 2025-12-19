@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\LazyCollection;
 
@@ -161,8 +162,8 @@ trait QueryHelpers
         $modelName = lcfirst($modelClass); // e.g., 'ReceivePayment' => 'receivePayment'
         $permission = 'viewOnlyCreateBy_'.$modelName;
 
-        if (Auth::check() && Auth::user()->can($permission)) {
-            $commonQuery = $commonQuery->where($tableName.'.created_by', Auth::user()->id);
+        if (Auth::check() && Gate::check($permission)) {
+            $commonQuery = $commonQuery->where($tableName.'.created_by', Auth::id());
         }
 
         // Apply soft delete filter if model uses soft deletes

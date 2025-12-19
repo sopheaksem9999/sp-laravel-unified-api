@@ -33,13 +33,13 @@ class AuditLogJob implements ShouldQueue
      * Create a new job instance.
      */
     public function __construct(
-        public AuditLogEventEnum $auditLogEventEnum,
+        public AuditLogEventEnum $event,
         public string $entityName,
         public ?string $entityType = null,
         public ?array $queryData = null
     ) {
         $this->queryData = $queryData;
-        $this->auditLogEventEnum = $auditLogEventEnum;
+        $this->event = $event;
         $this->entityName = $entityName;
         $this->entityType = $entityType;
     }
@@ -51,7 +51,7 @@ class AuditLogJob implements ShouldQueue
     {
         try {
             AuditLogService::handleAuditDataEntry(
-                event: $this->auditLogEventEnum,
+                event: $this->event,
                 entityName: $this->entityName,
                 entityType: $this->entityType,
                 queryData: $this->queryData,

@@ -2214,5 +2214,3 @@ class CoreRecordController extends Controller
         }
     }
 }
-
-class RecordController extends CoreRecordController {}

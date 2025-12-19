@@ -25,7 +25,7 @@
  * - Table configurations with permissions, metadata, and relationships
  * - Relationship types: belongsTo, hasMany, hasManyThrough, belongsToMany
  *
- * @see RecordController
+ * @see CoreRecordController
  * @see RelationshipResolver
  * @see SchemaRegistry
  */

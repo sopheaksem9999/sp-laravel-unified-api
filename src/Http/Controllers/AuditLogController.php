@@ -8,9 +8,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
 use Sopheak\Core\Services\AuditLogService;
-use Sopheak\Core\Services\ApiResponseService;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 use Illuminate\Support\Facades\Validator;
+use Sopheak\Core\Services\RecordApiResponseService;
 
 /**
  * Controller for handling audit log operations.
@@ -18,9 +18,9 @@ use Illuminate\Support\Facades\Validator;
  * This controller provides endpoints for retrieving audit logs, statistics,
  * and managing audit data across the application.
  */
-class AuditController extends Controller
+class AuditLogController extends Controller
 {
-    public function __construct(protected ApiResponseService $apiResponseService)
+    public function __construct(protected RecordApiResponseService $apiResponseService)
     {
     }
 

@@ -3,6 +3,7 @@
 namespace Sopheak\Core\Services;
 
 use Sopheak\Core\Enums\AuditLogEventEnum;
+use Sopheak\Core\Jobs\AuditLogJob;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -100,10 +101,14 @@ class AuditLogService
             'entity_id' => $data['entity_id'],
             'entity_name' => $tableName,
             'event' => $data['event'],
-            'metadata' => json_encode(static::getAuditMetadata($changedFields, $data['old_data'] ?? [], $data['new_data'] ?? [], $data['entity_type'] ?? null, $data['entity_id'] ?? null)),
+            'metadata' => null,
             'created_at' => now()->toDateTimeString(),
             'updated_at' => null,
         ];
+
+        if (!in_array($data['event'], [AuditLogEventEnum::LOGIN->value, AuditLogEventEnum::LOGOUT->value, AuditLogEventEnum::FAILED_LOGIN->value])) {
+            $auditData['metadata'] = json_encode(static::getAuditMetadata($changedFields, $data['old_data'] ?? [], $data['new_data'] ?? [], $data['entity_type'] ?? null, $data['entity_id'] ?? null));
+        }
 
         DB::table('audit_logs')->insert($auditData);
     }
@@ -162,18 +167,18 @@ class AuditLogService
     /**
      * Log user authentication events.
      */
-    public static function authEvent(AuditLogEventEnum $event, array $data = []): void
+    public static function authEvent(AuditLogEventEnum $event, ?array $data = []): void
     {
         if (!static::isAuditEnabled()) {
             return;
         }
 
-        $userModel = config('audit.user_model', 'App\Models\User');
-        $auditLogJobClass = config('audit.audit_log_job', 'App\Jobs\AuditLogJob');
+        $userModel = config('auth.providers.users.model', 'App\\Models\\User');
+        $auditLogJobClass = config('audit.audit_log_job', AuditLogJob::class);
 
         $entityName = static::getTableNameFromEntityType($userModel);
 
-        if (static::isAuditQueueEnabled()) {
+        if (static::isAuditQueueEnabled() && class_exists($auditLogJobClass) && method_exists($auditLogJobClass, 'dispatch')) {
             $auditLogJobClass::dispatch(
                 event: $event,
                 entityName: $entityName,
@@ -209,7 +214,20 @@ class AuditLogService
 
         // Handle audit logging based on queue configuration
         if (static::isAuditQueueEnabled()) {
-            $auditLogJobClass = config('audit.audit_log_job', 'App\Jobs\AuditLogJob');
+            $auditLogJobClass = config('audit.audit_log_job', AuditLogJob::class);
+            if (!class_exists($auditLogJobClass) || !method_exists($auditLogJobClass, 'dispatch')) {
+                static::handleAuditDataEntry(
+                    event: $auditLogEventEnum,
+                    entityName: $entityName,
+                    entityType: $entityType,
+                    queryData: $queryData,
+                    subject: $subject,
+                    recap: $recap,
+                );
+
+                return;
+            }
+
             $auditLogJobClass::dispatch(
                 event: $auditLogEventEnum,
                 entityName: $entityName,
@@ -565,20 +583,20 @@ class AuditLogService
 
         switch ($driver) {
             case 'sqlite':
-                $segments = array_map(fn($p): string => preg_match('/[^A-Za-z0-9_]/', $p) ? "['".str_replace("'", "''", $p)."']" : ".".$p, $parts);
-                $sqlitePath = '$'.implode('', $segments);
+                $segments = array_map(fn($p): string => preg_match('/[^A-Za-z0-9_]/', $p) ? "['" . str_replace("'", "''", $p) . "']" : "." . $p, $parts);
+                $sqlitePath = '$' . implode('', $segments);
                 return sprintf("json_extract(%s, '%s')", $column, $sqlitePath);
             case 'mysql':
             case 'mariadb':
-                $segments = array_map(fn($p): string => preg_match('/[^A-Za-z0-9_]/', $p) ? '["'.str_replace('"', '\\"', $p).'"]' : ".".$p, $parts);
-                $mysqlPath = '$'.implode('', $segments);
+                $segments = array_map(fn($p): string => preg_match('/[^A-Za-z0-9_]/', $p) ? '["' . str_replace('"', '\\"', $p) . '"]' : "." . $p, $parts);
+                $mysqlPath = '$' . implode('', $segments);
                 return sprintf("JSON_EXTRACT(%s, '%s')", $column, $mysqlPath);
             case 'pgsql':
-                $pgPath = '{'.implode(',', $parts).'}';
+                $pgPath = '{' . implode(',', $parts) . '}';
                 return sprintf("(%s #> '%s')", $column, $pgPath);
             default:
-                $segments = array_map(fn($p): string => preg_match('/[^A-Za-z0-9_]/', $p) ? '["'.str_replace('"', '\\"', $p).'"]' : ".".$p, $parts);
-                $pathStr = '$'.implode('', $segments);
+                $segments = array_map(fn($p): string => preg_match('/[^A-Za-z0-9_]/', $p) ? '["' . str_replace('"', '\\"', $p) . '"]' : "." . $p, $parts);
+                $pathStr = '$' . implode('', $segments);
                 return sprintf("JSON_EXTRACT(%s, '%s')", $column, $pathStr);
         }
     }

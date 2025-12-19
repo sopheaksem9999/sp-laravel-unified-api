@@ -864,7 +864,7 @@ php artisan queue:work --queue=high,default --sleep=3 --tries=3 --max-time=3600
 
 ### Core Classes Reference
 
-- **ApiResponseService**: Standardized API responses
+- **RecordApiResponseService**: Standardized API responses
 - **AuditLogService**: Audit logging functionality
 - **SchemaRegistry**: Database schema management
 - **QueryHelpers**: Advanced query building
@@ -972,10 +972,10 @@ GET /api/users?age=gt.18&created_at=between.2024-01-01,2024-12-31
 
 ## Services
 
-### ApiResponseService
+### RecordApiResponseService
 Provides standardized JSON responses:
 ```php
-use Sopheak\Core\Services\ApiResponseService;
+use Sopheak\Core\Services\RecordApiResponseService;
 
 $response = app('api.response');
 return $response->success($data, 'Operation successful');
@@ -1329,7 +1329,7 @@ php artisan sp-laravel-api:clean-audit-logs --dry-run --days=90
 
 ### Core Classes Reference
 - **Request ID Middleware**: `Sopheak\Core\Http\Middleware\RequestId`
-- **API Response Service**: `Sopheak\Core\Services\ApiResponseService`
+- **API Response Service**: `Sopheak\Core\Services\RecordApiResponseService`
 - **Audit Log Service**: `Sopheak\Core\Services\AuditLogService`
 - **Query Cache Service**: `Sopheak\Core\Services\QueryCacheService`
 - **Cursor Pagination Service**: `Sopheak\Core\Services\CursorPagination`

@@ -2,7 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Sopheak\Core\Http\Controllers\Api\CoreRecordController;
-use Sopheak\Core\Http\Controllers\AuditController;
+use Sopheak\Core\Http\Controllers\AuditLogController;
 
 /*
 |--------------------------------------------------------------------------
@@ -20,7 +20,7 @@ use Sopheak\Core\Http\Controllers\AuditController;
 
 /*
 |--------------------------------------------------------------------------
-| Public API Routes (Authorization handled by RecordController)
+| Public API Routes (Authorization handled by CoreRecordController)
 |--------------------------------------------------------------------------
 */
 Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.id'])->group(function (): void {
@@ -105,25 +105,25 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware([
     */
     Route::prefix('audit')->group(function (): void {
         // Get audit logs for a specific entity
-        Route::get('logs', [AuditController::class, 'getLogs'])->middleware('throttle:api-reads');
+        Route::get('logs', [AuditLogController::class, 'getLogs'])->middleware('throttle:api-reads');
         
         // Get audit statistics
-        Route::get('stats', [AuditController::class, 'getStats'])->middleware('throttle:api-reads');
+        Route::get('stats', [AuditLogController::class, 'getStats'])->middleware('throttle:api-reads');
         
         // Get field timeline for a specific field
-        Route::get('field-timeline', [AuditController::class, 'getFieldTimeline'])->middleware('throttle:api-reads');
+        Route::get('field-timeline', [AuditLogController::class, 'getFieldTimeline'])->middleware('throttle:api-reads');
         
         // Get field statistics for a specific field
-        Route::get('field-stats', [AuditController::class, 'getFieldStats'])->middleware('throttle:api-reads');
+        Route::get('field-stats', [AuditLogController::class, 'getFieldStats'])->middleware('throttle:api-reads');
         
         // Manually create an audit log entry
-        Route::post('logs', [AuditController::class, 'createLog'])->middleware('throttle:api-writes');
+        Route::post('logs', [AuditLogController::class, 'createLog'])->middleware('throttle:api-writes');
         
         // Get specific audit log by ID
-        Route::get('logs/{id}', [AuditController::class, 'show'])->middleware('throttle:api-reads');
+        Route::get('logs/{id}', [AuditLogController::class, 'show'])->middleware('throttle:api-reads');
         
         // Clean up old audit logs (admin only)
-        Route::delete('cleanup', [AuditController::class, 'cleanup'])
+        Route::delete('cleanup', [AuditLogController::class, 'cleanup'])
             ->middleware(['throttle:api-writes', 'can:manage-audit-logs']);
     });
 

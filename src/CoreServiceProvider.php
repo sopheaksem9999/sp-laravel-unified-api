@@ -12,7 +12,7 @@ use Sopheak\Core\Console\Records\ClearRecordCache;
 use Sopheak\Core\Console\Records\GetRecordCache;
 use Sopheak\Core\Console\Records\RecordRefreshCache;
 use Sopheak\Core\Console\CleanAuditLogs;
-use Sopheak\Core\Services\ApiResponseService;
+use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\AuditLogService;
 use Sopheak\Core\Services\CursorPagination;
 use Sopheak\Core\Services\QueryCacheService;
@@ -23,7 +23,7 @@ class CoreServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__ . '/../config/sp-laravel-api.php', 'sp-laravel-api');
 
-        $this->app->singleton('api.response', fn(): ApiResponseService => new ApiResponseService());
+        $this->app->singleton('api.response', fn(): RecordApiResponseService => new RecordApiResponseService());
 
         $this->app->singleton(AuditLogService::class);
         $this->app->singleton(CursorPagination::class);
