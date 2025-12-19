@@ -2,111 +2,206 @@
 
 namespace Sopheak\Core\Services;
 
+use stdClass;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Arr;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
+use Illuminate\Support\MessageBag;
+use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 
 class RecordApiResponseService
 {
-    public function success($data = null, array $metaExtra = [], int $status = 200): JsonResponse
-    {
-        return $this->json(true, $data, $metaExtra, $status);
+   /**
+     * Create a simple JSON response for API v1 compatibility
+     * Returns only data and status code to maintain backward compatibility.
+     *
+     * @param mixed               $data       The data to return
+     * @param RecordApiJsonResponseEnum $statusCode HTTP status code
+     */
+    public static function jsonResponse(
+        mixed $data = null,
+        RecordApiJsonResponseEnum $statusCode = RecordApiJsonResponseEnum::SUCCESS
+    ): JsonResponse {
+        // Remove deleted_at fields from data for security
+        $cleanData = static::removeDeletedAtFields($data);
+
+        return response()->json($cleanData, $statusCode->value);
     }
 
-    public function created($data = null, array $metaExtra = []): JsonResponse
+    /**
+     * Create a success response with data.
+     *
+     * @param mixed $data The data to return
+     */
+    public static function success(mixed $data = null): JsonResponse
     {
-        return $this->json(true, $data, $metaExtra, 201);
+        return static::jsonResponse($data, RecordApiJsonResponseEnum::SUCCESS);
     }
 
-    public function updated($data = null, array $metaExtra = []): JsonResponse
+    /**
+     * Create a created response (201).
+     *
+     * @param mixed $data The created resource data
+     */
+    public static function created(mixed $data = null): JsonResponse
     {
-        return $this->json(true, $data, $metaExtra, 200);
+        return static::jsonResponse($data, RecordApiJsonResponseEnum::CREATED);
     }
 
-    public function deleted($data = null, array $metaExtra = []): JsonResponse
+    /**
+     * Create an updated response (200).
+     *
+     * @param mixed $data The updated resource data
+     */
+    public static function updated(mixed $data = null): JsonResponse
     {
-        return $this->json(true, $data, $metaExtra, 200);
+        return static::jsonResponse($data, RecordApiJsonResponseEnum::SUCCESS);
     }
 
-    public function error(string $message = 'Error', array $errors = [], array $metaExtra = [], int $status = 400): JsonResponse
+    /**
+     * Create a deleted response (204).
+     */
+    public static function deleted(): JsonResponse
     {
-        $payload = [
-            'success' => false,
-            'message' => $message,
-            'errors' => $errors,
-            'meta' => $this->meta($metaExtra),
-        ];
-
-        return response()->json($payload, $status);
+        return static::jsonResponse(null, RecordApiJsonResponseEnum::DELETED);
     }
 
-    public function validationError(array $errors, array $metaExtra = []): JsonResponse
-    {
-        return $this->error('Validation error', $errors, $metaExtra, 422);
+    /**
+     * Create an error response.
+     *
+     * @param string              $message    Error message
+     * @param RecordApiJsonResponseEnum $statusCode Error status code
+     */
+    public static function errorResponse(
+        string $message,
+        RecordApiJsonResponseEnum $statusCode = RecordApiJsonResponseEnum::ERROR
+    ): JsonResponse {
+        return static::jsonResponse(['errors' => $message], $statusCode);
     }
 
-    public function unauthorized(string $message = 'Unauthorized', array $metaExtra = []): JsonResponse
+    /**
+     * Create a validation error response (400).
+     *
+     * @param array|MessageBag|string $errors Validation errors
+     */
+    public static function validationError(array|MessageBag|string $errors): JsonResponse
     {
-        return $this->error($message, [], $metaExtra, 401);
-    }
-
-    public function forbidden(string $message = 'Forbidden', array $metaExtra = []): JsonResponse
-    {
-        return $this->error($message, [], $metaExtra, 403);
-    }
-
-    public function notFound(string $message = 'Not Found', array $metaExtra = []): JsonResponse
-    {
-        return $this->error($message, [], $metaExtra, 404);
-    }
-
-    public function serverError(string $message = 'Server Error', array $metaExtra = []): JsonResponse
-    {
-        return $this->error($message, [], $metaExtra, 500);
-    }
-
-    private function json(bool $success, $data = null, array $metaExtra = [], int $status = 200): JsonResponse
-    {
-        $cleanData = $this->removeDeletedAtFields($data);
-
-        $payload = [
-            'success' => $success,
-            'data' => $cleanData,
-            'meta' => $this->meta($metaExtra),
-        ];
-
-        return response()->json($payload, $status);
-    }
-
-    private function meta(array $extra = []): array
-    {
-        $meta = [];
-        if (config('sp-laravel-api.response.include_request_id', true)) {
-            $requestId = request()?->attributes->get('request_id') ?? request()?->headers->get('X-Request-ID');
-            if ($requestId) {
-                $meta['request_id'] = $requestId;
-            }
+        // Handle Laravel's MessageBag, array, or string errors
+        if ($errors instanceof MessageBag) {
+            $data = ['validation_errors' => $errors->toArray()];
+        } elseif (is_array($errors)) {
+            $data = ['validation_errors' => $errors];
+        } else {
+            $data = ['validation_errors' => ['message' => (string) $errors]];
         }
 
-        return array_merge($meta, $extra);
+        return static::jsonResponse($data, RecordApiJsonResponseEnum::ERROR);
     }
 
-    private function removeDeletedAtFields($data)
+    /**
+     * Create an unauthorized response (401).
+     *
+     * @param string $message Error message
+     */
+    public static function unauthorized(string $message = 'Unauthorized access'): JsonResponse
     {
+        return static::jsonResponse(['errors' => $message], RecordApiJsonResponseEnum::UNAUTHORIZED);
+    }
+
+    /**
+     * Create a forbidden response (403).
+     *
+     * @param string $message Error message
+     */
+    public static function forbidden(string $message = 'Access forbidden'): JsonResponse
+    {
+        return static::jsonResponse(['errors' => $message], RecordApiJsonResponseEnum::FORBIDDEN);
+    }
+
+    /**
+     * Create a not found response (404).
+     *
+     * @param string $message Error message
+     */
+    public static function notFound(string $message = 'Resource not found'): JsonResponse
+    {
+        return static::jsonResponse(['errors' => $message], RecordApiJsonResponseEnum::NOT_FOUND);
+    }
+
+    /**
+     * Create a server error response (500).
+     *
+     * @param string $message Error message
+     * @param mixed  $data    Optional error data
+     */
+    public static function serverError(string $message = 'Internal server error', mixed $data = null): JsonResponse
+    {
+        $errorData = $data ?? ['errors' => $message];
+
+        return static::jsonResponse($errorData, RecordApiJsonResponseEnum::SERVER_ERROR);
+    }
+
+    public static function removeDeletedAtFields(mixed $data): mixed
+    {
+        if (null === $data) {
+            return null;
+        }
+
+        // Handle arrays
         if (is_array($data)) {
-            return array_map(function ($item) {
-                if (is_array($item)) {
-                    return Arr::except($item, ['deleted_at']);
+            $cleaned = [];
+            foreach ($data as $key => $value) {
+                if ('deleted_at' !== $key) {
+                    $cleaned[$key] = static::removeDeletedAtFields($value);
                 }
+            }
 
-                return $item;
-            }, $data);
+            return $cleaned;
         }
 
-        if (is_object($data) && method_exists($data, 'toArray')) {
-            $array = $data->toArray();
-            return Arr::except($array, ['deleted_at']);
+        // Handle objects (including stdClass and Eloquent models)
+        if (is_object($data)) {
+            // Handle Laravel Collections
+            if ($data instanceof Collection) {
+                return $data->map(fn($item): mixed => static::removeDeletedAtFields($item));
+            }
+
+            // Handle Laravel Paginator
+            if ($data instanceof LengthAwarePaginator) {
+                $items = $data->getCollection()->map(fn($item): mixed => static::removeDeletedAtFields($item));
+
+                // Create a new paginator with cleaned items
+                return new LengthAwarePaginator(
+                    $items,
+                    $data->total(),
+                    $data->perPage(),
+                    $data->currentPage(),
+                    [
+                        'path' => request()->url(),
+                        'pageName' => 'page',
+                    ]
+                );
+            }
+
+            // Handle Eloquent models
+            if (method_exists($data, 'toArray')) {
+                $array = $data->toArray();
+
+                return static::removeDeletedAtFields($array);
+            }
+
+            // Handle stdClass and other objects
+            $cleaned = new stdClass();
+            foreach (get_object_vars($data) as $key => $value) {
+                if ('deleted_at' !== $key) {
+                    $cleaned->{$key} = static::removeDeletedAtFields($value);
+                }
+            }
+
+            return $cleaned;
         }
 
+        // Return primitive values as-is
         return $data;
     }
 }
