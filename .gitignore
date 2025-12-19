@@ -33,3 +33,6 @@ frankenphp-worker.php
 package-lock.json
 composer.lock
 deno.lock
+.phpunit.cache
+build/*
+build

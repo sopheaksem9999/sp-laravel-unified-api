@@ -50,7 +50,7 @@ class CoreServiceProvider extends ServiceProvider
         $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
 
         if ($this->app->runningInConsole()) {
-            $this->commands([
+            $commands = [
                 GenerateOpenApiSpec::class,
                 SetupPackage::class,
                 ValidateSetup::class,
@@ -58,7 +58,10 @@ class CoreServiceProvider extends ServiceProvider
                 GetRecordCache::class,
                 RecordRefreshCache::class,
                 CleanAuditLogs::class,
-            ]);
+            ];
+
+            $commands = array_values(array_filter($commands, fn(string $command): bool => class_exists($command)));
+            $this->commands($commands);
         }
 
         /** @var Router $router */
