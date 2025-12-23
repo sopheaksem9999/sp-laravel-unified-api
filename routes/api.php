@@ -23,6 +23,7 @@ use Sopheak\Core\Http\Controllers\AuditLogController;
 | Public API Routes (Authorization handled by CoreRecordController)
 |--------------------------------------------------------------------------
 */
+
 Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.id'])->group(function (): void {
 
     Route::get('docs/openapi', function () {
@@ -47,7 +48,7 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.i
 
         return response()->json($json)->header('Content-Type', 'application/json');
     });
-    
+
     /*
     |--------------------------------------------------------------------------
     | Table-specific RPC Functions
@@ -94,10 +95,20 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.i
 */
 Route::prefix(config('record.api_prefix', 'api'))->middleware([
     'api',
-    'auth:'.config('sp-laravel-api.auth.guard', 'api'),
+    'auth:' . config('sp-laravel-api.auth.guard', 'api'),
     'request.id',
 ])->group(function (): void {
-    
+
+    /*
+    |--------------------------------------------------------------------------
+    | Global RPC Functions (not table-specific)
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('rpc')->group(function (): void {
+        Route::match(['get', 'post', 'put', 'patch', 'delete'], '{functionName}', [CoreRecordController::class, 'executeGlobalFunction'])
+            ->where('functionName', '[a-zA-Z_][a-zA-Z0-9_]*')
+            ->middleware('throttle:api-functions');
+    });
     /*
     |--------------------------------------------------------------------------
     | Audit Management Routes
@@ -106,33 +117,24 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware([
     Route::prefix('audit')->group(function (): void {
         // Get audit logs for a specific entity
         Route::get('logs', [AuditLogController::class, 'getLogs'])->middleware('throttle:api-reads');
-        
+
         // Get audit statistics
         Route::get('stats', [AuditLogController::class, 'getStats'])->middleware('throttle:api-reads');
-        
+
         // Get field timeline for a specific field
         Route::get('field-timeline', [AuditLogController::class, 'getFieldTimeline'])->middleware('throttle:api-reads');
-        
+
         // Get field statistics for a specific field
         Route::get('field-stats', [AuditLogController::class, 'getFieldStats'])->middleware('throttle:api-reads');
-        
+
         // Manually create an audit log entry
         Route::post('logs', [AuditLogController::class, 'createLog'])->middleware('throttle:api-writes');
-        
+
         // Get specific audit log by ID
         Route::get('logs/{id}', [AuditLogController::class, 'show'])->middleware('throttle:api-reads');
-        
+
         // Clean up old audit logs (admin only)
         Route::delete('cleanup', [AuditLogController::class, 'cleanup'])
             ->middleware(['throttle:api-writes', 'can:manage-audit-logs']);
     });
-
-    /*
-    |--------------------------------------------------------------------------
-    | Global RPC Functions (not table-specific)
-    |--------------------------------------------------------------------------
-    */
-    Route::match(['get', 'post', 'put', 'patch', 'delete'], '{functionName}', [CoreRecordController::class, 'executeGlobalFunction'])
-        ->where('functionName', '[a-zA-Z_][a-zA-Z0-9_]*')
-        ->middleware('throttle:api-functions');
 });

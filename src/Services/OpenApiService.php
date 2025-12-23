@@ -276,7 +276,7 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
         foreach ($globalFunctions as $functionName => $functionConfig) {
             $config = $this->normalizeFunctionConfig($functionConfig);
             $methods = $this->normalizeHttpMethods($config['method'] ?? ['POST']);
-            $path = sprintf('/%s/%s', $apiPrefix, $functionName);
+            $path = sprintf('/%s/rpc/%s', $apiPrefix, $functionName);
 
             foreach ($methods as $method) {
                 $methodKey = strtolower((string) $method);
@@ -306,8 +306,8 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
 
                 $operation = [
                     'tags' => ['RPC'],
-                    'summary' => $config['description'] ?? sprintf('Execute %s function', $functionName),
-                    'description' => $config['description'] ?? sprintf('Execute the %s global function', $functionName),
+                    'summary' => $config['description'] ?? sprintf('%s', $functionName),
+                    'description' => $config['description'] ?? sprintf('%s global function', $functionName),
                     'operationId' => sprintf('rpc_%s_%s', $functionName, $methodKey),
                     'security' => [['bearerAuth' => []]],
                     'responses' => [
@@ -427,8 +427,8 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
 
                     $operation = [
                         'tags' => [ucfirst((string) $tableName)],
-                        'summary' => $config['description'] ?? sprintf('Execute %s function', $functionName),
-                        'description' => $config['description'] ?? sprintf('Execute the %s function for %s', $functionName, $tableName),
+                        'summary' => $config['description'] ?? sprintf('%s', $functionName),
+                        'description' => $config['description'] ?? sprintf('the %s function for %s', $functionName, $tableName),
                         'operationId' => sprintf('%s_rpc_%s_%s', $tableName, $functionName, $methodKey),
                         'security' => $security,
                         'responses' => [
