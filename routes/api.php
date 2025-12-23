@@ -51,6 +51,17 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.i
 
     /*
     |--------------------------------------------------------------------------
+    | Global RPC Functions (not table-specific)
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('rpc')->group(function (): void {
+        Route::match(['get', 'post', 'put', 'patch', 'delete'], '{functionName}', [CoreRecordController::class, 'executeGlobalFunction'])
+            ->where('functionName', '[a-zA-Z_][a-zA-Z0-9_]*')
+            ->middleware('throttle:api-functions');
+    });
+
+    /*
+    |--------------------------------------------------------------------------
     | Table-specific RPC Functions
     |--------------------------------------------------------------------------
     */
@@ -99,16 +110,6 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware([
     'request.id',
 ])->group(function (): void {
 
-    /*
-    |--------------------------------------------------------------------------
-    | Global RPC Functions (not table-specific)
-    |--------------------------------------------------------------------------
-    */
-    Route::prefix('rpc')->group(function (): void {
-        Route::match(['get', 'post', 'put', 'patch', 'delete'], '{functionName}', [CoreRecordController::class, 'executeGlobalFunction'])
-            ->where('functionName', '[a-zA-Z_][a-zA-Z0-9_]*')
-            ->middleware('throttle:api-functions');
-    });
     /*
     |--------------------------------------------------------------------------
     | Audit Management Routes

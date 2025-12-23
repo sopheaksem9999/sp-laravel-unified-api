@@ -448,7 +448,7 @@ You can create public endpoints by setting `pms_name` to `null`. These functions
 
 **Request:**
 ```bash
-curl -X POST http://localhost:8000/api/v2/record/login \
+curl -X POST http://localhost:8000/api/v2/record/rpc/login \
   -H "Content-Type: application/json" \
   -d '{"email": "user@example.com", "password": "password"}'
 ```
@@ -471,7 +471,7 @@ By providing a `pms_name`, the function requires authentication and the user mus
 
 **Request:**
 ```bash
-curl -X GET http://localhost:8000/api/v2/record/system_stats \
+curl -X GET http://localhost:8000/api/v2/record/rpc/system_stats \
   -H "Authorization: Bearer {token}"
 ```
 
