@@ -45,6 +45,9 @@ class RecordHasManyType
         public RecordRelationshipsEnum $type = RecordRelationshipsEnum::HAS_MANY,
         public string $localKey = 'id',
         public ?array $with = [],   // hint for eager child include when requested
+        public bool $allowCreate = true,
+        public bool $allowUpdate = true,
+        public bool $allowDelete = true,
     ) {}
 
     /**
@@ -59,6 +62,9 @@ class RecordHasManyType
             type: $properties['type'] ?? RecordRelationshipsEnum::HAS_MANY,
             localKey: $properties['localKey'] ?? 'id',
             with: $properties['with'] ?? [],
+            allowCreate: $properties['allowCreate'] ?? true,
+            allowUpdate: $properties['allowUpdate'] ?? true,
+            allowDelete: $properties['allowDelete'] ?? true,
         );
     }
 }

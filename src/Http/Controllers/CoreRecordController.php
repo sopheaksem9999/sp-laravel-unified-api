@@ -1,6 +1,6 @@
 <?php
 
-namespace Sopheak\Core\Http\Controllers\Api;
+namespace Sopheak\Core\Http\Controllers;
 
 use BackedEnum;
 use RuntimeException;
@@ -555,7 +555,6 @@ class CoreRecordController extends Controller
         $payload = $request->all();
 
         // Strip relationship data from main payload
-
         $payloadMain = RelationshipResolver::stripRelationshipData($table, $payload);
         $payloadMain = $this->sanitizePayload($payloadMain, $schema[$table]);
 
@@ -574,6 +573,9 @@ class CoreRecordController extends Controller
         try {
             $pk = $schema[$table]->primary_key ?? 'id';
             $insertedId = DB::table($actualTableName)->insertGetId($payloadMain, $pk);
+
+            // Process nested relationships
+            RelationshipResolver::processRelatedData($table, $payload, $insertedId, $tenantId, 'create');
 
             // Commit transaction
             DB::commit();
@@ -697,6 +699,9 @@ class CoreRecordController extends Controller
             }
 
             $updated = $query->update($payloadMain);
+
+            // Process nested relationships
+            RelationshipResolver::processRelatedData($table, $payload, $id, $tenantId, 'update');
 
             if (0 === $updated) {
                 DB::rollBack();

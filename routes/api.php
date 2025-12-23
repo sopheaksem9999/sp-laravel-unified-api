@@ -1,7 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Sopheak\Core\Http\Controllers\Api\CoreRecordController;
+use Sopheak\Core\Http\Controllers\CoreRecordController;
 use Sopheak\Core\Http\Controllers\AuditLogController;
 
 /*
