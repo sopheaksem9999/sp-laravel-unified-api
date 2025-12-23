@@ -550,7 +550,6 @@ class CoreRecordController extends Controller
         $payload = $request->all();
 
         // Strip relationship data from main payload
-
         $payloadMain = RelationshipResolver::stripRelationshipData($table, $payload);
         $payloadMain = $this->sanitizePayload($payloadMain, $schema[$table]);
 
@@ -570,24 +569,8 @@ class CoreRecordController extends Controller
             $pk = $schema[$table]->primary_key ?? 'id';
             $insertedId = DB::table($actualTableName)->insertGetId($payloadMain, $pk);
 
-            QueryCacheService::invalidateTable($table);
-            $record = $this->show($request, $table, $insertedId);
-            if (!($schema[$table]->disable_auditLog ?? false)) {
-                try {
-                    $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
-                    AuditLogService::insertAuditLog(
-                        auditLogEventEnum: AuditLogEventEnum::CREATED,
-                        entityClass: $entityClass,
-                        queryData: json_decode(json_encode($record->getData()->data), true),
-                    );
-                } catch (\Exception $exception) {
-                    Log::error('Audit log insert failed (create)', [
-                        'table' => $table,
-                        'id' => $insertedId,
-                        'error' => $exception->getMessage(),
-                    ]);
-                }
-            }
+            // Process nested relationships
+            RelationshipResolver::processRelatedData($table, $payload, $insertedId, $tenantId, 'create');
 
             // Commit transaction
             DB::commit();
@@ -692,6 +675,9 @@ class CoreRecordController extends Controller
             }
 
             $updated = $query->update($payloadMain);
+
+            // Process nested relationships
+            RelationshipResolver::processRelatedData($table, $payload, $id, $tenantId, 'update');
 
             if (0 === $updated) {
                 DB::rollBack();

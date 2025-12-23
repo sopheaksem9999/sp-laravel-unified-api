@@ -12,11 +12,11 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  * This class defines the structure and behavior of custom API endpoints that can be
  * dynamically registered and executed within the ERP system.
  *
- * @property array|string $pms_name        The PMS name identifier(s) for this function (required)
- * @property array|string $method          Allowed HTTP methods (GET, POST, PUT, DELETE, etc.)
- * @property string       $class           Class name for class-based functions (required)
- * @property string       $function_method Method name for class-based functions (required)
- * @property null|string  $description     Function description for documentation purposes
+ * @property array|string|null $pms_name        The PMS name identifier(s) for this function (optional, null for public)
+ * @property array|string       $method          Allowed HTTP methods (GET, POST, PUT, DELETE, etc.)
+ * @property string             $class           Class name for class-based functions (required)
+ * @property string             $function_method Method name for class-based functions (required)
+ * @property null|string        $description     Function description for documentation purposes
  *
  * @since 1.0.0
  *
@@ -24,6 +24,15 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  *
  * Example usage:
  * ```php
+ * // Public function (no pms_name)
+ * $publicFunction = new RecordFunctionType(
+ *     pms_name: null,
+ *     method: 'POST',
+ *     class: 'App\\Services\\AuthService',
+ *     function_method: 'login',
+ *     description: 'User login'
+ * );
+ *
  * // Class-based function for business logic
  * $classFunction = new RecordFunctionType(
  *     pms_name: 'calculate_total',
@@ -66,16 +75,16 @@ class RecordFunctionType
     /**
      * Create a new RecordFunctionType instance.
      *
-     * @param array|string $pms_name        The PMS name identifier(s) for this function (required)
+     * @param array|string|null $pms_name   The PMS name identifier(s) for this function (optional, null for public)
      * @param array|string $method          Allowed HTTP methods (e.g., 'GET', ['GET', 'POST'])
      * @param string       $class           Class name for class-based functions (required)
      * @param string       $function_method Method name for class-based functions (required)
      * @param null|string  $description     Function description for documentation purposes
      *
-     * @throws InvalidArgumentException When pms_name, class, or function_method is empty or invalid
+     * @throws InvalidArgumentException When class or function_method is empty
      */
     public function __construct(
-        public array|string $pms_name,
+        public array|string|null $pms_name = null,
         public array|string|RecordFunctionMethodEnum $method,
         public string $class,
         public string $function_method,
@@ -84,8 +93,8 @@ class RecordFunctionType
         public ?array $payload_schema = null,
         public ?array $response_schema = null,
     ) {
-        if (empty($pms_name) || (is_array($pms_name) && [] === $pms_name)) {
-            throw new InvalidArgumentException('pms_name cannot be empty');
+        if (null !== $pms_name && (empty($pms_name) || (is_array($pms_name) && [] === $pms_name))) {
+            throw new InvalidArgumentException('pms_name cannot be empty if provided');
         }
 
         if (empty($class)) {
@@ -112,7 +121,7 @@ class RecordFunctionType
     public static function __set_state(array $properties): self
     {
         return new self(
-            pms_name: $properties['pms_name'] ?? throw new InvalidArgumentException('pms_name is required'),
+            pms_name: $properties['pms_name'] ?? null,
             method: $properties['method'] ?? throw new InvalidArgumentException('method is required'),
             class: $properties['class'] ?? throw new InvalidArgumentException('class is required'),
             function_method: $properties['function_method'] ?? throw new InvalidArgumentException('function_method is required'),
@@ -184,7 +193,7 @@ class RecordFunctionType
     public static function fromArray(array $config): self
     {
         return new self(
-            pms_name: $config['pms_name'] ?? throw new InvalidArgumentException('pms_name is required in config array'),
+            pms_name: $config['pms_name'] ?? null,
             method: $config['method'] ?? throw new InvalidArgumentException('method is required in config array'),
             class: $config['class'] ?? throw new InvalidArgumentException('class is required in config array'),
             function_method: $config['function_method'] ?? throw new InvalidArgumentException('function_method is required in config array'),

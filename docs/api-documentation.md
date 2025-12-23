@@ -279,6 +279,23 @@ Create a new record.
 
 If a `createValidator` is defined for the target table in `config/record.php`, the request body is validated using that validator before any database changes. On validation failure, the endpoint returns `422` with detailed error messages.
 
+#### Create With Relationships In Response
+To return related records in the response of the create call, pass a nested `select` query parameter. Relationship selection uses parentheses:
+`relationship(columns,childRelationship(...))`.
+
+Example (return `customer` and `items.product` after creating an `orders` record):
+
+```bash
+curl --location 'http://127.0.0.1:8000/api/v2/record/orders?select=*,customer(*),items(*,product(*))' \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Bearer {jwt_token}' \
+  --data '{
+    "customer_id": 5,
+    "status": "draft",
+    "total": 300.00
+  }'
+```
+
 #### Request Body
 JSON object with field values:
 
@@ -403,6 +420,173 @@ Permanently delete a record (bypasses soft delete).
   "message": "Record permanently deleted",
   "request_id": "req_abc123def456"
 }
+```
+
+## Global RPC Functions
+
+Global RPC functions allow you to define custom endpoints that are not tied to a specific table. These are useful for system-wide operations like authentication, reporting, or utility functions.
+
+Global functions are configured in `config/record.php` under the `global_functions` key.
+
+### Public Global Functions
+You can create public endpoints by setting `pms_name` to `null`. These functions can be accessed without authentication.
+
+**Configuration Example:**
+```php
+'global_functions' => [
+    'login' => [
+        'method' => ['POST'],
+        'class' => \App\Http\Controllers\AuthController::class,
+        'function_method' => 'login',
+        'description' => 'User login',
+        'pms_name' => null, // Public access
+        'payload_schema' => [ ... ],
+        'response_schema' => [ ... ],
+    ],
+],
+```
+
+**Request:**
+```bash
+curl -X POST http://localhost:8000/api/v2/record/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "password"}'
+```
+
+### Protected Global Functions
+By providing a `pms_name`, the function requires authentication and the user must have the specified permission(s).
+
+**Configuration Example:**
+```php
+'global_functions' => [
+    'system_stats' => [
+        'method' => ['GET'],
+        'class' => \App\Services\StatsService::class,
+        'function_method' => 'getSystemStats',
+        'description' => 'Get system statistics',
+        'pms_name' => 'view_system_stats', // Requires auth & permission
+    ],
+],
+```
+
+**Request:**
+```bash
+curl -X GET http://localhost:8000/api/v2/record/system_stats \
+  -H "Authorization: Bearer {token}"
+```
+
+### Routing
+Global functions are registered with high priority, so a global function named `login` will take precedence over a table named `login`. However, they are constrained to the configured keys to avoid shadowing valid table routes unnecessarily.
+
+---
+
+## Nested Relationships
+
+You can perform Create and Update operations on a record and its related records in a single request. This is supported for `hasMany` relationships configured in `config/record.php`.
+
+### Nested Create
+Create a parent record along with its related child records.
+
+#### Request Body
+```json
+{
+  "customer_name": "Tech Corp",
+  "date": "2023-12-23",
+  "total": 1500.00,
+  "status": "draft",
+  "items": [
+    {
+      "product_name": "Laptop",
+      "quantity": 1,
+      "price": 1200.00,
+      "total": 1200.00
+    },
+    {
+      "product_name": "Mouse",
+      "quantity": 2,
+      "price": 150.00,
+      "total": 300.00
+    }
+  ]
+}
+```
+
+#### Example Request
+```bash
+curl --location 'http://127.0.0.1:8000/api/v2/record/invoices' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer {token}' \
+--data '{
+    "customer_name": "Tech Corp",
+    "date": "2023-12-23",
+    "total": 1500.00,
+    "status": "draft",
+    "items": [
+        {
+            "product_name": "Laptop",
+            "quantity": 1,
+            "price": 1200.00,
+            "total": 1200.00
+        }
+    ]
+}'
+```
+
+### Nested Update
+Update a parent record and manage its relationships simultaneously. You can:
+- **Update** existing children (provide `id`).
+- **Create** new children (omit `id`).
+- **Delete** existing children (provide `id` and `_delete: true` or `_destroy: true`).
+
+#### Request Body
+```json
+{
+  "total": 1750.00,
+  "items": [
+    {
+      "id": 1,
+      "quantity": 2,
+      "total": 2400.00
+    },
+    {
+      "id": 2,
+      "_delete": true
+    },
+    {
+      "product_name": "Keyboard",
+      "quantity": 5,
+      "price": 50.00,
+      "total": 250.00
+    }
+  ]
+}
+```
+
+#### Example Request
+```bash
+curl --location --request PUT 'http://127.0.0.1:8000/api/v2/record/invoices/123' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer {token}' \
+--data '{
+    "total": 1750.00,
+    "items": [
+        {
+            "id": 1,
+            "quantity": 2,
+            "total": 2400.00
+        },
+        {
+            "id": 2,
+            "_delete": true
+        },
+        {
+            "product_name": "Keyboard",
+            "quantity": 5,
+            "price": 50.00,
+            "total": 250.00
+        }
+    ]
+}'
 ```
 
 ## Bulk Operations

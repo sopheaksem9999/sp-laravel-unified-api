@@ -288,6 +288,9 @@ class RelationshipResolver
                         'foreign_key' => $rel->foreignKey ?? (Str::singular($mainTable).'_id'),
                         'local_key' => $rel->localKey ?? $localPk,
                         'selectable' => ['*'],
+                        'allow_create' => $rel->allowCreate,
+                        'allow_update' => $rel->allowUpdate,
+                        'allow_delete' => $rel->allowDelete,
                     ];
                     self::$resolveCache[$cacheKey] = $result;
 
@@ -407,11 +410,12 @@ class RelationshipResolver
             }
 
             $relatedTable = $config['table'];
-            $relatedSchema = $schema[$relatedTable] ?? [];
-            $relatedPk = $relatedSchema['primary_key'] ?? 'id';
+            $relatedSchema = $schema[$relatedTable] ?? null;
+            $relatedPk = $relatedSchema->primary_key ?? 'id';
             $foreignKey = $config['foreign_key'] ?? null;
             $allowCreate = $config['allow_create'] ?? true;
-            $allowUpsert = $config['allow_upsert'] ?? false;
+            $allowUpdate = $config['allow_update'] ?? true;
+            $allowDelete = $config['allow_delete'] ?? true;
 
             // Get actual table name from schema
             $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
@@ -436,6 +440,20 @@ class RelationshipResolver
                 $hasPk = isset($item[$relatedPk]);
                 $idVal = $hasPk ? $item[$relatedPk] : null;
 
+                // Handle deletion
+                if (($item['_delete'] ?? false) || ($item['_destroy'] ?? false)) {
+                    if ($hasPk && $allowDelete) {
+                        if ($relatedSchema->soft_deletes ?? false) {
+                            DB::table($actualRelatedTableName)
+                                ->where($relatedPk, $idVal)
+                                ->update(['deleted_at' => now()]);
+                        } else {
+                            DB::table($actualRelatedTableName)->where($relatedPk, $idVal)->delete();
+                        }
+                    }
+                    continue;
+                }
+
                 // Sanitize payload: only allowed columns; drop system/protected fields
                 $item = array_intersect_key($item, array_flip($allowedCols));
                 unset($item['id'], $item['created_at'], $item['updated_at'], $item['deleted_at']);
@@ -450,7 +468,7 @@ class RelationshipResolver
                 }
 
                 // Permission check per related action
-                // $action = ($hasPk && $allowUpsert) ? 'update' : 'create';
+                // $action = ($hasPk && $allowUpdate) ? 'update' : 'create';
                 // if (!PermissionHelper::isPublicAction($relatedTable, $action)) {
                 //     $user = auth('api')->user();
                 //     if (!$user) {
@@ -463,7 +481,7 @@ class RelationshipResolver
                 //     }
                 // }
 
-                if ($hasPk && $allowUpsert) {
+                if ($hasPk && $allowUpdate) {
                     // Upsert/update path
                     unset($item[$relatedPk]);
                     DB::table($actualRelatedTableName)->where($relatedPk, $idVal)->update($item);
