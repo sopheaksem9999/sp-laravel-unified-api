@@ -84,10 +84,10 @@ class RecordFunctionType
      * @throws InvalidArgumentException When class or function_method is empty
      */
     public function __construct(
-        public array|string|null $pms_name = null,
         public array|string|RecordFunctionMethodEnum $method,
         public string $class,
         public string $function_method,
+        public array|string|null $pms_name = null,
         public ?string $description = null,
         public ?array $query_schema = null,
         public ?array $payload_schema = null,
@@ -121,10 +121,10 @@ class RecordFunctionType
     public static function __set_state(array $properties): self
     {
         return new self(
-            pms_name: $properties['pms_name'] ?? null,
             method: $properties['method'] ?? throw new InvalidArgumentException('method is required'),
             class: $properties['class'] ?? throw new InvalidArgumentException('class is required'),
             function_method: $properties['function_method'] ?? throw new InvalidArgumentException('function_method is required'),
+            pms_name: $properties['pms_name'] ?? null,
             description: $properties['description'] ?? null,
             query_schema: $properties['query_schema'] ?? null,
             payload_schema: $properties['payload_schema'] ?? null,
@@ -193,10 +193,10 @@ class RecordFunctionType
     public static function fromArray(array $config): self
     {
         return new self(
-            pms_name: $config['pms_name'] ?? null,
             method: $config['method'] ?? throw new InvalidArgumentException('method is required in config array'),
             class: $config['class'] ?? throw new InvalidArgumentException('class is required in config array'),
             function_method: $config['function_method'] ?? throw new InvalidArgumentException('function_method is required in config array'),
+            pms_name: $config['pms_name'] ?? null,
             description: $config['description'] ?? null,
             query_schema: $config['query_schema'] ?? null,
             payload_schema: $config['payload_schema'] ?? null,
