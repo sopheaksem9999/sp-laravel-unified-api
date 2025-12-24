@@ -98,6 +98,7 @@ return [
         'update' => false,  // allow nested update on update
         'upsert' => false,  // upsert by primary key when provided
     ],
+    'permission_prefix' => '_',
 
     /*
     |--------------------------------------------------------------------------

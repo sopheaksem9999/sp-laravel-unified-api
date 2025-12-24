@@ -53,6 +53,7 @@ class PermissionHelper
     {
         // Get resource name from config pms_name or fallback to table name
         $tables = config('record.tables', []);
+        $permissionPrefix = config('record.permission_prefix', '_');
         $tableConfig = $tables[$table] ?? [];
         $resource = $tableConfig->pms_name ?? Str::snake(Str::singular($table));
 
@@ -87,9 +88,9 @@ class PermissionHelper
 
             default:
                 // Handle special permission types that include the action in the permission name
-                if (str_contains($action, '_')) {
+                if (str_contains($action, $permissionPrefix)) {
                     // For actions like 'viewOnlyCreateBy', 'updateStatus', etc.
-                    return $action.'_'.$resource;
+                    return $action . $permissionPrefix . $resource;
                 }
 
                 $verb = $action;
@@ -97,6 +98,6 @@ class PermissionHelper
                 break;
         }
 
-        return $verb.'_'.$resource;
+        return $verb . $permissionPrefix . $resource;
     }
 }
