@@ -51,14 +51,14 @@ class CoreRecordController extends Controller
             return $this->error('Resource not available', 404);
         }
 
-        $tenantId = $request->attributes->get('tenant_id');
+        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
 
         $triggerParams = [
             $request,
             $table,
             [
                 'type' => 'index',
-                'tenant_id' => $tenantId,
+                config('record.tenant_column', 'tenant_id') => $tenantId,
             ],
         ];
         $triggerParams = $this->executeTableTrigger($schema[$table]->beforeRead ?? null, $triggerParams);
@@ -66,7 +66,7 @@ class CoreRecordController extends Controller
             $request = $triggerParams[0];
         }
 
-        $tenantId = $request->attributes->get('tenant_id');
+        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
 
         // Resolve actual table name from RecordTableType configuration
         $actualTableName = $this->resolveActualTableName($table);
@@ -91,7 +91,7 @@ class CoreRecordController extends Controller
             $cacheKey = $this->generateOptimizedCacheKey(
                 $table,
                 array_merge($filters, [
-                    'tenant_id' => $this->isTenantIdEnabled() ? $tenantId : null,
+                    config('record.tenant_column', 'tenant_id') => $this->isTenantIdEnabled() ? $tenantId : null,
                     'tenant_enabled' => $this->isTenantIdEnabled(),
                 ]),
                 $includes,
@@ -366,7 +366,7 @@ class CoreRecordController extends Controller
 
         $pk = $schema[$table]->primary_key ?? 'id';
 
-        $tenantId = $request->attributes->get('tenant_id');
+        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
 
         // Check cache for single record
         $recordCacheKey = $this->generateRecordCacheKey($table, $id, $tenantId, $request->query('select'));
@@ -501,13 +501,13 @@ class CoreRecordController extends Controller
         // Resolve actual table name from RecordTableType configuration
         $actualTableName = $this->resolveActualTableName($table);
 
-        $tenantId = $request->attributes->get('tenant_id');
+        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
 
         $triggerParams = [
             $request,
             $table,
             [
-                'tenant_id' => $tenantId,
+                config('record.tenant_column', 'tenant_id') => $tenantId,
             ],
         ];
         $triggerParams = $this->executeTableTrigger($schema[$table]->beforeCreate ?? null, $triggerParams);
@@ -515,7 +515,7 @@ class CoreRecordController extends Controller
             $request = $triggerParams[0];
         }
 
-        $tenantId = $request->attributes->get('tenant_id');
+        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
 
         $validatorCallback = $schema[$table]->createValidator ?? null;
         if ($validatorCallback) {
@@ -536,7 +536,7 @@ class CoreRecordController extends Controller
         $payloadMain = $this->sanitizePayload($payloadMain, $schema[$table]);
 
         if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
-            $payloadMain['tenant_id'] = $tenantId;
+            $payloadMain[config('record.tenant_column', 'tenant_id')] = $tenantId;
         }
 
         // Apply timestamps and audit fields
@@ -584,10 +584,10 @@ class CoreRecordController extends Controller
                 }
             }
 
-            return $record;
-
             // Commit transaction
             DB::commit();
+
+            return $record;
         } catch (Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
@@ -623,14 +623,14 @@ class CoreRecordController extends Controller
         // Resolve actual table name from RecordTableType configuration
         $actualTableName = $this->resolveActualTableName($table);
 
-        $tenantId = $request->attributes->get('tenant_id');
+        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
 
         $triggerParams = [
             $request,
             $table,
             [
                 'id' => $id,
-                'tenant_id' => $tenantId,
+                config('record.tenant_column', 'tenant_id') => $tenantId,
             ],
         ];
         $triggerParams = $this->executeTableTrigger($schema[$table]->beforeUpdate ?? null, $triggerParams);
@@ -638,7 +638,7 @@ class CoreRecordController extends Controller
             $request = $triggerParams[0];
         }
 
-        $tenantId = $request->attributes->get('tenant_id');
+        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
 
         $validatorCallback = $schema[$table]->updateValidator ?? null;
         if ($validatorCallback) {
@@ -704,7 +704,7 @@ class CoreRecordController extends Controller
                     [
                         'id' => $id,
                         'payload' => $payloadMain,
-                        'tenant_id' => $tenantId,
+                        config('record.tenant_column', 'tenant_id') => $tenantId,
                         'updated' => $updated,
                         'response' => $record,
                     ],
@@ -724,10 +724,10 @@ class CoreRecordController extends Controller
                 }
             }
 
-            return $record;
-
             // Commit transaction
             DB::commit();
+
+            return $record;
         } catch (Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
@@ -764,7 +764,7 @@ class CoreRecordController extends Controller
         // Resolve actual table name from RecordTableType configuration
         $actualTableName = $this->resolveActualTableName($table);
 
-        $tenantId = $request->attributes->get('tenant_id');
+        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
         $pk = $schema[$table]->primary_key ?? 'id';
 
         $triggerParams = [
@@ -772,7 +772,7 @@ class CoreRecordController extends Controller
             $table,
             [
                 'id' => $id,
-                'tenant_id' => $tenantId,
+                config('record.tenant_column', 'tenant_id') => $tenantId,
             ],
         ];
         $triggerParams = $this->executeTableTrigger($schema[$table]->beforeDelete ?? null, $triggerParams);
@@ -780,7 +780,7 @@ class CoreRecordController extends Controller
             $request = $triggerParams[0];
         }
 
-        $tenantId = $request->attributes->get('tenant_id');
+        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
 
         $validatorCallback = $schema[$table]->deleteValidator ?? null;
         if ($validatorCallback) {
@@ -826,7 +826,7 @@ class CoreRecordController extends Controller
                     $table,
                     [
                         'id' => $id,
-                        'tenant_id' => $tenantId,
+                        config('record.tenant_column', 'tenant_id') => $tenantId,
                         'affected' => $affected,
                         'soft_deleted' => $schema[$table]->soft_deletes,
                         'response' => $response,
@@ -885,7 +885,7 @@ class CoreRecordController extends Controller
         // Resolve actual table name from RecordTableType configuration
         $actualTableName = $this->resolveActualTableName($table);
 
-        $tenantId = $request->attributes->get('tenant_id');
+        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
         $pk = $schema[$table]->primary_key ?? 'id';
 
         $affected = 0;
@@ -896,7 +896,7 @@ class CoreRecordController extends Controller
         try {
             $query = DB::table($actualTableName)->where($pk, $id);
             if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
-                $query->where('tenant_id', $tenantId);
+                $query->where(config('record.tenant_column', 'tenant_id'), $tenantId);
             }
 
             $affected = $query->update(['deleted_at' => null]);
@@ -915,7 +915,7 @@ class CoreRecordController extends Controller
                 $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
                 $query = DB::table($actualTableName)->where($pk, $id);
                 if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
-                    $query->where('tenant_id', $tenantId);
+                    $query->where(config('record.tenant_column', 'tenant_id'), $tenantId);
                 }
 
                 $record = $this->show($request, $table, $id);
@@ -961,7 +961,7 @@ class CoreRecordController extends Controller
         // Resolve actual table name from RecordTableType configuration
         $actualTableName = $this->resolveActualTableName($table);
 
-        $tenantId = $request->attributes->get('tenant_id');
+        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
         $pk = $schema[$table]->primary_key ?? 'id';
 
         $deleted = 0;
@@ -972,7 +972,7 @@ class CoreRecordController extends Controller
         try {
             $query = DB::table($actualTableName)->where($pk, $id);
             if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
-                $query->where('tenant_id', $tenantId);
+                $query->where(config('record.tenant_column', 'tenant_id'), $tenantId);
             }
 
             $deleted = $query->delete();
@@ -1050,7 +1050,7 @@ class CoreRecordController extends Controller
             return $this->error('Batch too large, max ' . $maxBatch, 413);
         }
 
-        $tenantId = $request->attributes->get('tenant_id');
+        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
         $pk = $schema[$table]->primary_key ?? 'id';
 
         $affected = 0;
@@ -1071,7 +1071,7 @@ class CoreRecordController extends Controller
                     // CREATE: No ID present, create new record
                     $item = $this->sanitizePayload($item, $schema[$table]);
                     if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
-                        $item['tenant_id'] = $tenantId;
+                        $item[config('record.tenant_column', 'tenant_id')] = $tenantId;
                     }
 
                     // Apply timestamps and audit fields
@@ -1098,7 +1098,7 @@ class CoreRecordController extends Controller
                     unset($item[$pk]);
                     $item = $this->sanitizePayload($item, $schema[$table]);
                     if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
-                        $item['tenant_id'] = $tenantId;
+                        $item[config('record.tenant_column', 'tenant_id')] = $tenantId;
                     }
 
                     // Apply timestamps and audit fields
@@ -1146,7 +1146,7 @@ class CoreRecordController extends Controller
                     // UPSERT: Legacy action support
                     $item = $this->sanitizePayload($item, $schema[$table]);
                     if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
-                        $item['tenant_id'] = $tenantId;
+                        $item[config('record.tenant_column', 'tenant_id')] = $tenantId;
                     }
 
                     // Apply timestamps and audit fields
@@ -1389,7 +1389,7 @@ class CoreRecordController extends Controller
             throw new ValidationException($validator);
         }
 
-        $tenantId = $request->attributes->get('tenant_id');
+        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
         $pk = $schema[$table]->primary_key ?? 'id';
 
         $createdData = [];
@@ -1410,7 +1410,7 @@ class CoreRecordController extends Controller
                 $item = $this->sanitizePayload($item, $schema[$table]);
 
                 if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
-                    $item['tenant_id'] = $tenantId;
+                    $item[config('record.tenant_column', 'tenant_id')] = $tenantId;
                 }
 
                 // Apply timestamps and audit fields
@@ -1502,7 +1502,7 @@ class CoreRecordController extends Controller
             throw new ValidationException($validator);
         }
 
-        $tenantId = $request->attributes->get('tenant_id');
+        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
 
         $updatedData = [];
         $affected = 0;
@@ -1533,7 +1533,7 @@ class CoreRecordController extends Controller
                 $item = $this->sanitizePayload($item, $schema[$table]);
 
                 if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
-                    $item['tenant_id'] = $tenantId;
+                    $item[config('record.tenant_column', 'tenant_id')] = $tenantId;
                 }
 
                 // Apply timestamps and audit fields
@@ -1632,7 +1632,7 @@ class CoreRecordController extends Controller
             throw new ValidationException($validator);
         }
 
-        $tenantId = $request->attributes->get('tenant_id');
+        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
 
         // Normalize items to extract IDs
         $idsToDelete = [];
@@ -1819,7 +1819,7 @@ class CoreRecordController extends Controller
         if ($this->isTenantIdEnabled() && $tenantId) {
             $schema = $this->getCachedSchema();
             if ($schema[$table]->has_tenant_id ?? false) {
-                $query->where($table . '.tenant_id', $tenantId);
+                $query->where($table . '.' . config('record.tenant_column', 'tenant_id'), $tenantId);
             }
         }
     }

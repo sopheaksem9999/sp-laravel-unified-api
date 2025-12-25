@@ -379,8 +379,8 @@ class QueryBuilderFilters
                         self::applyOperatorToSubquery($subquery, $relatedTable, $column, $operator, $value);
 
                         // Apply tenant filtering if enabled
-                        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns['tenant_id'])) {
-                            $subquery->where($relatedTable . '.tenant_id', $tenantId);
+                        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[config('record.tenant_column', 'tenant_id')])) {
+                            $subquery->where($relatedTable . '.' . config('record.tenant_column', 'tenant_id'), $tenantId);
                         }
 
                         // Apply soft delete filtering
@@ -405,8 +405,8 @@ class QueryBuilderFilters
                         self::applyOperatorToSubquery($subquery, $relatedTable, $column, $operator, $value);
 
                         // Apply tenant filtering if enabled
-                        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns['tenant_id'])) {
-                            $subquery->where($relatedTable . '.tenant_id', $tenantId);
+                        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[config('record.tenant_column', 'tenant_id')])) {
+                            $subquery->where($relatedTable . '.' . config('record.tenant_column', 'tenant_id'), $tenantId);
                         }
 
                         // Apply soft delete filtering
@@ -436,12 +436,12 @@ class QueryBuilderFilters
 
                         // Apply tenant filtering if enabled
                         if ($enableTenantId && $tenantId) {
-                            if (isset($schema[$relatedTable]->columns['tenant_id'])) {
-                                $subquery->where($relatedTable . '.tenant_id', $tenantId);
+                            if (isset($schema[$relatedTable]->columns[config('record.tenant_column', 'tenant_id')])) {
+                                $subquery->where($relatedTable . '.' . config('record.tenant_column', 'tenant_id'), $tenantId);
                             }
 
-                            if (isset($schema[$throughTable]->columns['tenant_id'])) {
-                                $subquery->where($throughTable . '.tenant_id', $tenantId);
+                            if (isset($schema[$throughTable]->columns[config('record.tenant_column', 'tenant_id')])) {
+                                $subquery->where($throughTable . '.' . config('record.tenant_column', 'tenant_id'), $tenantId);
                             }
                         }
 
@@ -1131,7 +1131,8 @@ class QueryBuilderFilters
     {
         // Check if tenant_id functionality is enabled
         $enableTenantId = config('record.enable_tenant_id', false);
-        $tenantId = $enableTenantId && isset($params['tenant_id']) ? $params['tenant_id'] : null;
+        $tenantCol = config('record.tenant_column', 'tenant_id');
+        $tenantId = $enableTenantId && isset($params[$tenantCol]) ? $params[$tenantCol] : null;
 
         // Separate relationship filters from regular column filters
         $relationshipFilters = [];
@@ -1148,7 +1149,7 @@ class QueryBuilderFilters
                 continue;
             }
 
-            if ($enableTenantId && 'tenant_id' === $key) {
+            if ($enableTenantId && config('record.tenant_column', 'tenant_id') === $key) {
                 continue;
             }
 
@@ -1197,10 +1198,11 @@ class QueryBuilderFilters
         }
 
         // Apply tenant_id filtering if enabled and available
-        if ($enableTenantId && isset($params['tenant_id'])) {
+        $tenantCol = config('record.tenant_column', 'tenant_id');
+        if ($enableTenantId && isset($params[$tenantCol])) {
             $schema = SchemaRegistry::get();
-            if (isset($schema[$table]->columns['tenant_id'])) {
-                $builder->where($table.'.tenant_id', $params['tenant_id']);
+            if (isset($schema[$table]->columns[$tenantCol])) {
+                $builder->where($table.'.'.$tenantCol, $params[$tenantCol]);
             }
         }
     }

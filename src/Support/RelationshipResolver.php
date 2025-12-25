@@ -397,7 +397,7 @@ class RelationshipResolver
     public static function processRelatedData(string $table, array $payload, mixed $recordId, $tenantId = null, string $operation = 'create'): array
     {
         $schema = self::getSchema();
-        $hasTenant = isset($schema[$table]->columns['tenant_id']);
+        $hasTenant = isset($schema[$table]->columns[config('record.tenant_column', 'tenant_id')]);
 
         foreach ($payload as $alias => $relatedData) {
             if (!is_array($relatedData)) {
@@ -458,13 +458,13 @@ class RelationshipResolver
                 $item = array_intersect_key($item, array_flip($allowedCols));
                 unset($item['id'], $item['created_at'], $item['updated_at'], $item['deleted_at']);
                 if ($hasTenant) {
-                    unset($item['tenant_id']);
+                    unset($item[config('record.tenant_column', 'tenant_id')]);
                 }
 
                 // Ensure FK is set to parent ID (cannot be overridden by input)
                 $item[$foreignKey] = $recordId;
                 if ($tenantId && $hasTenant) {
-                    $item['tenant_id'] = $tenantId;
+                    $item[config('record.tenant_column', 'tenant_id')] = $tenantId;
                 }
 
                 // Permission check per related action
@@ -664,8 +664,9 @@ class RelationshipResolver
         ;
 
         // Apply tenant filtering if enabled
-        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns['tenant_id'])) {
-            $subquery->where($subqueryAlias . '.tenant_id', $tenantId);
+        $tenantCol = config('record.tenant_column', 'tenant_id');
+        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
+            $subquery->where($subqueryAlias . '.' . $tenantCol, $tenantId);
         }
 
         // Apply soft delete filtering
@@ -705,8 +706,9 @@ class RelationshipResolver
             WHERE {$actualRelatedTableName}.{$foreignKey} = {$actualMainTableName}.{$localKey}";
 
         // Add tenant filtering if enabled
-        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns['tenant_id'])) {
-            $subqueryRaw .= sprintf(' AND %s.tenant_id = %s', $actualRelatedTableName, $tenantId);
+        $tenantCol = config('record.tenant_column', 'tenant_id');
+        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
+            $subqueryRaw .= sprintf(' AND %s.'.$tenantCol.' = %s', $actualRelatedTableName, $tenantId);
         }
 
         // Add soft delete filtering
@@ -771,12 +773,13 @@ class RelationshipResolver
 
         // Add tenant filtering if enabled
         if ($enableTenantId && $tenantId) {
-            if (isset($schema[$relatedTable]->columns['tenant_id'])) {
-                $subqueryRaw .= sprintf(' AND %s.tenant_id = %s', $actualRelatedTableName, $tenantId);
+            $tenantCol = config('record.tenant_column', 'tenant_id');
+            if (isset($schema[$relatedTable]->columns[$tenantCol])) {
+                $subqueryRaw .= sprintf(' AND %s.'.$tenantCol.' = %s', $actualRelatedTableName, $tenantId);
             }
 
-            if (isset($schema[$pivotTable]->columns['tenant_id'])) {
-                $subqueryRaw .= sprintf(' AND %s.tenant_id = %s', $actualPivotTableName, $tenantId);
+            if (isset($schema[$pivotTable]->columns[$tenantCol])) {
+                $subqueryRaw .= sprintf(' AND %s.'.$tenantCol.' = %s', $actualPivotTableName, $tenantId);
             }
         }
 
@@ -850,12 +853,13 @@ class RelationshipResolver
 
         // Add tenant filtering if enabled
         if ($enableTenantId && $tenantId) {
-            if (isset($schema[$relatedTable]->columns['tenant_id'])) {
-                $subqueryRaw .= sprintf(' AND %s.tenant_id = %s', $actualRelatedTableName, $tenantId);
+            $tenantCol = config('record.tenant_column', 'tenant_id');
+            if (isset($schema[$relatedTable]->columns[$tenantCol])) {
+                $subqueryRaw .= sprintf(' AND %s.'.$tenantCol.' = %s', $actualRelatedTableName, $tenantId);
             }
 
-            if (isset($schema[$pivotTable]->columns['tenant_id'])) {
-                $subqueryRaw .= sprintf(' AND %s.tenant_id = %s', $actualPivotTableName, $tenantId);
+            if (isset($schema[$pivotTable]->columns[$tenantCol])) {
+                $subqueryRaw .= sprintf(' AND %s.'.$tenantCol.' = %s', $actualPivotTableName, $tenantId);
             }
         }
 
@@ -907,12 +911,13 @@ class RelationshipResolver
 
         // Add tenant filtering if enabled
         if ($enableTenantId && $tenantId) {
-            if (isset($schema[$relatedTable]->columns['tenant_id'])) {
-                $subqueryRaw .= sprintf(' AND %s.tenant_id = %s', $actualRelatedTableName, $tenantId);
+            $tenantCol = config('record.tenant_column', 'tenant_id');
+            if (isset($schema[$relatedTable]->columns[$tenantCol])) {
+                $subqueryRaw .= sprintf(' AND %s.'.$tenantCol.' = %s', $actualRelatedTableName, $tenantId);
             }
 
-            if (isset($schema[$throughTable]->columns['tenant_id'])) {
-                $subqueryRaw .= sprintf(' AND %s.tenant_id = %s', $actualThroughTableName, $tenantId);
+            if (isset($schema[$throughTable]->columns[$tenantCol])) {
+                $subqueryRaw .= sprintf(' AND %s.'.$tenantCol.' = %s', $actualThroughTableName, $tenantId);
             }
         }
 
@@ -948,7 +953,8 @@ class RelationshipResolver
         // Remove tenant_id if it's not enabled in configuration
         $enableTenantId = config('record.enable_tenant_id', false);
         if (!$enableTenantId) {
-            $validColumns = array_filter($validColumns, fn ($column): bool => 'tenant_id' !== $column);
+            $tenantCol = config('record.tenant_column', 'tenant_id');
+            $validColumns = array_filter($validColumns, fn ($column): bool => $tenantCol !== $column);
         }
 
         if ([] === $validColumns) {
@@ -1293,8 +1299,9 @@ class RelationshipResolver
         // Step 1: Optimized through table query with chunking for large datasets
         $builder = DB::table($actualThroughTableName);
 
-        if ($enableTenantId && $tenantId && isset($schema[$throughTable]->columns['tenant_id'])) {
-            $builder->where('tenant_id', $tenantId);
+        $tenantCol = config('record.tenant_column', 'tenant_id');
+        if ($enableTenantId && $tenantId && isset($schema[$throughTable]->columns[$tenantCol])) {
+            $builder->where($tenantCol, $tenantId);
         }
 
         if ($schema[$throughTable]->soft_deletes ?? false) {
@@ -1378,8 +1385,9 @@ class RelationshipResolver
         $builder = DB::table($actualRelatedTableName);
 
         // Apply tenant scoping only if enabled
-        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns['tenant_id'])) {
-            $builder->where('tenant_id', $tenantId);
+        $tenantCol = config('record.tenant_column', 'tenant_id');
+        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
+            $builder->where($tenantCol, $tenantId);
         }
 
         // Apply soft delete filtering
@@ -1405,8 +1413,9 @@ class RelationshipResolver
             $builder = DB::table($relatedTableName);
 
             // Apply tenant scoping only if enabled
-            if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns['tenant_id'])) {
-                $builder->where('tenant_id', $tenantId);
+            $tenantCol = config('record.tenant_column', 'tenant_id');
+            if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
+                $builder->where($tenantCol, $tenantId);
             }
 
             // Apply soft delete filtering
