@@ -19,7 +19,7 @@ class OpenApiService
 
         $servers = [
             [
-                'url' => rtrim((string) config('app.url'), '/').'/api',
+                'url' => rtrim((string) config('app.url'), '/'),
                 'description' => 'Primary API server',
             ],
         ];
@@ -848,7 +848,7 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
                "- Use `sort=-column` for descending order\n" .
                "- Multiple sorts: `sort=column1,-column2`\n\n" .
                "**Column Selection:**\n" .
-               "- Use `columns=col1,col2` to select specific columns\n\n" .
+               "- Use `select=col1,col2` to select specific columns\n\n" .
                "**Relationships:**\n" .
                "- Use `with=relation1,relation2` to include related data";
     }
@@ -888,18 +888,11 @@ GET /api/v2/record/orders?select=id,items(id,product:products(*))
                 'example' => ['status' => 'active', 'created_at' => ['gte' => '2023-01-01']]
             ],
             [
-                'name' => 'columns',
+                'name' => 'select',
                 'in' => 'query',
                 'description' => 'Select specific columns to return',
                 'schema' => ['type' => 'string'],
                 'example' => 'id,name,created_at'
-            ],
-            [
-                'name' => 'with',
-                'in' => 'query',
-                'description' => 'Include related data',
-                'schema' => ['type' => 'string'],
-                'example' => 'user,category'
             ]
         ];
     }

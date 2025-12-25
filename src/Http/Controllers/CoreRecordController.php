@@ -542,6 +542,10 @@ class CoreRecordController extends Controller
         // Apply timestamps and audit fields
         $payloadMain = $this->applyTimestampsAndAuditFields($payloadMain, $schema[$table], false);
 
+        if ([] === $payloadMain) {
+            return $this->error('Validation failed', 422, ['payload' => ['No data to insert']]);
+        }
+
         $insertedId = null;
 
         // Begin transaction
@@ -549,10 +553,19 @@ class CoreRecordController extends Controller
 
         try {
             $pk = $schema[$table]->primary_key ?? 'id';
-            $insertedId = DB::table($actualTableName)->insertGetId($payloadMain, $pk);
+            if (array_key_exists($pk, $payloadMain) && null !== $payloadMain[$pk]) {
+                DB::table($actualTableName)->insert($payloadMain);
+                $insertedId = $payloadMain[$pk];
+            } else {
+                $insertedId = DB::table($actualTableName)->insertGetId($payloadMain, $pk);
+            }
 
             // Process nested relationships
             RelationshipResolver::processRelatedData($table, $payload, $insertedId, $tenantId, 'create');
+
+            // Commit transaction
+            DB::commit();
+
             QueryCacheService::invalidateTable($table);
 
             $record = $this->show($request, $table, $insertedId);
@@ -576,16 +589,13 @@ class CoreRecordController extends Controller
                     $entityClass = 'App\\Models\\' . Str::studly(Str::singular($table));
                     AuditLogService::insertAuditLog(AuditLogEventEnum::CREATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
                 } catch (Exception $exception) {
-                    Log::error('Audit log insert failed (create)', [
-                        'table' => $table,
-                        'id' => $insertedId,
-                        'error' => $exception->getMessage(),
-                    ]);
+                    // Log::error('Audit log insert failed (create)', [
+                    //     'table' => $table,
+                    //     'id' => $insertedId,
+                    //     'error' => $exception->getMessage(),
+                    // ]);
                 }
             }
-
-            // Commit transaction
-            DB::commit();
 
             return $record;
         } catch (Exception $exception) {
@@ -593,12 +603,12 @@ class CoreRecordController extends Controller
             DB::rollBack();
 
             // Log the error for debugging
-            Log::error('Store operation failed', [
-                'table' => $table,
-                'payload' => $payloadMain,
-                'error' => $exception->getMessage(),
-                'trace' => $exception->getTraceAsString(),
-            ]);
+            // Log::error('Store operation failed', [
+            //     'table' => $table,
+            //     'payload' => $payloadMain,
+            //     'error' => $exception->getMessage(),
+            //     'trace' => $exception->getTraceAsString(),
+            // ]);
 
             return $this->error('Failed to create record: ' . $exception->getMessage(), 500);
         }
@@ -663,8 +673,6 @@ class CoreRecordController extends Controller
         // Apply timestamps and audit fields
         $payloadMain = $this->applyTimestampsAndAuditFields($payloadMain, $schema[$table], true);
 
-
-
         $updated = 0;
         $record = null;
 
@@ -681,16 +689,19 @@ class CoreRecordController extends Controller
                 $query->whereNull($actualTableName . '.deleted_at');
             }
 
-            $updated = $query->update($payloadMain);
+            $existing = (clone $query)->first();
+            if (!$existing) {
+                DB::rollBack();
+
+                return $this->error('Not found', 404);
+            }
+
+            if ([] !== $payloadMain) {
+                $updated = $query->update($payloadMain);
+            }
 
             // Process nested relationships
             RelationshipResolver::processRelatedData($table, $payload, $id, $tenantId, 'update');
-
-            if (0 === $updated) {
-                DB::rollBack();
-
-                return $this->error('Not found or no changes', 404);
-            }
 
             QueryCacheService::invalidateTable($table);
 
@@ -716,30 +727,29 @@ class CoreRecordController extends Controller
                     $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
                     AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
                 } catch (Exception $exception) {
-                    Log::error('Audit log insert failed (update)', [
-                        'table' => $table,
-                        'id' => $id,
-                        'error' => $exception->getMessage(),
-                    ]);
+                    // Log::error('Audit log insert failed (update)', [
+                    //     'table' => $table,
+                    //     'id' => $id,
+                    //     'error' => $exception->getMessage(),
+                    // ]);
                 }
             }
 
             // Commit transaction
             DB::commit();
-
             return $record;
         } catch (Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
 
             // Log the error for debugging
-            Log::error('Update operation failed', [
-                'table' => $table,
-                'id' => $id,
-                'payload' => $payloadMain,
-                'error' => $exception->getMessage(),
-                'trace' => $exception->getTraceAsString(),
-            ]);
+            // Log::error('Update operation failed', [
+            //     'table' => $table,
+            //     'id' => $id,
+            //     'payload' => $payloadMain,
+            //     'error' => $exception->getMessage(),
+            //     'trace' => $exception->getTraceAsString(),
+            // ]);
 
             return $this->error('Failed to update record: ' . $exception->getMessage(), 500);
         }
@@ -812,8 +822,8 @@ class CoreRecordController extends Controller
                 return $this->error('Not found', 404);
             }
 
-
-
+            // Commit transaction
+            DB::commit();
 
             QueryCacheService::invalidateTable($table);
 
@@ -839,28 +849,25 @@ class CoreRecordController extends Controller
                     $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
                     AuditLogService::insertAuditLog(AuditLogEventEnum::DELETED, $entityClass, ['id' => $id]);
                 } catch (Exception $exception) {
-                    Log::error('Audit log insert failed (delete)', [
-                        'table' => $table,
-                        'id' => $id,
-                        'error' => $exception->getMessage(),
-                    ]);
+                    // Log::error('Audit log insert failed (delete)', [
+                    //     'table' => $table,
+                    //     'id' => $id,
+                    //     'error' => $exception->getMessage(),
+                    // ]);
                 }
             }
-
-            // Commit transaction
-            DB::commit();
             return $response;
         } catch (Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
 
             // Log the error for debugging
-            Log::error('Delete operation failed', [
-                'table' => $table,
-                'id' => $id,
-                'error' => $exception->getMessage(),
-                'trace' => $exception->getTraceAsString(),
-            ]);
+            // Log::error('Delete operation failed', [
+            //     'table' => $table,
+            //     'id' => $id,
+            //     'error' => $exception->getMessage(),
+            //     'trace' => $exception->getTraceAsString(),
+            // ]);
 
             return $this->error('Failed to delete record: ' . $exception->getMessage(), 500);
         }
@@ -895,9 +902,8 @@ class CoreRecordController extends Controller
 
         try {
             $query = DB::table($actualTableName)->where($pk, $id);
-            if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
-                $query->where(config('record.tenant_column', 'tenant_id'), $tenantId);
-            }
+            $this->applyTenantFilter($query, $actualTableName, $tenantId);
+            $query->whereNotNull($actualTableName . '.deleted_at');
 
             $affected = $query->update(['deleted_at' => null]);
 
@@ -907,21 +913,6 @@ class CoreRecordController extends Controller
                 return $this->error('Not found', 404);
             }
 
-            // Invalidate cache for this table
-            QueryCacheService::invalidateTable($table);
-
-            // Audit log for restore as an update event (if not disabled)
-            if (!($schema[$table]->disable_auditLog ?? false)) {
-                $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                $query = DB::table($actualTableName)->where($pk, $id);
-                if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
-                    $query->where(config('record.tenant_column', 'tenant_id'), $tenantId);
-                }
-
-                $record = $this->show($request, $table, $id);
-                AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
-            }
-
             // Commit transaction
             DB::commit();
         } catch (Exception $exception) {
@@ -929,14 +920,25 @@ class CoreRecordController extends Controller
             DB::rollBack();
 
             // Log the error for debugging
-            Log::error('Restore operation failed', [
-                'table' => $table,
-                'id' => $id,
-                'error' => $exception->getMessage(),
-                'trace' => $exception->getTraceAsString(),
-            ]);
+            // Log::error('Restore operation failed', [
+            //     'table' => $table,
+            //     'id' => $id,
+            //     'error' => $exception->getMessage(),
+            //     'trace' => $exception->getTraceAsString(),
+            // ]);
 
             return $this->error('Failed to restore record: ' . $exception->getMessage(), 500);
+        }
+
+        QueryCacheService::invalidateTable($table);
+
+        if (!($schema[$table]->disable_auditLog ?? false)) {
+            try {
+                $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
+                $record = $this->show($request, $table, $id);
+                AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
+            } catch (Exception $exception) {
+            }
         }
 
         return $this->success(['restored' => $affected]);
@@ -996,12 +998,12 @@ class CoreRecordController extends Controller
             DB::rollBack();
 
             // Log the error for debugging
-            Log::error('Force delete operation failed', [
-                'table' => $table,
-                'id' => $id,
-                'error' => $exception->getMessage(),
-                'trace' => $exception->getTraceAsString(),
-            ]);
+            // Log::error('Force delete operation failed', [
+            //     'table' => $table,
+            //     'id' => $id,
+            //     'error' => $exception->getMessage(),
+            //     'trace' => $exception->getTraceAsString(),
+            // ]);
 
             return $this->error('Failed to force delete record: ' . $exception->getMessage(), 500);
         }
@@ -1200,13 +1202,13 @@ class CoreRecordController extends Controller
             DB::rollBack();
 
             // Log the error for debugging
-            Log::error('Bulk operation failed', [
-                'table' => $table,
-                'action' => 'mixed',
-                'items_count' => count($items),
-                'error' => $exception->getMessage(),
-                'trace' => $exception->getTraceAsString(),
-            ]);
+            // Log::error('Bulk operation failed', [
+            //     'table' => $table,
+            //     'action' => 'mixed',
+            //     'items_count' => count($items),
+            //     'error' => $exception->getMessage(),
+            //     'trace' => $exception->getTraceAsString(),
+            // ]);
 
             return $this->error('Failed to perform bulk operation: ' . $exception->getMessage(), 500);
         }
@@ -1270,12 +1272,12 @@ class CoreRecordController extends Controller
             // Execute the custom function with extracted ID parameter
             return $this->executeCustomFunction($request, $functionConfig, $extractedId);
         } catch (Exception $exception) {
-            Log::error('Table function execution failed', [
-                'table' => $table,
-                'function' => $functionName,
-                'error' => $exception->getMessage(),
-                'trace' => $exception->getTraceAsString(),
-            ]);
+            // Log::error('Table function execution failed', [
+            //     'table' => $table,
+            //     'function' => $functionName,
+            //     'error' => $exception->getMessage(),
+            //     'trace' => $exception->getTraceAsString(),
+            // ]);
 
             return response()->json([
                 'error' => 'Function execution failed',
@@ -1437,12 +1439,12 @@ class CoreRecordController extends Controller
         } catch (Exception $exception) {
             DB::rollBack();
 
-            Log::error('Bulk create operation failed', [
-                'table' => $table,
-                'items_count' => count($items),
-                'error' => $exception->getMessage(),
-                'trace' => $exception->getTraceAsString(),
-            ]);
+            // Log::error('Bulk create operation failed', [
+            //     'table' => $table,
+            //     'items_count' => count($items),
+            //     'error' => $exception->getMessage(),
+            //     'trace' => $exception->getTraceAsString(),
+            // ]);
 
             if ($exception instanceof ValidationException) {
                 return $this->error('Validation failed', 422, $exception->errors());
@@ -1572,12 +1574,12 @@ class CoreRecordController extends Controller
         } catch (Exception $exception) {
             DB::rollBack();
 
-            Log::error('Bulk update operation failed', [
-                'table' => $table,
-                'items_count' => count($items),
-                'error' => $exception->getMessage(),
-                'trace' => $exception->getTraceAsString(),
-            ]);
+            // Log::error('Bulk update operation failed', [
+            //     'table' => $table,
+            //     'items_count' => count($items),
+            //     'error' => $exception->getMessage(),
+            //     'trace' => $exception->getTraceAsString(),
+            // ]);
 
             if ($exception instanceof ValidationException) {
                 return $this->error('Validation failed', 422, $exception->errors());
@@ -1704,12 +1706,12 @@ class CoreRecordController extends Controller
         } catch (Exception $exception) {
             DB::rollBack();
 
-            Log::error('Bulk delete operation failed', [
-                'table' => $table,
-                'items_count' => count($idsToDelete),
-                'error' => $exception->getMessage(),
-                'trace' => $exception->getTraceAsString(),
-            ]);
+            // Log::error('Bulk delete operation failed', [
+            //     'table' => $table,
+            //     'items_count' => count($idsToDelete),
+            //     'error' => $exception->getMessage(),
+            //     'trace' => $exception->getTraceAsString(),
+            // ]);
 
             if ($exception instanceof ValidationException) {
                 return $this->error('Validation failed', 422, $exception->errors());
@@ -1982,9 +1984,9 @@ class CoreRecordController extends Controller
                 try {
                     $item = RecordTableTriggerType::fromArray($item);
                 } catch (Exception $exception) {
-                    Log::error('Record table trigger config invalid', [
-                        'error' => $exception->getMessage(),
-                    ]);
+                    // Log::error('Record table trigger config invalid', [
+                    //     'error' => $exception->getMessage(),
+                    // ]);
 
                     continue;
                 }
@@ -1998,10 +2000,10 @@ class CoreRecordController extends Controller
             $method = $item->function_method;
 
             if (!class_exists($className) || !method_exists($className, $method)) {
-                Log::warning('Record table trigger handler not found', [
-                    'class' => $className,
-                    'method' => $method,
-                ]);
+                // Log::warning('Record table trigger handler not found', [
+                //     'class' => $className,
+                //     'method' => $method,
+                // ]);
 
                 continue;
             }
@@ -2014,11 +2016,11 @@ class CoreRecordController extends Controller
                     $params[0]->merge($result);
                 }
             } catch (Exception $exception) {
-                Log::error('Record table trigger execution failed', [
-                    'class' => $className,
-                    'method' => $method,
-                    'error' => $exception->getMessage(),
-                ]);
+                // Log::error('Record table trigger execution failed', [
+                //     'class' => $className,
+                //     'method' => $method,
+                //     'error' => $exception->getMessage(),
+                // ]);
             }
         }
 
