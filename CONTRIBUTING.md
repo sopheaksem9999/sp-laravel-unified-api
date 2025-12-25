@@ -1,6 +1,6 @@
-# Contributing to SP Laravel API
+# Contributing to SP Laravel Unified API
 
-Thank you for considering contributing to SP Laravel API! This document provides guidelines and information for contributors.
+Thank you for considering contributing to SP Laravel Unified API! This document provides guidelines and information for contributors.
 
 ## 🚀 Getting Started
 

@@ -86,7 +86,7 @@ class OpenApiService
             'info' => [
                 'title' => config('app.name') . ' – Internal Documentation',
                 'version' => '2.0.0',
-                'description' => '# QBO Finance ERP Dynamic Record API
+                'description' => '# API Documentation
 
 A powerful, flexible API for accessing ERP system data with advanced filtering, relationships, and performance optimizations.
 
@@ -242,8 +242,8 @@ Accepts an array of IDs or an array of objects with the primary key.
 - Embed relationships instead of making separate API calls
 - Use cursor pagination (`cursor`) for large datasets',
                 'contact' => [
-                    'name' => 'Speedx Development Team',
-                    'email' => 'dev@speedx.com',
+                    'name' => config('app.name').' Development Team',
+                    'email' => config('app.email'),
                 ],
                 'license' => [
                     'name' => 'Proprietary - Internal Use Only',

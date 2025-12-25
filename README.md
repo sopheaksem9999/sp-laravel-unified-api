@@ -1,4 +1,4 @@
-# SP Laravel API - Dynamic ERP SaaS Package
+# SP Laravel Unified API
 
 A comprehensive Laravel package that provides standardized API responses, dynamic API controllers, query helpers, audit logging, optional permission integration, flexible authentication via Laravel guards, and OpenAPI specification generation for ERP SaaS applications.
 
@@ -134,20 +134,23 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 
-RateLimiter::for('api-reads', function (Request $request): Limit {
-    $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
-    return Limit::perMinute(120)->by((string) $key);
-});
+public function boot(): void
+{
+    RateLimiter::for('api-reads', function (Request $request): Limit {
+        $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
+        return Limit::perMinute(200)->by((string) $key);
+    });
 
-RateLimiter::for('api-writes', function (Request $request): Limit {
-    $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
-    return Limit::perMinute(60)->by((string) $key);
-});
+    RateLimiter::for('api-writes', function (Request $request): Limit {
+        $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
+        return Limit::perMinute(100)->by((string) $key);
+    });
 
-RateLimiter::for('api-functions', function (Request $request): Limit {
-    $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
-    return Limit::perMinute(30)->by((string) $key);
-});
+    RateLimiter::for('api-functions', function (Request $request): Limit {
+        $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
+        return Limit::perMinute(100)->by((string) $key);
+    });
+}
 ```
 
 ### Step 6: Validate Installation
@@ -317,6 +320,7 @@ DB_DATABASE=/absolute/path/to/database.sqlite
 return [
     // API route prefix
     'api_prefix' => env('RECORD_API_PREFIX', 'api'),
+    'tenant_column' => 'tenant_id',
     
     // Global settings
     'max_depth' => env('RECORD_MAX_DEPTH', 3),
@@ -771,12 +775,8 @@ vendor/bin/phpunit
 
 ```bash
 # Install development tools
-composer require --dev phpstan/phpstan
 composer require --dev rector/rector
 composer require --dev phpunit/phpunit
-
-# Run code analysis
-vendor/bin/phpstan analyse src
 
 # Fix code style
 vendor/bin/rector process src
@@ -796,7 +796,7 @@ vendor/bin/rector process src
 
 ```bash
 # Update composer.json
-"sopheak/sp-laravel-api": "^2.0"
+"sopheak/sp-laravel-api": "*"
 
 # Update dependencies
 composer update
