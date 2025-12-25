@@ -27,7 +27,7 @@ class GenerateOpenApiSpec extends Command
 
         $tables = config('record.tables', []);
         SchemaRegistry::refresh();
-        $spec = $this->openApiService->generateSpecification();
+        $spec = $this->openApiService->generateInternal();
 
         try {
             $dir = dirname($out);

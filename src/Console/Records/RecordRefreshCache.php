@@ -65,7 +65,7 @@ class RecordRefreshCache extends Command
             $defaultOut = storage_path('openapi-schema.json');
             $out = $this->option('out') ?: $defaultOut;
 
-            $spec = app(OpenApiService::class)->generateSpecification();
+            $spec = app(OpenApiService::class)->generateInternal();
 
             $dir = dirname($out);
             if (!is_dir($dir)) {

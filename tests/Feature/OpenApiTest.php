@@ -18,7 +18,7 @@ class OpenApiTest extends TestCase
         Config::set('record.tables', []);
 
         $service = new OpenApiService();
-        $spec = $service->generateSpecification();
+        $spec = $service->generateInternal();
 
         // Check server URL
         $serverUrl = $spec['servers'][0]['url'];

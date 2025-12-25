@@ -1,9 +1,9 @@
 <?php
 
-namespace Sopheak\Core\Services;
+namespace App\Utilities\Services;
 
 use Exception;
-use Sopheak\Core\Support\SchemaRegistry;
+use App\Utilities\Support\SchemaRegistry;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 
@@ -19,7 +19,7 @@ class OpenApiService
      */
     public static function load(): array
     {
-        $specPath = storage_path('openapi-v2-spec.json');
+        $specPath = storage_path('internal/openapi-v2-spec.json');
 
         if (!File::exists($specPath)) {
             throw new Exception('OpenAPI specification file not found. Run php artisan openapi:generate to create it.');
@@ -44,7 +44,6 @@ class OpenApiService
     public static function generateInternal(): array
     {
         $tables = SchemaRegistry::get();
-        $apiPrefix = config('record.api_prefix', 'api/v1');
 
         $schemas = [];
         foreach ($tables as $recordName => $config) {
@@ -65,7 +64,7 @@ class OpenApiService
 
         $servers = [
             [
-                'url' => rtrim((string) config('app.url'), '/'),
+                'url' => rtrim((string) config('app.url'), '/').'/api',
                 'description' => 'Primary API server (Internal)',
             ],
         ];
@@ -84,7 +83,7 @@ class OpenApiService
         $spec = [
             'openapi' => '3.0.3',
             'info' => [
-                'title' => config('app.name') . ' – Internal Documentation',
+                'title' => 'QBO Finance ERP API v2 – Internal Documentation',
                 'version' => '2.0.0',
                 'description' => '# QBO Finance ERP Dynamic Record API
 
@@ -104,22 +103,22 @@ This API provides **unified access** to all ERP tables through a single endpoint
 ### Basic Usage
 ```bash
 # Get all paid invoices
-GET /'.$apiPrefix.'/invoices?status=eq.PAID
+GET /api/v2/record/invoices?status=eq.PAID
 
 # Search customers by name
-GET /'.$apiPrefix.'/customers?name=like.John
+GET /api/v2/record/customers?name=like.John
 
 # Get products in price range
-GET /'.$apiPrefix.'/products?price=between.100,1000
+GET /api/v2/record/products?price=between.100,1000
 ```
 
 ### Load Related Data
 ```bash
 # Get invoices with customer and items
-GET /'.$apiPrefix.'/invoices?select=id,ref_number,customer:customers(id,name),items(*)
+GET /api/v2/record/invoices?select=id,ref_number,customer:customers(id,name),items(*)
 
 # Get users with their roles
-GET /'.$apiPrefix.'/users?select=id,name,roles(id,name)
+GET /api/v2/record/users?select=id,name,roles(id,name)
 ```
 
 ## 🔧 Key Features
@@ -158,75 +157,45 @@ GET /'.$apiPrefix.'/users?select=id,name,roles(id,name)
 ### Bulk Operations (Available for All Tables)
 
 #### Mixed Operations
-`POST /'.$apiPrefix.'/{table}/bulk` - Create, update, delete in one request. Operations are auto-detected based on payload structure.
-
-**Request Payload:**
-Accepts a JSON array of objects directly or wrapped in `{"items": [...]}`.
-
-- **Create**: Object without primary key (e.g., `id`).
-- **Update**: Object with primary key and other fields.
-- **Delete**: Object with only primary key.
-
-**Option 1: Direct Array**
-```json
-[
-  {"name": "New Customer", "email": "new@example.com"},           // Create (No ID)
-  {"id": "123", "name": "Updated Name", "status": "active"},      // Update (ID + fields)
-  {"id": "789"}                                                   // Delete (Only ID)
-]
-```
-
-**Option 2: Wrapped in Items**
+`POST /api/v2/record/{table}/bulk` - Create, update, delete in one request
 ```json
 {
-  "items": [
-    {"name": "New Customer"},
-    {"id": "123", "status": "active"}
-  ]
+  "create": [
+    {"name": "New Customer 1", "email": "customer1@example.com"},
+    {"name": "New Customer 2", "email": "customer2@example.com"}
+  ],
+  "update": [
+    {"id": "123", "name": "Updated Customer", "status": "active"},
+    {"id": "456", "email": "newemail@example.com"}
+  ],
+  "delete": ["789", "101112"]
 }
 ```
 
-**Response:**
-Returns consolidated list of created and updated records in `data`. Deleted records are not returned.
-`meta.affected` contains the total count of processed records.
-
 #### Bulk Create
-`POST /'.$apiPrefix.'/{table}/bulk/create` - Create multiple records
-Primary keys (e.g., `id`) must NOT be provided.
-
+`POST /api/v2/record/{table}/bulk/create` - Create multiple records
 ```json
 [
   {"name": "Product A", "price": 99.99, "category": "electronics"},
-  {"name": "Product B", "price": 149.99, "category": "electronics"}
+  {"name": "Product B", "price": 149.99, "category": "electronics"},
+  {"name": "Product C", "price": 79.99, "category": "books"}
 ]
 ```
 
 #### Bulk Update
-`POST /'.$apiPrefix.'/{table}/bulk/update` - Update multiple records
-Primary key is **REQUIRED** for each item. At least one field to update must be provided.
-
+`POST /api/v2/record/{table}/bulk/update` - Update multiple records
 ```json
 [
-  {"id": "123", "price": 89.99},
-  {"id": "456", "status": "discontinued"}
+  {"id": "123", "price": 89.99, "status": "active"},
+  {"id": "456", "price": 129.99, "discount": 10},
+  {"id": "789", "status": "discontinued"}
 ]
 ```
 
 #### Bulk Delete
-`POST /'.$apiPrefix.'/{table}/bulk/delete` - Delete multiple records
-Accepts an array of IDs or an array of objects with the primary key.
-
-**Option 1: Array of IDs**
+`POST /api/v2/record/{table}/bulk/delete` - Delete multiple records
 ```json
 ["record-id-1", "record-id-2", "record-id-3"]
-```
-
-**Option 2: Array of Objects**
-```json
-[
-  {"id": "record-id-1"},
-  {"id": "record-id-2"}
-]
 ```
 
 ### Performance Optimization
@@ -434,7 +403,6 @@ Accepts an array of IDs or an array of objects with the primary key.
 
     private static function paths(array $tables): array
     {
-        $apiPrefix = config('record.api_prefix', 'api/v1');
         $paths = [];
 
         foreach ($tables as $recordName => $config) {
@@ -449,7 +417,7 @@ Accepts an array of IDs or an array of objects with the primary key.
             $relationshipDescription = self::generateRelationshipDescription($config);
 
             // List & create (API endpoints use record name, but descriptions reference actual table)
-            $basePath = '/'.$apiPrefix.'/'.$recordName;
+            $basePath = '/v2/record/'.$recordName;
             $paths[$basePath] = [
                 'get' => [
                     'tags' => [$formattedRecordName],
@@ -492,7 +460,6 @@ Accepts an array of IDs or an array of objects with the primary key.
                 'post' => [
                     'tags' => [$formattedRecordName],
                     'summary' => 'Create ' . $recordName,
-                    'description' => "Create a new {$recordName} record with comprehensive validation:\n\n**Advanced Validation:** Multiple rules ([Validation](#description/-getting-started))\n\n{$relationshipDescription}",
                     'requestBody' => [
                         'required' => true,
                         'content' => [
@@ -585,7 +552,6 @@ Accepts an array of IDs or an array of objects with the primary key.
                 'put' => [
                     'tags' => [$formattedRecordName],
                     'summary' => 'Update ' . $formattedRecordName,
-                    'description' => "Update an existing {$recordName} record with comprehensive validation:\n\n**Advanced Validation:** Multiple rules ([Validation](#description/-getting-started))\n\n{$relationshipDescription}",
                     'requestBody' => [
                         'required' => true,
                         'content' => [
@@ -644,7 +610,6 @@ Accepts an array of IDs or an array of objects with the primary key.
                 'patch' => [
                     'tags' => [$formattedRecordName],
                     'summary' => 'Partially update ' . $formattedRecordName,
-                    'description' => "Update an existing {$recordName} record with comprehensive validation:\n\n**Advanced Validation:** Multiple rules ([Validation](#description/-getting-started))\n\n{$relationshipDescription}",
                     'requestBody' => [
                         'required' => true,
                         'content' => [
@@ -859,39 +824,18 @@ Accepts an array of IDs or an array of objects with the primary key.
 
     private static function rpcPaths(array $tables, array $globalFunctions): array
     {
-        $apiPrefix = config('record.api_prefix', 'api/v1');
         $paths = [];
 
         // Global RPC Functions - Generate individual endpoints
         foreach ($globalFunctions as $functionName => $functionConfig) {
             $allowedMethods = $functionConfig->method ?? ['GET'];
             $description = $functionConfig->description ?? 'RPC - ' . $functionName;
-            
-            // Get schemas from config
-            $querySchema = $functionConfig->query_schema ?? null;
-            $payloadSchema = $functionConfig->payload_schema ?? null;
-            $responseSchema = $functionConfig->response_schema ?? null;
 
-            $endpoint = '/'.$apiPrefix.'/record/rpc/' . $functionName;
+            $endpoint = '/v2/record/rpc/' . $functionName;
             $paths[$endpoint] = [];
 
             foreach ($allowedMethods as $method) {
                 $methodLower = strtolower((string) $method);
-                
-                // Determine response schema
-                $successResponseSchema = [
-                    'type' => 'object',
-                    'properties' => [
-                        'success' => ['type' => 'boolean'],
-                        'data' => ['type' => 'object'],
-                        'meta' => ['type' => 'object'],
-                    ],
-                ];
-                
-                if ($responseSchema) {
-                    $successResponseSchema = $responseSchema;
-                }
-
                 $paths[$endpoint][$methodLower] = [
                     'tags' => ['RPC Endpoints'],
                     'summary' => $description,
@@ -902,7 +846,14 @@ Accepts an array of IDs or an array of objects with the primary key.
                             'description' => 'Successful response',
                             'content' => [
                                 'application/json' => [
-                                    'schema' => $successResponseSchema,
+                                    'schema' => [
+                                        'type' => 'object',
+                                        'properties' => [
+                                            'success' => ['type' => 'boolean'],
+                                            'data' => ['type' => 'object'],
+                                            'meta' => ['type' => 'object'],
+                                        ],
+                                    ],
                                 ],
                             ],
                         ],
@@ -1022,20 +973,14 @@ Accepts an array of IDs or an array of objects with the primary key.
 
                 // Add request body for POST, PUT, PATCH methods
                 if (in_array($methodLower, ['post', 'put', 'patch'])) {
-                    $bodySchema = [
-                        'type' => 'object',
-                        'description' => 'Function parameters',
-                    ];
-                    
-                    if ($payloadSchema) {
-                        $bodySchema = $payloadSchema;
-                    }
-                    
                     $paths[$endpoint][$methodLower]['requestBody'] = [
-                        'required' => !empty($payloadSchema['required']),
+                        'required' => false,
                         'content' => [
                             'application/json' => [
-                                'schema' => $bodySchema,
+                                'schema' => [
+                                    'type' => 'object',
+                                    'description' => 'Function parameters',
+                                ],
                             ],
                         ],
                     ];
@@ -1043,19 +988,15 @@ Accepts an array of IDs or an array of objects with the primary key.
 
                 // Add query parameters for GET method
                 if ('get' === $methodLower) {
-                    if ($querySchema) {
-                        $paths[$endpoint][$methodLower]['parameters'] = self::schemaToQueryParameters($querySchema);
-                    } else {
-                        $paths[$endpoint][$methodLower]['parameters'] = [
-                            [
-                                'name' => 'params',
-                                'in' => 'query',
-                                'required' => false,
-                                'description' => 'Function parameters as JSON string',
-                                'schema' => ['type' => 'string'],
-                            ],
-                        ];
-                    }
+                    $paths[$endpoint][$methodLower]['parameters'] = [
+                        [
+                            'name' => 'params',
+                            'in' => 'query',
+                            'required' => false,
+                            'description' => 'Function parameters as JSON string',
+                            'schema' => ['type' => 'string'],
+                        ],
+                    ];
                 }
             }
         }
@@ -1068,14 +1009,9 @@ Accepts an array of IDs or an array of objects with the primary key.
             foreach ($functions as $functionName => $functionConfig) {
                 $allowedMethods = $functionConfig->method ?? ['GET'];
                 $description = $functionConfig->description ?? sprintf('RPC - %s: %s', $tableName, $functionName);
-                
-                // Get schemas from config
-                $querySchema = $functionConfig->query_schema ?? null;
-                $payloadSchema = $functionConfig->payload_schema ?? null;
-                $responseSchema = $functionConfig->response_schema ?? null;
 
                 // Handle parameterized endpoints like 'update/{id}'
-                $endpoint = sprintf('/%s/%s/rpc/%s', $apiPrefix, $tableName, $functionName);
+                $endpoint = sprintf('/v2/record/%s/rpc/%s', $tableName, $functionName);
                 $paths[$endpoint] = [];
 
                 // Check if function name contains parameters
@@ -1100,20 +1036,6 @@ Accepts an array of IDs or an array of objects with the primary key.
                     $methodLower = strtolower((string) $method);
                     $operationId = 'tableRpc'.ucfirst((string) $tableName).ucfirst(str_replace(['{', '}', '/'], '', $functionName)).ucfirst($methodLower);
 
-                    // Determine response schema
-                    $successResponseSchema = [
-                        'type' => 'object',
-                        'properties' => [
-                            'success' => ['type' => 'boolean'],
-                            'data' => ['type' => 'object'],
-                            'meta' => ['type' => 'object'],
-                        ],
-                    ];
-                    
-                    if ($responseSchema) {
-                        $successResponseSchema = $responseSchema;
-                    }
-
                     $paths[$endpoint][$methodLower] = [
                         'tags' => [$formattedTableName],
                         'summary' => $description,
@@ -1124,7 +1046,14 @@ Accepts an array of IDs or an array of objects with the primary key.
                                 'description' => 'Successful response',
                                 'content' => [
                                     'application/json' => [
-                                        'schema' => $successResponseSchema,
+                                        'schema' => [
+                                            'type' => 'object',
+                                            'properties' => [
+                                                'success' => ['type' => 'boolean'],
+                                                'data' => ['type' => 'object'],
+                                                'meta' => ['type' => 'object'],
+                                            ],
+                                        ],
                                     ],
                                 ],
                             ],
@@ -1249,72 +1178,38 @@ Accepts an array of IDs or an array of objects with the primary key.
 
                     // Add request body for POST, PUT, PATCH methods
                     if (in_array($methodLower, ['post', 'put', 'patch'])) {
-                        $bodySchema = [
-                            'type' => 'object',
-                            'description' => 'Function parameters',
-                        ];
-                        
-                        if ($payloadSchema) {
-                            $bodySchema = $payloadSchema;
-                        }
-                        
                         $paths[$endpoint][$methodLower]['requestBody'] = [
-                            'required' => !empty($payloadSchema['required']),
+                            'required' => false,
                             'content' => [
                                 'application/json' => [
-                                    'schema' => $bodySchema,
+                                    'schema' => [
+                                        'type' => 'object',
+                                        'description' => 'Function parameters',
+                                    ],
                                 ],
                             ],
                         ];
                     }
 
-                    // Add query parameters for GET method
-                    if ('get' === $methodLower) {
-                        $queryParams = [];
-                        if ($querySchema) {
-                            $queryParams = self::schemaToQueryParameters($querySchema);
-                        } elseif (empty($parameters)) {
-                             // Only add default 'params' if no path parameters and no schema
-                             $queryParams[] = [
-                                'name' => 'params',
-                                'in' => 'query',
-                                'required' => false,
-                                'description' => 'Function parameters as JSON string',
-                                'schema' => ['type' => 'string'],
-                            ];
+                    // Add query parameters for GET method (if no path parameters)
+                    if ('get' === $methodLower && empty($parameters)) {
+                        if (!isset($paths[$endpoint][$methodLower]['parameters'])) {
+                            $paths[$endpoint][$methodLower]['parameters'] = [];
                         }
-                        
-                        if (!empty($queryParams)) {
-                            if (!isset($paths[$endpoint][$methodLower]['parameters'])) {
-                                $paths[$endpoint][$methodLower]['parameters'] = [];
-                            }
-                            $paths[$endpoint][$methodLower]['parameters'] = array_merge($paths[$endpoint][$methodLower]['parameters'], $queryParams);
-                        }
+
+                        $paths[$endpoint][$methodLower]['parameters'][] = [
+                            'name' => 'params',
+                            'in' => 'query',
+                            'required' => false,
+                            'description' => 'Function parameters as JSON string',
+                            'schema' => ['type' => 'string'],
+                        ];
                     }
                 }
             }
         }
 
         return $paths;
-    }
-
-    private static function schemaToQueryParameters(array $schema): array
-    {
-        $parameters = [];
-        $properties = $schema['properties'] ?? [];
-        $required = $schema['required'] ?? [];
-
-        foreach ($properties as $name => $propSchema) {
-            $parameters[] = [
-                'name' => $name,
-                'in' => 'query',
-                'required' => in_array($name, $required, true),
-                'description' => $propSchema['description'] ?? '',
-                'schema' => Arr::except($propSchema, ['description', 'required']),
-            ];
-        }
-
-        return $parameters;
     }
 
     private static function pathIdParameter(): array
