@@ -46,7 +46,7 @@ class AuditLogController extends Controller
 
             $logs = AuditLogService::getEntityAuditLogs($entityType, $entityId, $limit);
 
-            return $this->apiResponseService->success($logs->toArray(), ['message' => 'Audit logs retrieved successfully']);
+            return $this->apiResponseService->success($logs->toArray());
         } catch (Exception $exception) {
             return $this->apiResponseService->serverError('Failed to retrieve audit logs: ' . $exception->getMessage());
         }
@@ -73,7 +73,7 @@ class AuditLogController extends Controller
             $filters = $request->only(['entity_type', 'entity_id', 'start_date', 'end_date', 'event']);
             $stats = AuditLogService::getAuditStats($filters);
 
-            return $this->apiResponseService->success($stats, ['message' => 'Audit statistics retrieved successfully']);
+            return $this->apiResponseService->success($stats);
         } catch (Exception $exception) {
             return $this->apiResponseService->serverError('Failed to retrieve audit statistics: ' . $exception->getMessage());
         }
@@ -103,7 +103,7 @@ class AuditLogController extends Controller
 
             $timeline = AuditLogService::getFieldTimeline($entityType, $entityId, $field, $limit);
 
-            return $this->apiResponseService->success($timeline, ['message' => 'Field timeline retrieved successfully']);
+            return $this->apiResponseService->success($timeline);
         } catch (Exception $exception) {
             return $this->apiResponseService->serverError('Failed to retrieve field timeline: ' . $exception->getMessage());
         }
@@ -131,7 +131,7 @@ class AuditLogController extends Controller
 
             $stats = AuditLogService::getFieldStats($entityType, $entityId, $field);
 
-            return $this->apiResponseService->success($stats, ['message' => 'Field statistics retrieved successfully']);
+            return $this->apiResponseService->success($stats);
         } catch (Exception $exception) {
             return $this->apiResponseService->serverError('Failed to retrieve field statistics: ' . $exception->getMessage());
         }
@@ -178,7 +178,7 @@ class AuditLogController extends Controller
                 recap: $recap
             );
 
-            return $this->apiResponseService->success(null, ['message' => 'Audit log created successfully']);
+            return $this->apiResponseService->success(null);
         } catch (Exception $exception) {
             return $this->apiResponseService->serverError('Failed to create audit log: ' . $exception->getMessage());
         }
@@ -204,7 +204,7 @@ class AuditLogController extends Controller
             return $this->apiResponseService->success([
                 'deleted_count' => $deletedCount,
                 'days_kept' => $daysToKeep
-            ], ['message' => sprintf('Successfully cleaned up %d old audit logs', $deletedCount)]);
+            ]);
         } catch (Exception $exception) {
             return $this->apiResponseService->serverError('Failed to cleanup audit logs: ' . $exception->getMessage());
         }
@@ -222,7 +222,7 @@ class AuditLogController extends Controller
                 return $this->apiResponseService->notFound('Audit log not found');
             }
 
-            return $this->apiResponseService->success($log, ['message' => 'Audit log retrieved successfully']);
+            return $this->apiResponseService->success($log);
         } catch (Exception) {
             return $this->apiResponseService->notFound('Audit log not found');
         }

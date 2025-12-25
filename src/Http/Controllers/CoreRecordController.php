@@ -23,7 +23,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -485,10 +484,6 @@ class CoreRecordController extends Controller
 
     /**
      * Create a new record
-     *
-     * @param Request $request
-     * @param string $table
-     * @return JsonResponse
      */
     public function store(Request $request, string $table): JsonResponse
     {
@@ -588,7 +583,7 @@ class CoreRecordController extends Controller
                 try {
                     $entityClass = 'App\\Models\\' . Str::studly(Str::singular($table));
                     AuditLogService::insertAuditLog(AuditLogEventEnum::CREATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
-                } catch (Exception $exception) {
+                } catch (Exception) {
                     // Log::error('Audit log insert failed (create)', [
                     //     'table' => $table,
                     //     'id' => $insertedId,
@@ -617,10 +612,7 @@ class CoreRecordController extends Controller
     /**
      * Update a record by ID
      *
-     * @param Request $request
-     * @param string $table
      * @param [type] $id
-     * @return JsonResponse
      */
     public function update(Request $request, string $table, string $id): JsonResponse
     {
@@ -726,7 +718,7 @@ class CoreRecordController extends Controller
                 try {
                     $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
                     AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
-                } catch (Exception $exception) {
+                } catch (Exception) {
                     // Log::error('Audit log insert failed (update)', [
                     //     'table' => $table,
                     //     'id' => $id,
@@ -758,10 +750,7 @@ class CoreRecordController extends Controller
     /**
      * Delete a record by ID
      *
-     * @param Request $request
-     * @param string $table
      * @param [type] $id
-     * @return JsonResponse
      */
     public function destroy(Request $request, string $table, string $id): JsonResponse
     {
@@ -848,7 +837,7 @@ class CoreRecordController extends Controller
                 try {
                     $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
                     AuditLogService::insertAuditLog(AuditLogEventEnum::DELETED, $entityClass, ['id' => $id]);
-                } catch (Exception $exception) {
+                } catch (Exception) {
                     // Log::error('Audit log insert failed (delete)', [
                     //     'table' => $table,
                     //     'id' => $id,
@@ -856,6 +845,7 @@ class CoreRecordController extends Controller
                     // ]);
                 }
             }
+
             return $response;
         } catch (Exception $exception) {
             // Rollback transaction on any error
@@ -876,10 +866,7 @@ class CoreRecordController extends Controller
     /**
      * Restore a soft-deleted record
      *
-     * @param Request $request
-     * @param string $table
      * @param [type] $id
-     * @return JsonResponse
      */
     public function restore(Request $request, string $table, string $id): JsonResponse
     {
@@ -937,7 +924,7 @@ class CoreRecordController extends Controller
                 $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
                 $record = $this->show($request, $table, $id);
                 AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
-            } catch (Exception $exception) {
+            } catch (Exception) {
             }
         }
 
@@ -946,11 +933,6 @@ class CoreRecordController extends Controller
 
     /**
      * Force delete a record (bypass soft delete)
-     *
-     * @param Request $request
-     * @param string $table
-     * @param string $id
-     * @return JsonResponse
      */
     public function forceDelete(Request $request, string $table, string $id): JsonResponse
     {
@@ -1983,7 +1965,7 @@ class CoreRecordController extends Controller
             if (is_array($item)) {
                 try {
                     $item = RecordTableTriggerType::fromArray($item);
-                } catch (Exception $exception) {
+                } catch (Exception) {
                     // Log::error('Record table trigger config invalid', [
                     //     'error' => $exception->getMessage(),
                     // ]);
@@ -1998,13 +1980,18 @@ class CoreRecordController extends Controller
 
             $className = $item->class;
             $method = $item->function_method;
-
-            if (!class_exists($className) || !method_exists($className, $method)) {
+            if (!class_exists($className)) {
                 // Log::warning('Record table trigger handler not found', [
                 //     'class' => $className,
                 //     'method' => $method,
                 // ]);
-
+                continue;
+            }
+            if (!method_exists($className, $method)) {
+                // Log::warning('Record table trigger handler not found', [
+                //     'class' => $className,
+                //     'method' => $method,
+                // ]);
                 continue;
             }
 
@@ -2015,7 +2002,7 @@ class CoreRecordController extends Controller
                 } elseif (is_array($result) && isset($params[0]) && $params[0] instanceof Request) {
                     $params[0]->merge($result);
                 }
-            } catch (Exception $exception) {
+            } catch (Exception) {
                 // Log::error('Record table trigger execution failed', [
                 //     'class' => $className,
                 //     'method' => $method,

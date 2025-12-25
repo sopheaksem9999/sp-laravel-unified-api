@@ -9,7 +9,7 @@ use Sopheak\Core\Tests\TestCase;
 class OpenApiTest extends TestCase
 {
     /** @test */
-    public function it_generates_correct_server_url_without_duplicate_api_path()
+    public function it_generates_correct_server_url_without_duplicate_api_path(): void
     {
         // Set configuration to match the reported issue
         Config::set('app.url', 'http://mylekha_task_management_back.test');

@@ -88,7 +88,7 @@ class PermissionHelper
 
             default:
                 // Handle special permission types that include the action in the permission name
-                if (str_contains($action, $permissionPrefix)) {
+                if (str_contains($action, (string) $permissionPrefix)) {
                     // For actions like 'viewOnlyCreateBy', 'updateStatus', etc.
                     return $action . $permissionPrefix . $resource;
                 }

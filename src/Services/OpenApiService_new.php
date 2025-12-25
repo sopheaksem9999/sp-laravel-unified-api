@@ -246,7 +246,7 @@ GET /api/v2/record/users?select=id,name,roles(id,name)
         return str_replace(['-', ' '], '_', ucfirst($table));
     }
 
-    private static function tableSchema(string $table, array $columns, object $config): array
+    private static function tableSchema(string $table, array $columns): array
     {
         $properties = [];
         $required = [];
@@ -330,7 +330,7 @@ GET /api/v2/record/users?select=id,name,roles(id,name)
         return ['type' => 'string'];
     }
 
-    private static function tableSchemaRead(string $table, array $columns, object $config): array
+    private static function tableSchemaRead(string $table, array $columns): array
     {
         $properties = [];
         $required = [];
@@ -359,7 +359,7 @@ GET /api/v2/record/users?select=id,name,roles(id,name)
         ];
     }
 
-    private static function tableSchemaWrite(string $table, array $columns, object $config): array
+    private static function tableSchemaWrite(string $table, array $columns): array
     {
         $properties = [];
         $required = [];
@@ -1225,10 +1225,8 @@ GET /api/v2/record/users?select=id,name,roles(id,name)
 
     /**
      * Generate relationship description for API documentation.
-     *
-     * @param mixed $config
      */
-    private static function generateRelationshipDescription($config): string
+    private static function generateRelationshipDescription(mixed $config): string
     {
         if (empty($config->relationships)) {
             return '';

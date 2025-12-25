@@ -277,7 +277,7 @@ Accepts an array of IDs or an array of objects with the primary key.
         return str_replace(['-', ' '], '_', ucfirst($table));
     }
 
-    private static function tableSchema(string $table, array $columns, object $config): array
+    private static function tableSchema(string $table, array $columns): array
     {
         $properties = [];
         $required = [];
@@ -361,7 +361,7 @@ Accepts an array of IDs or an array of objects with the primary key.
         return ['type' => 'string'];
     }
 
-    private static function tableSchemaRead(string $table, array $columns, object $config): array
+    private static function tableSchemaRead(string $table, array $columns): array
     {
         $properties = [];
         $required = [];
@@ -390,7 +390,7 @@ Accepts an array of IDs or an array of objects with the primary key.
         ];
     }
 
-    private static function tableSchemaWrite(string $table, array $columns, object $config): array
+    private static function tableSchemaWrite(string $table, array $columns): array
     {
         $properties = [];
         $required = [];
@@ -872,7 +872,7 @@ Accepts an array of IDs or an array of objects with the primary key.
             $payloadSchema = $functionConfig->payload_schema ?? null;
             $responseSchema = $functionConfig->response_schema ?? null;
 
-            $endpoint = '/'.$apiPrefix.'/record/rpc/' . $functionName;
+            $endpoint = '/'.$apiPrefix.'/rpc/'.$functionName;
             $paths[$endpoint] = [];
 
             foreach ($allowedMethods as $method) {
@@ -1288,6 +1288,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                             if (!isset($paths[$endpoint][$methodLower]['parameters'])) {
                                 $paths[$endpoint][$methodLower]['parameters'] = [];
                             }
+
                             $paths[$endpoint][$methodLower]['parameters'] = array_merge($paths[$endpoint][$methodLower]['parameters'], $queryParams);
                         }
                     }
@@ -1330,10 +1331,8 @@ Accepts an array of IDs or an array of objects with the primary key.
 
     /**
      * Generate relationship description for API documentation.
-     *
-     * @param mixed $config
      */
-    private static function generateRelationshipDescription($config): string
+    private static function generateRelationshipDescription(mixed $config): string
     {
         if (empty($config->relationships)) {
             return '';

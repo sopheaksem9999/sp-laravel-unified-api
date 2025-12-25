@@ -92,7 +92,7 @@ class RecordApiResponseService
         } elseif (is_array($errors)) {
             $data = ['validation_errors' => $errors];
         } else {
-            $data = ['validation_errors' => ['message' => (string) $errors]];
+            $data = ['validation_errors' => ['message' => $errors]];
         }
 
         return static::jsonResponse($data, RecordApiJsonResponseEnum::ERROR);

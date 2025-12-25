@@ -451,6 +451,7 @@ class RelationshipResolver
                             DB::table($actualRelatedTableName)->where($relatedPk, $idVal)->delete();
                         }
                     }
+
                     continue;
                 }
 
