@@ -45,6 +45,8 @@ class OpenApiService
     {
         $tables = SchemaRegistry::get();
         $apiPrefix = config('record.api_prefix', 'api/v1');
+        $tenantHeader = config('record.tenant_header', 'X-Tenant-ID');
+        $tenantColumn = config('record.tenant_column', 'tenant_id');
 
         $schemas = [];
         foreach ($tables as $recordName => $config) {
@@ -88,11 +90,11 @@ class OpenApiService
                 'version' => '2.0.0',
                 'description' => '# API Documentation
 
-A powerful, flexible API for accessing ERP system data with advanced filtering, relationships, and performance optimizations.
+A powerful, flexible API for accessing system data with advanced filtering, relationships, and performance optimizations.
 
 ## 📋 What This API Does
 
-This API provides **unified access** to all ERP tables through a single endpoint pattern:
+This API provides **unified access** to all tables through a single endpoint pattern:
 - **CRUD Operations**: Create, read, update, delete records
 - **Dynamic Filtering**: 25+ filter operators for precise data queries  
 - **Relationship Embedding**: Load related data in a single request
@@ -121,6 +123,14 @@ GET /'.$apiPrefix.'/invoices?select=id,ref_number,customer:customers(id,name),it
 # Get users with their roles
 GET /'.$apiPrefix.'/users?select=id,name,roles(id,name)
 ```
+
+## 🏢 Multi-Tenant Header
+
+If multi-tenant mode is enabled (`record.enable_tenant_id=true`) and the table is configured with `has_tenant_id=true`, include the tenant header on requests:
+```bash
+'.$tenantHeader.': <tenant-id>
+```
+Records are filtered by the `'.$tenantColumn.'` column.
 
 ## 🔧 Key Features
 
@@ -444,13 +454,15 @@ Accepts an array of IDs or an array of objects with the primary key.
             $schemaRef = '#/components/schemas/'.self::schemaName($recordName);
             $schemaRefRead = '#/components/schemas/'.self::schemaName($recordName).'Read';
             $schemaRefWrite = '#/components/schemas/'.self::schemaName($recordName).'Write';
+            $tenantHeaderParameters = self::tenantHeaderParametersForTableConfig($config);
 
             // Generate relationship description
             $relationshipDescription = self::generateRelationshipDescription($config);
 
             // List & create (API endpoints use record name, but descriptions reference actual table)
             $basePath = '/'.$apiPrefix.'/'.$recordName;
-            $paths[$basePath] = [
+            $paths[$basePath] = array_filter([
+                'parameters' => $tenantHeaderParameters,
                 'get' => [
                     'tags' => [$formattedRecordName],
                     'summary' => 'List ' . $formattedRecordName,
@@ -526,12 +538,12 @@ Accepts an array of IDs or an array of objects with the primary key.
                     ],
                     'security' => [['bearerAuth' => []]],
                 ],
-            ];
+            ], static fn (mixed $value): bool => [] !== $value);
 
             // Read/Update/Delete
             $idPath = $basePath.'/{id}';
             $paths[$idPath] = [
-                'parameters' => [self::pathIdParameter()],
+                'parameters' => array_merge([self::pathIdParameter()], $tenantHeaderParameters),
                 'get' => [
                     'tags' => [$formattedRecordName],
                     'summary' => sprintf('Get %s by ID', $recordName),
@@ -1064,6 +1076,7 @@ Accepts an array of IDs or an array of objects with the primary key.
         foreach ($tables as $tableName => $config) {
             $formattedTableName = ucwords(str_replace('_', ' ', $tableName));
             $functions = Arr::get((array) $config, 'functions', []);
+            $tenantHeaderParameters = self::tenantHeaderParametersForTableConfig($config);
 
             foreach ($functions as $functionName => $functionConfig) {
                 $allowedMethods = $functionConfig->method ?? ['GET'];
@@ -1119,6 +1132,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                         'summary' => $description,
                         'description' => $description,
                         'operationId' => $operationId,
+                        'parameters' => $tenantHeaderParameters,
                         'responses' => [
                             '200' => [
                                 'description' => 'Successful response',
@@ -1244,7 +1258,7 @@ Accepts an array of IDs or an array of objects with the primary key.
 
                     // Add path parameters if any
                     if (!empty($parameters)) {
-                        $paths[$endpoint][$methodLower]['parameters'] = $parameters;
+                        $paths[$endpoint][$methodLower]['parameters'] = array_merge($paths[$endpoint][$methodLower]['parameters'], $parameters);
                     }
 
                     // Add request body for POST, PUT, PATCH methods
@@ -1327,6 +1341,33 @@ Accepts an array of IDs or an array of objects with the primary key.
             'schema' => ['type' => 'string'],
             'description' => 'Record identifier (UUID or string)',
         ];
+    }
+
+    private static function tenantHeaderParameter(bool $required = true): array
+    {
+        $tenantHeader = config('record.tenant_header', 'X-Tenant-ID');
+        $tenantColumn = config('record.tenant_column', 'tenant_id');
+
+        return [
+            'name' => $tenantHeader,
+            'in' => 'header',
+            'required' => $required,
+            'schema' => ['type' => 'string'],
+            'description' => sprintf('Tenant identifier header. Used to filter records by `%s` when multi-tenant mode is enabled.', $tenantColumn),
+        ];
+    }
+
+    private static function tenantHeaderParametersForTableConfig(mixed $config): array
+    {
+        if (!config('record.enable_tenant_id', false)) {
+            return [];
+        }
+
+        if (!($config->has_tenant_id ?? false)) {
+            return [];
+        }
+
+        return [self::tenantHeaderParameter(true)];
     }
 
     /**
