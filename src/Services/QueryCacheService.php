@@ -40,7 +40,7 @@ class QueryCacheService
     /**
      * Get cached query result or execute and cache the callback
      */
-    public static function remember(string $key, callable $callback): mixed
+    public static function remember(string $key, callable $callback, ?int $ttl = null): mixed
     {
         // If caching is disabled, execute callback directly
         if (!self::isCacheEnabled()) {
@@ -64,7 +64,7 @@ class QueryCacheService
     /**
      * Cache a query result
      */
-    public static function put(string $key, mixed $value): bool
+    public static function put(string $key, mixed $value, ?int $ttl = null): bool
     {
         // If caching is disabled, return true (no-op)
         if (!self::isCacheEnabled()) {

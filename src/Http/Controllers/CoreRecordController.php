@@ -313,7 +313,7 @@ class CoreRecordController extends Controller
 
             // Use dynamic TTL based on data size and complexity
             $ttl = $this->calculateOptimalCacheTTL($table, count($data), $request->has('select'));
-            QueryCacheService::put($cacheKey, $cacheData);
+            QueryCacheService::put($cacheKey, $cacheData, $ttl);
         }
 
         $response = RecordApiResponseService::successWrapped($data, $meta, 200, $headers);

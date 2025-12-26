@@ -24,6 +24,10 @@ class QueryBuilderFilters
 
     private static array $compiledFilters = [];
 
+    private static string $lazyMarkerPrefix = 'LAZY_OP_';
+
+    private static array $lazyBuilders = [];
+
     /**
      * Apply filters, selects, ordering, pagination to Query Builder based on request.
      * Optimized for performance with caching and reduced query complexity.
@@ -191,8 +195,9 @@ class QueryBuilderFilters
                 ];
 
                 // Return query with lazy operation marker
+                self::registerLazyOperationForBuilder($builder, $lazyOperationId);
                 $builder->where(function ($q) use ($lazyOperationId): void {
-                    $q->whereRaw('1=1 /* LAZY_OP_'.$lazyOperationId.' */');
+                    $q->whereRaw('1=1 /* '.self::$lazyMarkerPrefix.$lazyOperationId.' */');
                 });
             } else {
                 // Execute operators immediately with optimized batch processing
@@ -203,6 +208,7 @@ class QueryBuilderFilters
         // Execute lazy operations if any are pending with priority ordering
         if ([] !== self::$lazyOperations) {
             self::executeLazyOperationsOptimized($builder);
+            self::cleanupExecutedLazyOperations();
         }
 
         return $builder;
@@ -295,6 +301,7 @@ class QueryBuilderFilters
         self::$operatorCache = [];
         self::$lazyOperations = [];
         self::$lazyCache = [];
+        self::$lazyBuilders = [];
     }
 
     /**
@@ -1244,9 +1251,36 @@ class QueryBuilderFilters
      */
     private static function shouldExecuteLazyOperation(Builder $builder, string $operationId): bool
     {
-        // Check if the query contains the lazy operation marker
-        $sql = $builder->toSql();
+        $builderId = spl_object_id($builder);
 
-        return str_contains($sql, 'LAZY_OP_'.$operationId);
+        return isset(self::$lazyBuilders[$builderId][$operationId]);
+    }
+
+    private static function registerLazyOperationForBuilder(Builder $builder, string $operationId): void
+    {
+        $builderId = spl_object_id($builder);
+        self::$lazyBuilders[$builderId] ??= [];
+        self::$lazyBuilders[$builderId][$operationId] = true;
+    }
+
+    private static function cleanupExecutedLazyOperations(): void
+    {
+        foreach (self::$lazyOperations as $operationId => $operation) {
+            if (!($operation['executed'] ?? false)) {
+                continue;
+            }
+
+            unset(self::$lazyOperations[$operationId]);
+
+            foreach (self::$lazyBuilders as $builderId => $operationIds) {
+                if (isset($operationIds[$operationId])) {
+                    unset(self::$lazyBuilders[$builderId][$operationId]);
+                }
+
+                if ([] === self::$lazyBuilders[$builderId]) {
+                    unset(self::$lazyBuilders[$builderId]);
+                }
+            }
+        }
     }
 }
