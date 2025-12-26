@@ -3,29 +3,29 @@
 namespace Sopheak\Core\Http\Controllers;
 
 use BackedEnum;
-use RuntimeException;
 use Exception;
-use stdClass;
+use RuntimeException;
 use UnitEnum;
-use Illuminate\Routing\Controller;
-use Sopheak\Core\Enums\AuditLogEventEnum;
-use Sopheak\Core\Services\AuditLogService;
-use Sopheak\Core\Services\CursorPagination;
-use Sopheak\Core\Services\QueryCacheService;
-use Sopheak\Core\Support\PermissionHelper;
-use Sopheak\Core\Support\QueryBuilderFilters;
-use Sopheak\Core\Support\RelationshipResolver;
-use Sopheak\Core\Support\SchemaRegistry;
-use Sopheak\Core\Types\RecordFunctionType;
-use Sopheak\Core\Types\RecordTableTriggerType;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Sopheak\Core\Enums\AuditLogEventEnum;
+use Sopheak\Core\Services\AuditLogService;
+use Sopheak\Core\Services\CursorPagination;
+use Sopheak\Core\Services\QueryCacheService;
+use Sopheak\Core\Services\RecordApiResponseService;
+use Sopheak\Core\Support\PermissionHelper;
+use Sopheak\Core\Support\QueryBuilderFilters;
+use Sopheak\Core\Support\RelationshipResolver;
+use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Types\RecordFunctionType;
+use Sopheak\Core\Types\RecordTableTriggerType;
 
 class CoreRecordController extends Controller
 {
@@ -40,17 +40,20 @@ class CoreRecordController extends Controller
     private static ?bool $tenantIdEnabled = null;
 
     /**
-     * List records for a table
+     * List records for a table.
      */
     public function index(Request $request, string $table): JsonResponse
     {
         $this->authorizeAction($table, 'read');
         $schema = $this->getCachedSchema();
         if (!isset($schema[$table])) {
-            return $this->error('Resource not available', 404);
+            return RecordApiResponseService::errorWrapped('Resource not available', 404);
         }
 
-        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
+        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
+            return $response;
+        }
 
         $triggerParams = [
             $request,
@@ -64,8 +67,6 @@ class CoreRecordController extends Controller
         if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
             $request = $triggerParams[0];
         }
-
-        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
 
         // Resolve actual table name from RecordTableType configuration
         $actualTableName = $this->resolveActualTableName($table);
@@ -100,7 +101,7 @@ class CoreRecordController extends Controller
 
             $cached = QueryCacheService::get($cacheKey);
             if (null !== $cached) {
-                return $this->success($cached['data'], $cached['meta'], status: 200, headers: $cached['headers']);
+                return RecordApiResponseService::successWrapped($cached['data'], $cached['meta'], 200, $cached['headers']);
             }
         }
 
@@ -221,7 +222,7 @@ class CoreRecordController extends Controller
         }
 
         // Remove deleted_at fields from response data
-        $data = $this->removeDeletedAtFields($data);
+        $data = RecordApiResponseService::removeDeletedAtFields($data);
 
         $headers = [];
         $meta = [];
@@ -312,10 +313,10 @@ class CoreRecordController extends Controller
 
             // Use dynamic TTL based on data size and complexity
             $ttl = $this->calculateOptimalCacheTTL($table, count($data), $request->has('select'));
-            QueryCacheService::put($cacheKey, $cacheData, $table, $ttl);
+            QueryCacheService::put($cacheKey, $cacheData);
         }
 
-        $response = $this->success($data, $meta, status: 200, headers: $headers);
+        $response = RecordApiResponseService::successWrapped($data, $meta, 200, $headers);
 
         $this->executeTableTrigger(
             $schema[$table]->afterRead ?? null,
@@ -337,14 +338,14 @@ class CoreRecordController extends Controller
     }
 
     /**
-     * Get a single record by ID
+     * Get a single record by ID.
      */
     public function show(Request $request, string $table, mixed $id): JsonResponse
     {
         $this->authorizeAction($table, 'read');
         $schema = $this->getCachedSchema();
         if (!isset($schema[$table])) {
-            return $this->error('Resource not available', 404);
+            return RecordApiResponseService::errorWrapped('Resource not available', 404);
         }
 
         $triggerParams = [
@@ -365,14 +366,18 @@ class CoreRecordController extends Controller
 
         $pk = $schema[$table]->primary_key ?? 'id';
 
-        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
+        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
+            return $response;
+        }
+
 
         // Check cache for single record
         $recordCacheKey = $this->generateRecordCacheKey($table, $id, $tenantId, $request->query('select'));
         if ($this->isCacheableRequest($request, $table)) {
             $cachedRecord = Cache::get($recordCacheKey);
             if ($cachedRecord) {
-                return $this->success($cachedRecord);
+                return RecordApiResponseService::successWrapped($cachedRecord);
             }
         }
 
@@ -395,7 +400,7 @@ class CoreRecordController extends Controller
 
         $record = $builder->where($pk, $id)->first();
         if (!$record) {
-            return $this->error('Not found', 404);
+            return RecordApiResponseService::errorWrapped('Not found', 404);
         }
 
         // Optimized relationship includes for single record
@@ -455,7 +460,7 @@ class CoreRecordController extends Controller
         }
 
         // Remove deleted_at field from response data
-        $record = $this->removeDeletedAtFields($record);
+        $record = RecordApiResponseService::removeDeletedAtFields($record);
 
         // Cache the single record result
         if ($this->isCacheableRequest($request, $table)) {
@@ -463,7 +468,7 @@ class CoreRecordController extends Controller
             Cache::put($recordCacheKey, $record, $ttl);
         }
 
-        $response = $this->success($record);
+        $response = RecordApiResponseService::successWrapped($record);
 
         $this->executeTableTrigger(
             $schema[$table]->afterRead ?? null,
@@ -483,20 +488,19 @@ class CoreRecordController extends Controller
     }
 
     /**
-     * Create a new record
+     * Create a new record.
      */
     public function store(Request $request, string $table): JsonResponse
     {
         $this->authorizeAction($table, 'create');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
-            return $this->error('Resource not available', 404);
+            return RecordApiResponseService::errorWrapped('Resource not available', 404);
         }
 
         // Resolve actual table name from RecordTableType configuration
         $actualTableName = $this->resolveActualTableName($table);
-
-        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
+        $tenantId = $request->header(config('record.tenant_header', 'X-Tenant-ID'));
 
         $triggerParams = [
             $request,
@@ -510,7 +514,10 @@ class CoreRecordController extends Controller
             $request = $triggerParams[0];
         }
 
-        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
+        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
+            return $response;
+        }
 
         $validatorCallback = $schema[$table]->createValidator ?? null;
         if ($validatorCallback) {
@@ -520,7 +527,7 @@ class CoreRecordController extends Controller
             }
 
             if ($validator->fails()) {
-                return $this->error('Validation failed', 422, $validator->errors()->toArray());
+                return RecordApiResponseService::errorWrapped('Validation failed', 422, $validator->errors()->toArray());
             }
         }
 
@@ -530,7 +537,7 @@ class CoreRecordController extends Controller
         $payloadMain = RelationshipResolver::stripRelationshipData($table, $payload);
         $payloadMain = $this->sanitizePayload($payloadMain, $schema[$table]);
 
-        if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
+        if ($this->shouldApplyTenantId($schema[$table])) {
             $payloadMain[config('record.tenant_column', 'tenant_id')] = $tenantId;
         }
 
@@ -538,7 +545,7 @@ class CoreRecordController extends Controller
         $payloadMain = $this->applyTimestampsAndAuditFields($payloadMain, $schema[$table], false);
 
         if ([] === $payloadMain) {
-            return $this->error('Validation failed', 422, ['payload' => ['No data to insert']]);
+            return RecordApiResponseService::errorWrapped('Validation failed', 422, ['payload' => ['No data to insert']]);
         }
 
         $insertedId = null;
@@ -560,7 +567,6 @@ class CoreRecordController extends Controller
 
             // Commit transaction
             DB::commit();
-
             QueryCacheService::invalidateTable($table);
 
             $record = $this->show($request, $table, $insertedId);
@@ -573,7 +579,7 @@ class CoreRecordController extends Controller
                     [
                         'id' => $insertedId,
                         'payload' => $payloadMain,
-                        'tenant_id' => $tenantId,
+                        config('record.tenant_column', 'tenant_id') => $tenantId,
                         'response' => $record,
                     ],
                 ]
@@ -581,7 +587,7 @@ class CoreRecordController extends Controller
 
             if (!($schema[$table]->disable_auditLog ?? false)) {
                 try {
-                    $entityClass = 'App\\Models\\' . Str::studly(Str::singular($table));
+                    $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
                     AuditLogService::insertAuditLog(AuditLogEventEnum::CREATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
                 } catch (Exception) {
                     // Log::error('Audit log insert failed (create)', [
@@ -605,12 +611,12 @@ class CoreRecordController extends Controller
             //     'trace' => $exception->getTraceAsString(),
             // ]);
 
-            return $this->error('Failed to create record: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Failed to create record: ' . $exception->getMessage(), 500);
         }
     }
 
     /**
-     * Update a record by ID
+     * Update a record by ID.
      *
      * @param [type] $id
      */
@@ -619,13 +625,13 @@ class CoreRecordController extends Controller
         $this->authorizeAction($table, 'update');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
-            return $this->error('Resource not available', 404);
+            return RecordApiResponseService::errorWrapped('Resource not available', 404);
         }
 
         // Resolve actual table name from RecordTableType configuration
         $actualTableName = $this->resolveActualTableName($table);
 
-        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
+        $tenantId = $request->header(config('record.tenant_header', 'X-Tenant-ID'));
 
         $triggerParams = [
             $request,
@@ -640,7 +646,10 @@ class CoreRecordController extends Controller
             $request = $triggerParams[0];
         }
 
-        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
+        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
+            return $response;
+        }
 
         $validatorCallback = $schema[$table]->updateValidator ?? null;
         if ($validatorCallback) {
@@ -650,7 +659,7 @@ class CoreRecordController extends Controller
             }
 
             if ($validator->fails()) {
-                return $this->error('Validation failed', 422, $validator->errors()->toArray());
+                return RecordApiResponseService::errorWrapped('Validation failed', 422, $validator->errors()->toArray());
             }
         }
 
@@ -659,6 +668,9 @@ class CoreRecordController extends Controller
         // Strip relationship data from main payload
         $payloadMain = RelationshipResolver::stripRelationshipData($table, $payload);
         $payloadMain = $this->sanitizePayload($payloadMain, $schema[$table]);
+        if ($this->shouldApplyTenantId($schema[$table])) {
+            unset($payloadMain[config('record.tenant_column', 'tenant_id')]);
+        }
 
         $pk = $schema[$table]->primary_key ?? 'id';
 
@@ -685,7 +697,7 @@ class CoreRecordController extends Controller
             if (!$existing) {
                 DB::rollBack();
 
-                return $this->error('Not found', 404);
+                return RecordApiResponseService::errorWrapped('Not found', 404);
             }
 
             if ([] !== $payloadMain) {
@@ -694,7 +706,6 @@ class CoreRecordController extends Controller
 
             // Process nested relationships
             RelationshipResolver::processRelatedData($table, $payload, $id, $tenantId, 'update');
-
             QueryCacheService::invalidateTable($table);
 
             $record = $this->show($request, $table, $id);
@@ -715,40 +726,24 @@ class CoreRecordController extends Controller
             );
 
             if (!($schema[$table]->disable_auditLog ?? false)) {
-                try {
-                    $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                    AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
-                } catch (Exception) {
-                    // Log::error('Audit log insert failed (update)', [
-                    //     'table' => $table,
-                    //     'id' => $id,
-                    //     'error' => $exception->getMessage(),
-                    // ]);
-                }
+                $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
+                AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
             }
 
             // Commit transaction
             DB::commit();
+
             return $record;
         } catch (Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
 
-            // Log the error for debugging
-            // Log::error('Update operation failed', [
-            //     'table' => $table,
-            //     'id' => $id,
-            //     'payload' => $payloadMain,
-            //     'error' => $exception->getMessage(),
-            //     'trace' => $exception->getTraceAsString(),
-            // ]);
-
-            return $this->error('Failed to update record: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Failed to update record: ' . $exception->getMessage(), 500);
         }
     }
 
     /**
-     * Delete a record by ID
+     * Delete a record by ID.
      *
      * @param [type] $id
      */
@@ -757,13 +752,13 @@ class CoreRecordController extends Controller
         $this->authorizeAction($table, 'delete');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
-            return $this->error('Resource not available', 404);
+            return RecordApiResponseService::errorWrapped('Resource not available', 404);
         }
 
         // Resolve actual table name from RecordTableType configuration
         $actualTableName = $this->resolveActualTableName($table);
 
-        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
+        $tenantId = $request->header(config('record.tenant_header', 'X-Tenant-ID'));
         $pk = $schema[$table]->primary_key ?? 'id';
 
         $triggerParams = [
@@ -777,9 +772,12 @@ class CoreRecordController extends Controller
         $triggerParams = $this->executeTableTrigger($schema[$table]->beforeDelete ?? null, $triggerParams);
         if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
             $request = $triggerParams[0];
-        }
+        };
 
-        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
+        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
+            return $response;
+        }
 
         $validatorCallback = $schema[$table]->deleteValidator ?? null;
         if ($validatorCallback) {
@@ -789,7 +787,7 @@ class CoreRecordController extends Controller
             }
 
             if ($validator->fails()) {
-                return $this->error('Validation failed', 422, $validator->errors()->toArray());
+                return RecordApiResponseService::errorWrapped('Validation failed', 422, $validator->errors()->toArray());
             }
         }
 
@@ -808,7 +806,7 @@ class CoreRecordController extends Controller
             if (0 === $affected) {
                 DB::rollBack();
 
-                return $this->error('Not found', 404);
+                return RecordApiResponseService::errorWrapped('Not found', 404);
             }
 
             // Commit transaction
@@ -816,7 +814,7 @@ class CoreRecordController extends Controller
 
             QueryCacheService::invalidateTable($table);
 
-            $response = $this->success(['deleted' => $affected]);
+            $response = RecordApiResponseService::successWrapped(['deleted' => $affected]);
 
             $this->executeTableTrigger(
                 $schema[$table]->afterDelete ?? null,
@@ -834,16 +832,8 @@ class CoreRecordController extends Controller
             );
 
             if (!($schema[$table]->disable_auditLog ?? false)) {
-                try {
-                    $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                    AuditLogService::insertAuditLog(AuditLogEventEnum::DELETED, $entityClass, ['id' => $id]);
-                } catch (Exception) {
-                    // Log::error('Audit log insert failed (delete)', [
-                    //     'table' => $table,
-                    //     'id' => $id,
-                    //     'error' => $exception->getMessage(),
-                    // ]);
-                }
+                $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
+                AuditLogService::insertAuditLog(AuditLogEventEnum::DELETED, $entityClass, ['id' => $id]);
             }
 
             return $response;
@@ -859,12 +849,12 @@ class CoreRecordController extends Controller
             //     'trace' => $exception->getTraceAsString(),
             // ]);
 
-            return $this->error('Failed to delete record: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Failed to delete record: ' . $exception->getMessage(), 500);
         }
     }
 
     /**
-     * Restore a soft-deleted record
+     * Restore a soft-deleted record.
      *
      * @param [type] $id
      */
@@ -873,13 +863,17 @@ class CoreRecordController extends Controller
         $this->authorizeAction($table, 'restore');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table]) || !$schema[$table]->soft_deletes) {
-            return $this->error('Resource not restorable', 400);
+            return RecordApiResponseService::errorWrapped('Resource not restorable', 400);
         }
 
         // Resolve actual table name from RecordTableType configuration
         $actualTableName = $this->resolveActualTableName($table);
 
-        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
+        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
+            return $response;
+        }
+
         $pk = $schema[$table]->primary_key ?? 'id';
 
         $affected = 0;
@@ -897,7 +891,7 @@ class CoreRecordController extends Controller
             if (0 === $affected) {
                 DB::rollBack();
 
-                return $this->error('Not found', 404);
+                return RecordApiResponseService::errorWrapped('Not found', 404);
             }
 
             // Commit transaction
@@ -914,38 +908,39 @@ class CoreRecordController extends Controller
             //     'trace' => $exception->getTraceAsString(),
             // ]);
 
-            return $this->error('Failed to restore record: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Failed to restore record: ' . $exception->getMessage(), 500);
         }
 
         QueryCacheService::invalidateTable($table);
 
         if (!($schema[$table]->disable_auditLog ?? false)) {
-            try {
-                $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                $record = $this->show($request, $table, $id);
-                AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
-            } catch (Exception) {
-            }
+            $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
+            $record = $this->show($request, $table, $id);
+            AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
         }
 
-        return $this->success(['restored' => $affected]);
+        return RecordApiResponseService::successWrapped(['restored' => $affected]);
     }
 
     /**
-     * Force delete a record (bypass soft delete)
+     * Force delete a record (bypass soft delete).
      */
     public function forceDelete(Request $request, string $table, string $id): JsonResponse
     {
         $this->authorizeAction($table, 'force_delete');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
-            return $this->error('Resource not available', 404);
+            return RecordApiResponseService::errorWrapped('Resource not available', 404);
         }
 
         // Resolve actual table name from RecordTableType configuration
         $actualTableName = $this->resolveActualTableName($table);
 
-        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
+        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
+            return $response;
+        }
+
         $pk = $schema[$table]->primary_key ?? 'id';
 
         $deleted = 0;
@@ -955,16 +950,14 @@ class CoreRecordController extends Controller
 
         try {
             $query = DB::table($actualTableName)->where($pk, $id);
-            if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
-                $query->where(config('record.tenant_column', 'tenant_id'), $tenantId);
-            }
+            $this->applyTenantFilter($query, $actualTableName, $tenantId);
 
             $deleted = $query->delete();
 
             if (0 === $deleted) {
                 DB::rollBack();
 
-                return $this->error('Not found', 404);
+                return RecordApiResponseService::errorWrapped('Not found', 404);
             }
 
             // Audit log for deletion (if not disabled)
@@ -979,18 +972,10 @@ class CoreRecordController extends Controller
             // Rollback transaction on any error
             DB::rollBack();
 
-            // Log the error for debugging
-            // Log::error('Force delete operation failed', [
-            //     'table' => $table,
-            //     'id' => $id,
-            //     'error' => $exception->getMessage(),
-            //     'trace' => $exception->getTraceAsString(),
-            // ]);
-
-            return $this->error('Failed to force delete record: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Failed to force delete record: ' . $exception->getMessage(), 500);
         }
 
-        return $this->success(['deleted' => $deleted]);
+        return RecordApiResponseService::successWrapped(['deleted' => $deleted]);
     }
 
     public function bulk(Request $request, string $table): JsonResponse
@@ -1005,7 +990,7 @@ class CoreRecordController extends Controller
         $this->authorizeAction($actualTableName, 'update');
         $this->authorizeAction($actualTableName, 'delete');
         if (!isset($schema[$table])) {
-            return $this->error('Resource not available', 404);
+            return RecordApiResponseService::errorWrapped('Resource not available', 404);
         }
 
         // Support both direct array and items wrapper for backward compatibility
@@ -1026,15 +1011,19 @@ class CoreRecordController extends Controller
         }
 
         if (!is_array($items) || [] === $items) {
-            return $this->error('Data array required', 422);
+            return RecordApiResponseService::errorWrapped('Data array required', 422);
         }
 
         $maxBatch = (int) config('record.bulk_max', 100);
         if (count($items) > $maxBatch) {
-            return $this->error('Batch too large, max ' . $maxBatch, 413);
+            return RecordApiResponseService::errorWrapped('Batch too large, max ' . $maxBatch, 413);
         }
 
-        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
+        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
+            return $response;
+        }
+
         $pk = $schema[$table]->primary_key ?? 'id';
 
         $affected = 0;
@@ -1054,7 +1043,7 @@ class CoreRecordController extends Controller
                 if ('create' === $operation) {
                     // CREATE: No ID present, create new record
                     $item = $this->sanitizePayload($item, $schema[$table]);
-                    if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
+                    if ($this->shouldApplyTenantId($schema[$table])) {
                         $item[config('record.tenant_column', 'tenant_id')] = $tenantId;
                     }
 
@@ -1081,8 +1070,8 @@ class CoreRecordController extends Controller
                     $id = $item[$pk];
                     unset($item[$pk]);
                     $item = $this->sanitizePayload($item, $schema[$table]);
-                    if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
-                        $item[config('record.tenant_column', 'tenant_id')] = $tenantId;
+                    if ($this->shouldApplyTenantId($schema[$table])) {
+                        unset($item[config('record.tenant_column', 'tenant_id')]);
                     }
 
                     // Apply timestamps and audit fields
@@ -1129,7 +1118,7 @@ class CoreRecordController extends Controller
                 } elseif ('upsert' === $operation) {
                     // UPSERT: Legacy action support
                     $item = $this->sanitizePayload($item, $schema[$table]);
-                    if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
+                    if ($this->shouldApplyTenantId($schema[$table])) {
                         $item[config('record.tenant_column', 'tenant_id')] = $tenantId;
                     }
 
@@ -1173,26 +1162,14 @@ class CoreRecordController extends Controller
                 $consolidatedData = array_merge($consolidatedData, $upsertedData);
             }
 
-            // Note: Deleted records are intentionally excluded from the consolidated data
-
             // Calculate total affected records (excluding deletes for the data array)
             $activeRecordsCount = count($createdData) + count($updatedData) + count($upsertedData);
 
-            return $this->success(data: $consolidatedData, meta: ['affected' => $activeRecordsCount]);
+            return RecordApiResponseService::successWrapped($consolidatedData, ['affected' => $activeRecordsCount]);
         } catch (Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
-
-            // Log the error for debugging
-            // Log::error('Bulk operation failed', [
-            //     'table' => $table,
-            //     'action' => 'mixed',
-            //     'items_count' => count($items),
-            //     'error' => $exception->getMessage(),
-            //     'trace' => $exception->getTraceAsString(),
-            // ]);
-
-            return $this->error('Failed to perform bulk operation: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Failed to perform bulk operation: ' . $exception->getMessage(), 500);
         }
     }
 
@@ -1205,10 +1182,7 @@ class CoreRecordController extends Controller
             // Get schema and validate table exists
             $schema = SchemaRegistry::get();
             if (!isset($schema[$table])) {
-                return response()->json([
-                    'error' => 'Table not found',
-                    'message' => sprintf("Table '%s' does not exist", $table),
-                ], 404);
+                return RecordApiResponseService::errorWrapped(sprintf("Table '%s' does not exist", $table), 404);
             }
 
             // Check if function exists in table schema
@@ -1240,10 +1214,7 @@ class CoreRecordController extends Controller
             }
 
             if (!$functionConfig) {
-                return response()->json([
-                    'error' => 'Function not found',
-                    'message' => sprintf("Function '%s' not found for table '%s'", $functionName, $table),
-                ], 404);
+                return RecordApiResponseService::errorWrapped(sprintf("Function '%s' not found for table '%s'", $functionName, $table), 404);
             }
 
             // Check permission using table function's pms_name
@@ -1254,17 +1225,7 @@ class CoreRecordController extends Controller
             // Execute the custom function with extracted ID parameter
             return $this->executeCustomFunction($request, $functionConfig, $extractedId);
         } catch (Exception $exception) {
-            // Log::error('Table function execution failed', [
-            //     'table' => $table,
-            //     'function' => $functionName,
-            //     'error' => $exception->getMessage(),
-            //     'trace' => $exception->getTraceAsString(),
-            // ]);
-
-            return response()->json([
-                'error' => 'Function execution failed',
-                'message' => $exception->getMessage(),
-            ], 500);
+            return RecordApiResponseService::errorWrapped('Function execution failed: ' . $exception->getMessage(), 500);
         }
     }
 
@@ -1304,25 +1265,13 @@ class CoreRecordController extends Controller
             }
 
             if (!$functionConfig) {
-                return response()->json([
-                    'error' => 'Function not found',
-                    'message' => sprintf("Function '%s' not found", $functionName),
-                ], 404);
+                return RecordApiResponseService::errorWrapped(sprintf("Function '%s' not found", $functionName), 404);
             }
 
             // Execute the custom function with extracted ID parameter
             return $this->executeCustomFunction($request, $functionConfig, $extractedId);
         } catch (Exception $exception) {
-            // Log::error('Table function execution failed', [
-            //     'function' => $functionName,
-            //     'error' => $exception->getMessage(),
-            //     'trace' => $exception->getTraceAsString(),
-            // ]);
-
-            return response()->json([
-                'error' => 'Function execution failed',
-                'message' => $exception->getMessage(),
-            ], 500);
+            return RecordApiResponseService::errorWrapped('Function execution failed: ' . $exception->getMessage(), 500);
         }
     }
 
@@ -1339,7 +1288,7 @@ class CoreRecordController extends Controller
         $this->authorizeAction($table, 'create');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
-            return $this->error('Resource not available', 404);
+            return RecordApiResponseService::errorWrapped('Resource not available', 404);
         }
 
         // Resolve actual table name from RecordTableType configuration
@@ -1373,7 +1322,11 @@ class CoreRecordController extends Controller
             throw new ValidationException($validator);
         }
 
-        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
+        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
+            return $response;
+        }
+
         $pk = $schema[$table]->primary_key ?? 'id';
 
         $createdData = [];
@@ -1393,7 +1346,7 @@ class CoreRecordController extends Controller
                 // Sanitize and prepare payload
                 $item = $this->sanitizePayload($item, $schema[$table]);
 
-                if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
+                if ($this->shouldApplyTenantId($schema[$table])) {
                     $item[config('record.tenant_column', 'tenant_id')] = $tenantId;
                 }
 
@@ -1417,22 +1370,15 @@ class CoreRecordController extends Controller
 
             DB::commit();
 
-            return $this->success($createdData, ['affected' => $affected]);
+            return RecordApiResponseService::successWrapped($createdData, ['affected' => $affected]);
         } catch (Exception $exception) {
             DB::rollBack();
 
-            // Log::error('Bulk create operation failed', [
-            //     'table' => $table,
-            //     'items_count' => count($items),
-            //     'error' => $exception->getMessage(),
-            //     'trace' => $exception->getTraceAsString(),
-            // ]);
-
             if ($exception instanceof ValidationException) {
-                return $this->error('Validation failed', 422, $exception->errors());
+                return RecordApiResponseService::errorWrapped('Validation failed', 422, $exception->errors());
             }
 
-            return $this->error('Failed to perform bulk create operation: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Failed to perform bulk create operation: ' . $exception->getMessage(), 500);
         }
     }
 
@@ -1449,7 +1395,7 @@ class CoreRecordController extends Controller
         $this->authorizeAction($table, 'update');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
-            return $this->error('Resource not available', 404);
+            return RecordApiResponseService::errorWrapped('Resource not available', 404);
         }
 
         // Resolve actual table name from RecordTableType configuration
@@ -1486,7 +1432,10 @@ class CoreRecordController extends Controller
             throw new ValidationException($validator);
         }
 
-        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
+        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
+            return $response;
+        }
 
         $updatedData = [];
         $affected = 0;
@@ -1516,8 +1465,8 @@ class CoreRecordController extends Controller
                 // Sanitize and prepare payload
                 $item = $this->sanitizePayload($item, $schema[$table]);
 
-                if ($tenantId && ($schema[$table]->has_tenant_id ?? false)) {
-                    $item[config('record.tenant_column', 'tenant_id')] = $tenantId;
+                if ($this->shouldApplyTenantId($schema[$table])) {
+                    unset($item[config('record.tenant_column', 'tenant_id')]);
                 }
 
                 // Apply timestamps and audit fields
@@ -1552,22 +1501,15 @@ class CoreRecordController extends Controller
 
             DB::commit();
 
-            return $this->success($updatedData, ['affected' => $affected]);
+            return RecordApiResponseService::successWrapped($updatedData, ['affected' => $affected]);
         } catch (Exception $exception) {
             DB::rollBack();
 
-            // Log::error('Bulk update operation failed', [
-            //     'table' => $table,
-            //     'items_count' => count($items),
-            //     'error' => $exception->getMessage(),
-            //     'trace' => $exception->getTraceAsString(),
-            // ]);
-
             if ($exception instanceof ValidationException) {
-                return $this->error('Validation failed', 422, $exception->errors());
+                return RecordApiResponseService::errorWrapped('Validation failed', 422, $exception->errors());
             }
 
-            return $this->error('Failed to perform bulk update operation: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Failed to perform bulk update operation: ' . $exception->getMessage(), 500);
         }
     }
 
@@ -1584,7 +1526,7 @@ class CoreRecordController extends Controller
         $this->authorizeAction($table, 'delete');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
-            return $this->error('Resource not available', 404);
+            return RecordApiResponseService::errorWrapped('Resource not available', 404);
         }
 
         // Resolve actual table name from RecordTableType configuration
@@ -1616,7 +1558,10 @@ class CoreRecordController extends Controller
             throw new ValidationException($validator);
         }
 
-        $tenantId = $request->attributes->get(config('record.tenant_column', 'tenant_id'));
+        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
+            return $response;
+        }
 
         // Normalize items to extract IDs
         $idsToDelete = [];
@@ -1684,22 +1629,14 @@ class CoreRecordController extends Controller
 
             DB::commit();
 
-            return $this->success($deletedData, ['affected' => $affected]);
+            return RecordApiResponseService::successWrapped($deletedData, ['affected' => $affected]);
         } catch (Exception $exception) {
             DB::rollBack();
-
-            // Log::error('Bulk delete operation failed', [
-            //     'table' => $table,
-            //     'items_count' => count($idsToDelete),
-            //     'error' => $exception->getMessage(),
-            //     'trace' => $exception->getTraceAsString(),
-            // ]);
-
             if ($exception instanceof ValidationException) {
-                return $this->error('Validation failed', 422, $exception->errors());
+                return RecordApiResponseService::errorWrapped('Validation failed', 422, $exception->errors());
             }
 
-            return $this->error('Failed to perform bulk delete operation: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Failed to perform bulk delete operation: ' . $exception->getMessage(), 500);
         }
     }
 
@@ -1800,12 +1737,49 @@ class CoreRecordController extends Controller
      */
     private function applyTenantFilter(mixed $query, string $table, mixed $tenantId): void
     {
-        if ($this->isTenantIdEnabled() && $tenantId) {
+        $tenantId = $this->normalizeTenantId($tenantId);
+        if ($this->isTenantIdEnabled() && !$this->isTenantIdMissing($tenantId)) {
             $schema = $this->getCachedSchema();
             if ($schema[$table]->has_tenant_id ?? false) {
                 $query->where($table . '.' . config('record.tenant_column', 'tenant_id'), $tenantId);
             }
         }
+    }
+
+    private function normalizeTenantId(mixed $tenantId): mixed
+    {
+        if (is_string($tenantId)) {
+            return trim($tenantId);
+        }
+
+        return $tenantId;
+    }
+
+    private function isTenantIdMissing(mixed $tenantId): bool
+    {
+        $tenantId = $this->normalizeTenantId($tenantId);
+
+        return null === $tenantId || '' === $tenantId;
+    }
+
+    private function shouldApplyTenantId(object $tableSchema): bool
+    {
+        return $this->isTenantIdEnabled() && ($tableSchema->has_tenant_id ?? false);
+    }
+
+    private function validateTenantIdRequired(object $tableSchema, mixed $tenantId): ?JsonResponse
+    {
+        if (!$this->shouldApplyTenantId($tableSchema)) {
+            return null;
+        }
+
+        if ($this->isTenantIdMissing($tenantId)) {
+            return RecordApiResponseService::errorWrapped('Validation failed', 422, [
+                config('record.tenant_header', 'X-Tenant-ID') => ['header ' . config('record.tenant_header', 'X-Tenant-ID') . ' cannot be empty'],
+            ]);
+        }
+
+        return null;
     }
 
     /**
@@ -1868,32 +1842,6 @@ class CoreRecordController extends Controller
         return $payload;
     }
 
-    private function success($data, array $meta = [], int $status = 200, array $headers = []): JsonResponse
-    {
-        $requestId = request()->attributes->get('request_id');
-        $meta = array_merge(['request_id' => $requestId], $meta);
-
-        return response()->json([
-            'success' => true,
-            'data' => $data,
-            'meta' => $meta,
-        ], $status, $headers);
-    }
-
-    private function error(string $message, int $status = 400, array $errors = []): JsonResponse
-    {
-        $requestId = request()->attributes->get('request_id');
-
-        return response()->json([
-            'success' => false,
-            'message' => $message,
-            'errors' => $errors,
-            'meta' => [
-                'request_id' => $requestId,
-            ],
-        ], $status);
-    }
-
     private function isCacheableRequest(Request $request, string $table): bool
     {
         // Check if caching is globally enabled
@@ -1949,7 +1897,7 @@ class CoreRecordController extends Controller
         return 'record_show_' . md5(serialize($keyData));
     }
 
-    private function executeTableTrigger(RecordTableTriggerType|array|null $trigger, array $params = []): array
+    private function executeTableTrigger(array|RecordTableTriggerType|null $trigger, array $params = []): array
     {
         if (null === $trigger) {
             return $params;
@@ -1966,10 +1914,6 @@ class CoreRecordController extends Controller
                 try {
                     $item = RecordTableTriggerType::fromArray($item);
                 } catch (Exception) {
-                    // Log::error('Record table trigger config invalid', [
-                    //     'error' => $exception->getMessage(),
-                    // ]);
-
                     continue;
                 }
             }
@@ -1981,17 +1925,10 @@ class CoreRecordController extends Controller
             $className = $item->class;
             $method = $item->function_method;
             if (!class_exists($className)) {
-                // Log::warning('Record table trigger handler not found', [
-                //     'class' => $className,
-                //     'method' => $method,
-                // ]);
                 continue;
             }
+
             if (!method_exists($className, $method)) {
-                // Log::warning('Record table trigger handler not found', [
-                //     'class' => $className,
-                //     'method' => $method,
-                // ]);
                 continue;
             }
 
@@ -2003,11 +1940,6 @@ class CoreRecordController extends Controller
                     $params[0]->merge($result);
                 }
             } catch (Exception) {
-                // Log::error('Record table trigger execution failed', [
-                //     'class' => $className,
-                //     'method' => $method,
-                //     'error' => $exception->getMessage(),
-                // ]);
             }
         }
 
@@ -2041,39 +1973,6 @@ class CoreRecordController extends Controller
     }
 
     /**
-     * Recursively remove deleted_at fields from response data.
-     *
-     *
-     * @return mixed
-     */
-    private function removeDeletedAtFields(mixed $data)
-    {
-        if (is_array($data)) {
-            $result = [];
-            foreach ($data as $key => $value) {
-                if ('deleted_at' !== $key) {
-                    $result[$key] = $this->removeDeletedAtFields($value);
-                }
-            }
-
-            return $result;
-        }
-
-        if (is_object($data)) {
-            $result = new stdClass();
-            foreach ($data as $key => $value) {
-                if ('deleted_at' !== $key) {
-                    $result->{$key} = $this->removeDeletedAtFields($value);
-                }
-            }
-
-            return $result;
-        }
-
-        return $data;
-    }
-
-    /**
      * Execute a custom function based on its configuration.
      */
     private function executeCustomFunction(Request $request, array|RecordFunctionType $functionConfig, mixed $id = null): JsonResponse
@@ -2090,10 +1989,7 @@ class CoreRecordController extends Controller
             $guard = config('sp-laravel-api.auth.guard', 'api');
             $user = auth($guard)->user();
             if (!$user) {
-                return response()->json([
-                    'error' => 'Unauthenticated',
-                    'message' => 'Authentication required',
-                ], 401);
+                return RecordApiResponseService::errorWrapped('Authentication required', 401);
             }
 
             // Handle both single permission (string) and multiple permissions (array)
@@ -2110,10 +2006,7 @@ class CoreRecordController extends Controller
             }
 
             if (!$hasPermission) {
-                return response()->json([
-                    'error' => 'Forbidden',
-                    'message' => 'Insufficient permissions',
-                ], 403);
+                return RecordApiResponseService::errorWrapped('Insufficient permissions', 403);
             }
         }
 
@@ -2131,10 +2024,7 @@ class CoreRecordController extends Controller
             }, $allowedMethods);
 
             if (!in_array(strtoupper($request->method()), $allowedMethods, true)) {
-                return response()->json([
-                    'error' => 'Method not allowed',
-                    'message' => sprintf("Method '%s' not allowed for this function", $request->method()),
-                ], 405);
+                return RecordApiResponseService::errorWrapped(sprintf("Method '%s' not allowed for this function", $request->method()), 405);
             }
         }
 
@@ -2148,10 +2038,7 @@ class CoreRecordController extends Controller
             }
 
             if ([] !== $missingParams) {
-                return response()->json([
-                    'error' => 'Missing required parameters',
-                    'message' => 'Missing parameters: ' . implode(', ', $missingParams),
-                ], 400);
+                return RecordApiResponseService::errorWrapped('Missing required parameters', 400, ['missing' => $missingParams]);
             }
         }
 
@@ -2168,18 +2055,12 @@ class CoreRecordController extends Controller
             $method = $functionConfig['function_method'] ?? 'handle';
 
             if (!$className || !class_exists($className)) {
-                return response()->json([
-                    'error' => 'Function class not found',
-                    'message' => sprintf("Class '%s' does not exist", $className),
-                ], 500);
+                return RecordApiResponseService::errorWrapped(sprintf("Class '%s' does not exist", $className), 500);
             }
 
             $instance = new $className();
             if (!method_exists($instance, $method)) {
-                return response()->json([
-                    'error' => 'Function method not found',
-                    'message' => sprintf("Method '%s' does not exist in class '%s'", $method, $className),
-                ], 500);
+                return RecordApiResponseService::errorWrapped(sprintf("Method '%s' does not exist in class '%s'", $method, $className), 500);
             }
 
             $result = $id ? $instance->{$method}($request, $id) : $instance->{$method}($request);
@@ -2201,18 +2082,15 @@ class CoreRecordController extends Controller
                 }
 
                 if ($statusCode > 204) {
-                    return $this->error('string' === gettype($records) ? $records : '', $statusCode, 'object' === gettype($responseData) ? (array) $responseData : []);
+                    return RecordApiResponseService::errorWrapped('string' === gettype($records) ? $records : '', $statusCode, 'object' === gettype($responseData) ? (array) $responseData : []);
                 }
 
-                return $this->success($records, $meta, $result->getStatusCode());
+                return RecordApiResponseService::successWrapped($records, $meta, $result->getStatusCode());
             }
 
-            return response()->json($result);
+            return RecordApiResponseService::successWrapped($result);
         } catch (Exception $exception) {
-            return response()->json([
-                'error' => 'Function execution failed',
-                'message' => $exception->getMessage(),
-            ], 500);
+            return RecordApiResponseService::errorWrapped('Function execution failed: ' . $exception->getMessage(), 500);
         }
     }
 }

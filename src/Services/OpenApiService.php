@@ -52,13 +52,13 @@ class OpenApiService
             $actualTableName = $config->table ?? $recordName; // Use actual table name from config
 
             // Full schema (for responses)
-            $schemas[self::schemaName($recordName)] = self::tableSchema($actualTableName, $columns, $config);
+            $schemas[self::schemaName($recordName)] = self::tableSchema($actualTableName, $columns);
 
             // Read schema (for GET operations - exclude created_at, updated_at)
-            $schemas[self::schemaName($recordName).'Read'] = self::tableSchemaRead($actualTableName, $columns, $config);
+            $schemas[self::schemaName($recordName).'Read'] = self::tableSchemaRead($actualTableName, $columns);
 
             // Write schema (for POST/PUT/PATCH operations - exclude created_at, updated_at, deleted_at)
-            $schemas[self::schemaName($recordName).'Write'] = self::tableSchemaWrite($actualTableName, $columns, $config);
+            $schemas[self::schemaName($recordName).'Write'] = self::tableSchemaWrite($actualTableName, $columns);
         }
 
         $paths = self::paths($tables);

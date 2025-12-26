@@ -3,10 +3,11 @@
     "file:///Users/sopheak/.vscode/extensions/atlassian.atlascode-3.0.10/resources/schemas/pipelines-schema.json": "bitbucket-pipelines.yml",
     "https://www.schemastore.org/json-patch.json": "untitled:Untitled-1"
   },
-  "php-cs-fixer.executablePath": "${extensionPath}/php-cs-fixer.phar",
-  "php-cs-fixer.onsave": true,
-  "php-cs-fixer.rules": "@PhpCsFixer",
-  "php-cs-fixer.config": "config/.php-cs-fixer.dist.php",
+  "php-cs-fixer.executablePath": "php-cs-fixer",
+  "php-cs-fixer.executablePathWindows": "", //eg: php-cs-fixer.bat
+  "php-cs-fixer.onsave": false,
+  "php-cs-fixer.rules": "@PSR12",
+  "php-cs-fixer.config": ".php-cs-fixer.php;.php-cs-fixer.dist.php;.php_cs;.php_cs.dist",
   "php-cs-fixer.allowRisky": false,
   "php-cs-fixer.pathMode": "override",
   "php-cs-fixer.ignorePHPVersion": false,
@@ -14,8 +15,5 @@
   "php-cs-fixer.autoFixByBracket": false,
   "php-cs-fixer.autoFixBySemicolon": false,
   "php-cs-fixer.formatHtml": false,
-  "php-cs-fixer.documentFormattingProvider": true,
-  "[php]": {
-    "editor.defaultFormatter": "junstyle.php-cs-fixer"
-  }
+  "php-cs-fixer.documentFormattingProvider": true
 }

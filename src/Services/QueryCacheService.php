@@ -40,7 +40,7 @@ class QueryCacheService
     /**
      * Get cached query result or execute and cache the callback
      */
-    public static function remember(string $key, callable $callback, int $ttl = null): mixed
+    public static function remember(string $key, callable $callback): mixed
     {
         // If caching is disabled, execute callback directly
         if (!self::isCacheEnabled()) {
@@ -52,11 +52,11 @@ class QueryCacheService
 
         try {
             return Cache::remember($cacheKey, $ttl, $callback);
-        } catch (Exception $exception) {
-            Log::warning('Query cache failed, executing callback directly', [
-                'key' => $key,
-                'error' => $exception->getMessage()
-            ]);
+        } catch (Exception) {
+            // Log::warning('Query cache failed, executing callback directly', [
+            //     'key' => $key,
+            //     'error' => $exception->getMessage()
+            // ]);
             return $callback();
         }
     }
@@ -64,7 +64,7 @@ class QueryCacheService
     /**
      * Cache a query result
      */
-    public static function put(string $key, mixed $value, string $table = null, int $ttl = null): bool
+    public static function put(string $key, mixed $value): bool
     {
         // If caching is disabled, return true (no-op)
         if (!self::isCacheEnabled()) {
@@ -76,12 +76,12 @@ class QueryCacheService
 
         try {
             return Cache::put($cacheKey, $value, $ttl);
-        } catch (Exception $exception) {
-            Log::warning('Failed to cache query result', [
-                'key' => $key,
-                'table' => $table,
-                'error' => $exception->getMessage()
-            ]);
+        } catch (Exception) {
+            // Log::warning('Failed to cache query result', [
+            //     'key' => $key,
+            //     'table' => $table,
+            //     'error' => $exception->getMessage()
+            // ]);
             return false;
         }
     }

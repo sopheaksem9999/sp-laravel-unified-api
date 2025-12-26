@@ -343,7 +343,7 @@ return [
     | - 'records' → /records/users, /records/posts
     |
     */
-    'api_prefix' => env('RECORD_API_PREFIX', 'api/v1'),
+    'api_prefix' => 'api/v1',
 
     /*
     |--------------------------------------------------------------------------
@@ -353,7 +353,7 @@ return [
     'max_depth' => env('RECORD_MAX_DEPTH', 3),
     'cache_ttl' => env('RECORD_CACHE_TTL', 3600),
     'lazy_cache_ttl' => env('RECORD_LAZY_CACHE_TTL', 300),
-    'enable_tenant_id' => env('RECORD_ENABLE_TENANT_ID', false),
+    'enable_tenant_id' => false,
 
     /*
     |--------------------------------------------------------------------------

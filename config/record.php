@@ -44,8 +44,9 @@ return [
     | Default: false (for backward compatibility with existing projects)
     |
     */
-    'enable_tenant_id' => env('RECORD_ENABLE_TENANT_ID', false),
+    'enable_tenant_id' => false,
     'tenant_column' => 'tenant_id',
+    'tenant_header' => 'X-Tenant-ID',
 
     /*
     |--------------------------------------------------------------------------
@@ -57,7 +58,7 @@ return [
     | You can customize this prefix to match your application's routing structure.
     |
     */
-    'api_prefix' => env('RECORD_API_PREFIX', 'api/v1'),
+    'api_prefix' => 'api/v1',
 
     // Maximum items returned per page for list endpoints
     'per_page_max' => 10000,
@@ -77,7 +78,7 @@ return [
         'ttl' => 3600,
 
         // Cache key prefix for Records API
-        'prefix' => 'records_api',
+        'prefix' => 'sp_laravel_api',
 
         // Per-table cache control (overrides global setting)
         'per_table' => [

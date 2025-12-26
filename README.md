@@ -321,12 +321,13 @@ return [
     // API route prefix
     'api_prefix' => env('RECORD_API_PREFIX', 'api'),
     'tenant_column' => 'tenant_id',
+    'tenant_header' => 'X-Tenant-ID',
     
     // Global settings
     'max_depth' => env('RECORD_MAX_DEPTH', 3),
     'cache_ttl' => env('RECORD_CACHE_TTL', 3600),
     'lazy_cache_ttl' => env('RECORD_LAZY_CACHE_TTL', 300),
-    'enable_tenant_id' => env('RECORD_ENABLE_TENANT_ID', false),
+    'enable_tenant_id' => false,
     
     // Table configurations
     'tables' => [
@@ -366,7 +367,7 @@ return [
     'max_depth' => env('RECORD_MAX_DEPTH', 3),
     'cache_ttl' => env('RECORD_CACHE_TTL', 3600),
     'lazy_cache_ttl' => env('RECORD_LAZY_CACHE_TTL', 300),
-    'enable_tenant_id' => env('RECORD_ENABLE_TENANT_ID', false),
+    'enable_tenant_id' => false,
     'tables' => $tables,
 ];
 ```
@@ -734,6 +735,7 @@ return [
 return [
     'enable_tenant_id' => true,
     'tenant_column' => 'tenant_id',
+    'tenant_header' => 'X-Tenant-ID',
     'tenant_resolver' => \App\Services\TenantResolver::class,
 ];
 ```
@@ -1183,7 +1185,7 @@ return [
 Controls database table operations and OpenAPI generation:
 ```php
 return [
-    'enable_tenant_id' => env('RECORD_ENABLE_TENANT_ID', false),
+    'enable_tenant_id' => false,
     'api_prefix' => env('RECORD_API_PREFIX', 'api'),
     'global_functions' => [
         // Define custom RPC functions here

@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Log;
 
 class SchemaRegistry
 {
-    private const CACHE_KEY = 'schema_record_registry:v1';
+    private const CACHE_KEY = 'sp_laravel_api_schema_record_registry:v1';
 
     private static array $cache = [];
 
@@ -23,9 +23,9 @@ class SchemaRegistry
     private static int $cacheTtl = 31536000;
 
     // Redis cache keys
-    private static string $schemaCacheKey = 'schema_record_registry:schema';
+    private static string $schemaCacheKey = 'sp_laravel_api_schema_record_registry:schema';
 
-    private static string $columnCacheKey = 'schema_record_registry:columns';
+    private static string $columnCacheKey = 'sp_laravel_api_schema_record_registry:columns';
 
     /**
      * Get schema registry for allowed tables.

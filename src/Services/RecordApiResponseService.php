@@ -28,6 +28,33 @@ class RecordApiResponseService
         return response()->json($cleanData, $statusCode->value);
     }
 
+    public static function successWrapped(mixed $data, array $meta = [], int $status = 200, array $headers = []): JsonResponse
+    {
+        $requestId = request()->attributes->get('request_id');
+        $meta = array_merge(['request_id' => $requestId], $meta);
+        $data = static::removeDeletedAtFields($data);
+
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+            'meta' => $meta,
+        ], $status, $headers);
+    }
+
+    public static function errorWrapped(string $message, int $status = 400, array $errors = []): JsonResponse
+    {
+        $requestId = request()->attributes->get('request_id');
+
+        return response()->json([
+            'success' => false,
+            'message' => $message,
+            'errors' => $errors,
+            'meta' => [
+                'request_id' => $requestId,
+            ],
+        ], $status);
+    }
+
     /**
      * Create a success response with data.
      *

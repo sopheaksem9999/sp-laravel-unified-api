@@ -251,8 +251,9 @@ return [
     | Tenant ID Configuration
     |--------------------------------------------------------------------------
     */
-    'enable_tenant_id' => env('RECORD_ENABLE_TENANT_ID', false),
+    'enable_tenant_id' => false,
     'tenant_column' => 'tenant_id',
+    'tenant_header' => 'X-Tenant-ID',
 
     /*
     |--------------------------------------------------------------------------
@@ -274,7 +275,7 @@ return [
     'cache' => [
         'enabled' => env('CACHE_API', false),
         'ttl' => 3600,
-        'prefix' => 'records_api',
+        'prefix' => 'sp_laravel_api',
         'per_table' => [],
     ],
 

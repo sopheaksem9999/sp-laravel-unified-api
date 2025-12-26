@@ -4,7 +4,10 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Records API Docs</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    <meta name="googlebot" content="noindex">
+    <title>SP Laravel Unified API Docs</title>
     <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
     <style>
         html,
@@ -66,7 +69,8 @@
                 window.Scalar.createApiReference(document.getElementById('docs'), config);
             } catch (error) {
                 console.error('Error initializing Scalar:', error);
-                document.getElementById('docs').innerHTML = '<div style="padding: 2rem; text-align: center; color: #666;">Error loading API documentation. Please refresh the page.</div>';
+                document.getElementById('docs').innerHTML =
+                    '<div style="padding: 2rem; text-align: center; color: #666;">Error loading API documentation. Please refresh the page.</div>';
             }
         }
     </script>
