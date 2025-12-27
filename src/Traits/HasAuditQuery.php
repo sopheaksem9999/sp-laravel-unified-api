@@ -8,6 +8,7 @@ use Exception;
 use Sopheak\Core\Services\AuditLogService;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 use Illuminate\Http\JsonResponse;
+use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 
 /**
  * Trait for controllers that implement audit query functionality.
@@ -26,9 +27,9 @@ trait HasAuditQuery
      * @param string|null $recap Optional recap for the audit log
      */
     protected function logAuditWithCustomQuery(
-        int $id, 
-        AuditLogEventEnum $auditLogEventEnum, 
-        ?string $subject = null, 
+        int $id,
+        AuditLogEventEnum $auditLogEventEnum,
+        ?string $subject = null,
         ?string $recap = null
     ): void {
         if (!method_exists($this, 'getAuditQuery')) {
@@ -72,7 +73,7 @@ trait HasAuditQuery
 
         $entityClass = $this->getAuditEntityClass();
         $entityType = AuditLogService::getTableNameFromEntityType($entityClass);
-        
+
         return AuditLogService::getEntityAuditLogs($entityType, $id, $limit);
     }
 
@@ -85,7 +86,7 @@ trait HasAuditQuery
     {
         try {
             $logs = $this->getAuditLogsForRecord($id);
-            
+
             return response()->json([
                 'success' => true,
                 'data' => $logs,
@@ -95,7 +96,7 @@ trait HasAuditQuery
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve audit logs: ' . $exception->getMessage()
-            ], 500);
+            ], RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -113,12 +114,12 @@ trait HasAuditQuery
 
             $entityClass = $this->getAuditEntityClass();
             $entityType = AuditLogService::getTableNameFromEntityType($entityClass);
-            
+
             $stats = AuditLogService::getAuditStats([
                 'entity_type' => $entityType,
                 'entity_id' => $id
             ]);
-            
+
             return response()->json([
                 'success' => true,
                 'data' => $stats,
@@ -128,7 +129,7 @@ trait HasAuditQuery
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve audit statistics: ' . $exception->getMessage()
-            ], 500);
+            ], RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -148,9 +149,9 @@ trait HasAuditQuery
 
             $entityClass = $this->getAuditEntityClass();
             $entityType = AuditLogService::getTableNameFromEntityType($entityClass);
-            
+
             $timeline = AuditLogService::getFieldTimeline($entityType, $id, $field, $limit);
-            
+
             return response()->json([
                 'success' => true,
                 'data' => $timeline,
@@ -160,7 +161,7 @@ trait HasAuditQuery
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve field timeline: ' . $exception->getMessage()
-            ], 500);
+            ], RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -179,9 +180,9 @@ trait HasAuditQuery
 
             $entityClass = $this->getAuditEntityClass();
             $entityType = AuditLogService::getTableNameFromEntityType($entityClass);
-            
+
             $stats = AuditLogService::getFieldStats($entityType, $id, $field);
-            
+
             return response()->json([
                 'success' => true,
                 'data' => $stats,
@@ -191,7 +192,7 @@ trait HasAuditQuery
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve field statistics: ' . $exception->getMessage()
-            ], 500);
+            ], RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 }

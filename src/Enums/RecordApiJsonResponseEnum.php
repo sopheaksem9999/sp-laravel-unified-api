@@ -11,5 +11,6 @@ enum RecordApiJsonResponseEnum: string
     case UNAUTHORIZED = '401'; // Unauthorized access
     case FORBIDDEN = '403';    // Forbidden access
     case NOT_FOUND = '404';    // Resource not found
+    case VALIDATION_ERROR = '422'; // Validation error
     case SERVER_ERROR = '500'; // Internal server error
 }

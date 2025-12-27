@@ -29,7 +29,7 @@ class OpenApiService
         $spec = json_decode($content, true);
 
         if (JSON_ERROR_NONE !== json_last_error()) {
-            throw new Exception('Invalid OpenAPI specification JSON: '.json_last_error_msg());
+            throw new Exception('Invalid OpenAPI specification JSON: ' . json_last_error_msg());
         }
 
         return $spec;
@@ -57,10 +57,10 @@ class OpenApiService
             $schemas[self::schemaName($recordName)] = self::tableSchema($actualTableName, $columns);
 
             // Read schema (for GET operations - exclude created_at, updated_at)
-            $schemas[self::schemaName($recordName).'Read'] = self::tableSchemaRead($actualTableName, $columns);
+            $schemas[self::schemaName($recordName) . 'Read'] = self::tableSchemaRead($actualTableName, $columns);
 
             // Write schema (for POST/PUT/PATCH operations - exclude created_at, updated_at, deleted_at)
-            $schemas[self::schemaName($recordName).'Write'] = self::tableSchemaWrite($actualTableName, $columns);
+            $schemas[self::schemaName($recordName) . 'Write'] = self::tableSchemaWrite($actualTableName, $columns);
         }
 
         $paths = self::paths($tables);
@@ -106,31 +106,31 @@ This API provides **unified access** to all tables through a single endpoint pat
 ### Basic Usage
 ```bash
 # Get all paid invoices
-GET /'.$apiPrefix.'/invoices?status=eq.PAID
+GET /' . $apiPrefix . '/invoices?status=eq.PAID
 
 # Search customers by name
-GET /'.$apiPrefix.'/customers?name=like.John
+GET /' . $apiPrefix . '/customers?name=like.John
 
 # Get products in price range
-GET /'.$apiPrefix.'/products?price=between.100,1000
+GET /' . $apiPrefix . '/products?price=between.100,1000
 ```
 
 ### Load Related Data
 ```bash
 # Get invoices with customer and items
-GET /'.$apiPrefix.'/invoices?select=id,ref_number,customer:customers(id,name),items(*)
+GET /' . $apiPrefix . '/invoices?select=id,ref_number,customer:customers(id,name),items(*)
 
 # Get users with their roles
-GET /'.$apiPrefix.'/users?select=id,name,roles(id,name)
+GET /' . $apiPrefix . '/users?select=id,name,roles(id,name)
 ```
 
 ## 🏢 Multi-Tenant Header
 
 If multi-tenant mode is enabled (`record.enable_tenant_id=true`) and the table is configured with `has_tenant_id=true`, include the tenant header on requests:
 ```bash
-'.$tenantHeader.': <tenant-id>
+' . $tenantHeader . ': <tenant-id>
 ```
-Records are filtered by the `'.$tenantColumn.'` column.
+Records are filtered by the `' . $tenantColumn . '` column.
 
 ## 🔧 Key Features
 
@@ -168,7 +168,7 @@ Records are filtered by the `'.$tenantColumn.'` column.
 ### Bulk Operations (Available for All Tables)
 
 #### Mixed Operations
-`POST /'.$apiPrefix.'/{table}/bulk` - Create, update, delete in one request. Operations are auto-detected based on payload structure.
+`POST /' . $apiPrefix . '/{table}/bulk` - Create, update, delete in one request. Operations are auto-detected based on payload structure.
 
 **Request Payload:**
 Accepts a JSON array of objects directly or wrapped in `{"items": [...]}`.
@@ -201,7 +201,7 @@ Returns consolidated list of created and updated records in `data`. Deleted reco
 `meta.affected` contains the total count of processed records.
 
 #### Bulk Create
-`POST /'.$apiPrefix.'/{table}/bulk/create` - Create multiple records
+`POST /' . $apiPrefix . '/{table}/bulk/create` - Create multiple records
 Primary keys (e.g., `id`) must NOT be provided.
 
 ```json
@@ -212,7 +212,7 @@ Primary keys (e.g., `id`) must NOT be provided.
 ```
 
 #### Bulk Update
-`POST /'.$apiPrefix.'/{table}/bulk/update` - Update multiple records
+`POST /' . $apiPrefix . '/{table}/bulk/update` - Update multiple records
 Primary key is **REQUIRED** for each item. At least one field to update must be provided.
 
 ```json
@@ -223,7 +223,7 @@ Primary key is **REQUIRED** for each item. At least one field to update must be 
 ```
 
 #### Bulk Delete
-`POST /'.$apiPrefix.'/{table}/bulk/delete` - Delete multiple records
+`POST /' . $apiPrefix . '/{table}/bulk/delete` - Delete multiple records
 Accepts an array of IDs or an array of objects with the primary key.
 
 **Option 1: Array of IDs**
@@ -252,7 +252,7 @@ Accepts an array of IDs or an array of objects with the primary key.
 - Embed relationships instead of making separate API calls
 - Use cursor pagination (`cursor`) for large datasets',
                 'contact' => [
-                    'name' => config('app.name').' Development Team',
+                    'name' => config('app.name') . ' Development Team',
                     'email' => config('app.email'),
                 ],
                 'license' => [
@@ -451,16 +451,16 @@ Accepts an array of IDs or an array of objects with the primary key.
             $actualTableName = $config->table ?? $recordName; // Use actual table name from config
             $formattedRecordName = ucwords(str_replace('_', ' ', $recordName));
             $formattedTableName = ucwords(str_replace('_', ' ', $actualTableName));
-            $schemaRef = '#/components/schemas/'.self::schemaName($recordName);
-            $schemaRefRead = '#/components/schemas/'.self::schemaName($recordName).'Read';
-            $schemaRefWrite = '#/components/schemas/'.self::schemaName($recordName).'Write';
+            $schemaRef = '#/components/schemas/' . self::schemaName($recordName);
+            $schemaRefRead = '#/components/schemas/' . self::schemaName($recordName) . 'Read';
+            $schemaRefWrite = '#/components/schemas/' . self::schemaName($recordName) . 'Write';
             $tenantHeaderParameters = self::tenantHeaderParametersForTableConfig($config);
 
             // Generate relationship description
             $relationshipDescription = self::generateRelationshipDescription($config);
 
             // List & create (API endpoints use record name, but descriptions reference actual table)
-            $basePath = '/'.$apiPrefix.'/'.$recordName;
+            $basePath = '/' . $apiPrefix . '/' . $recordName;
             $paths[$basePath] = array_filter([
                 'parameters' => $tenantHeaderParameters,
                 'get' => [
@@ -538,10 +538,10 @@ Accepts an array of IDs or an array of objects with the primary key.
                     ],
                     'security' => [['bearerAuth' => []]],
                 ],
-            ], static fn (mixed $value): bool => [] !== $value);
+            ], static fn(mixed $value): bool => [] !== $value);
 
             // Read/Update/Delete
-            $idPath = $basePath.'/{id}';
+            $idPath = $basePath . '/{id}';
             $paths[$idPath] = [
                 'parameters' => array_merge([self::pathIdParameter()], $tenantHeaderParameters),
                 'get' => [
@@ -770,7 +770,7 @@ Accepts an array of IDs or an array of objects with the primary key.
             ];
 
             // Restore & Force Delete
-            $paths[$basePath.'/{id}/restore'] = [
+            $paths[$basePath . '/{id}/restore'] = [
                 'parameters' => [self::pathIdParameter()],
                 'post' => [
                     'tags' => [$formattedRecordName],
@@ -815,7 +815,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                     'security' => [['bearerAuth' => []]],
                 ],
             ];
-            $paths[$basePath.'/{id}/force'] = [
+            $paths[$basePath . '/{id}/force'] = [
                 'parameters' => [self::pathIdParameter()],
                 'delete' => [
                     'tags' => [$formattedRecordName],
@@ -878,18 +878,18 @@ Accepts an array of IDs or an array of objects with the primary key.
         foreach ($globalFunctions as $functionName => $functionConfig) {
             $allowedMethods = $functionConfig->method ?? ['GET'];
             $description = $functionConfig->description ?? 'RPC - ' . $functionName;
-            
+
             // Get schemas from config
             $querySchema = $functionConfig->query_schema ?? null;
             $payloadSchema = $functionConfig->payload_schema ?? null;
             $responseSchema = $functionConfig->response_schema ?? null;
 
-            $endpoint = '/'.$apiPrefix.'/rpc/'.$functionName;
+            $endpoint = '/' . $apiPrefix . '/rpc/' . $functionName;
             $paths[$endpoint] = [];
 
             foreach ($allowedMethods as $method) {
                 $methodLower = strtolower((string) $method);
-                
+
                 // Determine response schema
                 $successResponseSchema = [
                     'type' => 'object',
@@ -899,7 +899,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                         'meta' => ['type' => 'object'],
                     ],
                 ];
-                
+
                 if ($responseSchema) {
                     $successResponseSchema = $responseSchema;
                 }
@@ -908,7 +908,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                     'tags' => ['RPC Endpoints'],
                     'summary' => $description,
                     'description' => $description,
-                    'operationId' => 'globalRpc'.ucfirst((string) $functionName).ucfirst($methodLower),
+                    'operationId' => 'globalRpc' . ucfirst((string) $functionName) . ucfirst($methodLower),
                     'responses' => [
                         '200' => [
                             'description' => 'Successful response',
@@ -918,7 +918,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                 ],
                             ],
                         ],
-                        '400' => [
+                        'RecordApiJsonResponseEnum::ERROR->value' => [
                             'description' => 'Bad Request',
                             'content' => [
                                 'application/json' => [
@@ -1038,11 +1038,11 @@ Accepts an array of IDs or an array of objects with the primary key.
                         'type' => 'object',
                         'description' => 'Function parameters',
                     ];
-                    
+
                     if ($payloadSchema) {
                         $bodySchema = $payloadSchema;
                     }
-                    
+
                     $paths[$endpoint][$methodLower]['requestBody'] = [
                         'required' => !empty($payloadSchema['required']),
                         'content' => [
@@ -1081,7 +1081,7 @@ Accepts an array of IDs or an array of objects with the primary key.
             foreach ($functions as $functionName => $functionConfig) {
                 $allowedMethods = $functionConfig->method ?? ['GET'];
                 $description = $functionConfig->description ?? sprintf('RPC - %s: %s', $tableName, $functionName);
-                
+
                 // Get schemas from config
                 $querySchema = $functionConfig->query_schema ?? null;
                 $payloadSchema = $functionConfig->payload_schema ?? null;
@@ -1103,7 +1103,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                             'name' => $paramName,
                             'in' => 'path',
                             'required' => true,
-                            'description' => ucfirst($paramName).' parameter',
+                            'description' => ucfirst($paramName) . ' parameter',
                             'schema' => ['type' => 'string'],
                         ];
                     }
@@ -1111,7 +1111,7 @@ Accepts an array of IDs or an array of objects with the primary key.
 
                 foreach ($allowedMethods as $method) {
                     $methodLower = strtolower((string) $method);
-                    $operationId = 'tableRpc'.ucfirst((string) $tableName).ucfirst(str_replace(['{', '}', '/'], '', $functionName)).ucfirst($methodLower);
+                    $operationId = 'tableRpc' . ucfirst((string) $tableName) . ucfirst(str_replace(['{', '}', '/'], '', $functionName)) . ucfirst($methodLower);
 
                     // Determine response schema
                     $successResponseSchema = [
@@ -1122,7 +1122,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                             'meta' => ['type' => 'object'],
                         ],
                     ];
-                    
+
                     if ($responseSchema) {
                         $successResponseSchema = $responseSchema;
                     }
@@ -1142,7 +1142,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                     ],
                                 ],
                             ],
-                            '400' => [
+                            'RecordApiJsonResponseEnum::ERROR->value' => [
                                 'description' => 'Bad Request',
                                 'content' => [
                                     'application/json' => [
@@ -1267,11 +1267,11 @@ Accepts an array of IDs or an array of objects with the primary key.
                             'type' => 'object',
                             'description' => 'Function parameters',
                         ];
-                        
+
                         if ($payloadSchema) {
                             $bodySchema = $payloadSchema;
                         }
-                        
+
                         $paths[$endpoint][$methodLower]['requestBody'] = [
                             'required' => !empty($payloadSchema['required']),
                             'content' => [
@@ -1288,8 +1288,8 @@ Accepts an array of IDs or an array of objects with the primary key.
                         if ($querySchema) {
                             $queryParams = self::schemaToQueryParameters($querySchema);
                         } elseif (empty($parameters)) {
-                             // Only add default 'params' if no path parameters and no schema
-                             $queryParams[] = [
+                            // Only add default 'params' if no path parameters and no schema
+                            $queryParams[] = [
                                 'name' => 'params',
                                 'in' => 'query',
                                 'required' => false,
@@ -1297,7 +1297,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                 'schema' => ['type' => 'string'],
                             ];
                         }
-                        
+
                         if (!empty($queryParams)) {
                             if (!isset($paths[$endpoint][$methodLower]['parameters'])) {
                                 $paths[$endpoint][$methodLower]['parameters'] = [];

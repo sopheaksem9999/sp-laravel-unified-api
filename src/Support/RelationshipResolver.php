@@ -13,6 +13,7 @@ use Sopheak\Core\Types\RecordSpatiePermissionType;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 
 class RelationshipResolver
 {
@@ -251,7 +252,7 @@ class RelationshipResolver
      */
     public static function resolveRelationship(string $mainTable, string $alias, ?string $hintTable = null)
     {
-        $cacheKey = $mainTable.'|'.$alias.'|'.($hintTable ?? '');
+        $cacheKey = $mainTable . '|' . $alias . '|' . ($hintTable ?? '');
         if (array_key_exists($cacheKey, self::$resolveCache)) {
             return self::$resolveCache[$cacheKey] ?: null;
         }
@@ -270,7 +271,7 @@ class RelationshipResolver
                     $result = [
                         'type' => 'belongsTo',
                         'table' => $rel->table,
-                        'foreign_key' => $rel->foreignKey ?? (Str::singular($rel->table).'_id'),
+                        'foreign_key' => $rel->foreignKey ?? (Str::singular($rel->table) . '_id'),
                         'owner_key' => $rel->ownerKey ?? 'id',
                         'local_key' => $localPk,
                         'selectable' => ['*'],
@@ -285,7 +286,7 @@ class RelationshipResolver
                     $result = [
                         'type' => 'hasMany',
                         'table' => $rel->table,
-                        'foreign_key' => $rel->foreignKey ?? (Str::singular($mainTable).'_id'),
+                        'foreign_key' => $rel->foreignKey ?? (Str::singular($mainTable) . '_id'),
                         'local_key' => $rel->localKey ?? $localPk,
                         'selectable' => ['*'],
                         'allow_create' => $rel->allowCreate,
@@ -303,7 +304,7 @@ class RelationshipResolver
                         'type' => 'belongsToMany',
                         'table' => $rel->related,
                         'pivot_table' => $rel->table,
-                        'foreign_pivot_key' => $rel->foreignPivotKey ?? (Str::singular($mainTable).'_id'),
+                        'foreign_pivot_key' => $rel->foreignPivotKey ?? (Str::singular($mainTable) . '_id'),
                         'related_pivot_key' => $rel->relatedPivotKey ?? 'id',
                         'parent_key' => $rel->parentKey ?? $localPk,
                         'related_key' => $rel->relatedKey ?? 'id',
@@ -345,7 +346,7 @@ class RelationshipResolver
 
                     // Normalize relation to FQCN if provided as 'model' placeholder or missing
                     if (!isset($result['relation']) || $result['relation'] === 'model') {
-                      $result['relation'] = 'App\\Models\\'.Str::studly(Str::singular($mainTable));
+                        $result['relation'] = 'App\\Models\\' . Str::studly(Str::singular($mainTable));
                     }
 
                     self::$resolveCache[$cacheKey] = $result;
@@ -359,9 +360,9 @@ class RelationshipResolver
                         'type' => 'hasManyThrough',
                         'table' => $rel->table,
                         'through_table' => $rel->through,
-                        'first_key' => $rel->firstKey ?? (Str::singular($mainTable).'_id'),
+                        'first_key' => $rel->firstKey ?? (Str::singular($mainTable) . '_id'),
                         'second_key' => $rel->secondKey ?? 'id',
-                        'second_local_key' => $rel->secondLocalKey ?? (Str::singular($rel->table).'_id'),
+                        'second_local_key' => $rel->secondLocalKey ?? (Str::singular($rel->table) . '_id'),
                         'local_key' => $rel->localKey ?? $localPk,
                         'order_by' => $rel->orderBy ?? null,
                         'selectable' => ['*'],
@@ -425,7 +426,7 @@ class RelationshipResolver
             }
 
             if (!$recordId) {
-                abort(422, 'Missing main record identifier for nested update');
+                abort(RecordApiJsonResponseEnum::VALIDATION_ERROR->value, 'Missing main record identifier for nested update');
             }
 
             // Allowed columns
@@ -478,7 +479,7 @@ class RelationshipResolver
 
                 //     $perm = PermissionHelper::mapPermission($relatedTable, $action);
                 //     if (!$user->can($perm)) {
-                //         abort(403, 'Forbidden');
+                //         abort(RecordApiJsonResponseEnum::FORBIDDEN->value, 'Forbidden');
                 //     }
                 // }
 
@@ -554,8 +555,10 @@ class RelationshipResolver
                             continue;
                         }
 
-                        if (preg_match('/^(\w+):(\w+)\((.*)\)$/', $innerSeg)
-                            || preg_match('/^(\w+)\((.*)\)$/', $innerSeg)) {
+                        if (
+                            preg_match('/^(\w+):(\w+)\((.*)\)$/', $innerSeg)
+                            || preg_match('/^(\w+)\((.*)\)$/', $innerSeg)
+                        ) {
                             $child = self::parseSelectForIncludes($innerSeg);
                             $children = array_merge($children, $child);
                         } else {
@@ -590,8 +593,10 @@ class RelationshipResolver
                             continue;
                         }
 
-                        if (preg_match('/^(\w+):(\w+)\((.*)\)$/', $innerSeg)
-                            || preg_match('/^(\w+)\((.*)\)$/', $innerSeg)) {
+                        if (
+                            preg_match('/^(\w+):(\w+)\((.*)\)$/', $innerSeg)
+                            || preg_match('/^(\w+)\((.*)\)$/', $innerSeg)
+                        ) {
                             $child = self::parseSelectForIncludes($innerSeg);
                             $children = array_merge($children, $child);
                         } else {
@@ -628,10 +633,10 @@ class RelationshipResolver
 
         // Generate a unique alias by appending suffix
         $counter = 1;
-        $safeAlias = $alias.'_rel';
+        $safeAlias = $alias . '_rel';
 
         while (in_array($safeAlias, $mainTableColumns, true)) {
-            $safeAlias = $alias.'_rel_'.$counter;
+            $safeAlias = $alias . '_rel_' . $counter;
             ++$counter;
         }
 
@@ -657,12 +662,11 @@ class RelationshipResolver
         $jsonObjectExpr = self::buildJsonObjectExpression($jsonColumns);
 
         // Use alias for subquery to avoid conflicts when main table = related table
-        $subqueryAlias = $actualRelatedTableName === $actualMainTableName ? $actualRelatedTableName.'_sub' : $actualRelatedTableName;
+        $subqueryAlias = $actualRelatedTableName === $actualMainTableName ? $actualRelatedTableName . '_sub' : $actualRelatedTableName;
 
-        $subquery = DB::table($actualRelatedTableName.' as '.$subqueryAlias)
+        $subquery = DB::table($actualRelatedTableName . ' as ' . $subqueryAlias)
             ->selectRaw($jsonObjectExpr)
-            ->whereColumn(sprintf('%s.%s', $subqueryAlias, $ownerKey), sprintf('%s.%s', $actualMainTableName, $foreignKey))
-        ;
+            ->whereColumn(sprintf('%s.%s', $subqueryAlias, $ownerKey), sprintf('%s.%s', $actualMainTableName, $foreignKey));
 
         // Apply tenant filtering if enabled
         $tenantCol = config('record.tenant_column', 'tenant_id');
@@ -709,7 +713,7 @@ class RelationshipResolver
         // Add tenant filtering if enabled
         $tenantCol = config('record.tenant_column', 'tenant_id');
         if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
-            $subqueryRaw .= sprintf(' AND %s.'.$tenantCol.' = %s', $actualRelatedTableName, $tenantId);
+            $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualRelatedTableName, $tenantId);
         }
 
         // Add soft delete filtering
@@ -776,11 +780,11 @@ class RelationshipResolver
         if ($enableTenantId && $tenantId) {
             $tenantCol = config('record.tenant_column', 'tenant_id');
             if (isset($schema[$relatedTable]->columns[$tenantCol])) {
-                $subqueryRaw .= sprintf(' AND %s.'.$tenantCol.' = %s', $actualRelatedTableName, $tenantId);
+                $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualRelatedTableName, $tenantId);
             }
 
             if (isset($schema[$pivotTable]->columns[$tenantCol])) {
-                $subqueryRaw .= sprintf(' AND %s.'.$tenantCol.' = %s', $actualPivotTableName, $tenantId);
+                $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualPivotTableName, $tenantId);
             }
         }
 
@@ -821,7 +825,7 @@ class RelationshipResolver
         // Determine model class fallback if relation is missing or not a FQCN
         if (!$relation || $relation === 'model') {
             // Derive FQCN from main table name as a sensible default (users -> App\Models\User)
-            $relation = 'App\\Models\\'.Str::studly(Str::singular($table));
+            $relation = 'App\\Models\\' . Str::studly(Str::singular($table));
         }
 
         // Get actual table names from schema
@@ -856,11 +860,11 @@ class RelationshipResolver
         if ($enableTenantId && $tenantId) {
             $tenantCol = config('record.tenant_column', 'tenant_id');
             if (isset($schema[$relatedTable]->columns[$tenantCol])) {
-                $subqueryRaw .= sprintf(' AND %s.'.$tenantCol.' = %s', $actualRelatedTableName, $tenantId);
+                $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualRelatedTableName, $tenantId);
             }
 
             if (isset($schema[$pivotTable]->columns[$tenantCol])) {
-                $subqueryRaw .= sprintf(' AND %s.'.$tenantCol.' = %s', $actualPivotTableName, $tenantId);
+                $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualPivotTableName, $tenantId);
             }
         }
 
@@ -914,11 +918,11 @@ class RelationshipResolver
         if ($enableTenantId && $tenantId) {
             $tenantCol = config('record.tenant_column', 'tenant_id');
             if (isset($schema[$relatedTable]->columns[$tenantCol])) {
-                $subqueryRaw .= sprintf(' AND %s.'.$tenantCol.' = %s', $actualRelatedTableName, $tenantId);
+                $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualRelatedTableName, $tenantId);
             }
 
             if (isset($schema[$throughTable]->columns[$tenantCol])) {
-                $subqueryRaw .= sprintf(' AND %s.'.$tenantCol.' = %s', $actualThroughTableName, $tenantId);
+                $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualThroughTableName, $tenantId);
             }
         }
 
@@ -949,13 +953,13 @@ class RelationshipResolver
         }
 
         // Validate columns against schema
-        $validColumns = array_filter($columns, fn ($column): bool => isset($schemaColumns[$column]));
+        $validColumns = array_filter($columns, fn($column): bool => isset($schemaColumns[$column]));
 
         // Remove tenant_id if it's not enabled in configuration
         $enableTenantId = config('record.enable_tenant_id', false);
         if (!$enableTenantId) {
             $tenantCol = config('record.tenant_column', 'tenant_id');
-            $validColumns = array_filter($validColumns, fn ($column): bool => $tenantCol !== $column);
+            $validColumns = array_filter($validColumns, fn($column): bool => $tenantCol !== $column);
         }
 
         if ([] === $validColumns) {
@@ -1433,10 +1437,10 @@ class RelationshipResolver
             foreach (array_chunk($matchValues, $chunkSize) as $chunk) {
                 $chunkQuery = clone $builder;
 
-                $chunkQuery->join($pivotTable, $relatedTableName.'.id', '=', $pivotTable.'.'.$relatedKey)
-                    ->whereIn($pivotTable.'.'.$parentKey, $chunk)
-                    ->addSelect($relatedTableName.'.*')
-                    ->addSelect($pivotTable.'.'.$parentKey.' as pivot_parent_key')
+                $chunkQuery->join($pivotTable, $relatedTableName . '.id', '=', $pivotTable . '.' . $relatedKey)
+                    ->whereIn($pivotTable . '.' . $parentKey, $chunk)
+                    ->addSelect($relatedTableName . '.*')
+                    ->addSelect($pivotTable . '.' . $parentKey . ' as pivot_parent_key')
                 ;
 
                 // Add model_type condition and pivot columns for morphToMany relationships (like Spatie permission system)
@@ -1447,12 +1451,12 @@ class RelationshipResolver
                         $modelClass = User::class;
                     }
 
-                    $chunkQuery->where($pivotTable.'.'.$morphType, $modelClass);
+                    $chunkQuery->where($pivotTable . '.' . $morphType, $modelClass);
 
                     // Add pivot columns to match the correct SQL structure
-                    $chunkQuery->addSelect($pivotTable.'.'.$parentKey.' as pivot_model_id')
-                              ->addSelect($pivotTable.'.'.$relatedKey.' as pivot_role_id')
-                              ->addSelect($pivotTable.'.'.$morphType.' as pivot_model_type');
+                    $chunkQuery->addSelect($pivotTable . '.' . $parentKey . ' as pivot_model_id')
+                        ->addSelect($pivotTable . '.' . $relatedKey . ' as pivot_role_id')
+                        ->addSelect($pivotTable . '.' . $morphType . ' as pivot_model_type');
                 } elseif (str_contains((string) $pivotTable, 'model_has_')) {
                     // Fallback for legacy Spatie permission tables
                     $modelClass = config('auth.providers.users.model');
@@ -1460,12 +1464,12 @@ class RelationshipResolver
                         $modelClass = User::class;
                     }
 
-                    $chunkQuery->where($pivotTable.'.model_type', $modelClass);
+                    $chunkQuery->where($pivotTable . '.model_type', $modelClass);
 
                     // Add pivot columns for legacy tables
-                    $chunkQuery->addSelect($pivotTable.'.model_id as pivot_model_id')
-                              ->addSelect($pivotTable.'.role_id as pivot_role_id')
-                              ->addSelect($pivotTable.'.model_type as pivot_model_type');
+                    $chunkQuery->addSelect($pivotTable . '.model_id as pivot_model_id')
+                        ->addSelect($pivotTable . '.role_id as pivot_role_id')
+                        ->addSelect($pivotTable . '.model_type as pivot_model_type');
                 }
 
                 $chunkResults = $chunkQuery->get();
@@ -1551,7 +1555,7 @@ class RelationshipResolver
         }
 
         // Validate and filter columns against schema
-        $validColumns = array_values(array_filter($columns, fn ($column): bool => '*' === $column || isset($schemaColumns[$column])));
+        $validColumns = array_values(array_filter($columns, fn($column): bool => '*' === $column || isset($schemaColumns[$column])));
 
         if ([] !== $validColumns) {
             $query->select($validColumns);

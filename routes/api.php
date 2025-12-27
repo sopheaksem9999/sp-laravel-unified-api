@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 use Sopheak\Core\Http\Controllers\CoreRecordController;
 use Sopheak\Core\Http\Controllers\AuditLogController;
 
@@ -33,7 +34,7 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.i
             return response()->json([
                 'error' => 'OpenAPI specification not found',
                 'message' => 'Please run "php artisan sp-laravel-api:openapi" to generate the specification'
-            ], 404);
+            ], RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         $content = file_get_contents($filePath);
@@ -43,7 +44,7 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.i
             return response()->json([
                 'error' => 'Invalid OpenAPI specification',
                 'message' => 'The OpenAPI file contains invalid JSON'
-            ], 500);
+            ], RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
 
         return response()->json($json)->header('Content-Type', 'application/json');

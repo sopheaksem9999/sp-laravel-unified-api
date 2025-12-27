@@ -11,7 +11,7 @@ use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 
 class RecordApiResponseService
 {
-   /**
+    /**
      * Create a simple JSON response for API v1 compatibility
      * Returns only data and status code to maintain backward compatibility.
      *
@@ -28,7 +28,7 @@ class RecordApiResponseService
         return response()->json($cleanData, $statusCode->value);
     }
 
-    public static function successWrapped(mixed $data, array $meta = [], int $status = 200, array $headers = []): JsonResponse
+    public static function successWrapped(mixed $data, array $meta = [], int $status = RecordApiJsonResponseEnum::SUCCESS->value, array $headers = []): JsonResponse
     {
         $requestId = request()->attributes->get('request_id');
         $meta = array_merge(['request_id' => $requestId], $meta);
@@ -41,7 +41,7 @@ class RecordApiResponseService
         ], $status, $headers);
     }
 
-    public static function errorWrapped(string $message, int $status = 400, array $errors = []): JsonResponse
+    public static function errorWrapped(string $message, int $status = RecordApiJsonResponseEnum::ERROR->value, array $errors = []): JsonResponse
     {
         $requestId = request()->attributes->get('request_id');
 
@@ -107,7 +107,7 @@ class RecordApiResponseService
     }
 
     /**
-     * Create a validation error response (400).
+     * Create a validation error response (RecordApiJsonResponseEnum::ERROR->value).
      *
      * @param array|MessageBag|string $errors Validation errors
      */
@@ -122,7 +122,7 @@ class RecordApiResponseService
             $data = ['validation_errors' => ['message' => $errors]];
         }
 
-        return static::jsonResponse($data, RecordApiJsonResponseEnum::ERROR);
+        return static::jsonResponse($data, RecordApiJsonResponseEnum::VALIDATION_ERROR);
     }
 
     /**

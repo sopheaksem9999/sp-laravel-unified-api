@@ -981,7 +981,7 @@ use Sopheak\Core\Services\RecordApiResponseService;
 
 $response = app('api.response');
 return $response->success($data, 'Operation successful');
-return $response->error('Error message', 400);
+return $response->error('Error message', RecordApiJsonResponseEnum::ERROR->value);
 ```
 
 ### AuditLogService

@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Sopheak\Core\Enums\AuditLogEventEnum;
+use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 use Sopheak\Core\Services\AuditLogService;
 use Sopheak\Core\Services\CursorPagination;
 use Sopheak\Core\Services\QueryCacheService;
@@ -47,7 +48,7 @@ class CoreRecordController extends Controller
         $this->authorizeAction($table, 'read');
         $schema = $this->getCachedSchema();
         if (!isset($schema[$table])) {
-            return RecordApiResponseService::errorWrapped('Resource not available', 404);
+            return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
@@ -101,7 +102,7 @@ class CoreRecordController extends Controller
 
             $cached = QueryCacheService::get($cacheKey);
             if (null !== $cached) {
-                return RecordApiResponseService::successWrapped($cached['data'], $cached['meta'], 200, $cached['headers']);
+                return RecordApiResponseService::successWrapped($cached['data'], $cached['meta'], RecordApiJsonResponseEnum::SUCCESS->value, $cached['headers']);
             }
         }
 
@@ -316,7 +317,7 @@ class CoreRecordController extends Controller
             QueryCacheService::put($cacheKey, $cacheData, $ttl);
         }
 
-        $response = RecordApiResponseService::successWrapped($data, $meta, 200, $headers);
+        $response = RecordApiResponseService::successWrapped($data, $meta, RecordApiJsonResponseEnum::SUCCESS->value, $headers);
 
         $this->executeTableTrigger(
             $schema[$table]->afterRead ?? null,
@@ -345,7 +346,7 @@ class CoreRecordController extends Controller
         $this->authorizeAction($table, 'read');
         $schema = $this->getCachedSchema();
         if (!isset($schema[$table])) {
-            return RecordApiResponseService::errorWrapped('Resource not available', 404);
+            return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         $triggerParams = [
@@ -400,7 +401,7 @@ class CoreRecordController extends Controller
 
         $record = $builder->where($pk, $id)->first();
         if (!$record) {
-            return RecordApiResponseService::errorWrapped('Not found', 404);
+            return RecordApiResponseService::errorWrapped('Not found', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         // Optimized relationship includes for single record
@@ -495,7 +496,7 @@ class CoreRecordController extends Controller
         $this->authorizeAction($table, 'create');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
-            return RecordApiResponseService::errorWrapped('Resource not available', 404);
+            return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         // Resolve actual table name from RecordTableType configuration
@@ -527,7 +528,7 @@ class CoreRecordController extends Controller
             }
 
             if ($validator->fails()) {
-                return RecordApiResponseService::errorWrapped('Validation failed', 422, $validator->errors()->toArray());
+                return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $validator->errors()->toArray());
             }
         }
 
@@ -545,7 +546,7 @@ class CoreRecordController extends Controller
         $payloadMain = $this->applyTimestampsAndAuditFields($payloadMain, $schema[$table], false);
 
         if ([] === $payloadMain) {
-            return RecordApiResponseService::errorWrapped('Validation failed', 422, ['payload' => ['No data to insert']]);
+            return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, ['payload' => ['No data to insert']]);
         }
 
         $insertedId = null;
@@ -611,7 +612,7 @@ class CoreRecordController extends Controller
             //     'trace' => $exception->getTraceAsString(),
             // ]);
 
-            return RecordApiResponseService::errorWrapped('Failed to create record: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Failed to create record: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -625,7 +626,7 @@ class CoreRecordController extends Controller
         $this->authorizeAction($table, 'update');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
-            return RecordApiResponseService::errorWrapped('Resource not available', 404);
+            return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         // Resolve actual table name from RecordTableType configuration
@@ -659,7 +660,7 @@ class CoreRecordController extends Controller
             }
 
             if ($validator->fails()) {
-                return RecordApiResponseService::errorWrapped('Validation failed', 422, $validator->errors()->toArray());
+                return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $validator->errors()->toArray());
             }
         }
 
@@ -697,7 +698,7 @@ class CoreRecordController extends Controller
             if (!$existing) {
                 DB::rollBack();
 
-                return RecordApiResponseService::errorWrapped('Not found', 404);
+                return RecordApiResponseService::errorWrapped('Not found', RecordApiJsonResponseEnum::NOT_FOUND->value);
             }
 
             if ([] !== $payloadMain) {
@@ -738,7 +739,7 @@ class CoreRecordController extends Controller
             // Rollback transaction on any error
             DB::rollBack();
 
-            return RecordApiResponseService::errorWrapped('Failed to update record: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Failed to update record: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -752,7 +753,7 @@ class CoreRecordController extends Controller
         $this->authorizeAction($table, 'delete');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
-            return RecordApiResponseService::errorWrapped('Resource not available', 404);
+            return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         // Resolve actual table name from RecordTableType configuration
@@ -787,7 +788,7 @@ class CoreRecordController extends Controller
             }
 
             if ($validator->fails()) {
-                return RecordApiResponseService::errorWrapped('Validation failed', 422, $validator->errors()->toArray());
+                return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $validator->errors()->toArray());
             }
         }
 
@@ -806,7 +807,7 @@ class CoreRecordController extends Controller
             if (0 === $affected) {
                 DB::rollBack();
 
-                return RecordApiResponseService::errorWrapped('Not found', 404);
+                return RecordApiResponseService::errorWrapped('Not found', RecordApiJsonResponseEnum::NOT_FOUND->value);
             }
 
             // Commit transaction
@@ -849,7 +850,7 @@ class CoreRecordController extends Controller
             //     'trace' => $exception->getTraceAsString(),
             // ]);
 
-            return RecordApiResponseService::errorWrapped('Failed to delete record: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Failed to delete record: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -863,7 +864,7 @@ class CoreRecordController extends Controller
         $this->authorizeAction($table, 'restore');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table]) || !$schema[$table]->soft_deletes) {
-            return RecordApiResponseService::errorWrapped('Resource not restorable', 400);
+            return RecordApiResponseService::errorWrapped('Resource not restorable', RecordApiJsonResponseEnum::ERROR->value);
         }
 
         // Resolve actual table name from RecordTableType configuration
@@ -891,7 +892,7 @@ class CoreRecordController extends Controller
             if (0 === $affected) {
                 DB::rollBack();
 
-                return RecordApiResponseService::errorWrapped('Not found', 404);
+                return RecordApiResponseService::errorWrapped('Not found', RecordApiJsonResponseEnum::NOT_FOUND->value);
             }
 
             // Commit transaction
@@ -908,7 +909,7 @@ class CoreRecordController extends Controller
             //     'trace' => $exception->getTraceAsString(),
             // ]);
 
-            return RecordApiResponseService::errorWrapped('Failed to restore record: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Failed to restore record: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
 
         QueryCacheService::invalidateTable($table);
@@ -930,7 +931,7 @@ class CoreRecordController extends Controller
         $this->authorizeAction($table, 'force_delete');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
-            return RecordApiResponseService::errorWrapped('Resource not available', 404);
+            return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         // Resolve actual table name from RecordTableType configuration
@@ -957,7 +958,7 @@ class CoreRecordController extends Controller
             if (0 === $deleted) {
                 DB::rollBack();
 
-                return RecordApiResponseService::errorWrapped('Not found', 404);
+                return RecordApiResponseService::errorWrapped('Not found', RecordApiJsonResponseEnum::NOT_FOUND->value);
             }
 
             // Audit log for deletion (if not disabled)
@@ -972,7 +973,7 @@ class CoreRecordController extends Controller
             // Rollback transaction on any error
             DB::rollBack();
 
-            return RecordApiResponseService::errorWrapped('Failed to force delete record: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Failed to force delete record: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
 
         return RecordApiResponseService::successWrapped(['deleted' => $deleted]);
@@ -990,7 +991,7 @@ class CoreRecordController extends Controller
         $this->authorizeAction($actualTableName, 'update');
         $this->authorizeAction($actualTableName, 'delete');
         if (!isset($schema[$table])) {
-            return RecordApiResponseService::errorWrapped('Resource not available', 404);
+            return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         // Support both direct array and items wrapper for backward compatibility
@@ -1011,7 +1012,7 @@ class CoreRecordController extends Controller
         }
 
         if (!is_array($items) || [] === $items) {
-            return RecordApiResponseService::errorWrapped('Data array required', 422);
+            return RecordApiResponseService::errorWrapped('Data array required', RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
         }
 
         $maxBatch = (int) config('record.bulk_max', 100);
@@ -1169,7 +1170,7 @@ class CoreRecordController extends Controller
         } catch (Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
-            return RecordApiResponseService::errorWrapped('Failed to perform bulk operation: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Failed to perform bulk operation: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -1182,7 +1183,7 @@ class CoreRecordController extends Controller
             // Get schema and validate table exists
             $schema = SchemaRegistry::get();
             if (!isset($schema[$table])) {
-                return RecordApiResponseService::errorWrapped(sprintf("Table '%s' does not exist", $table), 404);
+                return RecordApiResponseService::errorWrapped(sprintf("Table '%s' does not exist", $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
             }
 
             // Check if function exists in table schema
@@ -1214,7 +1215,7 @@ class CoreRecordController extends Controller
             }
 
             if (!$functionConfig) {
-                return RecordApiResponseService::errorWrapped(sprintf("Function '%s' not found for table '%s'", $functionName, $table), 404);
+                return RecordApiResponseService::errorWrapped(sprintf("Function '%s' not found for table '%s'", $functionName, $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
             }
 
             // Check permission using table function's pms_name
@@ -1225,7 +1226,7 @@ class CoreRecordController extends Controller
             // Execute the custom function with extracted ID parameter
             return $this->executeCustomFunction($request, $functionConfig, $extractedId);
         } catch (Exception $exception) {
-            return RecordApiResponseService::errorWrapped('Function execution failed: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Function execution failed: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -1265,13 +1266,13 @@ class CoreRecordController extends Controller
             }
 
             if (!$functionConfig) {
-                return RecordApiResponseService::errorWrapped(sprintf("Function '%s' not found", $functionName), 404);
+                return RecordApiResponseService::errorWrapped(sprintf("Function '%s' not found", $functionName), RecordApiJsonResponseEnum::NOT_FOUND->value);
             }
 
             // Execute the custom function with extracted ID parameter
             return $this->executeCustomFunction($request, $functionConfig, $extractedId);
         } catch (Exception $exception) {
-            return RecordApiResponseService::errorWrapped('Function execution failed: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Function execution failed: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -1288,7 +1289,7 @@ class CoreRecordController extends Controller
         $this->authorizeAction($table, 'create');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
-            return RecordApiResponseService::errorWrapped('Resource not available', 404);
+            return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         // Resolve actual table name from RecordTableType configuration
@@ -1375,10 +1376,10 @@ class CoreRecordController extends Controller
             DB::rollBack();
 
             if ($exception instanceof ValidationException) {
-                return RecordApiResponseService::errorWrapped('Validation failed', 422, $exception->errors());
+                return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $exception->errors());
             }
 
-            return RecordApiResponseService::errorWrapped('Failed to perform bulk create operation: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Failed to perform bulk create operation: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -1395,7 +1396,7 @@ class CoreRecordController extends Controller
         $this->authorizeAction($table, 'update');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
-            return RecordApiResponseService::errorWrapped('Resource not available', 404);
+            return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         // Resolve actual table name from RecordTableType configuration
@@ -1506,10 +1507,10 @@ class CoreRecordController extends Controller
             DB::rollBack();
 
             if ($exception instanceof ValidationException) {
-                return RecordApiResponseService::errorWrapped('Validation failed', 422, $exception->errors());
+                return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $exception->errors());
             }
 
-            return RecordApiResponseService::errorWrapped('Failed to perform bulk update operation: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Failed to perform bulk update operation: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -1526,7 +1527,7 @@ class CoreRecordController extends Controller
         $this->authorizeAction($table, 'delete');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
-            return RecordApiResponseService::errorWrapped('Resource not available', 404);
+            return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         // Resolve actual table name from RecordTableType configuration
@@ -1601,7 +1602,7 @@ class CoreRecordController extends Controller
                 $recordToDelete = null;
                 if (!($schema[$table]->disable_auditLog ?? false)) {
                     $recordResponse = $this->show($request, $table, $idToDelete);
-                    if (200 === $recordResponse->getStatusCode()) {
+                    if (RecordApiJsonResponseEnum::SUCCESS->value === $recordResponse->getStatusCode()) {
                         $recordToDelete = json_decode(json_encode($recordResponse->getData()->data), true);
                     }
                 }
@@ -1633,10 +1634,10 @@ class CoreRecordController extends Controller
         } catch (Exception $exception) {
             DB::rollBack();
             if ($exception instanceof ValidationException) {
-                return RecordApiResponseService::errorWrapped('Validation failed', 422, $exception->errors());
+                return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $exception->errors());
             }
 
-            return RecordApiResponseService::errorWrapped('Failed to perform bulk delete operation: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Failed to perform bulk delete operation: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -1774,7 +1775,7 @@ class CoreRecordController extends Controller
         }
 
         if ($this->isTenantIdMissing($tenantId)) {
-            return RecordApiResponseService::errorWrapped('Validation failed', 422, [
+            return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, [
                 config('record.tenant_header', 'X-Tenant-ID') => ['header ' . config('record.tenant_header', 'X-Tenant-ID') . ' cannot be empty'],
             ]);
         }
@@ -1820,13 +1821,13 @@ class CoreRecordController extends Controller
         $guard = config('sp-laravel-api.auth.guard', 'api');
         $user = auth($guard)->user();
         if (!$user) {
-            abort(401, 'Unauthenticated');
+            abort(RecordApiJsonResponseEnum::UNAUTHORIZED->value, 'Unauthenticated');
         }
 
         $perm = PermissionHelper::mapPermission($table, $action);
 
         if (!Gate::forUser($user)->allows($perm)) {
-            abort(403, 'Forbidden');
+            abort(RecordApiJsonResponseEnum::FORBIDDEN->value, 'Forbidden');
         }
     }
 
@@ -1989,7 +1990,7 @@ class CoreRecordController extends Controller
             $guard = config('sp-laravel-api.auth.guard', 'api');
             $user = auth($guard)->user();
             if (!$user) {
-                return RecordApiResponseService::errorWrapped('Authentication required', 401);
+                return RecordApiResponseService::errorWrapped('Authentication required', RecordApiJsonResponseEnum::UNAUTHORIZED->value);
             }
 
             // Handle both single permission (string) and multiple permissions (array)
@@ -2006,7 +2007,7 @@ class CoreRecordController extends Controller
             }
 
             if (!$hasPermission) {
-                return RecordApiResponseService::errorWrapped('Insufficient permissions', 403);
+                return RecordApiResponseService::errorWrapped('Insufficient permissions', RecordApiJsonResponseEnum::FORBIDDEN->value);
             }
         }
 
@@ -2038,7 +2039,7 @@ class CoreRecordController extends Controller
             }
 
             if ([] !== $missingParams) {
-                return RecordApiResponseService::errorWrapped('Missing required parameters', 400, ['missing' => $missingParams]);
+                return RecordApiResponseService::errorWrapped('Missing required parameters', RecordApiJsonResponseEnum::ERROR->value, ['missing' => $missingParams]);
             }
         }
 
@@ -2055,12 +2056,12 @@ class CoreRecordController extends Controller
             $method = $functionConfig['function_method'] ?? 'handle';
 
             if (!$className || !class_exists($className)) {
-                return RecordApiResponseService::errorWrapped(sprintf("Class '%s' does not exist", $className), 500);
+                return RecordApiResponseService::errorWrapped(sprintf("Class '%s' does not exist", $className), RecordApiJsonResponseEnum::SERVER_ERROR->value);
             }
 
             $instance = new $className();
             if (!method_exists($instance, $method)) {
-                return RecordApiResponseService::errorWrapped(sprintf("Method '%s' does not exist in class '%s'", $method, $className), 500);
+                return RecordApiResponseService::errorWrapped(sprintf("Method '%s' does not exist in class '%s'", $method, $className), RecordApiJsonResponseEnum::SERVER_ERROR->value);
             }
 
             $result = $id ? $instance->{$method}($request, $id) : $instance->{$method}($request);
@@ -2090,7 +2091,7 @@ class CoreRecordController extends Controller
 
             return RecordApiResponseService::successWrapped($result);
         } catch (Exception $exception) {
-            return RecordApiResponseService::errorWrapped('Function execution failed: ' . $exception->getMessage(), 500);
+            return RecordApiResponseService::errorWrapped('Function execution failed: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 }
