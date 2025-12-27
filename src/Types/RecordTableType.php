@@ -77,7 +77,7 @@ class RecordTableType
     public function __construct(
         public string $pms_name,
         public ?string $table = null,
-        public bool $soft_deletes = true,
+        public bool $soft_deletes = false,
         public bool $disable_auditLog = false,
         public RecordTablePublic $public = new RecordTablePublic(),
         public ?array $relationships = [],
@@ -109,7 +109,7 @@ class RecordTableType
         return new self(
             pms_name: $properties['pms_name'],
             table: $properties['table'] ?? null,
-            soft_deletes: $properties['soft_deletes'] ?? true,
+            soft_deletes: $properties['soft_deletes'] ?? false,
             disable_auditLog: $properties['disable_auditLog'] ?? false,
             public: $properties['public'] ?? new RecordTablePublic(),
             relationships: $properties['relationships'] ?? [],
