@@ -29,8 +29,8 @@ class PermissionHelper
         }
 
         // Grouped semantics: 'read' and 'write'
-        $readActions = ['read'];
-        $writeActions = ['create', 'update', 'delete', 'restore', 'force_delete'];
+        $readActions = ['read', 'view'];
+        $writeActions = ['create', 'update', 'delete', 'restore'];
 
         if (in_array($action, $readActions, true)) {
             return (bool) ($public->read ?? false);
@@ -53,35 +53,32 @@ class PermissionHelper
     {
         // Get resource name from config pms_name or fallback to table name
         $tables = config('record.tables', []);
-        $permissionPrefix = config('record.permission_prefix', '_');
+        $permissionPrefix = config('record.permission_prefix', ':');
         $tableConfig = $tables[$table] ?? [];
         $resource = $tableConfig->pms_name ?? Str::snake(Str::singular($table));
 
         // Map standard CRUD actions to permission verbs first
         switch ($action) {
             case 'read':
-            case 'index':
-            case 'show':
+            case 'view':
                 $verb = 'view';
 
                 break;
 
             case 'create':
-            case 'store':
                 $verb = 'create';
 
                 break;
 
             case 'update':
             case 'edit':
-            case 'restore':
+            case 'write':
                 $verb = 'update';
 
                 break;
 
             case 'delete':
-            case 'destroy':
-            case 'force_delete':
+            case 'write':
                 $verb = 'delete';
 
                 break;

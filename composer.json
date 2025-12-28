@@ -3,7 +3,7 @@
   "description": "Core utilities for Laravel apps: standardized API responses, request ID middleware, and CLI helpers.",
   "type": "library",
   "license": "proprietary",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "require": {
     "php": "^8.1|^8.2|^8.3",
     "laravel/framework": "^10.0|^11.0|^12.0",
@@ -14,8 +14,7 @@
     "larastan/larastan": "^2.0",
     "orchestra/testbench": "^8.0|^9.0|^10.0",
     "phpunit/phpunit": "^10.0|^11.0",
-    "rector/rector": "^1.2",
-    "spatie/laravel-permission": "^6.21"
+    "rector/rector": "^1.2"
   },
   "autoload": {
     "psr-4": {

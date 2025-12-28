@@ -75,11 +75,13 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.i
     | Standard CRUD Operations
     |--------------------------------------------------------------------------
     */
-    Route::get('{table}', [CoreRecordController::class, 'index'])->middleware('throttle:api-reads');
-    Route::get('{table}/{id}', [CoreRecordController::class, 'show'])->middleware('throttle:api-reads');
-    Route::post('{table}', [CoreRecordController::class, 'store'])->middleware('throttle:api-writes');
-    Route::match(['put', 'patch'], '{table}/{id}', [CoreRecordController::class, 'update'])->middleware('throttle:api-writes');
-    Route::delete('{table}/{id}', [CoreRecordController::class, 'destroy'])->middleware('throttle:api-writes');
+    Route::get('{table}', [CoreRecordController::class, 'listRecords'])->middleware('throttle:api-reads');
+    Route::get('{table}/{id}', [CoreRecordController::class, 'getRecordById'])->middleware('throttle:api-reads');
+    Route::post('{table}', [CoreRecordController::class, 'createRecord'])->middleware('throttle:api-writes');
+    Route::match(['put', 'patch'], '{table}/{id}', [CoreRecordController::class, 'updateRecord'])->middleware('throttle:api-writes');
+    Route::delete('{table}/{id}', [CoreRecordController::class, 'destroyRecord'])->middleware('throttle:api-writes');
+
+
 
     /*
     |--------------------------------------------------------------------------
@@ -94,10 +96,10 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.i
     | Bulk Operations
     |--------------------------------------------------------------------------
     */
-    Route::post('{table}/bulk', [CoreRecordController::class, 'bulk'])->middleware('throttle:api-writes');
-    Route::post('{table}/bulk/create', [CoreRecordController::class, 'bulkCreate'])->middleware('throttle:api-writes');
-    Route::post('{table}/bulk/update', [CoreRecordController::class, 'bulkUpdate'])->middleware('throttle:api-writes');
-    Route::post('{table}/bulk/delete', [CoreRecordController::class, 'bulkDelete'])->middleware('throttle:api-writes');
+    Route::post('{table}/bulk', [CoreRecordController::class, 'bulkRecord'])->middleware('throttle:api-writes');
+    Route::post('{table}/bulk/create', [CoreRecordController::class, 'bulkRecordCreate'])->middleware('throttle:api-writes');
+    Route::post('{table}/bulk/update', [CoreRecordController::class, 'bulkRecordUpdate'])->middleware('throttle:api-writes');
+    Route::post('{table}/bulk/delete', [CoreRecordController::class, 'bulkRecordDelete'])->middleware('throttle:api-writes');
 });
 
 /*

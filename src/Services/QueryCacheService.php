@@ -10,9 +10,6 @@ class QueryCacheService
 {
     private static int $defaultTtl = 3600;
 
-     // 1 hour
-    private static string $cachePrefix = 'query_cache:';
-
     /**
      * Check if caching is enabled globally
      */
@@ -53,10 +50,6 @@ class QueryCacheService
         try {
             return Cache::remember($cacheKey, $ttl, $callback);
         } catch (Exception) {
-            // Log::warning('Query cache failed, executing callback directly', [
-            //     'key' => $key,
-            //     'error' => $exception->getMessage()
-            // ]);
             return $callback();
         }
     }
@@ -77,11 +70,6 @@ class QueryCacheService
         try {
             return Cache::put($cacheKey, $value, $ttl);
         } catch (Exception) {
-            // Log::warning('Failed to cache query result', [
-            //     'key' => $key,
-            //     'table' => $table,
-            //     'error' => $exception->getMessage()
-            // ]);
             return false;
         }
     }

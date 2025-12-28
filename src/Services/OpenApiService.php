@@ -284,7 +284,7 @@ Accepts an array of IDs or an array of objects with the primary key.
 
     private static function schemaName(string $table): string
     {
-        return str_replace(['-', ' '], '_', ucfirst($table));
+        return str_replace(['-', ' '], '_', ucwords(strtolower($table)));
     }
 
     private static function tableSchema(string $table, array $columns): array
@@ -877,7 +877,9 @@ Accepts an array of IDs or an array of objects with the primary key.
         // Global RPC Functions - Generate individual endpoints
         foreach ($globalFunctions as $functionName => $functionConfig) {
             $allowedMethods = $functionConfig->method ?? ['GET'];
-            $description = $functionConfig->description ?? 'RPC - ' . $functionName;
+            $methodName = empty($functionConfig->description) ? self::schemaName($functionName) : $functionConfig->description;
+            $summary = sprintf('RPC - %s', $methodName);
+            $description = sprintf('%s', $methodName);
 
             // Get schemas from config
             $querySchema = $functionConfig->query_schema ?? null;
@@ -906,7 +908,7 @@ Accepts an array of IDs or an array of objects with the primary key.
 
                 $paths[$endpoint][$methodLower] = [
                     'tags' => ['RPC Endpoints'],
-                    'summary' => $description,
+                    'summary' => $summary,
                     'description' => $description,
                     'operationId' => 'globalRpc' . ucfirst((string) $functionName) . ucfirst($methodLower),
                     'responses' => [
@@ -918,7 +920,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                 ],
                             ],
                         ],
-                        'RecordApiJsonResponseEnum::ERROR->value' => [
+                        '400' => [
                             'description' => 'Bad Request',
                             'content' => [
                                 'application/json' => [
@@ -1080,7 +1082,9 @@ Accepts an array of IDs or an array of objects with the primary key.
 
             foreach ($functions as $functionName => $functionConfig) {
                 $allowedMethods = $functionConfig->method ?? ['GET'];
-                $description = $functionConfig->description ?? sprintf('RPC - %s: %s', $tableName, $functionName);
+                $methodName = empty($functionConfig->description) ? self::schemaName($functionName) : $functionConfig->description;
+                $summary = sprintf('RPC - %s', $methodName);
+                $description = sprintf('%s', $methodName);
 
                 // Get schemas from config
                 $querySchema = $functionConfig->query_schema ?? null;
@@ -1129,7 +1133,7 @@ Accepts an array of IDs or an array of objects with the primary key.
 
                     $paths[$endpoint][$methodLower] = [
                         'tags' => [$formattedTableName],
-                        'summary' => $description,
+                        'summary' => $summary,
                         'description' => $description,
                         'operationId' => $operationId,
                         'parameters' => $tenantHeaderParameters,
@@ -1142,7 +1146,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                     ],
                                 ],
                             ],
-                            'RecordApiJsonResponseEnum::ERROR->value' => [
+                            '400' => [
                                 'description' => 'Bad Request',
                                 'content' => [
                                     'application/json' => [

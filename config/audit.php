@@ -65,7 +65,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | This array defines which events should be excluded from audit logging.
-    | Available events: created, updated, deleted, restored, force_deleted
+    | Available events: created, updated, deleted, restored
     |
     */
     'excluded_events' => [
@@ -112,10 +112,10 @@ return [
     'performance' => [
         // Maximum number of relationships to load per audit log
         'max_relationships' => 10,
-        
+
         // Use database transactions for audit logging
         'use_transactions' => true,
-        
+
         // Batch size for bulk operations
         'batch_size' => 100,
     ],
@@ -131,10 +131,10 @@ return [
     'security' => [
         // Encrypt sensitive data in audit logs
         'encrypt_sensitive_data' => env('AUDIT_LOG_ENCRYPT', false),
-        
+
         // Hash user IP addresses for privacy
         'hash_ip_addresses' => env('AUDIT_LOG_HASH_IPS', false),
-        
+
         // Anonymize user data after retention period
         'anonymize_old_logs' => env('AUDIT_LOG_ANONYMIZE', false),
     ],
