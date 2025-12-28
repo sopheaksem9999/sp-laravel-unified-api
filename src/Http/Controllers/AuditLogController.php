@@ -20,9 +20,7 @@ use Sopheak\Core\Services\RecordApiResponseService;
  */
 class AuditLogController extends Controller
 {
-    public function __construct(protected RecordApiResponseService $apiResponseService)
-    {
-    }
+    public function __construct(protected RecordApiResponseService $apiResponseService) {}
 
     /**
      * Get audit logs for a specific entity.
@@ -46,7 +44,7 @@ class AuditLogController extends Controller
 
             $logs = AuditLogService::getEntityAuditLogs($entityType, $entityId, $limit);
 
-            return $this->apiResponseService->success($logs->toArray());
+            return $this->apiResponseService->successWrapped($logs->toArray());
         } catch (Exception $exception) {
             return $this->apiResponseService->serverError('Failed to retrieve audit logs: ' . $exception->getMessage());
         }
@@ -73,7 +71,7 @@ class AuditLogController extends Controller
             $filters = $request->only(['entity_type', 'entity_id', 'start_date', 'end_date', 'event']);
             $stats = AuditLogService::getAuditStats($filters);
 
-            return $this->apiResponseService->success($stats);
+            return $this->apiResponseService->successWrapped($stats);
         } catch (Exception $exception) {
             return $this->apiResponseService->serverError('Failed to retrieve audit statistics: ' . $exception->getMessage());
         }
@@ -99,11 +97,11 @@ class AuditLogController extends Controller
             $entityType = $request->input('entity_type');
             $entityId = $request->input('entity_id');
             $field = $request->input('field');
-            $limit = $request->input('limit', 10);
+            $limit = $request->input('limit', 50);
 
             $timeline = AuditLogService::getFieldTimeline($entityType, $entityId, $field, $limit);
 
-            return $this->apiResponseService->success($timeline);
+            return $this->apiResponseService->successWrapped($timeline);
         } catch (Exception $exception) {
             return $this->apiResponseService->serverError('Failed to retrieve field timeline: ' . $exception->getMessage());
         }
@@ -131,7 +129,7 @@ class AuditLogController extends Controller
 
             $stats = AuditLogService::getFieldStats($entityType, $entityId, $field);
 
-            return $this->apiResponseService->success($stats);
+            return $this->apiResponseService->successWrapped($stats);
         } catch (Exception $exception) {
             return $this->apiResponseService->serverError('Failed to retrieve field statistics: ' . $exception->getMessage());
         }
@@ -155,7 +153,7 @@ class AuditLogController extends Controller
         if ($validator->fails()) {
             return $this->apiResponseService->validationError($validator->errors()->toArray());
         }
-   
+
         try {
             $event = AuditLogEventEnum::from($request->input('event'));
             $entityType = $request->input('entity_type');
@@ -178,7 +176,7 @@ class AuditLogController extends Controller
                 recap: $recap
             );
 
-            return $this->apiResponseService->success(null);
+            return $this->apiResponseService->successWrapped(null);
         } catch (Exception $exception) {
             return $this->apiResponseService->serverError('Failed to create audit log: ' . $exception->getMessage());
         }
@@ -201,7 +199,7 @@ class AuditLogController extends Controller
             $daysToKeep = $request->input('days_to_keep', 365);
             $deletedCount = AuditLogService::cleanupOldLogs($daysToKeep);
 
-            return $this->apiResponseService->success([
+            return $this->apiResponseService->successWrapped([
                 'deleted_count' => $deletedCount,
                 'days_kept' => $daysToKeep
             ]);
@@ -222,7 +220,7 @@ class AuditLogController extends Controller
                 return $this->apiResponseService->notFound('Audit log not found');
             }
 
-            return $this->apiResponseService->success($log);
+            return $this->apiResponseService->successWrapped($log);
         } catch (Exception) {
             return $this->apiResponseService->notFound('Audit log not found');
         }

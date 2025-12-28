@@ -72,6 +72,15 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.i
 
     /*
     |--------------------------------------------------------------------------
+    | Audit Log Operations
+    |--------------------------------------------------------------------------
+    */
+    Route::get('audit/logs', [AuditLogController::class, 'getLogs'])->middleware('throttle:api-reads');
+    Route::get('audit/stats', [AuditLogController::class, 'getStats'])->middleware('throttle:api-reads');
+    Route::get('audit/timeline', [AuditLogController::class, 'getFieldTimeline'])->middleware('throttle:api-reads');
+
+    /*
+    |--------------------------------------------------------------------------
     | Standard CRUD Operations
     |--------------------------------------------------------------------------
     */

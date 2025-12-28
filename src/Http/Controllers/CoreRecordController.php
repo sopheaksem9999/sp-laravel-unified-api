@@ -2,31 +2,21 @@
 
 namespace Sopheak\Core\Http\Controllers;
 
-use BackedEnum;
 use Exception;
 use RuntimeException;
-use UnitEnum;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
-use Sopheak\Core\Enums\AuditLogEventEnum;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
-use Sopheak\Core\Services\AuditLogService;
-use Sopheak\Core\Services\CursorPagination;
 use Sopheak\Core\Services\QueryCacheService;
 use Sopheak\Core\Services\RecordApiResponseService;
+use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Support\PermissionHelper;
-use Sopheak\Core\Support\QueryBuilderFilters;
-use Sopheak\Core\Support\RelationshipResolver;
 use Sopheak\Core\Support\SchemaRegistry;
-use Sopheak\Core\Types\RecordFunctionType;
-use Sopheak\Core\Types\RecordTableTriggerType;
 
 class CoreRecordController extends Controller
 {
@@ -40,6 +30,10 @@ class CoreRecordController extends Controller
      */
     private static ?bool $tenantIdEnabled = null;
 
+    public function __construct(
+        protected RecordService $recordService
+    ) {}
+
     /**
      * List records for a table.
      */
@@ -51,291 +45,45 @@ class CoreRecordController extends Controller
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
-        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
         if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
             return $response;
         }
 
-        $triggerParams = [
-            $request,
-            $table,
-            [
-                'type' => 'index',
-                config('record.tenant_column', 'tenant_id') => $tenantId,
-            ],
-        ];
-        $triggerParams = $this->executeTableTrigger($schema[$table]->beforeRead ?? null, $triggerParams);
-        if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
-            $request = $triggerParams[0];
-        }
+        try {
+            $result = $this->recordService->listRecords($request, $table, $tenantId);
 
-        // Resolve actual table name from RecordTableType configuration
-        $actualTableName = $this->resolveActualTableName($table);
+            $data = $result['data'];
+            $meta = $result['meta'];
+            $headers = $result['headers'];
+            $request = $result['request'];
 
-        // Generate cache key for this query
-        $filters = $request->except(['page', 'per_page', 'limit']);
-        $includes = $request->query('select', []);
-        if (is_string($includes)) {
-            $includes = explode(',', $includes);
-        }
+            if (isset($result['from_cache']) && $result['from_cache']) {
+                return RecordApiResponseService::successWrapped($data, $meta, RecordApiJsonResponseEnum::SUCCESS->value, $headers);
+            }
 
-        $page = max((int) $request->get('page', 1), 1);
-        $perPage = $request->has('per_page') ? max(1, min((int) $request->get('per_page', 25), (int) config('record.per_page_max', 1000))) : null;
-        $limit = $request->has('limit') ? max(1, min((int) $request->get('limit'), (int) config('record.limit_max', 1000))) : config('record.limit_max', 1000);
+            $response = RecordApiResponseService::successWrapped($data, $meta, RecordApiJsonResponseEnum::SUCCESS->value, $headers);
 
-        // Enhanced caching with request fingerprinting
-        $isCacheable = $this->isCacheableRequest($request, $table);
-        $cacheKey = null;
-
-        if ($isCacheable) {
-            // Create more specific cache key including tenant status
-            $cacheKey = $this->generateOptimizedCacheKey(
-                $table,
-                array_merge($filters, [
-                    config('record.tenant_column', 'tenant_id') => $this->isTenantIdEnabled() ? $tenantId : null,
-                    'tenant_enabled' => $this->isTenantIdEnabled(),
-                ]),
-                $includes,
-                $page,
-                $perPage ?? $limit
+            $this->recordService->executeTableTrigger(
+                $schema[$table]->afterRead ?? null,
+                [
+                    $request,
+                    $table,
+                    [
+                        'type' => 'index',
+                        'filters' => $result['filters'] ?? [],
+                        'data' => $data,
+                        'meta' => $meta,
+                        config('record.tenant_column', 'tenant_id') => $tenantId,
+                        'response' => $response,
+                    ],
+                ]
             );
 
-            $cached = QueryCacheService::get($cacheKey);
-            if (null !== $cached) {
-                return RecordApiResponseService::successWrapped($cached['data'], $cached['meta'], RecordApiJsonResponseEnum::SUCCESS->value, $cached['headers']);
-            }
+            return $response;
+        } catch (Exception $exception) {
+            return RecordApiResponseService::errorWrapped('Failed to list records: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
-
-        // Optimized query building with better indexing hints
-        $builder = DB::table($actualTableName);
-
-        // Apply tenant filtering using optimized method
-        $this->applyTenantFilter($builder, $actualTableName, $tenantId);
-
-        // Apply soft delete filtering
-        if ($schema[$table]->soft_deletes) {
-            $builder->whereNull($actualTableName . '.deleted_at');
-        }
-
-        // Apply filters, including base select of main table columns
-        QueryBuilderFilters::apply($builder, $request, $actualTableName, $schema[$table]->primary_key ?? 'id');
-
-        // Handle limit parameter for non-paginated requests
-        if ($request->has('limit') && !$request->has('per_page')) {
-            $limit = max(1, min((int) $request->get('limit'), (int) config('record.limit_max', 1000)));
-            $data = $builder->limit($limit)->get()->all();
-            $total = count($data);
-        } else {
-            // Handle pagination - check if cursor-based pagination should be used
-            $maxPerPage = (int) config('record.per_page_max', 100);
-            $perPage = max(1, min((int) $request->get('per_page', config('record.limit_max', 1000)), $maxPerPage));
-
-            // Use cursor-based pagination for large datasets or when explicitly requested
-            if ($request->has('cursor') || CursorPagination::shouldUseCursorPagination($builder)) {
-                $primaryKey = $schema[$table]->primary_key ?? 'id';
-                $cursorColumn = $request->get('cursor_column', $primaryKey);
-
-                // Use composite cursor for complex sorting
-                if ($request->has('composite_cursor') || $request->has('sortby')) {
-                    $cursorColumns = [$cursorColumn];
-                    if ($cursorColumn !== $primaryKey) {
-                        $cursorColumns[] = $primaryKey; // Add primary key for uniqueness
-                    }
-
-                    $result = CursorPagination::paginateComposite($builder, $request, $cursorColumns, $perPage);
-                } else {
-                    $result = CursorPagination::paginate($builder, $request, $cursorColumn, $perPage);
-                }
-
-                $data = $result['data'];
-                $total = null; // Cursor pagination doesn't provide total count
-                $cursorMeta = $result['meta'];
-            } else {
-                // Traditional pagination for smaller datasets
-                $page = max((int) $request->get('page', 1), 1);
-
-                // Clone for count to avoid select/limit interference
-                $countQuery = clone $builder;
-                $total = $countQuery->count();
-
-                $data = $builder->forPage($page, $perPage)->get()->all();
-            }
-        }
-
-        // Optimized relationship includes with subquery loading
-        if ($request->has('select')) {
-            $selectParam = $request->query('select');
-            $includes = RelationshipResolver::parseSelectForIncludes($selectParam);
-
-            // Check if we should use subquery optimization (for performance)
-            $useSubqueryOptimization = config('record.use_subquery_optimization', true) && count($data) <= 100;
-
-            if ($useSubqueryOptimization && [] !== $includes) {
-                // Use new subquery optimization for better performance
-                // Note: This approach loads relationships in a single query using JSON aggregation
-                $primaryKey = $schema[$table]->primary_key ?? 'id';
-                $recordIds = array_column($data, $primaryKey);
-
-                if ([] !== $recordIds) {
-                    // Build optimized query with subquery relationships
-                    $optimizedBuilder = DB::table($actualTableName);
-
-                    // Apply column selection based on select parameter
-                    $mainCols = RelationshipResolver::getMainTableColumns($selectParam);
-                    if ([] !== $mainCols) {
-                        $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $mainCols);
-                        $optimizedBuilder->select($prefixedCols);
-                    } else {
-                        $optimizedBuilder->select($actualTableName . '.*');
-                    }
-
-                    // Apply tenant filtering
-                    $this->applyTenantFilter($optimizedBuilder, $actualTableName, $tenantId);
-
-                    // Apply soft delete filtering
-                    if ($schema[$table]->soft_deletes) {
-                        $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
-                    }
-
-                    // Add subquery relationships
-                    RelationshipResolver::applySubqueryRelationships(
-                        $optimizedBuilder,
-                        $table,
-                        $includes,
-                        $this->isTenantIdEnabled() ? $tenantId : null
-                    );
-
-                    // Get records with relationships in single query
-                    $optimizedData = $optimizedBuilder->whereIn($actualTableName . '.' . $primaryKey, $recordIds)->get()->all();
-
-                    // Process JSON relationships
-                    $data = RelationshipResolver::processJsonRelationships($optimizedData, $includes, $table);
-                }
-            } else {
-                // Fallback to existing relationship loading method
-                $data = RelationshipResolver::includeRelationships(
-                    $data,
-                    $table,
-                    $selectParam,
-                    $this->isTenantIdEnabled() ? $tenantId : null
-                );
-            }
-        }
-
-        // Remove deleted_at fields from response data
-        $data = RecordApiResponseService::removeDeletedAtFields($data);
-
-        $headers = [];
-        $meta = [];
-
-        // Add pagination headers and metadata for paginated requests
-        if ($request->has('per_page') && !$request->has('limit')) {
-            // Check if cursor-based pagination was used
-            if (isset($cursorMeta)) {
-                // Cursor-based pagination response
-                $headers['X-Per-Page'] = (string) $perPage;
-                $headers['X-Cursor-Column'] = $cursorMeta['cursor_column'] ?? $cursorMeta['cursor_columns'][0] ?? 'id';
-
-                if ($cursorMeta['has_more']) {
-                    $headers['X-Has-More'] = 'true';
-                }
-
-                // Build cursor-based navigation links
-                $baseUrl = $request->url();
-                $queryParams = $request->query();
-                $links = [];
-
-                if ($cursorMeta['cursors']['next']) {
-                    $queryParams['cursor'] = $cursorMeta['cursors']['next'];
-                    $queryParams['direction'] = 'next';
-                    unset($queryParams['page']); // Remove page parameter for cursor pagination
-                    $links[] = '<' . $baseUrl . '?' . http_build_query($queryParams) . '>; rel="next"';
-                }
-
-                if ($cursorMeta['cursors']['prev']) {
-                    $queryParams['cursor'] = $cursorMeta['cursors']['prev'];
-                    $queryParams['direction'] = 'prev';
-                    unset($queryParams['page']);
-                    $links[] = '<' . $baseUrl . '?' . http_build_query($queryParams) . '>; rel="prev"';
-                }
-
-                if ([] !== $links) {
-                    $headers['Link'] = implode(', ', $links);
-                }
-
-                // Add cursor metadata to response body
-                $meta = $cursorMeta;
-            } else {
-                // Traditional pagination response
-                $headers['X-Total-Count'] = (string) $total;
-                $lastPage = (int) ceil($total / $perPage);
-                $baseUrl = $request->url();
-                $queryParams = $request->query();
-
-                $links = [];
-                $buildLink = function ($pageNum, string $rel) use ($baseUrl, $queryParams): string {
-                    $queryParams['page'] = $pageNum;
-
-                    return '<' . $baseUrl . '?' . http_build_query($queryParams) . '>; rel="' . $rel . '"';
-                };
-                $links[] = $buildLink(max($page - 1, 1), 'prev');
-                $links[] = $buildLink(min($page + 1, 0 !== $lastPage ? $lastPage : 1), 'next');
-                $links[] = $buildLink(1, 'first');
-                $links[] = $buildLink(0 !== $lastPage ? $lastPage : 1, 'last');
-                $headers['Link'] = implode(', ', $links);
-
-                // Add pagination headers
-                $headers['X-Page'] = (string) $page;
-                $headers['X-Per-Page'] = (string) $perPage;
-                $headers['X-Total-Pages'] = (string) $lastPage;
-
-                // Add pagination metadata to response body
-                $meta = [
-                    'page' => $page,
-                    'per_page' => $perPage,
-                    'total' => $total,
-                ];
-            }
-        } else {
-            // For limit-based requests, only include total in meta
-            $headers['X-Total-Count'] = (string) $total;
-            $meta = ['total' => $total];
-        }
-
-        // Enhanced caching with TTL optimization
-        if ($isCacheable && $cacheKey) {
-            $cacheData = [
-                'data' => $data,
-                'meta' => $meta,
-                'headers' => $headers,
-                'cached_at' => now()->toISOString(),
-                'tenant_enabled' => $this->isTenantIdEnabled(),
-            ];
-
-            // Use dynamic TTL based on data size and complexity
-            $ttl = $this->calculateOptimalCacheTTL($table, count($data), $request->has('select'));
-            QueryCacheService::put($cacheKey, $cacheData, $ttl);
-        }
-
-        $response = RecordApiResponseService::successWrapped($data, $meta, RecordApiJsonResponseEnum::SUCCESS->value, $headers);
-
-        $this->executeTableTrigger(
-            $schema[$table]->afterRead ?? null,
-            [
-                $request,
-                $table,
-                [
-                    'type' => 'index',
-                    'filters' => $filters,
-                    'data' => $data,
-                    'meta' => $meta,
-                    config('record.tenant_column', 'tenant_id') => $tenantId,
-                    'response' => $response,
-                ],
-            ]
-        );
-
-        return $response;
     }
 
     /**
@@ -349,144 +97,45 @@ class CoreRecordController extends Controller
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
-        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
         if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
             return $response;
         }
 
-        $triggerParams = [
-            $request,
-            $table,
-            [
-                'type' => 'show',
-                'id' => $id,
-                config('record.tenant_column', 'tenant_id') => $tenantId,
-            ],
-        ];
-        $triggerParams = $this->executeTableTrigger($schema[$table]->beforeRead ?? null, $triggerParams);
-        if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
-            $request = $triggerParams[0];
-        }
+        try {
+            $result = $this->recordService->getRecord($request, $table, $id, $tenantId);
+            $record = $result['data'];
+            $request = $result['request'];
 
-        // Resolve actual table name from RecordTableType configuration
-        $actualTableName = $this->resolveActualTableName($table);
-
-        $pk = $schema[$table]->primary_key ?? 'id';
-
-        // Check cache for single record
-        $recordCacheKey = $this->generateRecordCacheKey($table, $id, $tenantId, $request->query('select'));
-        if ($this->isCacheableRequest($request, $table)) {
-            $cachedRecord = Cache::get($recordCacheKey);
-            if ($cachedRecord) {
-                return RecordApiResponseService::successWrapped($cachedRecord);
+            if (isset($result['from_cache']) && $result['from_cache']) {
+                return RecordApiResponseService::successWrapped($record);
             }
-        }
 
-        $builder = DB::table($actualTableName);
-
-        // Apply tenant filtering using optimized method
-        $this->applyTenantFilter($builder, $actualTableName, $tenantId);
-
-        if ($schema[$table]->soft_deletes) {
-            $builder->whereNull($actualTableName . '.deleted_at');
-        }
-
-        // Ensure base columns if select contains relationships
-        if ($request->has('select')) {
-            $mainCols = RelationshipResolver::getMainTableColumns($request->query('select'));
-            if ([] !== $mainCols) {
-                $builder->addSelect($mainCols);
+            if (!$record) {
+                return RecordApiResponseService::errorWrapped('Not found', RecordApiJsonResponseEnum::NOT_FOUND->value);
             }
-        }
 
-        $record = $builder->where($pk, $id)->first();
-        if (!$record) {
-            return RecordApiResponseService::errorWrapped('Not found', RecordApiJsonResponseEnum::NOT_FOUND->value);
-        }
+            $response = RecordApiResponseService::successWrapped($record);
 
-        // Optimized relationship includes for single record
-        if ($request->has('select')) {
-            $selectParam = $request->query('select');
-            $includes = RelationshipResolver::parseSelectForIncludes($selectParam);
-
-            // Use subquery optimization for single record (always enabled for single records)
-            $useSubqueryOptimization = config('record.use_subquery_optimization', true);
-
-            if ($useSubqueryOptimization && [] !== $includes) {
-                // Use new subquery optimization for better performance
-                $optimizedBuilder = DB::table($actualTableName);
-
-                // Apply column selection based on select parameter
-                if ([] !== $mainCols) {
-                    $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $mainCols);
-                    $optimizedBuilder->select($prefixedCols);
-                } else {
-                    $optimizedBuilder->select($actualTableName . '.*');
-                }
-
-                // Apply tenant filtering
-                $this->applyTenantFilter($optimizedBuilder, $actualTableName, $tenantId);
-
-                // Apply soft delete filtering
-                if ($schema[$table]->soft_deletes) {
-                    $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
-                }
-
-                // Add subquery relationships
-                RelationshipResolver::applySubqueryRelationships(
-                    $optimizedBuilder,
-                    $table,
-                    $includes,
-                    $this->isTenantIdEnabled() ? $tenantId : null
-                );
-
-                // Get record with relationships in single query
-                $optimizedRecord = $optimizedBuilder->where($pk, $id)->first();
-
-                if ($optimizedRecord) {
-                    // Process JSON relationships
-                    $processedData = RelationshipResolver::processJsonRelationships([$optimizedRecord], $includes, $table);
-                    $record = $processedData[0] ?? $record;
-                }
-            } else {
-                // Fallback to existing relationship loading method
-                $data = RelationshipResolver::includeRelationships(
-                    [$record],
-                    $table,
-                    $selectParam,
-                    $this->isTenantIdEnabled() ? $tenantId : null
-                );
-                $record = $data[0] ?? $record;
-            }
-        }
-
-        // Remove deleted_at field from response data
-        $record = RecordApiResponseService::removeDeletedAtFields($record);
-
-        // Cache the single record result
-        if ($this->isCacheableRequest($request, $table)) {
-            $ttl = $this->calculateOptimalCacheTTL($table, 1, $request->has('select'));
-            Cache::put($recordCacheKey, $record, $ttl);
-        }
-
-        $response = RecordApiResponseService::successWrapped($record);
-
-        $this->executeTableTrigger(
-            $schema[$table]->afterRead ?? null,
-            [
-                $request,
-                $table,
+            $this->recordService->executeTableTrigger(
+                $schema[$table]->afterRead ?? null,
                 [
-                    'type' => 'show',
-                    'id' => $id,
-                    config('record.tenant_column', 'tenant_id') => $tenantId,
-                    'record' => $record,
-                    'response' => $response,
-                ],
-            ]
-        );
+                    $request,
+                    $table,
+                    [
+                        'type' => 'show',
+                        'id' => $id,
+                        config('record.tenant_column', 'tenant_id') => $tenantId,
+                        'record' => $record,
+                        'response' => $response,
+                    ],
+                ]
+            );
 
-        return $response;
+            return $response;
+        } catch (Exception $exception) {
+            return RecordApiResponseService::errorWrapped('Failed to retrieve record: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
+        }
     }
 
     /**
@@ -501,8 +150,8 @@ class CoreRecordController extends Controller
         }
 
         // Resolve actual table name from RecordTableType configuration
-        $actualTableName = $this->resolveActualTableName($table);
-        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $this->resolveActualTableName($table);
+        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
         if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
             return $response;
         }
@@ -514,7 +163,7 @@ class CoreRecordController extends Controller
                 config('record.tenant_column', 'tenant_id') => $tenantId,
             ],
         ];
-        $triggerParams = $this->executeTableTrigger($schema[$table]->beforeCreate ?? null, $triggerParams);
+        $triggerParams = $this->recordService->executeTableTrigger($schema[$table]->beforeCreate ?? null, $triggerParams);
         if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
             $request = $triggerParams[0];
         }
@@ -533,64 +182,27 @@ class CoreRecordController extends Controller
 
         $payload = $request->all();
 
-        // Strip relationship data from main payload
-        $payloadMain = RelationshipResolver::stripRelationshipData($table, $payload);
-        $payloadMain = $this->sanitizePayload($payloadMain, $schema[$table]);
-
-        if ($this->shouldApplyTenantId($schema[$table])) {
-            $payloadMain[config('record.tenant_column', 'tenant_id')] = $tenantId;
-        }
-
-        // Apply timestamps and audit fields
-        $payloadMain = $this->applyTimestampsAndAuditFields($payloadMain, $schema[$table], false);
-
-        if ([] === $payloadMain) {
-            return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, ['payload' => ['No data to insert']]);
-        }
-
-        $insertedId = null;
-
         // Begin transaction
         DB::beginTransaction();
 
         try {
-            $pk = $schema[$table]->primary_key ?? 'id';
-            if (array_key_exists($pk, $payloadMain) && null !== $payloadMain[$pk]) {
-                // Explicitly set primary key if provided
-                DB::table($actualTableName)->insert($payloadMain);
-                $insertedId = $payloadMain[$pk];
-            } else {
-                // Auto-increment primary key if not provided
-                $insertedId = DB::table($actualTableName)->insertGetId($payloadMain, $pk);
-            }
-
-            // Process nested relationships
-            RelationshipResolver::processRelatedData($table, $payload, $insertedId, $tenantId, 'create');
+            // Use RecordService to create the record
+            $result = $this->recordService->createRecord($request, $table, $payload, $tenantId);
+            $insertedId = $result['id'];
 
             // Commit transaction
             DB::commit();
             QueryCacheService::invalidateTable($table);
 
-            $record = $this->show($request, $table, $insertedId);
+            $record = $this->getRecordById($request, $table, $insertedId);
 
-            $this->executeTableTrigger(
-                $schema[$table]->afterCreate ?? null,
-                [
-                    $request,
-                    $table,
-                    [
-                        'id' => $insertedId,
-                        'payload' => $payloadMain,
-                        config('record.tenant_column', 'tenant_id') => $tenantId,
-                        'response' => $record,
-                    ],
-                ]
-            );
-
-            if (!($schema[$table]->disable_auditLog ?? false)) {
-                $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                AuditLogService::insertAuditLog(AuditLogEventEnum::CREATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
-            }
+            // Execute Post-Write Logic (Triggers and Audit Logs)
+            $this->recordService->processPostWriteLogic($request, $table, 'create', [
+                'id' => $insertedId,
+                'payload' => $result['payload'],
+                config('record.tenant_column', 'tenant_id') => $result['tenant_id'],
+                'response' => $record,
+            ]);
 
             return $record;
         } catch (Exception $exception) {
@@ -615,8 +227,8 @@ class CoreRecordController extends Controller
         }
 
         // Resolve actual table name from RecordTableType configuration
-        $actualTableName = $this->resolveActualTableName($table);
-        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $this->resolveActualTableName($table);
+        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
         if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
             return $response;
         }
@@ -631,7 +243,7 @@ class CoreRecordController extends Controller
         ];
 
         // Execute beforeUpdate trigger
-        $triggerParams = $this->executeTableTrigger($schema[$table]->beforeUpdate ?? null, $triggerParams);
+        $triggerParams = $this->recordService->executeTableTrigger($schema[$table]->beforeUpdate ?? null, $triggerParams);
         if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
             $request = $triggerParams[0];
         }
@@ -650,74 +262,35 @@ class CoreRecordController extends Controller
 
         $payload = $request->all();
 
-        // Strip relationship data from main payload
-        $payloadMain = RelationshipResolver::stripRelationshipData($table, $payload);
-        $payloadMain = $this->sanitizePayload($payloadMain, $schema[$table]);
-        if ($this->shouldApplyTenantId($schema[$table])) {
-            unset($payloadMain[config('record.tenant_column', 'tenant_id')]);
-        }
-
-        $pk = $schema[$table]->primary_key ?? 'id';
-
-        // Apply timestamps and audit fields
-        $payloadMain = $this->applyTimestampsAndAuditFields($payloadMain, $schema[$table], true);
-
-        $updated = 0;
-        $record = null;
-
         // Begin transaction
         DB::beginTransaction();
 
         try {
-            $query = DB::table($actualTableName)->where($pk, $id);
+            // Use RecordService to update the record
+            $result = $this->recordService->updateRecord($request, $table, $id, $payload, $tenantId);
+            $updated = $result['updated'];
 
-            // Apply tenant filtering using optimized method
-            $this->applyTenantFilter($query, $actualTableName, $tenantId);
-
-            if ($schema[$table]->soft_deletes) {
-                $query->whereNull($actualTableName . '.deleted_at');
-            }
-
-            $existing = (clone $query)->first();
-            if (!$existing) {
+            // Handle not found
+            if (!$result['exists']) {
                 DB::rollBack();
 
                 return RecordApiResponseService::errorWrapped('Not found', RecordApiJsonResponseEnum::NOT_FOUND->value);
             }
 
-            if ([] !== $payloadMain) {
-                $updated = $query->update($payloadMain);
-            }
-
-            // Process nested relationships
-            RelationshipResolver::processRelatedData($table, $payload, $id, $tenantId, 'update');
             // Commit transaction
             DB::commit();
-
             QueryCacheService::invalidateTable($table);
-            $record = $this->show($request, $table, $id);
 
-            // Execute afterUpdate trigger if defined
-            $this->executeTableTrigger(
-                $schema[$table]->afterUpdate ?? null,
-                [
-                    $request,
-                    $table,
-                    [
-                        'id' => $id,
-                        'payload' => $payloadMain,
-                        config('record.tenant_column', 'tenant_id') => $tenantId,
-                        'updated' => $updated,
-                        'response' => $record,
-                    ],
-                ]
-            );
+            $record = $this->getRecordById($request, $table, $id);
 
-            // Insert audit log if enabled
-            if (!($schema[$table]->disable_auditLog ?? false)) {
-                $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
-            }
+            // Execute Post-Write Logic (Triggers and Audit Logs)
+            $this->recordService->processPostWriteLogic($request, $table, 'update', [
+                'id' => $id,
+                'payload' => $result['payload'],
+                config('record.tenant_column', 'tenant_id') => $result['tenant_id'],
+                'updated' => $updated,
+                'response' => $record,
+            ]);
 
             return $record;
         } catch (Exception $exception) {
@@ -742,13 +315,11 @@ class CoreRecordController extends Controller
         }
 
         // Resolve actual table name from RecordTableType configuration
-        $actualTableName = $this->resolveActualTableName($table);
-        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $this->resolveActualTableName($table);
+        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
         if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
             return $response;
         }
-
-        $pk = $schema[$table]->primary_key ?? 'id';
 
         $triggerParams = [
             $request,
@@ -760,7 +331,7 @@ class CoreRecordController extends Controller
         ];
 
         // Execute beforeDelete trigger if defined
-        $triggerParams = $this->executeTableTrigger($schema[$table]->beforeDelete ?? null, $triggerParams);
+        $triggerParams = $this->recordService->executeTableTrigger($schema[$table]->beforeDelete ?? null, $triggerParams);
         if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
             $request = $triggerParams[0];
         };
@@ -782,12 +353,9 @@ class CoreRecordController extends Controller
         DB::beginTransaction();
 
         try {
-            $query = DB::table($actualTableName)->where($pk, $id);
-
-            // Apply tenant filtering using optimized method
-            $this->applyTenantFilter($query, $actualTableName, $tenantId);
-
-            $affected = $schema[$table]->soft_deletes ? $query->update(['deleted_at' => now()]) : $query->delete();
+            // Use RecordService to delete the record
+            $result = $this->recordService->deleteRecord($request, $table, $id, $tenantId);
+            $affected = $result['affected'];
 
             if (0 === $affected) {
                 DB::rollBack();
@@ -802,27 +370,14 @@ class CoreRecordController extends Controller
 
             $response = RecordApiResponseService::successWrapped(['deleted' => $affected]);
 
-            // Execute afterDelete trigger if defined
-            $this->executeTableTrigger(
-                $schema[$table]->afterDelete ?? null,
-                [
-                    $request,
-                    $table,
-                    [
-                        'id' => $id,
-                        config('record.tenant_column', 'tenant_id') => $tenantId,
-                        'affected' => $affected,
-                        'soft_deleted' => $schema[$table]->soft_deletes,
-                        'response' => $response,
-                    ],
-                ]
-            );
-
-            // Insert audit log if enabled
-            if (!($schema[$table]->disable_auditLog ?? false)) {
-                $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                AuditLogService::insertAuditLog(AuditLogEventEnum::DELETED, $entityClass, ['id' => $id]);
-            }
+            // Execute Post-Write Logic (Triggers and Audit Logs)
+            $this->recordService->processPostWriteLogic($request, $table, 'delete', [
+                'id' => $id,
+                config('record.tenant_column', 'tenant_id') => $tenantId,
+                'affected' => $affected,
+                'soft_deleted' => $schema[$table]->soft_deletes,
+                'response' => $response,
+            ]);
 
             return $response;
         } catch (Exception $exception) {
@@ -846,25 +401,22 @@ class CoreRecordController extends Controller
         }
 
         // Resolve actual table name from RecordTableType configuration
-        $actualTableName = $this->resolveActualTableName($table);
+        $this->resolveActualTableName($table);
 
-        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
         if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
             return $response;
         }
 
-        $pk = $schema[$table]->primary_key ?? 'id';
         $affected = 0;
 
         // Begin transaction
         DB::beginTransaction();
 
         try {
-            $query = DB::table($actualTableName)->where($pk, $id);
-            $this->applyTenantFilter($query, $actualTableName, $tenantId);
-            $query->whereNotNull($actualTableName . '.deleted_at');
-
-            $affected = $query->update(['deleted_at' => null]);
+            // Use RecordService to restore the record
+            $result = $this->recordService->restoreRecord($request, $table, $id, $tenantId);
+            $affected = $result['restored'];
 
             if (0 === $affected) {
                 DB::rollBack();
@@ -877,11 +429,16 @@ class CoreRecordController extends Controller
 
             QueryCacheService::invalidateTable($table);
 
-            if (!($schema[$table]->disable_auditLog ?? false)) {
-                $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                $record = $this->show($request, $table, $id);
-                AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, json_decode(json_encode($record->getData()->data), true));
-            }
+            $record = $this->getRecordById($request, $table, $id);
+
+            // Execute Post-Write Logic (Triggers and Audit Logs)
+            $this->recordService->processPostWriteLogic($request, $table, 'update', [
+                'id' => $id,
+                'payload' => [], // No payload for restore
+                config('record.tenant_column', 'tenant_id') => $tenantId,
+                'restored' => $affected,
+                'response' => $record,
+            ]);
 
             return RecordApiResponseService::successWrapped(['restored' => $affected]);
         } catch (Exception $exception) {
@@ -904,14 +461,12 @@ class CoreRecordController extends Controller
         }
 
         // Resolve actual table name from RecordTableType configuration
-        $actualTableName = $this->resolveActualTableName($table);
+        $this->resolveActualTableName($table);
 
-        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
         if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
             return $response;
         }
-
-        $pk = $schema[$table]->primary_key ?? 'id';
 
         $deleted = 0;
 
@@ -919,10 +474,9 @@ class CoreRecordController extends Controller
         DB::beginTransaction();
 
         try {
-            $query = DB::table($actualTableName)->where($pk, $id);
-            $this->applyTenantFilter($query, $actualTableName, $tenantId);
-
-            $deleted = $query->delete();
+            // Use RecordService to force delete the record
+            $result = $this->recordService->forceDeleteRecord($request, $table, $id, $tenantId);
+            $deleted = $result['deleted'];
 
             if (0 === $deleted) {
                 DB::rollBack();
@@ -930,17 +484,24 @@ class CoreRecordController extends Controller
                 return RecordApiResponseService::errorWrapped('Not found', RecordApiJsonResponseEnum::NOT_FOUND->value);
             }
 
-            // Audit log for deletion (if not disabled)
-            if (!($schema[$table]->disable_auditLog ?? false)) {
-                $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                AuditLogService::insertAuditLog(AuditLogEventEnum::DELETED, $entityClass, ['id' => $id]);
-            }
-
             // Commit transaction
             DB::commit();
 
             QueryCacheService::invalidateTable($table);
-            return RecordApiResponseService::successWrapped(['deleted' => $deleted]);
+
+            $response = RecordApiResponseService::successWrapped(['deleted' => $deleted]);
+
+            // Execute Post-Write Logic (Triggers and Audit Logs)
+            $this->recordService->processPostWriteLogic($request, $table, 'delete', [
+                'id' => $id,
+                config('record.tenant_column', 'tenant_id') => $tenantId,
+                'deleted' => $deleted,
+                'force_deleted' => true,
+                'response_data' => ['id' => $id], // Preserve original audit log data
+                'response' => $response,
+            ]);
+
+            return $response;
         } catch (Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
@@ -951,203 +512,37 @@ class CoreRecordController extends Controller
 
     /**
      * Batch create, update, or delete records in a single API call.
-     *
-     * @param Request $request
-     * @param string $table
-     * @return JsonResponse
      */
-    public function bulkRecord(Request $request, string $table): JsonResponse
+    public function bulkRecord(Request $request, string $table, ?string $legacyAction = null): JsonResponse
     {
         // Check all permissions for mixed operations
         $schema = SchemaRegistry::get();
-
-        // Resolve actual table name from RecordTableType configuration
-        $actualTableName = $this->resolveActualTableName($table);
-
-        $this->authorizeAction($actualTableName, 'create');
-        $this->authorizeAction($actualTableName, 'update');
-        $this->authorizeAction($actualTableName, 'delete');
         if (!isset($schema[$table])) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
-        // Support both direct array and items wrapper for backward compatibility
-        $requestData = $request->all();
-        if (isset($requestData['items']) && is_array($requestData['items'])) {
-            $items = $requestData['items'];
-        } else {
-            // Check if request is a direct array (JSON array sent directly)
-            $jsonInput = $request->getContent();
-            $decodedJson = json_decode($jsonInput, true);
+        // Resolve actual table name from RecordTableType configuration
+        $actualTableName = (string) $this->resolveActualTableName($table);
 
-            if (JSON_ERROR_NONE === json_last_error() && is_array($decodedJson) && [] !== $decodedJson) {
-                // Check if it's an indexed array (direct bulk data)
-                $items = array_keys($decodedJson) === range(0, count($decodedJson) - 1) ? $decodedJson : [$decodedJson];
-            } else {
-                $items = $request->input('items', []);
-            }
-        }
+        $this->authorizeAction($actualTableName, 'create');
+        $this->authorizeAction($actualTableName, 'update');
+        $this->authorizeAction($actualTableName, 'delete');
 
-        if (!is_array($items) || [] === $items) {
-            return RecordApiResponseService::errorWrapped('Data array required', RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
-        }
-
-        $maxBatch = (int) config('record.bulk_max', 100);
-        if (count($items) > $maxBatch) {
-            return RecordApiResponseService::errorWrapped('Batch too large, max ' . $maxBatch, 413);
-        }
-
-        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
         if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
             return $response;
         }
 
-        $pk = $schema[$table]->primary_key ?? 'id';
-
-        $affected = 0;
-        $createdData = [];
-        $updatedData = [];
-        $deletedData = [];
-        $upsertedData = [];
-
-        // Begin transaction
-        DB::beginTransaction();
-
         try {
-            foreach ($items as $item) {
-                // Determine operation type based on data structure
-                $operation = $this->determineOperation($item, $pk, null);
-
-                if ('create' === $operation) {
-                    // CREATE: No ID present, create new record
-                    $item = $this->sanitizePayload($item, $schema[$table]);
-                    if ($this->shouldApplyTenantId($schema[$table])) {
-                        $item[config('record.tenant_column', 'tenant_id')] = $tenantId;
-                    }
-
-                    // Apply timestamps and audit fields
-                    $item = $this->applyTimestampsAndAuditFields($item, $schema[$table], false);
-
-                    $insertId = DB::table($actualTableName)->insertGetId($item);
-                    // Get created record using show method
-                    $createdRecord = $this->show($request, $table, $insertId);
-                    $recordData = json_decode(json_encode($createdRecord->getData()->data), true);
-                    $createdData[] = $recordData;
-                    ++$affected;
-                    // Audit log for insert with complete record data (if not disabled)
-                    if (!($schema[$table]->disable_auditLog ?? false)) {
-                        $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                        AuditLogService::insertAuditLog(AuditLogEventEnum::CREATED, $entityClass, $recordData);
-                    }
-                } elseif ('update' === $operation) {
-                    // UPDATE: ID present with additional data
-                    if (!isset($item[$pk])) {
-                        throw ValidationException::withMessages([$pk => 'Primary key required for update']);
-                    }
-
-                    $id = $item[$pk];
-                    unset($item[$pk]);
-                    $item = $this->sanitizePayload($item, $schema[$table]);
-                    if ($this->shouldApplyTenantId($schema[$table])) {
-                        unset($item[config('record.tenant_column', 'tenant_id')]);
-                    }
-
-                    // Apply timestamps and audit fields
-                    $item = $this->applyTimestampsAndAuditFields($item, $schema[$table], true);
-
-                    $q = DB::table($actualTableName)->where($pk, $id);
-
-                    // Apply tenant filtering using optimized method
-                    $this->applyTenantFilter($q, $actualTableName, $tenantId);
-                    $updateCount = $q->update($item);
-                    if ($updateCount > 0) {
-                        // Get updated record using show method
-                        $updatedRecord = $this->show($request, $table, $id);
-                        $recordData = json_decode(json_encode($updatedRecord->getData()->data), true);
-                        $updatedData[] = $recordData;
-                        $affected += $updateCount;
-                        // Audit log per updated row with complete record data (if not disabled)
-                        if (!($schema[$table]->disable_auditLog ?? false)) {
-                            $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                            AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, $recordData);
-                        }
-                    }
-                } elseif ('delete' === $operation) {
-                    // DELETE: Only ID present
-                    if (!isset($item[$pk])) {
-                        throw ValidationException::withMessages([$pk => 'Primary key required for delete']);
-                    }
-
-                    $q = DB::table($actualTableName)->where($pk, $item[$pk]);
-
-                    // Apply tenant filtering using optimized method
-                    $this->applyTenantFilter($q, $actualTableName, $tenantId);
-                    $deleteCount = $schema[$table]->soft_deletes ? $q->update(['deleted_at' => now()]) : $q->delete();
-
-                    if ($deleteCount > 0) {
-                        $deletedData[] = ['id' => $item[$pk]];
-                        $affected += $deleteCount;
-                        // Audit log per deleted row (if not disabled)
-                        if (!($schema[$table]->disable_auditLog ?? false)) {
-                            $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                            AuditLogService::insertAuditLog(AuditLogEventEnum::DELETED, $entityClass, ['id' => $item[$pk]]);
-                        }
-                    }
-                } elseif ('upsert' === $operation) {
-                    // UPSERT: Legacy action support
-                    $item = $this->sanitizePayload($item, $schema[$table]);
-                    if ($this->shouldApplyTenantId($schema[$table])) {
-                        $item[config('record.tenant_column', 'tenant_id')] = $tenantId;
-                    }
-
-                    // Apply timestamps and audit fields
-                    $item = $this->applyTimestampsAndAuditFields($item, $schema[$table], true);
-
-                    // Upsert requires update columns; exclude primary key and system timestamps
-                    $updateColumns = array_values(array_diff(array_keys($item), [$pk, 'id', 'created_at', 'deleted_at']));
-                    DB::table($actualTableName)->upsert([$item], [$pk], $updateColumns);
-                    // Get upserted record using show method
-                    $upsertedRecord = $this->show($request, $table, $item[$pk]);
-                    $recordData = json_decode(json_encode($upsertedRecord->getData()->data), true);
-                    $upsertedData[] = $recordData;
-                    ++$affected;
-                    // Audit log for upsert with complete record data (if not disabled)
-                    if (!($schema[$table]->disable_auditLog ?? false)) {
-                        $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                        AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, $recordData);
-                    }
-                }
-            }
-
-            // Commit transaction
-            DB::commit();
-
-            // Consolidate created and updated records into a single data array
-            $consolidatedData = [];
-
-            // Add created records
-            if ([] !== $createdData) {
-                $consolidatedData = array_merge($consolidatedData, $createdData);
-            }
-
-            // Add updated records
-            if ([] !== $updatedData) {
-                $consolidatedData = array_merge($consolidatedData, $updatedData);
-            }
-
-            // Add upserted records
-            if ([] !== $upsertedData) {
-                $consolidatedData = array_merge($consolidatedData, $upsertedData);
-            }
-
-            // Calculate total affected records (excluding deletes for the data array)
-            $activeRecordsCount = count($createdData) + count($updatedData) + count($upsertedData);
-
-            return RecordApiResponseService::successWrapped($consolidatedData, ['affected' => $activeRecordsCount]);
+            $result = $this->recordService->bulkRecord($request, $table, $tenantId, $legacyAction);
+            return RecordApiResponseService::successWrapped($result['data'], $result['meta']);
         } catch (Exception $exception) {
-            // Rollback transaction on any error
-            DB::rollBack();
-            return RecordApiResponseService::errorWrapped('Failed to perform bulk operation: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
+            $code = $exception->getCode();
+            if (!is_int($code) || $code < 100 || $code > 599) {
+                $code = RecordApiJsonResponseEnum::SERVER_ERROR->value;
+            }
+
+            return RecordApiResponseService::errorWrapped($exception->getMessage(), $code);
         }
     }
 
@@ -1168,7 +563,7 @@ class CoreRecordController extends Controller
         }
 
         // Resolve actual table name from RecordTableType configuration
-        $actualTableName = $this->resolveActualTableName($table);
+        $this->resolveActualTableName($table);
 
         // Validate request structure - expect direct array payload
         $payload = $request->all();
@@ -1198,7 +593,7 @@ class CoreRecordController extends Controller
             throw new ValidationException($validator);
         }
 
-        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
         if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
             return $response;
         }
@@ -1219,29 +614,25 @@ class CoreRecordController extends Controller
                     ]);
                 }
 
-                // Sanitize and prepare payload
-                $item = $this->sanitizePayload($item, $schema[$table]);
+                // Execute beforeCreate trigger
+                $this->recordService->executeTableTrigger($schema[$table]->beforeCreate ?? null, [$request, $table, $item]);
 
-                if ($this->shouldApplyTenantId($schema[$table])) {
-                    $item[config('record.tenant_column', 'tenant_id')] = $tenantId;
-                }
-
-                // Apply timestamps and audit fields
-                $item = $this->applyTimestampsAndAuditFields($item, $schema[$table], false);
-
-                $insertId = DB::table($actualTableName)->insertGetId($item);
+                $result = $this->recordService->createRecord($request, $table, $item, $tenantId);
+                $insertId = $result['id'];
 
                 // Get created record using show method
-                $createdRecord = $this->show($request, $table, $insertId);
+                $createdRecord = $this->getRecordById($request, $table, $insertId);
                 $recordData = json_decode(json_encode($createdRecord->getData()->data), true);
                 $createdData[] = $recordData;
                 ++$affected;
 
-                // Audit log for insert with complete record data (if not disabled)
-                if (!($schema[$table]->disable_auditLog ?? false)) {
-                    $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                    AuditLogService::insertAuditLog(AuditLogEventEnum::CREATED, $entityClass, $recordData);
-                }
+                // Post-write logic
+                $this->recordService->processPostWriteLogic($request, $table, 'create', [
+                    'id' => $insertId,
+                    'payload' => $result['payload'],
+                    config('record.tenant_column', 'tenant_id') => $result['tenant_id'],
+                    'response' => $createdRecord,
+                ]);
             }
 
             DB::commit();
@@ -1275,7 +666,7 @@ class CoreRecordController extends Controller
         }
 
         // Resolve actual table name from RecordTableType configuration
-        $actualTableName = $this->resolveActualTableName($table);
+        $this->resolveActualTableName($table);
         $pk = $schema[$table]->primary_key ?? 'id';
 
         // Validate request structure - expect direct array payload
@@ -1308,7 +699,7 @@ class CoreRecordController extends Controller
             throw new ValidationException($validator);
         }
 
-        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
         if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
             return $response;
         }
@@ -1338,35 +729,27 @@ class CoreRecordController extends Controller
                 $id = $item[$pk];
                 unset($item[$pk]);
 
-                // Sanitize and prepare payload
-                $item = $this->sanitizePayload($item, $schema[$table]);
+                // Execute beforeUpdate trigger
+                $this->recordService->executeTableTrigger($schema[$table]->beforeUpdate ?? null, [$request, $table, $id, $item]);
 
-                if ($this->shouldApplyTenantId($schema[$table])) {
-                    unset($item[config('record.tenant_column', 'tenant_id')]);
-                }
-
-                // Apply timestamps and audit fields
-                $item = $this->applyTimestampsAndAuditFields($item, $schema[$table], true);
-
-                $q = DB::table($actualTableName)->where($pk, $id);
-
-                // Apply tenant filtering using optimized method
-                $this->applyTenantFilter($q, $actualTableName, $tenantId);
-
-                $updateCount = $q->update($item);
+                $result = $this->recordService->updateRecord($request, $table, $id, $item, $tenantId);
+                $updateCount = $result['updated'];
 
                 if ($updateCount > 0) {
                     // Get updated record using show method
-                    $updatedRecord = $this->show($request, $table, $id);
+                    $updatedRecord = $this->getRecordById($request, $table, $id);
                     $recordData = json_decode(json_encode($updatedRecord->getData()->data), true);
                     $updatedData[] = $recordData;
                     $affected += $updateCount;
 
-                    // Audit log per updated row with complete record data (if not disabled)
-                    if (!($schema[$table]->disable_auditLog ?? false)) {
-                        $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                        AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, $recordData);
-                    }
+                    // Post-write logic
+                    $this->recordService->processPostWriteLogic($request, $table, 'update', [
+                        'id' => $id,
+                        'payload' => $result['payload'],
+                        config('record.tenant_column', 'tenant_id') => $result['tenant_id'],
+                        'updated' => $updateCount,
+                        'response' => $updatedRecord,
+                    ]);
                 } else {
                     // Record not found or no changes made
                     throw ValidationException::withMessages([
@@ -1406,7 +789,7 @@ class CoreRecordController extends Controller
         }
 
         // Resolve actual table name from RecordTableType configuration
-        $actualTableName = $this->resolveActualTableName($table);
+        $this->resolveActualTableName($table);
         $pk = $schema[$table]->primary_key ?? 'id';
 
         // Validate request structure - expect direct array payload
@@ -1434,7 +817,7 @@ class CoreRecordController extends Controller
             throw new ValidationException($validator);
         }
 
-        $tenantId = $this->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
         if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
             return $response;
         }
@@ -1473,37 +856,33 @@ class CoreRecordController extends Controller
 
         try {
             foreach ($idsToDelete as $idToDelete) {
-                // Get record data before deletion for audit log
-                $recordToDelete = null;
-                if (!($schema[$table]->disable_auditLog ?? false)) {
-                    $recordResponse = $this->show($request, $table, $idToDelete);
-                    if (RecordApiJsonResponseEnum::SUCCESS->value === $recordResponse->getStatusCode()) {
-                        $recordToDelete = json_decode(json_encode($recordResponse->getData()->data), true);
-                    }
-                }
+                // Execute beforeDelete trigger
+                $this->recordService->executeTableTrigger($schema[$table]->beforeDelete ?? null, [$request, $table, $idToDelete]);
 
-                $q = DB::table($actualTableName)->where($pk, $idToDelete);
-
-                // Apply tenant filtering using optimized method
-                $this->applyTenantFilter($q, $actualTableName, $tenantId);
-
-                $deleteCount = $schema[$table]->soft_deletes
-                    ? $q->update(['deleted_at' => now()])
-                    : $q->delete();
+                $result = $this->recordService->deleteRecord($request, $table, $idToDelete, $tenantId);
+                $deleteCount = $result['affected'];
 
                 if ($deleteCount > 0) {
                     $deletedData[] = [$pk => $idToDelete];
                     $affected += $deleteCount;
 
-                    // Audit log per deleted row (if not disabled)
-                    if (!($schema[$table]->disable_auditLog ?? false) && $recordToDelete) {
-                        $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                        AuditLogService::insertAuditLog(AuditLogEventEnum::DELETED, $entityClass, $recordToDelete);
-                    }
+                    $response = RecordApiResponseService::successWrapped(['deleted' => $deleteCount]);
+
+                    // Post-write logic
+                    $this->recordService->processPostWriteLogic($request, $table, 'delete', [
+                        'id' => $idToDelete,
+                        'payload' => ['id' => $idToDelete],
+                        config('record.tenant_column', 'tenant_id') => $tenantId,
+                        'affected' => $deleteCount,
+                        'soft_deleted' => $schema[$table]->soft_deletes ?? false,
+                        'response' => $response,
+                    ]);
                 }
             }
 
             DB::commit();
+
+            QueryCacheService::invalidateTable($table);
 
             return RecordApiResponseService::successWrapped($deletedData, ['affected' => $affected]);
         } catch (Exception $exception) {
@@ -1522,53 +901,18 @@ class CoreRecordController extends Controller
     public function executeTableFunction(Request $request, string $table, string $functionName): JsonResponse
     {
         try {
-            // Get schema and validate table exists
-            $schema = SchemaRegistry::get();
+            $schema = $this->getCachedSchema();
             if (!isset($schema[$table])) {
                 return RecordApiResponseService::errorWrapped(sprintf("Table '%s' does not exist", $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
             }
 
-            // Check if function exists in table schema
-            $tableFunctions = $schema[$table]->functions ?? [];
-            $functionConfig = null;
-            $extractedId = null;
-
-            // First try exact match
-            if (isset($tableFunctions[$functionName])) {
-                $functionConfig = $tableFunctions[$functionName];
-            } else {
-                // Try pattern matching for parameterized function names
-                foreach ($tableFunctions as $configuredFunctionName => $config) {
-                    // Convert function name pattern to regex (e.g., 'role_permission/{id}' -> 'role_permission/(\d+)')
-                    $pattern = preg_replace('/\{[^}]+\}/', '(\d+)', $configuredFunctionName);
-                    $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/';
-
-                    if (preg_match($pattern, $functionName, $matches)) {
-                        $functionConfig = $config;
-
-                        // Extract ID parameter if present (first captured group)
-                        if (isset($matches[1])) {
-                            $extractedId = $matches[1];
-                        }
-
-                        break;
-                    }
-                }
-            }
-
-            if (!$functionConfig) {
-                return RecordApiResponseService::errorWrapped(sprintf("Function '%s' not found for table '%s'", $functionName, $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
-            }
-
-            // Check permission using table function's pms_name
             // Resolve actual table name from RecordTableType configuration
-            $actualTableName = $this->resolveActualTableName($table);
+            $actualTableName = (string) $this->resolveActualTableName($table);
             $this->authorizeAction($actualTableName, 'read');
 
-            // Execute the custom function with extracted ID parameter
-            return $this->executeCustomFunction($request, $functionConfig, $extractedId);
+            return $this->recordService->executeTableFunction($request, $table, $functionName);
         } catch (Exception $exception) {
-            return RecordApiResponseService::errorWrapped('Function execution failed: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
+            return RecordApiResponseService::errorWrapped($exception->getMessage(), $exception->getCode() ?: RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -1579,42 +923,9 @@ class CoreRecordController extends Controller
     public function executeGlobalFunction(Request $request, string $functionName): JsonResponse
     {
         try {
-            // Check if function exists in table schema
-            $globalFunctions = config('record.global_functions', []);
-            $functionConfig = null;
-            $extractedId = null;
-
-            // First try exact match
-            if (isset($globalFunctions[$functionName])) {
-                $functionConfig = $globalFunctions[$functionName];
-            } else {
-                // Try pattern matching for parameterized function names
-                foreach ($globalFunctions as $configuredFunctionName => $config) {
-                    // Convert function name pattern to regex (e.g., 'role_permission/{id}' -> 'role_permission/(\d+)')
-                    $pattern = preg_replace('/\{[^}]+\}/', '(\d+)', (string) $configuredFunctionName);
-                    $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/';
-
-                    if (preg_match($pattern, $functionName, $matches)) {
-                        $functionConfig = $config;
-
-                        // Extract ID parameter if present (first captured group)
-                        if (isset($matches[1])) {
-                            $extractedId = $matches[1];
-                        }
-
-                        break;
-                    }
-                }
-            }
-
-            if (!$functionConfig) {
-                return RecordApiResponseService::errorWrapped(sprintf("Function '%s' not found", $functionName), RecordApiJsonResponseEnum::NOT_FOUND->value);
-            }
-
-            // Execute the custom function with extracted ID parameter
-            return $this->executeCustomFunction($request, $functionConfig, $extractedId);
+            return $this->recordService->executeGlobalFunction($request, $functionName);
         } catch (Exception $exception) {
-            return RecordApiResponseService::errorWrapped('Function execution failed: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
+            return RecordApiResponseService::errorWrapped($exception->getMessage(), $exception->getCode() ?: RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -1627,36 +938,6 @@ class CoreRecordController extends Controller
      *
      * @return array Modified payload with timestamps and audit fields
      */
-    private function applyTimestampsAndAuditFields(array $payload, object $tableSchema, bool $isUpdate = false): array
-    {
-        $user = auth('api')->user();
-
-        if ($isUpdate) {
-            // Auto-add updated_at timestamp
-            $payload['updated_at'] = now();
-
-            // Auto-assign updated_by or last_updated_by if column exists and user is authenticated
-            if ($user) {
-                if (isset($tableSchema->columns['updated_by'])) {
-                    $payload['updated_by'] = $user->id;
-                } elseif (isset($tableSchema->columns['last_updated_by'])) {
-                    $payload['last_updated_by'] = $user->id;
-                }
-            }
-        } else {
-            // Auto-add created_at and updated_at timestamps
-            $payload['created_at'] = now();
-            $payload['updated_at'] = now();
-
-            // Auto-assign created_by if column exists and user is authenticated
-            if ($user && isset($tableSchema->columns['created_by'])) {
-                $payload['created_by'] = $user->id;
-            }
-        }
-
-        return $payload;
-    }
-
     /**
      * Resolve the actual table name from schema configuration.
      */
@@ -1693,37 +974,8 @@ class CoreRecordController extends Controller
     }
 
     /**
-     * Apply tenant_id filtering if enabled and available.
-     *
-     * This method conditionally applies tenant-based filtering to queries
-     * based on the 'enable_tenant_id' configuration setting. It provides
-     * secure multi-tenant data isolation when enabled.
-     *
-     * Security Features:
-     * - Only applies filtering when tenant_id is enabled in configuration
-     * - Validates tenant_id column exists in table schema before filtering
-     * - Prevents cross-tenant data access in multi-tenant environments
-     *
-     * Performance Considerations:
-     * - Uses cached schema to avoid repeated database queries
-     * - Applies filtering at query level for optimal performance
-     * - Integrates with existing query optimizations
-     *
-     * @param mixed  $query    Laravel query builder instance
-     * @param string $table    Target table name for schema validation
-     * @param mixed  $tenantId Tenant identifier for filtering
+     * Normalize tenant ID.
      */
-    private function applyTenantFilter(mixed $query, string $table, mixed $tenantId): void
-    {
-        $tenantId = $this->normalizeTenantId($tenantId);
-        if ($this->isTenantIdEnabled() && !$this->isTenantIdMissing($tenantId)) {
-            $schema = $this->getCachedSchema();
-            if ($schema[$table]->has_tenant_id ?? false) {
-                $query->where($table . '.' . config('record.tenant_column', 'tenant_id'), $tenantId);
-            }
-        }
-    }
-
     private function normalizeTenantId(mixed $tenantId): mixed
     {
         if (is_string($tenantId)) {
@@ -1761,33 +1013,8 @@ class CoreRecordController extends Controller
     }
 
     /**
-     * Determine the operation type based on data structure.
+     * Authorize the action for the given table.
      */
-    private function determineOperation(array $row, string $pk, ?string $legacyAction): string
-    {
-        // If legacy action is provided, use it
-        if (null !== $legacyAction && '' !== $legacyAction && '0' !== $legacyAction) {
-            return $legacyAction;
-        }
-
-        // Auto-detect operation based on data structure
-        $hasId = isset($row[$pk]) && !empty($row[$pk]);
-        $hasOtherFields = [] !== array_diff_key($row, [$pk => true]);
-
-        if (!$hasId) {
-            // No ID present = CREATE
-            return 'create';
-        }
-
-        if ($hasOtherFields) {
-            // ID + other fields = UPDATE
-            return 'update';
-        }
-
-        // Only ID present = DELETE
-        return 'delete';
-    }
-
     private function authorizeAction(string $table, string $action): void
     {
         // Allow unauthenticated access for configured tables/actions (per-table config)
@@ -1805,270 +1032,6 @@ class CoreRecordController extends Controller
 
         if (!Gate::forUser($user)->allows($perm)) {
             abort(RecordApiJsonResponseEnum::FORBIDDEN->value, 'Forbidden');
-        }
-    }
-
-    private function sanitizePayload(array $input, $meta): array
-    {
-        $columns = array_keys($meta->columns ?? []);
-        // Only allow known columns; prevent mass assignment to meta/system columns
-        $payload = array_intersect_key($input, array_flip($columns));
-
-        // Never allow setting these explicitly
-        unset($payload['id'], $payload['deleted_at'], $payload['created_at'], $payload['updated_at']);
-
-        return $payload;
-    }
-
-    private function isCacheableRequest(Request $request, string $table): bool
-    {
-        // Check if caching is globally enabled
-        if (!config('record.cache.enabled', true)) {
-            return false;
-        }
-
-        // Check per-table cache settings (overrides global setting)
-        $perTableCache = config('record.cache.per_table', []);
-        if (isset($perTableCache[$table]) && !$perTableCache[$table]) {
-            return false;
-        }
-
-        // Only cache GET requests without complex filters
-        if ('GET' !== $request->method()) {
-            return false;
-        }
-
-        // Don't cache if user-specific data or complex queries
-        return !$request->has(['search', 'filter', 'where']);
-    }
-
-    /**
-     * Generate optimized cache key with better collision resistance.
-     */
-    private function generateOptimizedCacheKey(string $table, array $filters, array $includes, int $page, int $limit): string
-    {
-        $keyData = [
-            'table' => $table,
-            'filters' => $filters,
-            'includes' => $includes,
-            'page' => $page,
-            'limit' => $limit,
-            'tenant_enabled' => $this->isTenantIdEnabled(),
-        ];
-
-        return 'record_index_' . md5(serialize($keyData));
-    }
-
-    /**
-     * Generate cache key for single record.
-     */
-    private function generateRecordCacheKey(string $table, mixed $id, mixed $tenantId, mixed $select): string
-    {
-        $keyData = [
-            'table' => $table,
-            'id' => $id,
-            'tenant_id' => $this->isTenantIdEnabled() ? $tenantId : null,
-            'select' => $select,
-            'tenant_enabled' => $this->isTenantIdEnabled(),
-        ];
-
-        return 'record_show_' . md5(serialize($keyData));
-    }
-
-    private function executeTableTrigger(array|RecordTableTriggerType|null $trigger, array $params = []): array
-    {
-        if (null === $trigger) {
-            return $params;
-        }
-
-        $triggers = $trigger instanceof RecordTableTriggerType ? [$trigger] : $trigger;
-
-        if (!is_array($triggers)) {
-            return $params;
-        }
-
-        foreach ($triggers as $item) {
-            if (is_array($item)) {
-                try {
-                    $item = RecordTableTriggerType::fromArray($item);
-                } catch (Exception) {
-                    continue;
-                }
-            }
-
-            if (!$item instanceof RecordTableTriggerType) {
-                continue;
-            }
-
-            $className = $item->class;
-            $method = $item->function_method;
-            if (!class_exists($className)) {
-                continue;
-            }
-
-            if (!method_exists($className, $method)) {
-                continue;
-            }
-
-            try {
-                $result = call_user_func_array([$className, $method], $params);
-                if ($result instanceof Request && isset($params[0]) && $params[0] instanceof Request) {
-                    $params[0] = $result;
-                } elseif (is_array($result) && isset($params[0]) && $params[0] instanceof Request) {
-                    $params[0]->merge($result);
-                }
-            } catch (Exception) {
-            }
-        }
-
-        return $params;
-    }
-
-    /**
-     * Calculate optimal cache TTL based on data characteristics.
-     */
-    private function calculateOptimalCacheTTL(string $table, int $recordCount, bool $hasRelationships): int
-    {
-        $baseTTL = config('record.cache.default_ttl', 3600); // 1 hour default
-
-        // Reduce TTL for large datasets
-        if ($recordCount > 100) {
-            $baseTTL = (int) ($baseTTL * 0.5);
-        }
-
-        // Reduce TTL for complex queries with relationships
-        if ($hasRelationships) {
-            $baseTTL = (int) ($baseTTL * 0.7);
-        }
-
-        // Per-table TTL overrides
-        $perTableTTL = config('record.cache.per_table_ttl', []);
-        if (isset($perTableTTL[$table])) {
-            $baseTTL = $perTableTTL[$table];
-        }
-
-        return max($baseTTL, 300); // Minimum 5 minutes
-    }
-
-    /**
-     * Execute a custom function based on its configuration.
-     */
-    private function executeCustomFunction(Request $request, array|RecordFunctionType $functionConfig, mixed $id = null): JsonResponse
-    {
-        // Convert RecordFunctionType to array if needed
-        if ($functionConfig instanceof RecordFunctionType) {
-            $config = $functionConfig->toArray();
-        } else {
-            $config = $functionConfig;
-        }
-
-        // Check permissions if pms_name is specified
-        if (isset($config['pms_name']) && !empty($config['pms_name'])) {
-            $guard = config('sp-laravel-api.auth.guard', 'api');
-            $user = auth($guard)->user();
-            if (!$user) {
-                return RecordApiResponseService::errorWrapped('Authentication required', RecordApiJsonResponseEnum::UNAUTHORIZED->value);
-            }
-
-            // Handle both single permission (string) and multiple permissions (array)
-            $permissions = is_array($config['pms_name']) ? $config['pms_name'] : [$config['pms_name']];
-            $hasPermission = false;
-
-            // Check if user has at least one of the required permissions
-            foreach ($permissions as $permission) {
-                if (Gate::forUser($user)->allows($permission)) {
-                    $hasPermission = true;
-
-                    break;
-                }
-            }
-
-            if (!$hasPermission) {
-                return RecordApiResponseService::errorWrapped('Insufficient permissions', RecordApiJsonResponseEnum::FORBIDDEN->value);
-            }
-        }
-
-        // Validate HTTP method if specified
-        if (isset($config['method'])) {
-            $allowedMethods = is_array($config['method']) ? $config['method'] : [$config['method']];
-            $allowedMethods = array_map(function (mixed $method): string {
-                if ($method instanceof BackedEnum) {
-                    $method = $method->value;
-                } elseif ($method instanceof UnitEnum) {
-                    $method = $method->name;
-                }
-
-                return strtoupper((string) $method);
-            }, $allowedMethods);
-
-            if (!in_array(strtoupper($request->method()), $allowedMethods, true)) {
-                return RecordApiResponseService::errorWrapped(sprintf("Method '%s' not allowed for this function", $request->method()), 405);
-            }
-        }
-
-        // Validate required parameters
-        if (isset($config['required_params'])) {
-            $missingParams = [];
-            foreach ($config['required_params'] as $param) {
-                if (!$request->has($param)) {
-                    $missingParams[] = $param;
-                }
-            }
-
-            if ([] !== $missingParams) {
-                return RecordApiResponseService::errorWrapped('Missing required parameters', RecordApiJsonResponseEnum::ERROR->value, ['missing' => $missingParams]);
-            }
-        }
-
-        return $this->executeClassFunction($request, $config, $id);
-    }
-
-    /**
-     * Execute a class-based custom function.
-     */
-    private function executeClassFunction(Request $request, array $functionConfig, mixed $id = null): JsonResponse
-    {
-        try {
-            $className = $functionConfig['class'] ?? null;
-            $method = $functionConfig['function_method'] ?? 'handle';
-
-            if (!$className || !class_exists($className)) {
-                return RecordApiResponseService::errorWrapped(sprintf("Class '%s' does not exist", $className), RecordApiJsonResponseEnum::SERVER_ERROR->value);
-            }
-
-            $instance = new $className();
-            if (!method_exists($instance, $method)) {
-                return RecordApiResponseService::errorWrapped(sprintf("Method '%s' does not exist in class '%s'", $method, $className), RecordApiJsonResponseEnum::SERVER_ERROR->value);
-            }
-
-            $result = $id ? $instance->{$method}($request, $id) : $instance->{$method}($request);
-
-            // If the result is already a Response instance, return it directly
-            // @var JsonResponse
-            if ($result instanceof JsonResponse) {
-                $responseData = $result->getData();
-                $statusCode = $result->getStatusCode();
-                $meta = [];
-                $records = null;
-
-                if (empty($responseData->data)) {
-                    $records = $responseData;
-                } else {
-                    $records = $responseData->data;
-                    unset($meta->data);
-                    $meta = json_decode(json_encode($meta), true);
-                }
-
-                if ($statusCode > 204) {
-                    return RecordApiResponseService::errorWrapped('string' === gettype($records) ? $records : '', $statusCode, 'object' === gettype($responseData) ? (array) $responseData : []);
-                }
-
-                return RecordApiResponseService::successWrapped($records, $meta, $result->getStatusCode());
-            }
-
-            return RecordApiResponseService::successWrapped($result);
-        } catch (Exception $exception) {
-            return RecordApiResponseService::errorWrapped('Function execution failed: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 }

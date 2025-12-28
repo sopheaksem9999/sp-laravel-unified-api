@@ -621,6 +621,7 @@ class AuditLogService
         }
 
         $logs = $query->orderBy('created_at', 'desc')
+            ->orderBy('id', 'desc')
             ->limit($limit)
             ->get();
 
