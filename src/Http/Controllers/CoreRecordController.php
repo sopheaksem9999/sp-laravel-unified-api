@@ -837,7 +837,7 @@ class CoreRecordController extends Controller
      *
      * @param [type] $id
      */
-    public function restore(Request $request, string $table, string $id): JsonResponse
+    public function restoreRecord(Request $request, string $table, string $id): JsonResponse
     {
         $this->authorizeAction($table, 'restore');
         $schema = SchemaRegistry::get();
@@ -895,7 +895,7 @@ class CoreRecordController extends Controller
     /**
      * Force delete a record (bypass soft delete).
      */
-    public function forceDelete(Request $request, string $table, string $id): JsonResponse
+    public function forceDeleteRecord(Request $request, string $table, string $id): JsonResponse
     {
         $this->authorizeAction($table, 'delete');
         $schema = SchemaRegistry::get();
@@ -1148,108 +1148,6 @@ class CoreRecordController extends Controller
             // Rollback transaction on any error
             DB::rollBack();
             return RecordApiResponseService::errorWrapped('Failed to perform bulk operation: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
-        }
-    }
-
-    /**
-     * Execute a table-specific custom function.
-     */
-    public function executeTableFunction(Request $request, string $table, string $functionName): JsonResponse
-    {
-        try {
-            // Get schema and validate table exists
-            $schema = SchemaRegistry::get();
-            if (!isset($schema[$table])) {
-                return RecordApiResponseService::errorWrapped(sprintf("Table '%s' does not exist", $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
-            }
-
-            // Check if function exists in table schema
-            $tableFunctions = $schema[$table]->functions ?? [];
-            $functionConfig = null;
-            $extractedId = null;
-
-            // First try exact match
-            if (isset($tableFunctions[$functionName])) {
-                $functionConfig = $tableFunctions[$functionName];
-            } else {
-                // Try pattern matching for parameterized function names
-                foreach ($tableFunctions as $configuredFunctionName => $config) {
-                    // Convert function name pattern to regex (e.g., 'role_permission/{id}' -> 'role_permission/(\d+)')
-                    $pattern = preg_replace('/\{[^}]+\}/', '(\d+)', $configuredFunctionName);
-                    $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/';
-
-                    if (preg_match($pattern, $functionName, $matches)) {
-                        $functionConfig = $config;
-
-                        // Extract ID parameter if present (first captured group)
-                        if (isset($matches[1])) {
-                            $extractedId = $matches[1];
-                        }
-
-                        break;
-                    }
-                }
-            }
-
-            if (!$functionConfig) {
-                return RecordApiResponseService::errorWrapped(sprintf("Function '%s' not found for table '%s'", $functionName, $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
-            }
-
-            // Check permission using table function's pms_name
-            // Resolve actual table name from RecordTableType configuration
-            $actualTableName = $this->resolveActualTableName($table);
-            $this->authorizeAction($actualTableName, 'read');
-
-            // Execute the custom function with extracted ID parameter
-            return $this->executeCustomFunction($request, $functionConfig, $extractedId);
-        } catch (Exception $exception) {
-            return RecordApiResponseService::errorWrapped('Function execution failed: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
-        }
-    }
-
-    /**
-     * Execute a global custom function.
-     * Supports patterns like: function_name or function_name/{id}.
-     */
-    public function executeGlobalFunction(Request $request, string $functionName): JsonResponse
-    {
-        try {
-            // Check if function exists in table schema
-            $globalFunctions = config('record.global_functions', []);
-            $functionConfig = null;
-            $extractedId = null;
-
-            // First try exact match
-            if (isset($globalFunctions[$functionName])) {
-                $functionConfig = $globalFunctions[$functionName];
-            } else {
-                // Try pattern matching for parameterized function names
-                foreach ($globalFunctions as $configuredFunctionName => $config) {
-                    // Convert function name pattern to regex (e.g., 'role_permission/{id}' -> 'role_permission/(\d+)')
-                    $pattern = preg_replace('/\{[^}]+\}/', '(\d+)', (string) $configuredFunctionName);
-                    $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/';
-
-                    if (preg_match($pattern, $functionName, $matches)) {
-                        $functionConfig = $config;
-
-                        // Extract ID parameter if present (first captured group)
-                        if (isset($matches[1])) {
-                            $extractedId = $matches[1];
-                        }
-
-                        break;
-                    }
-                }
-            }
-
-            if (!$functionConfig) {
-                return RecordApiResponseService::errorWrapped(sprintf("Function '%s' not found", $functionName), RecordApiJsonResponseEnum::NOT_FOUND->value);
-            }
-
-            // Execute the custom function with extracted ID parameter
-            return $this->executeCustomFunction($request, $functionConfig, $extractedId);
-        } catch (Exception $exception) {
-            return RecordApiResponseService::errorWrapped('Function execution failed: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -1615,6 +1513,108 @@ class CoreRecordController extends Controller
             }
 
             return RecordApiResponseService::errorWrapped('Failed to perform bulk delete operation: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
+        }
+    }
+
+    /**
+     * Execute a table-specific custom function.
+     */
+    public function executeTableFunction(Request $request, string $table, string $functionName): JsonResponse
+    {
+        try {
+            // Get schema and validate table exists
+            $schema = SchemaRegistry::get();
+            if (!isset($schema[$table])) {
+                return RecordApiResponseService::errorWrapped(sprintf("Table '%s' does not exist", $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
+            }
+
+            // Check if function exists in table schema
+            $tableFunctions = $schema[$table]->functions ?? [];
+            $functionConfig = null;
+            $extractedId = null;
+
+            // First try exact match
+            if (isset($tableFunctions[$functionName])) {
+                $functionConfig = $tableFunctions[$functionName];
+            } else {
+                // Try pattern matching for parameterized function names
+                foreach ($tableFunctions as $configuredFunctionName => $config) {
+                    // Convert function name pattern to regex (e.g., 'role_permission/{id}' -> 'role_permission/(\d+)')
+                    $pattern = preg_replace('/\{[^}]+\}/', '(\d+)', $configuredFunctionName);
+                    $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/';
+
+                    if (preg_match($pattern, $functionName, $matches)) {
+                        $functionConfig = $config;
+
+                        // Extract ID parameter if present (first captured group)
+                        if (isset($matches[1])) {
+                            $extractedId = $matches[1];
+                        }
+
+                        break;
+                    }
+                }
+            }
+
+            if (!$functionConfig) {
+                return RecordApiResponseService::errorWrapped(sprintf("Function '%s' not found for table '%s'", $functionName, $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
+            }
+
+            // Check permission using table function's pms_name
+            // Resolve actual table name from RecordTableType configuration
+            $actualTableName = $this->resolveActualTableName($table);
+            $this->authorizeAction($actualTableName, 'read');
+
+            // Execute the custom function with extracted ID parameter
+            return $this->executeCustomFunction($request, $functionConfig, $extractedId);
+        } catch (Exception $exception) {
+            return RecordApiResponseService::errorWrapped('Function execution failed: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
+        }
+    }
+
+    /**
+     * Execute a global custom function.
+     * Supports patterns like: function_name or function_name/{id}.
+     */
+    public function executeGlobalFunction(Request $request, string $functionName): JsonResponse
+    {
+        try {
+            // Check if function exists in table schema
+            $globalFunctions = config('record.global_functions', []);
+            $functionConfig = null;
+            $extractedId = null;
+
+            // First try exact match
+            if (isset($globalFunctions[$functionName])) {
+                $functionConfig = $globalFunctions[$functionName];
+            } else {
+                // Try pattern matching for parameterized function names
+                foreach ($globalFunctions as $configuredFunctionName => $config) {
+                    // Convert function name pattern to regex (e.g., 'role_permission/{id}' -> 'role_permission/(\d+)')
+                    $pattern = preg_replace('/\{[^}]+\}/', '(\d+)', (string) $configuredFunctionName);
+                    $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/';
+
+                    if (preg_match($pattern, $functionName, $matches)) {
+                        $functionConfig = $config;
+
+                        // Extract ID parameter if present (first captured group)
+                        if (isset($matches[1])) {
+                            $extractedId = $matches[1];
+                        }
+
+                        break;
+                    }
+                }
+            }
+
+            if (!$functionConfig) {
+                return RecordApiResponseService::errorWrapped(sprintf("Function '%s' not found", $functionName), RecordApiJsonResponseEnum::NOT_FOUND->value);
+            }
+
+            // Execute the custom function with extracted ID parameter
+            return $this->executeCustomFunction($request, $functionConfig, $extractedId);
+        } catch (Exception $exception) {
+            return RecordApiResponseService::errorWrapped('Function execution failed: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 

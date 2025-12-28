@@ -88,8 +88,8 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.i
     | Advanced CRUD Operations
     |--------------------------------------------------------------------------
     */
-    Route::post('{table}/{id}/restore', [CoreRecordController::class, 'restore'])->middleware('throttle:api-writes');
-    Route::delete('{table}/{id}/force', [CoreRecordController::class, 'forceDelete'])->middleware('throttle:api-writes');
+    Route::post('{table}/{id}/restore', [CoreRecordController::class, 'restoreRecord'])->middleware('throttle:api-writes');
+    Route::delete('{table}/{id}/force', [CoreRecordController::class, 'forceDeleteRecord'])->middleware('throttle:api-writes');
 
     /*
     |--------------------------------------------------------------------------
@@ -123,22 +123,22 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware([
         Route::get('logs', [AuditLogController::class, 'getLogs'])->middleware('throttle:api-reads');
 
         // Get audit statistics
-        Route::get('stats', [AuditLogController::class, 'getStats'])->middleware('throttle:api-reads');
+        // Route::get('stats', [AuditLogController::class, 'getStats'])->middleware('throttle:api-reads');
 
-        // Get field timeline for a specific field
-        Route::get('field-timeline', [AuditLogController::class, 'getFieldTimeline'])->middleware('throttle:api-reads');
+        // // Get field timeline for a specific field
+        // Route::get('field-timeline', [AuditLogController::class, 'getFieldTimeline'])->middleware('throttle:api-reads');
 
-        // Get field statistics for a specific field
-        Route::get('field-stats', [AuditLogController::class, 'getFieldStats'])->middleware('throttle:api-reads');
+        // // Get field statistics for a specific field
+        // Route::get('field-stats', [AuditLogController::class, 'getFieldStats'])->middleware('throttle:api-reads');
 
-        // Manually create an audit log entry
-        Route::post('logs', [AuditLogController::class, 'createLog'])->middleware('throttle:api-writes');
+        // // Manually create an audit log entry
+        // Route::post('logs', [AuditLogController::class, 'createLog'])->middleware('throttle:api-writes');
 
         // Get specific audit log by ID
         Route::get('logs/{id}', [AuditLogController::class, 'show'])->middleware('throttle:api-reads');
 
         // Clean up old audit logs (admin only)
-        Route::delete('cleanup', [AuditLogController::class, 'cleanup'])
-            ->middleware(['throttle:api-writes', 'can:manage-audit-logs']);
+        // Route::delete('cleanup', [AuditLogController::class, 'cleanup'])
+        //     ->middleware(['throttle:api-writes', 'can:manage-audit-logs']);
     });
 });
