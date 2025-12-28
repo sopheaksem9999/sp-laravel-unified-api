@@ -591,6 +591,16 @@ curl --location --request PUT 'http://127.0.0.1:8000/api/v2/record/invoices/123'
 
 ## Bulk Operations
 
+Bulk operations allow you to perform Create, Update, or Delete actions on multiple records in a single HTTP request. This is significantly more efficient than sending individual requests for large datasets.
+
+For performance considerations and best practices when using bulk operations, please refer to the [Performance & Scalability](performance.md) guide.
+
+### Triggers & Validation in Bulk Operations
+
+- **Validation**: Table-level validators (`createValidator`, `updateValidator`, `deleteValidator`) are currently **not** automatically applied to bulk operations. You should validate your payload before sending.
+- **Triggers**: Table-level triggers (`beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete`) **are executed** for each individual item in the bulk batch.
+    - This allows you to maintain consistent business logic (e.g., setting default values, syncing with external systems) regardless of whether a record is created individually or in bulk.
+
 ### Legacy Bulk Operation
 ```http
 POST /{api_prefix}/{table}/bulk

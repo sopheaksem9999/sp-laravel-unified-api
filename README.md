@@ -38,6 +38,14 @@ curl -X GET http://your-app.test/api/users
 - **🏢 Multi-Tenant Ready**: Built-in support for tenant isolation
 - **🔧 Configuration Publishing**: Easy setup with sensible defaults
 
+## 📚 Documentation
+
+- [API Documentation](docs/api-documentation.md): Detailed guide on endpoints, request/response formats, and bulk operations.
+- [Performance & Scalability](docs/performance.md): Benchmark results and optimization strategies.
+- [Audit Interface](docs/audit-interface.md): How to implement custom audit logging.
+- [Cursor Pagination](docs/cursor-pagination.md): Usage of cursor-based pagination.
+- [Use Cases](docs/use-cases.md): Why use this for SaaS ERP or E-commerce.
+
 ## 📋 Requirements
 
 - **PHP**: 8.1 or higher

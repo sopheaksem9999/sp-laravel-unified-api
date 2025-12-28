@@ -17,6 +17,7 @@ use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Support\PermissionHelper;
 use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Jobs\ProcessBulkOperationJob;
 
 class CoreRecordController extends Controller
 {
@@ -598,6 +599,11 @@ class CoreRecordController extends Controller
             return $response;
         }
 
+        // Async processing
+        if ($request->boolean('async') || $request->header('X-Async-Process')) {
+            return $this->dispatchAsyncBulk($request, $table, 'create', $items, $tenantId);
+        }
+
         $pk = $schema[$table]->primary_key ?? 'id';
 
         $createdData = [];
@@ -702,6 +708,11 @@ class CoreRecordController extends Controller
         $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
         if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
             return $response;
+        }
+
+        // Async processing
+        if ($request->boolean('async') || $request->header('X-Async-Process')) {
+            return $this->dispatchAsyncBulk($request, $table, 'update', $items, $tenantId);
         }
 
         $updatedData = [];
@@ -848,6 +859,12 @@ class CoreRecordController extends Controller
 
         // Remove duplicates
         $idsToDelete = array_unique($idsToDelete);
+
+        // Async processing
+        if ($request->boolean('async') || $request->header('X-Async-Process')) {
+            $formattedItems = array_map(fn($id) => [$pk => $id], $idsToDelete);
+            return $this->dispatchAsyncBulk($request, $table, 'delete', $formattedItems, $tenantId);
+        }
 
         $deletedData = [];
         $affected = 0;
@@ -1033,5 +1050,28 @@ class CoreRecordController extends Controller
         if (!Gate::forUser($user)->allows($perm)) {
             abort(RecordApiJsonResponseEnum::FORBIDDEN->value, 'Forbidden');
         }
+    }
+
+    /**
+     * Helper to dispatch async bulk job.
+     */
+    private function dispatchAsyncBulk(Request $request, string $table, string $operation, array $items, mixed $tenantId): JsonResponse
+    {
+        $user = auth(config('sp-laravel-api.auth.guard', 'api'))->user();
+
+        $context = [
+            'headers' => $request->headers->all(),
+            'server' => $request->server->all(),
+            'user_id' => $user?->id,
+            'guard' => config('sp-laravel-api.auth.guard', 'api'),
+        ];
+
+        ProcessBulkOperationJob::dispatch($operation, $table, $items, $tenantId, $context);
+
+        return RecordApiResponseService::successWrapped(
+            ['status' => 'queued', 'message' => 'Bulk operation queued for processing'],
+            [],
+            202
+        );
     }
 }
