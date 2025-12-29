@@ -3,6 +3,7 @@
 namespace Sopheak\Core\Services;
 
 use Exception;
+use Illuminate\Cache\RedisStore;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
@@ -131,7 +132,12 @@ class QueryCacheService
         }
 
         try {
-            $redis = Cache::getRedis();
+            $store = Cache::getStore();
+            if (!$store instanceof RedisStore) {
+                // Pattern invalidation only supported on Redis
+                return 0;
+            }
+            $redis = $store->connection();
             $keys = $redis->keys(self::getCachePrefix() . $pattern);
 
             if (empty($keys)) {
@@ -192,7 +198,16 @@ class QueryCacheService
         }
 
         try {
-            $redis = Cache::getRedis();
+            $store = Cache::getStore();
+            if (!$store instanceof RedisStore) {
+                return [
+                    'status' => 'enabled',
+                    'cache_enabled' => true,
+                    'driver' => config('cache.default'),
+                    'cache_prefix' => self::getCachePrefix()
+                ];
+            }
+            $redis = $store->connection();
             $keys = $redis->keys(self::getCachePrefix() . '*');
 
             return [

@@ -300,7 +300,9 @@ class RecordSpatiePermissionType
             return [];
         }
 
-        $teamId ??= getPermissionsTeamId();
+        if ($teamId === null) {
+            $teamId = function_exists('\\getPermissionsTeamId') ? \getPermissionsTeamId() : null;
+        }
 
         return [
             'pivot' => [$this->teamsKey => $teamId],

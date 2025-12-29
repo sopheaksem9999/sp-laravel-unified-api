@@ -14,6 +14,7 @@ use Illuminate\Contracts\Validation\Validator as ValidatorContract;
 use Illuminate\Support\Facades\Validator;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordTablePublic;
+use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 
 class DynamicApiTest extends TestCase
 {
@@ -314,7 +315,7 @@ class DynamicApiTest extends TestCase
             'email' => 'invalid-email' // Invalid: not a valid email
         ]);
 
-        $testResponse->assertStatus(RecordApiJsonResponseEnum::VALIDATION_ERROR->value)
+        $testResponse->assertStatus((int) RecordApiJsonResponseEnum::VALIDATION_ERROR->value)
             ->assertJson([
                 'success' => false,
                 'message' => 'Validation failed',

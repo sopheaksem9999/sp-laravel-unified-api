@@ -50,7 +50,7 @@
         <env name="RECORD_ENABLE_TENANT_ID" value="false"/>
         
         <!-- Audit Log settings -->
-        <env name="AUDIT_LOG_ENABLED" value="true"/>
+        <env name="AUDIT_LOG_ENABLED" value="false"/>
         <env name="AUDIT_LOG_QUEUE" value="sync"/>
         <env name="AUDIT_LOG_CLEANUP_ENABLED" value="false"/>
         

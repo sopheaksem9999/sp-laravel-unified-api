@@ -1,113 +1,42 @@
-# name: Tests
+name: Tests
 
-# on:
-#   push:
-#     branches: [ main, develop ]
-#   pull_request:
-#     branches: [ main, develop ]
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
 
-# jobs:
-#   test:
-#     runs-on: ubuntu-latest
-    
-#     strategy:
-#       matrix:
-#         php-version: [8.1, 8.2, 8.3]
-#         laravel-version: [10.*, 11.*]
-#         dependency-version: [prefer-lowest, prefer-stable]
-        
-#     name: PHP ${{ matrix.php-version }} - Laravel ${{ matrix.laravel-version }} - ${{ matrix.dependency-version }}
-    
-#     services:
-#       mysql:
-#         image: mysql:8.0
-#         env:
-#           MYSQL_ROOT_PASSWORD: password
-#           MYSQL_DATABASE: testing
-#         ports:
-#           - 3306:3306
-#         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
-      
-#       redis:
-#         image: redis:7.0
-#         ports:
-#           - 6379:6379
-#         options: --health-cmd="redis-cli ping" --health-interval=10s --health-timeout=5s --health-retries=3
+jobs:
+  test:
+    runs-on: ubuntu-latest
 
-#     steps:
-#     - uses: actions/checkout@v4
+    strategy:
+      matrix:
+        php-version: [8.1, 8.2, 8.3]
+        laravel-version: [10.*, 11.*, 12.*]
+        dependency-version: [prefer-lowest, prefer-stable]
 
-#     - name: Setup PHP
-#       uses: shivammathur/setup-php@v2
-#       with:
-#         php-version: ${{ matrix.php-version }}
-#         extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, redis
-#         coverage: xdebug
+    name: PHP ${{ matrix.php-version }} - Laravel ${{ matrix.laravel-version }} - ${{ matrix.dependency-version }}
 
-#     - name: Setup problem matchers
-#       run: |
-#         echo "::add-matcher::${{ runner.tool_cache }}/php.json"
-#         echo "::add-matcher::${{ runner.tool_cache }}/phpunit.json"
+    steps:
+    - uses: actions/checkout@v4
 
-#     - name: Install dependencies
-#       run: |
-#         composer require "laravel/framework:${{ matrix.laravel-version }}" --no-interaction --no-update
-#         composer update --${{ matrix.dependency-version }} --prefer-dist --no-interaction
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: ${{ matrix.php-version }}
+        extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick
+        coverage: none
 
-#     - name: Create database
-#       run: |
-#         mkdir -p database
-#         touch database/database.sqlite
+    - name: Install dependencies
+      run: |
+        composer require "laravel/framework:${{ matrix.laravel-version }}" --no-interaction --no-update
+        composer update --${{ matrix.dependency-version }} --prefer-dist --no-interaction
 
-#     - name: Execute tests (Unit and Feature tests) via PHPUnit
-#       env:
-#         DB_CONNECTION: sqlite
-#         DB_DATABASE: database/database.sqlite
-#         CACHE_DRIVER: redis
-#         QUEUE_CONNECTION: redis
-#         SESSION_DRIVER: redis
-#       run: vendor/bin/phpunit --coverage-text --coverage-clover=coverage.clover
-
-#     - name: Execute tests (MySQL)
-#       env:
-#         DB_CONNECTION: mysql
-#         DB_HOST: 127.0.0.1
-#         DB_PORT: 3306
-#         DB_DATABASE: testing
-#         DB_USERNAME: root
-#         DB_PASSWORD: password
-#         CACHE_DRIVER: redis
-#         QUEUE_CONNECTION: redis
-#         SESSION_DRIVER: redis
-#       run: vendor/bin/phpunit
-
-#     - name: Upload coverage reports to Codecov
-#       uses: codecov/codecov-action@v3
-#       with:
-#         file: ./coverage.clover
-#         flags: unittests
-#         name: codecov-umbrella
-#         fail_ci_if_error: true
-
-#   code-quality:
-#     runs-on: ubuntu-latest
-#     name: Code Quality
-
-#     steps:
-#     - uses: actions/checkout@v4
-
-#     - name: Setup PHP
-#       uses: shivammathur/setup-php@v2
-#       with:
-#         php-version: 8.2
-#         extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick
-#         coverage: none
-
-#     - name: Install dependencies
-#       run: composer install --prefer-dist --no-interaction
-
-#     - name: Run PHPStan
-#       run: vendor/bin/phpstan analyse --memory-limit=2G
-
-#     - name: Run PHP CS Fixer
-#       run: vendor/bin/php-cs-fixer fix --dry-run --diff
+    - name: Execute tests via PHPUnit
+      env:
+        APP_ENV: testing
+        DB_CONNECTION: sqlite
+        DB_DATABASE: ":memory:"
+        CACHE_DRIVER: array
+      run: vendor/bin/phpunit --no-coverage
