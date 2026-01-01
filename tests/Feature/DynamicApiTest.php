@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Tests\Feature;
 
+use Sopheak\Core\Support\SchemaRegistry;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\WithFaker;
@@ -20,6 +21,7 @@ class DynamicApiTest extends TestCase
 {
     use RefreshDatabase;
     use WithFaker;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -37,12 +39,12 @@ class DynamicApiTest extends TestCase
             'users' => new RecordTableType(
                 pms_name: 'users',
                 table: 'users',
+                soft_deletes: false,
                 public: new RecordTablePublic(
                     read: true,
                     write: true
                 ),
                 relationships: [],
-                soft_deletes: false,
                 has_tenant_id: false,
                 createValidator: fn(Request $request, ?int $id = null): ValidatorContract => Validator::make($request->all(), [
                     'name' => 'required|string|max:255',
@@ -54,6 +56,9 @@ class DynamicApiTest extends TestCase
                 ]),
             ),
         ]);
+
+        // Refresh SchemaRegistry to pick up the new config
+        SchemaRegistry::refresh();
     }
 
     /** @test */
@@ -228,7 +233,7 @@ class DynamicApiTest extends TestCase
             $targetUser ??= ['id' => $id, 'name' => $name];
         }
 
-        $testResponse = $this->getJson('/api/users?name=eq.' . urlencode((string) $targetUser['name']));
+        $testResponse = $this->getJson('/api/users?name=eq.' . urlencode($targetUser['name']));
 
         $testResponse->assertStatus(200)
             ->assertJsonStructure(['success', 'data', 'meta'])

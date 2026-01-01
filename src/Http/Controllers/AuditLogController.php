@@ -167,13 +167,23 @@ class AuditLogController extends Controller
                 $metadata['entity_id'] = $request->input('entity_id');
             }
 
+            // Ensure id is present in metadata for AuditLogService
+            if (!isset($metadata['id'])) {
+                $metadata['id'] = $request->input('entity_id');
+            }
+
+            $tenantHeader = config('record.tenant_header', 'X-Tenant-ID');
+            $tenantColumn = config('record.tenant_column', 'tenant_id');
+            $tenantId = $request->header($tenantHeader) ?? $request->input($tenantColumn) ?? $request->input('tenant_id');
+
             AuditLogService::handleAuditDataEntry(
                 event: $event,
                 entityName: $entityName,
                 entityType: $entityType,
                 queryData: $metadata,
                 subject: $subject,
-                recap: $recap
+                recap: $recap,
+                tenantId: $tenantId
             );
 
             return $this->apiResponseService->successWrapped(null);

@@ -8,14 +8,17 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Http\Request;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Sopheak\Core\Services\RecordService;
 use Throwable;
 
 class ProcessBulkOperationJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
-
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
     /**
      * Create a new job instance.
      *
@@ -42,11 +45,11 @@ class ProcessBulkOperationJob implements ShouldQueue
             // Reconstruct Request
             $request = new Request();
             $request->merge(['items' => $this->items]);
-            
+
             if (isset($this->requestContext['headers'])) {
                 $request->headers->replace($this->requestContext['headers']);
             }
-            
+
             if (isset($this->requestContext['server'])) {
                 $request->server->replace($this->requestContext['server']);
             }
@@ -55,8 +58,31 @@ class ProcessBulkOperationJob implements ShouldQueue
             if (isset($this->requestContext['user_id'])) {
                 $guard = $this->requestContext['guard'] ?? config('sp-laravel-api.auth.guard', 'api');
                 try {
-                    auth($guard)->loginUsingId($this->requestContext['user_id']);
-                    $request->setUserResolver(fn () => auth($guard)->user());
+                    $guardInstance = Auth::guard($guard);
+                    $user = null;
+
+                    if (method_exists($guardInstance, 'loginUsingId')) {
+                        $user = $guardInstance->loginUsingId($this->requestContext['user_id']);
+                    } else {
+                        // Handle stateless guards (e.g., Sanctum, API)
+                        $provider = method_exists($guardInstance, 'getProvider') ? $guardInstance->getProvider() : null;
+
+                        if (!$provider) {
+                            $providerName = config(sprintf('auth.guards.%s.provider', $guard));
+                            if ($providerName) {
+                                $provider = Auth::createUserProvider($providerName);
+                            }
+                        }
+
+                        if ($provider) {
+                            $user = $provider->retrieveById($this->requestContext['user_id']);
+                            if ($user) {
+                                $guardInstance->setUser($user);
+                            }
+                        }
+                    }
+
+                    $request->setUserResolver(fn() => Auth::guard($guard)->user());
                 } catch (Throwable $e) {
                     Log::warning("ProcessBulkOperationJob: Failed to restore user session: " . $e->getMessage());
                 }
@@ -64,17 +90,16 @@ class ProcessBulkOperationJob implements ShouldQueue
 
             // Execute Bulk Operation
             $recordService->bulkRecord($request, $this->table, $this->tenantId, $this->operation);
-
-        } catch (Throwable $exception) {
+        } catch (Throwable $throwable) {
             Log::error("ProcessBulkOperationJob Failed", [
                 'table' => $this->table,
                 'operation' => $this->operation,
-                'error' => $exception->getMessage(),
-                'trace' => $exception->getTraceAsString()
+                'error' => $throwable->getMessage(),
+                'trace' => $throwable->getTraceAsString()
             ]);
-            
+
             // Re-throw to ensure job is marked as failed in queue
-            throw $exception;
+            throw $throwable;
         }
     }
 }

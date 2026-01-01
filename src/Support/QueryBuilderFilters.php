@@ -29,6 +29,15 @@ class QueryBuilderFilters
     private static array $lazyBuilders = [];
 
     /**
+     * Clear the column cache for testing/runtime updates.
+     */
+    public static function clearColumnCache(): void
+    {
+        self::$columnCache = [];
+        self::$operatorCache = [];
+    }
+
+    /**
      * Apply filters, selects, ordering, pagination to Query Builder based on request.
      * Optimized for performance with caching and reduced query complexity.
      *
@@ -117,12 +126,12 @@ class QueryBuilderFilters
                     // Use MATCH AGAINST for full-text search if available, fallback to LIKE
                     $hasFullText = self::hasFullTextIndex($table, $searchableCols);
                     if ($hasFullText && strlen($keyword) >= 3) {
-                        $columns = implode(',', array_map(fn ($col): string => sprintf('%s.%s', $table, $col), $searchableCols));
+                        $columns = implode(',', array_map(fn($col): string => sprintf('%s.%s', $table, $col), $searchableCols));
                         $q->whereRaw(sprintf('MATCH(%s) AGAINST(? IN BOOLEAN MODE)', $columns), [sprintf('+%s*', $keyword)]);
                     } else {
                         // Optimized LIKE search with reduced overhead
                         foreach ($searchableCols as $searchableCol) {
-                            $q->orWhere($table.'.'.$searchableCol, 'like', sprintf('%%%s%%', $keyword));
+                            $q->orWhere($table . '.' . $searchableCol, 'like', sprintf('%%%s%%', $keyword));
                         }
                     }
                 });
@@ -153,16 +162,16 @@ class QueryBuilderFilters
             $requestedCol = in_array($defaultOrderBy, $allowedCols, true) ? $defaultOrderBy : ($allowedCols[0] ?? 'id');
         }
 
-        $builder->orderBy($table.'.'.$requestedCol, $sortOrder);
+        $builder->orderBy($table . '.' . $requestedCol, $sortOrder);
 
         // Handle check permission query only own user created record
-        $recordConfig = config('record.tables.'.$table, []);
+        $recordConfig = config('record.tables.' . $table, []);
         $pmsName = $recordConfig->pms_name ?? null;
 
         if ($pmsName && Auth::check()) {
-            $permission = 'viewOnlyCreateBy_'.$pmsName;
+            $permission = 'viewOnlyCreateBy_' . $pmsName;
             if (Auth::check() && Gate::check($permission)) {
-                $builder->where($table.'.created_by', Auth::user()->id);
+                $builder->where($table . '.created_by', Auth::user()->id);
             }
         }
 
@@ -170,7 +179,7 @@ class QueryBuilderFilters
         $queryString = $request->getQueryString();
         if (null !== $queryString && '' !== $queryString && '0' !== $queryString) {
             // Enhanced caching with request fingerprinting
-            $cacheKey = md5($queryString.$table.serialize($allowedCols));
+            $cacheKey = md5($queryString . $table . serialize($allowedCols));
             if (!isset(self::$operatorCache[$cacheKey])) {
                 parse_str($queryString, $params);
                 self::$operatorCache[$cacheKey] = $params;
@@ -197,7 +206,7 @@ class QueryBuilderFilters
                 // Return query with lazy operation marker
                 self::registerLazyOperationForBuilder($builder, $lazyOperationId);
                 $builder->where(function ($q) use ($lazyOperationId): void {
-                    $q->whereRaw('1=1 /* '.self::$lazyMarkerPrefix.$lazyOperationId.' */');
+                    $q->whereRaw('1=1 /* ' . self::$lazyMarkerPrefix . $lazyOperationId . ' */');
                 });
             } else {
                 // Execute operators immediately with optimized batch processing
@@ -235,7 +244,7 @@ class QueryBuilderFilters
      */
     public static function getPendingLazyOperations(): array
     {
-        return array_filter(self::$lazyOperations, fn (array $op): bool => !$op['executed']);
+        return array_filter(self::$lazyOperations, fn(array $op): bool => !$op['executed']);
     }
 
     /**
@@ -279,7 +288,7 @@ class QueryBuilderFilters
     public static function getLazyStats(): array
     {
         $total = count(self::$lazyOperations);
-        $executed = count(array_filter(self::$lazyOperations, fn (array $op) => $op['executed']));
+        $executed = count(array_filter(self::$lazyOperations, fn(array $op) => $op['executed']));
         $pending = $total - $executed;
         $cacheHits = count(self::$lazyCache);
 
@@ -325,11 +334,11 @@ class QueryBuilderFilters
 
         foreach ($relationshipFilters as $relationshipColumn => $filters) {
             // Parse relationship.column format
-            if (!str_contains($relationshipColumn, '.')) {
+            if (!str_contains((string) $relationshipColumn, '.')) {
                 continue;
             }
 
-            [$relationshipAlias, $column] = explode('.', $relationshipColumn, 2);
+            [$relationshipAlias, $column] = explode('.', (string) $relationshipColumn, 2);
 
             // Resolve relationship configuration
             $config = RelationshipResolver::resolveRelationship($table, $relationshipAlias);
@@ -477,7 +486,7 @@ class QueryBuilderFilters
         switch ($operator) {
             case 'eq':
                 if (str_contains($value, ',')) {
-                    $subquery->whereIn($fullColumn, array_map('trim', explode(',', $value)));
+                    $subquery->whereIn($fullColumn, array_map(trim(...), explode(',', $value)));
                 } else {
                     $subquery->where($fullColumn, '=', $value);
                 }
@@ -486,7 +495,7 @@ class QueryBuilderFilters
 
             case 'neq':
                 if (str_contains($value, ',')) {
-                    $subquery->whereNotIn($fullColumn, array_map('trim', explode(',', $value)));
+                    $subquery->whereNotIn($fullColumn, array_map(trim(...), explode(',', $value)));
                 } else {
                     $subquery->where($fullColumn, '!=', $value);
                 }
@@ -495,7 +504,7 @@ class QueryBuilderFilters
 
             case 'like':
             case 'contains':
-                $subquery->where($fullColumn, 'like', '%'.$value.'%');
+                $subquery->where($fullColumn, 'like', '%' . $value . '%');
 
                 break;
 
@@ -520,13 +529,13 @@ class QueryBuilderFilters
                 break;
 
             case 'in':
-                $values = array_map('trim', explode(',', $value));
+                $values = array_map(trim(...), explode(',', $value));
                 $subquery->whereIn($fullColumn, $values);
 
                 break;
 
             case 'not_in':
-                $values = array_map('trim', explode(',', $value));
+                $values = array_map(trim(...), explode(',', $value));
                 $subquery->whereNotIn($fullColumn, $values);
 
                 break;
@@ -542,17 +551,17 @@ class QueryBuilderFilters
                 break;
 
             case 'starts_with':
-                $subquery->where($fullColumn, 'like', $value.'%');
+                $subquery->where($fullColumn, 'like', $value . '%');
 
                 break;
 
             case 'ends_with':
-                $subquery->where($fullColumn, 'like', '%'.$value);
+                $subquery->where($fullColumn, 'like', '%' . $value);
 
                 break;
 
             case 'between':
-                $values = array_map('trim', explode(',', $value));
+                $values = array_map(trim(...), explode(',', $value));
                 if (2 === count($values)) {
                     $subquery->whereBetween($fullColumn, $values);
                 }
@@ -560,7 +569,7 @@ class QueryBuilderFilters
                 break;
 
             case 'not_between':
-                $values = array_map('trim', explode(',', $value));
+                $values = array_map(trim(...), explode(',', $value));
                 if (2 === count($values)) {
                     $subquery->whereNotBetween($fullColumn, $values);
                 }
@@ -597,7 +606,7 @@ class QueryBuilderFilters
     private static function applyOperator(Builder $builder, string $table, array $allowedCols, string $key, string $operator, string $value): void
     {
         $isMultiple = str_contains($key, ',');
-        $columns = $isMultiple ? array_map('trim', explode(',', $key)) : [$key];
+        $columns = $isMultiple ? array_map(trim(...), explode(',', $key)) : [$key];
         // Normalize and keep only allowed columns
         $columns = array_values(array_filter(array_map(function (string $c) use ($allowedCols): ?string {
             if (str_contains($c, '.')) {
@@ -615,21 +624,21 @@ class QueryBuilderFilters
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $table): void {
                         foreach ($columns as $column) {
-                            $q->orWhereNull($table.'.'.$column);
+                            $q->orWhereNull($table . '.' . $column);
                         }
                     });
                 } elseif (is_string($value) && str_contains($value, ',')) {
-                    $vals = array_map('trim', explode(',', $value));
+                    $vals = array_map(trim(...), explode(',', $value));
                     $builder->where(function ($q) use ($table, $columns, $vals): void {
                         $key = $columns[0];
                         foreach ($vals as $val) {
                             if ('null' === $val) {
-                                $q->orWhereNull($table.'.'.$key);
+                                $q->orWhereNull($table . '.' . $key);
                             }
                         }
                     });
                 } else {
-                    $builder->whereNull($table.'.'.$columns[0]);
+                    $builder->whereNull($table . '.' . $columns[0]);
                 }
 
                 break;
@@ -639,18 +648,18 @@ class QueryBuilderFilters
                     $builder->where(function ($q) use ($columns, $value, $table): void {
                         foreach ($columns as $column) {
                             if (str_contains($value, ',')) {
-                                $q->orWhereIn($table.'.'.$column, array_map('trim', explode(',', $value)));
+                                $q->orWhereIn($table . '.' . $column, array_map(trim(...), explode(',', $value)));
                             } else {
-                                $q->orWhere($table.'.'.$column, '=', $value);
+                                $q->orWhere($table . '.' . $column, '=', $value);
                             }
                         }
                     });
                 } else {
                     $keyCol = $columns[0];
                     if (str_contains($value, ',')) {
-                        $builder->whereIn($table.'.'.$keyCol, array_map('trim', explode(',', $value)));
+                        $builder->whereIn($table . '.' . $keyCol, array_map(trim(...), explode(',', $value)));
                     } else {
-                        $builder->where($table.'.'.$keyCol, '=', $value);
+                        $builder->where($table . '.' . $keyCol, '=', $value);
                     }
                 }
 
@@ -661,18 +670,18 @@ class QueryBuilderFilters
                     $builder->where(function ($q) use ($columns, $value, $table): void {
                         foreach ($columns as $column) {
                             if (str_contains($value, ',')) {
-                                $q->orWhereNotIn($table.'.'.$column, array_map('trim', explode(',', $value)));
+                                $q->orWhereNotIn($table . '.' . $column, array_map(trim(...), explode(',', $value)));
                             } else {
-                                $q->orWhere($table.'.'.$column, '!=', $value);
+                                $q->orWhere($table . '.' . $column, '!=', $value);
                             }
                         }
                     });
                 } else {
                     $keyCol = $columns[0];
                     if (str_contains($value, ',')) {
-                        $builder->whereNotIn($table.'.'.$keyCol, array_map('trim', explode(',', $value)));
+                        $builder->whereNotIn($table . '.' . $keyCol, array_map(trim(...), explode(',', $value)));
                     } else {
-                        $builder->where($table.'.'.$keyCol, '!=', $value);
+                        $builder->where($table . '.' . $keyCol, '!=', $value);
                     }
                 }
 
@@ -683,11 +692,11 @@ class QueryBuilderFilters
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $value, $table): void {
                         foreach ($columns as $column) {
-                            $q->orWhere($table.'.'.$column, 'like', '%'.$value.'%');
+                            $q->orWhere($table . '.' . $column, 'like', '%' . $value . '%');
                         }
                     });
                 } else {
-                    $builder->where($table.'.'.$columns[0], 'like', '%'.$value.'%');
+                    $builder->where($table . '.' . $columns[0], 'like', '%' . $value . '%');
                 }
 
                 break;
@@ -715,15 +724,15 @@ class QueryBuilderFilters
             case 'between':
                 $parts = is_string($value) ? explode(',', $value, 2) : [];
                 if (2 === count($parts)) {
-                    [$a,$b] = [trim($parts[0]), trim($parts[1])];
+                    [$a, $b] = [trim($parts[0]), trim($parts[1])];
                     if ($isMultiple) {
                         $builder->where(function ($q) use ($columns, $a, $b, $table): void {
                             foreach ($columns as $column) {
-                                $q->orWhereBetween($table.'.'.$column, [$a, $b]);
+                                $q->orWhereBetween($table . '.' . $column, [$a, $b]);
                             }
                         });
                     } else {
-                        $builder->whereBetween($table.'.'.$columns[0], [$a, $b]);
+                        $builder->whereBetween($table . '.' . $columns[0], [$a, $b]);
                     }
                 }
 
@@ -732,26 +741,30 @@ class QueryBuilderFilters
             case 'not_between':
                 $parts = is_string($value) ? explode(',', $value, 2) : [];
                 if (2 === count($parts)) {
-                    [$a,$b] = [trim($parts[0]), trim($parts[1])];
+                    [$a, $b] = [trim($parts[0]), trim($parts[1])];
                     if ($isMultiple) {
                         $builder->where(function ($q) use ($columns, $a, $b, $table): void {
                             foreach ($columns as $column) {
-                                $q->orWhereNotBetween($table.'.'.$column, [$a, $b]);
+                                $q->orWhereNotBetween($table . '.' . $column, [$a, $b]);
                             }
                         });
                     } else {
-                        $builder->whereNotBetween($table.'.'.$columns[0], [$a, $b]);
+                        $builder->whereNotBetween($table . '.' . $columns[0], [$a, $b]);
                     }
                 }
 
                 break;
 
             case 'in':
-                $vals = array_map('trim', explode(',', $value));
+                $vals = array_map(trim(...), explode(',', $value));
                 if ($isMultiple) {
-                    $builder->where(function ($q) use ($columns, $vals, $table): void { foreach ($columns as $column) { $q->orWhereIn($table.'.'.$column, $vals); } });
+                    $builder->where(function ($q) use ($columns, $vals, $table): void {
+                        foreach ($columns as $column) {
+                            $q->orWhereIn($table . '.' . $column, $vals);
+                        }
+                    });
                 } else {
-                    $builder->whereIn($table.'.'.$columns[0], $vals);
+                    $builder->whereIn($table . '.' . $columns[0], $vals);
                 }
 
                 break;
@@ -760,11 +773,11 @@ class QueryBuilderFilters
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $value, $table): void {
                         foreach ($columns as $column) {
-                            $q->orWhere($table.'.'.$column, 'like', $value.'%');
+                            $q->orWhere($table . '.' . $column, 'like', $value . '%');
                         }
                     });
                 } else {
-                    $builder->where($table.'.'.$columns[0], 'like', $value.'%');
+                    $builder->where($table . '.' . $columns[0], 'like', $value . '%');
                 }
 
                 break;
@@ -773,11 +786,11 @@ class QueryBuilderFilters
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $value, $table): void {
                         foreach ($columns as $column) {
-                            $q->orWhere($table.'.'.$column, 'like', '%'.$value);
+                            $q->orWhere($table . '.' . $column, 'like', '%' . $value);
                         }
                     });
                 } else {
-                    $builder->where($table.'.'.$columns[0], 'like', '%'.$value);
+                    $builder->where($table . '.' . $columns[0], 'like', '%' . $value);
                 }
 
                 break;
@@ -786,25 +799,25 @@ class QueryBuilderFilters
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $value, $table): void {
                         foreach ($columns as $column) {
-                            $q->orWhere($table.'.'.$column, 'not like', '%'.$value.'%');
+                            $q->orWhere($table . '.' . $column, 'not like', '%' . $value . '%');
                         }
                     });
                 } else {
-                    $builder->where($table.'.'.$columns[0], 'not like', '%'.$value.'%');
+                    $builder->where($table . '.' . $columns[0], 'not like', '%' . $value . '%');
                 }
 
                 break;
 
             case 'not_in':
-                $vals = array_map('trim', explode(',', $value));
+                $vals = array_map(trim(...), explode(',', $value));
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $vals, $table): void {
                         foreach ($columns as $column) {
-                            $q->orWhereNotIn($table.'.'.$column, $vals);
+                            $q->orWhereNotIn($table . '.' . $column, $vals);
                         }
                     });
                 } else {
-                    $builder->whereNotIn($table.'.'.$columns[0], $vals);
+                    $builder->whereNotIn($table . '.' . $columns[0], $vals);
                 }
 
                 break;
@@ -813,11 +826,11 @@ class QueryBuilderFilters
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $table): void {
                         foreach ($columns as $column) {
-                            $q->orWhereNotNull($table.'.'.$column);
+                            $q->orWhereNotNull($table . '.' . $column);
                         }
                     });
                 } else {
-                    $builder->whereNotNull($table.'.'.$columns[0]);
+                    $builder->whereNotNull($table . '.' . $columns[0]);
                 }
 
                 break;
@@ -826,11 +839,11 @@ class QueryBuilderFilters
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $value, $table): void {
                         foreach ($columns as $column) {
-                            $q->orWhereRaw($table.'.'.$column.' REGEXP ?', [$value]);
+                            $q->orWhereRaw($table . '.' . $column . ' REGEXP ?', [$value]);
                         }
                     });
                 } else {
-                    $builder->whereRaw($table.'.'.$columns[0].' REGEXP ?', [$value]);
+                    $builder->whereRaw($table . '.' . $columns[0] . ' REGEXP ?', [$value]);
                 }
 
                 break;
@@ -839,11 +852,11 @@ class QueryBuilderFilters
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $value, $table): void {
                         foreach ($columns as $column) {
-                            $q->orWhereDate($table.'.'.$column, '=', $value);
+                            $q->orWhereDate($table . '.' . $column, '=', $value);
                         }
                     });
                 } else {
-                    $builder->whereDate($table.'.'.$columns[0], '=', $value);
+                    $builder->whereDate($table . '.' . $columns[0], '=', $value);
                 }
 
                 break;
@@ -852,11 +865,11 @@ class QueryBuilderFilters
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $value, $table): void {
                         foreach ($columns as $column) {
-                            $q->orWhereDate($table.'.'.$column, '>', $value);
+                            $q->orWhereDate($table . '.' . $column, '>', $value);
                         }
                     });
                 } else {
-                    $builder->whereDate($table.'.'.$columns[0], '>', $value);
+                    $builder->whereDate($table . '.' . $columns[0], '>', $value);
                 }
 
                 break;
@@ -865,11 +878,11 @@ class QueryBuilderFilters
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $value, $table): void {
                         foreach ($columns as $column) {
-                            $q->orWhereDate($table.'.'.$column, '<', $value);
+                            $q->orWhereDate($table . '.' . $column, '<', $value);
                         }
                     });
                 } else {
-                    $builder->whereDate($table.'.'.$columns[0], '<', $value);
+                    $builder->whereDate($table . '.' . $columns[0], '<', $value);
                 }
 
                 break;
@@ -878,11 +891,11 @@ class QueryBuilderFilters
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $value, $table): void {
                         foreach ($columns as $column) {
-                            $q->orWhereDate($table.'.'.$column, '>=', $value);
+                            $q->orWhereDate($table . '.' . $column, '>=', $value);
                         }
                     });
                 } else {
-                    $builder->whereDate($table.'.'.$columns[0], '>=', $value);
+                    $builder->whereDate($table . '.' . $columns[0], '>=', $value);
                 }
 
                 break;
@@ -891,11 +904,11 @@ class QueryBuilderFilters
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $value, $table): void {
                         foreach ($columns as $column) {
-                            $q->orWhereDate($table.'.'.$column, '<=', $value);
+                            $q->orWhereDate($table . '.' . $column, '<=', $value);
                         }
                     });
                 } else {
-                    $builder->whereDate($table.'.'.$columns[0], '<=', $value);
+                    $builder->whereDate($table . '.' . $columns[0], '<=', $value);
                 }
 
                 break;
@@ -905,13 +918,13 @@ class QueryBuilderFilters
                     $builder->where(function ($q) use ($columns, $table): void {
                         foreach ($columns as $column) {
                             $q->orWhere(function ($subQ) use ($table, $column): void {
-                                $subQ->whereNull($table.'.'.$column)->orWhere($table.'.'.$column, '=', '');
+                                $subQ->whereNull($table . '.' . $column)->orWhere($table . '.' . $column, '=', '');
                             });
                         }
                     });
                 } else {
                     $builder->where(function ($q) use ($table, $columns): void {
-                        $q->whereNull($table.'.'.$columns[0])->orWhere($table.'.'.$columns[0], '=', '');
+                        $q->whereNull($table . '.' . $columns[0])->orWhere($table . '.' . $columns[0], '=', '');
                     });
                 }
 
@@ -922,13 +935,13 @@ class QueryBuilderFilters
                     $builder->where(function ($q) use ($columns, $table): void {
                         foreach ($columns as $column) {
                             $q->orWhere(function ($subQ) use ($table, $column): void {
-                                $subQ->whereNotNull($table.'.'.$column)->where($table.'.'.$column, '!=', '');
+                                $subQ->whereNotNull($table . '.' . $column)->where($table . '.' . $column, '!=', '');
                             });
                         }
                     });
                 } else {
                     $builder->where(function ($q) use ($table, $columns): void {
-                        $q->whereNotNull($table.'.'.$columns[0])->where($table.'.'.$columns[0], '!=', '');
+                        $q->whereNotNull($table . '.' . $columns[0])->where($table . '.' . $columns[0], '!=', '');
                     });
                 }
 
@@ -941,11 +954,11 @@ class QueryBuilderFilters
         if ($isMultiple) {
             $builder->where(function ($q) use ($columns, $op, $value, $table): void {
                 foreach ($columns as $column) {
-                    $q->orWhere($table.'.'.$column, $op, $value);
+                    $q->orWhere($table . '.' . $column, $op, $value);
                 }
             });
         } else {
-            $builder->where($table.'.'.$columns[0], $op, $value);
+            $builder->where($table . '.' . $columns[0], $op, $value);
         }
     }
 
@@ -957,7 +970,7 @@ class QueryBuilderFilters
         foreach ($mainCols as $mainCol) {
             $mainCol = trim((string) $mainCol);
             if ('*' === $mainCol) {
-                $prefixed[] = $table.'.*';
+                $prefixed[] = $table . '.*';
 
                 continue;
             }
@@ -973,7 +986,7 @@ class QueryBuilderFilters
             }
 
             // Prefixed output
-            $prefixed[] = str_contains($mainCol, '.') ? $mainCol : $table.'.'.$mainCol;
+            $prefixed[] = str_contains($mainCol, '.') ? $mainCol : $table . '.' . $mainCol;
         }
 
         return ['main' => $prefixed];
@@ -987,6 +1000,15 @@ class QueryBuilderFilters
             self::$columnCache[$table] = array_keys($schema[$table]->columns ?? []);
         }
 
+        // If cache is set but empty, try fetching again if schema has columns
+        // This handles race conditions where cache was set before columns were populated
+        if (empty(self::$columnCache[$table])) {
+            $schema = SchemaRegistry::get();
+            if (isset($schema[$table]) && !empty($schema[$table]->columns)) {
+                self::$columnCache[$table] = array_keys($schema[$table]->columns);
+            }
+        }
+
         return self::$columnCache[$table];
     }
 
@@ -995,7 +1017,7 @@ class QueryBuilderFilters
      */
     private static function getSearchableColumns(string $table, array $allowedCols): array
     {
-        $cacheKey = $table.'_searchable';
+        $cacheKey = $table . '_searchable';
         if (!isset(self::$columnCache[$cacheKey])) {
             $searchableCols = [];
             $schema = SchemaRegistry::get();
@@ -1049,14 +1071,14 @@ class QueryBuilderFilters
      */
     private static function hasFullTextIndex(string $table, array $columns): bool
     {
-        $cacheKey = $table.'_fulltext_'.implode('_', $columns);
+        $cacheKey = $table . '_fulltext_' . implode('_', $columns);
         if (!isset(self::$searchableCache[$cacheKey])) {
             // Check if full-text index exists for these columns
             // This is a simplified check - in production, you'd query INFORMATION_SCHEMA
             $schema = SchemaRegistry::get();
             $tableConfig = $schema[$table] ?? [];
             $hasFullText = isset($tableConfig['fulltext_indexes'])
-                          && in_array($columns, $tableConfig['fulltext_indexes']);
+                && in_array($columns, $tableConfig['fulltext_indexes']);
 
             self::$searchableCache[$cacheKey] = $hasFullText;
         }
@@ -1069,7 +1091,7 @@ class QueryBuilderFilters
      */
     private static function createLazyOperation(string $table, array $allowedCols, array $params): string
     {
-        return 'lazy_'.md5($table.serialize($allowedCols).serialize($params).microtime(true));
+        return 'lazy_' . md5($table . serialize($allowedCols) . serialize($params) . microtime(true));
     }
 
     /**
@@ -1090,8 +1112,8 @@ class QueryBuilderFilters
                 } elseif (preg_match('/^compare\.(eq|neq|gt|lt|gte|lte)\.(.+)$/', (string) $value, $m)) {
                     $left = $key;
                     $right = $m[2];
-                    if (str_contains($left, '.')) {
-                        $left = explode('.', $left)[1];
+                    if (str_contains((string) $left, '.')) {
+                        $left = explode('.', (string) $left)[1];
                     }
 
                     if (str_contains($right, '.')) {
@@ -1100,7 +1122,7 @@ class QueryBuilderFilters
 
                     $map = ['eq' => '=', 'neq' => '!=', 'gt' => '>', 'lt' => '<', 'gte' => '>=', 'lte' => '<='];
                     if (isset($map[$m[1]]) && in_array($left, $allowedCols, true) && in_array($right, $allowedCols, true)) {
-                        $builder->whereColumn($table.'.'.$left, $map[$m[1]], $table.'.'.$right);
+                        $builder->whereColumn($table . '.' . $left, $map[$m[1]], $table . '.' . $right);
                     }
                 }
             }
@@ -1167,7 +1189,7 @@ class QueryBuilderFilters
                     $operatorValue = 'null' === $m[2] ? null : $m[2];
 
                     // Check if this is a relationship filter (contains dot)
-                    if (str_contains($key, '.')) {
+                    if (str_contains((string) $key, '.')) {
                         // This is a relationship filter
                         if (!isset($relationshipFilters[$key])) {
                             $relationshipFilters[$key] = [];
@@ -1196,7 +1218,7 @@ class QueryBuilderFilters
         // Execute regular operations in optimized order (equality first, then range, text, complex)
         foreach (['equality', 'range', 'text', 'complex'] as $type) {
             if (isset($regularOperations[$type]) && [] !== $regularOperations[$type]) {
-                $builder->where(function ($subQuery) use ($regularOperations, $type, $table, $allowedCols): void {
+                $builder->where(function (Builder $subQuery) use ($regularOperations, $type, $table, $allowedCols): void {
                     foreach ($regularOperations[$type] as [$key, $operator, $value]) {
                         self::applyOperator($subQuery, $table, $allowedCols, $key, $operator, $value);
                     }
@@ -1209,7 +1231,7 @@ class QueryBuilderFilters
         if ($enableTenantId && isset($params[$tenantCol])) {
             $schema = SchemaRegistry::get();
             if (isset($schema[$table]->columns[$tenantCol])) {
-                $builder->where($table.'.'.$tenantCol, $params[$tenantCol]);
+                $builder->where($table . '.' . $tenantCol, $params[$tenantCol]);
             }
         }
     }
@@ -1221,7 +1243,7 @@ class QueryBuilderFilters
     {
         // Sort operations by priority (higher priority first)
         $sortedOperations = self::$lazyOperations;
-        uasort($sortedOperations, fn ($a, $b): int => ($b['priority'] ?? 0) <=> ($a['priority'] ?? 0));
+        uasort($sortedOperations, fn($a, $b): int => ($b['priority'] ?? 0) <=> ($a['priority'] ?? 0));
 
         // Group operations by table for batch processing
         $operationsByTable = [];
@@ -1235,7 +1257,7 @@ class QueryBuilderFilters
         foreach ($operationsByTable as $operations) {
             $builder->where(function ($subQuery) use ($operations): void {
                 foreach ($operations as [$operationId, $operation]) {
-                    $subQuery->where(function ($opQuery) use ($operation): void {
+                    $subQuery->where(function (Builder $opQuery) use ($operation): void {
                         self::executeOperatorsOptimized($opQuery, $operation['table'], $operation['allowedCols'], $operation['params']);
                     });
 

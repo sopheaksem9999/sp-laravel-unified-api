@@ -39,6 +39,7 @@ class AuditLogJob implements ShouldQueue
         public ?array $queryData = null,
         public ?string $subject = null,
         public ?string $recap = null,
+        public mixed $tenantId = null,
     ) {}
 
     /**
@@ -54,9 +55,10 @@ class AuditLogJob implements ShouldQueue
                 queryData: $this->queryData,
                 subject: $this->subject,
                 recap: $this->recap,
+                tenantId: $this->tenantId,
             );
         } catch (Exception $exception) {
-            Log::error('Failed to process audit log job', [
+            Log::error('sp-laravel-api - Failed to process audit log job', [
                 'error' => $exception->getMessage(),
                 'entity_name' => $this->entityName,
                 'query_data' => $this->queryData,

@@ -65,6 +65,7 @@ class TestCase extends BaseTestCase
                 $table->string('subject')->nullable();
                 $table->unsignedBigInteger('user_id')->nullable();
                 $table->string('entity_type')->nullable();
+                $table->string('tenant_id')->nullable()->index();
                 $table->unsignedBigInteger('entity_id')->nullable();
                 $table->string('entity_name')->nullable();
                 $table->string('event')->nullable();

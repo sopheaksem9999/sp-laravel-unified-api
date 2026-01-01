@@ -4,6 +4,8 @@ namespace Sopheak\Core;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Routing\Router;
+use Illuminate\Database\Query\Builder;
+use Illuminate\Http\Request;
 use Sopheak\Core\Http\Middleware\RequestId;
 use Sopheak\Core\Console\GenerateOpenApiSpec;
 use Sopheak\Core\Console\SetupPackage;
@@ -16,6 +18,7 @@ use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\AuditLogService;
 use Sopheak\Core\Services\CursorPagination;
 use Sopheak\Core\Services\QueryCacheService;
+use Sopheak\Core\Services\RecordService;
 
 class CoreServiceProvider extends ServiceProvider
 {
@@ -44,7 +47,7 @@ class CoreServiceProvider extends ServiceProvider
         ], 'sp-laravel-api-migrations');
 
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'sp-laravel-api');
-        
+
         // Load package routes
         $this->loadRoutesFrom(__DIR__ . '/../routes/api.php');
         $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
@@ -60,12 +63,17 @@ class CoreServiceProvider extends ServiceProvider
                 CleanAuditLogs::class,
             ];
 
-            $commands = array_values(array_filter($commands, fn(string $command): bool => class_exists($command)));
+            $commands = array_values(array_filter($commands, class_exists(...)));
             $this->commands($commands);
         }
 
         /** @var Router $router */
         $router = $this->app['router'];
         $router->aliasMiddleware('request.id', RequestId::class);
+
+        Builder::macro('applyRequestFilters', function (Request $request, ?string $tenantColumn = ''): array {
+            /** @var Builder $this */
+            return RecordService::applyRequestFilters($request, $this, $tenantColumn);
+        });
     }
 }

@@ -523,7 +523,7 @@ class CoreRecordController extends Controller
         }
 
         // Resolve actual table name from RecordTableType configuration
-        $actualTableName = (string) $this->resolveActualTableName($table);
+        $actualTableName = $this->resolveActualTableName($table);
 
         $this->authorizeAction($actualTableName, 'create');
         $this->authorizeAction($actualTableName, 'update');
@@ -862,7 +862,7 @@ class CoreRecordController extends Controller
 
         // Async processing
         if ($request->boolean('async') || $request->header('X-Async-Process')) {
-            $formattedItems = array_map(fn($id) => [$pk => $id], $idsToDelete);
+            $formattedItems = array_map(fn($id): array => [$pk => $id], $idsToDelete);
             return $this->dispatchAsyncBulk($request, $table, 'delete', $formattedItems, $tenantId);
         }
 
@@ -924,7 +924,7 @@ class CoreRecordController extends Controller
             }
 
             // Resolve actual table name from RecordTableType configuration
-            $actualTableName = (string) $this->resolveActualTableName($table);
+            $actualTableName = $this->resolveActualTableName($table);
             $this->authorizeAction($actualTableName, 'read');
 
             return $this->recordService->executeTableFunction($request, $table, $functionName);

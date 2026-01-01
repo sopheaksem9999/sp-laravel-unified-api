@@ -409,9 +409,9 @@ class ValidateSetup extends Command
         $this->newLine();
         
         // Summary
-        $errors = array_filter($this->results, fn($r): bool => $r['type'] === 'error');
-        $warnings = array_filter($this->results, fn($r): bool => $r['type'] === 'warning');
-        $successes = array_filter($this->results, fn($r): bool => $r['type'] === 'success');
+        $errors = array_filter($this->results, fn(array $r): bool => $r['type'] === 'error');
+        $warnings = array_filter($this->results, fn(array $r): bool => $r['type'] === 'warning');
+        $successes = array_filter($this->results, fn(array $r): bool => $r['type'] === 'success');
         
         $this->info('📊 Summary:');
         $this->line("  ✅ Passed: " . count($successes));
@@ -437,6 +437,6 @@ class ValidateSetup extends Command
      */
     private function hasErrors(): bool
     {
-        return !empty(array_filter($this->results, fn($r): bool => $r['type'] === 'error'));
+        return !empty(array_filter($this->results, fn(array $r): bool => $r['type'] === 'error'));
     }
 }

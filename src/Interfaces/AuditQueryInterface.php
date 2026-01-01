@@ -19,19 +19,20 @@ interface AuditQueryInterface
      * @param int $id The ID of the record to query
      * @return array Formatted audit data including relationships
      */
-    public function getAuditQuery(int $id): array;
+    public static function getAuditQuery(int|string $id): array;
 
-    /**
-     * Get the entity name for audit logging.
-     * 
-     * @return string The entity name (e.g., 'invoices', 'customers')
-     */
-    public function getAuditEntityName(): string;
-
-    /**
-     * Get the entity class for audit logging.
-     * 
-     * @return string The fully qualified class name of the entity
-     */
-    public function getAuditEntityClass(): string;
+    // Optional methods - implemented automatically by HasAuditQuery trait if missing
+    // /**
+    //  * Get the entity name for audit logging.
+    //  * 
+    //  * @return string The entity name (e.g., 'invoices', 'customers')
+    //  */
+    // public static function getAuditEntityName(): string;
+    //
+    // /**
+    //  * Get the entity class for audit logging.
+    //  * 
+    //  * @return string The fully qualified class name of the entity
+    //  */
+    // public static function getAuditEntityClass(): string;
 }

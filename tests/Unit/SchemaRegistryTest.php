@@ -44,9 +44,9 @@ class SchemaRegistryTest extends TestCase
             'users' => new RecordTableType(
                 pms_name: 'users',
                 table: 'users',
+                soft_deletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
-                soft_deletes: false,
                 has_tenant_id: false,
             ),
         ]);
@@ -65,9 +65,9 @@ class SchemaRegistryTest extends TestCase
             'users' => new RecordTableType(
                 pms_name: 'users',
                 table: 'users',
+                soft_deletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
-                soft_deletes: false,
                 has_tenant_id: false,
             ),
         ]);
@@ -86,9 +86,9 @@ class SchemaRegistryTest extends TestCase
             'users' => new RecordTableType(
                 pms_name: 'users',
                 table: 'users',
+                soft_deletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
-                soft_deletes: false,
                 has_tenant_id: false,
             ),
         ]);
@@ -107,9 +107,9 @@ class SchemaRegistryTest extends TestCase
             'users' => new RecordTableType(
                 pms_name: 'users',
                 table: 'users',
+                soft_deletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
-                soft_deletes: false,
                 has_tenant_id: false,
             ),
         ]);
@@ -138,9 +138,9 @@ class SchemaRegistryTest extends TestCase
             'users' => new RecordTableType(
                 pms_name: 'users',
                 table: 'users',
+                soft_deletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
-                soft_deletes: false,
                 has_tenant_id: false,
             ),
         ]);

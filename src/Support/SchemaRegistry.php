@@ -94,12 +94,41 @@ class SchemaRegistry
         // Clear column caches for all tables
         $tables = config('record.tables', []);
         foreach (array_keys($tables) as $tableName) {
-            Cache::forget(self::$columnCacheKey.':'.$tableName);
+            Cache::forget(self::$columnCacheKey . ':' . $tableName);
         }
 
         // Clear memory caches
         self::$cache = [];
         self::$columnCache = [];
+    }
+
+    /**
+     * Register a table schema at runtime.
+     * 
+     * @param string $tableName The key name of the table in schema
+     * @param RecordTableType $config The configuration object
+     */
+    public static function register(string $tableName, RecordTableType $config): void
+    {
+        // Ensure cache is populated first
+        if (empty(self::$cache)) {
+            self::get();
+        }
+
+        // Ensure columns are populated
+        if (empty($config->columns)) {
+            $actualTableName = $config->table ?? $tableName;
+            $config->columns = self::getTableColumns($actualTableName);
+        }
+
+        // Default fallbacks
+        $config->primary_key ??= 'id';
+        $config->has_tenant_id ??= true;
+
+        self::$cache[$tableName] = $config;
+
+        // Force update column cache for this table
+        self::$columnCache[$tableName] = $config->columns;
     }
 
     /**
@@ -115,7 +144,7 @@ class SchemaRegistry
         // Clear column caches for all tables
         $tables = config('record.tables', []);
         foreach (array_keys($tables) as $tableName) {
-            Cache::forget(self::$columnCacheKey.':'.$tableName);
+            Cache::forget(self::$columnCacheKey . ':' . $tableName);
         }
     }
 
@@ -128,7 +157,7 @@ class SchemaRegistry
         unset(self::$columnCache[$tableName]);
 
         // Clear Redis cache
-        Cache::forget(self::$columnCacheKey.':'.$tableName);
+        Cache::forget(self::$columnCacheKey . ':' . $tableName);
 
         // Clear main schema cache to force rebuild
         Cache::forget(self::$schemaCacheKey);
@@ -146,7 +175,7 @@ class SchemaRegistry
         }
 
         // Check Redis cache
-        $cacheKey = self::$columnCacheKey.':'.$tableName;
+        $cacheKey = self::$columnCacheKey . ':' . $tableName;
         $cached = Cache::get($cacheKey);
         if ($cached) {
             self::$columnCache[$tableName] = $cached;
@@ -206,7 +235,7 @@ class SchemaRegistry
             return $columnInfo;
         } catch (Exception $exception) {
             // Log the error for debugging
-            Log::warning(sprintf('Failed to get columns for table %s: ', $tableName).$exception->getMessage());
+            Log::warning(sprintf('Failed to get columns for table %s: ', $tableName) . $exception->getMessage());
 
             // Return empty array as fallback
             return [];

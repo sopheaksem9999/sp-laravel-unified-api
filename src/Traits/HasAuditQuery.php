@@ -18,6 +18,42 @@ use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
  */
 trait HasAuditQuery
 {
+    protected function resolveAuditEntityClass(): string
+    {
+        if (method_exists($this, 'getAuditEntityClass')) {
+            return $this->getAuditEntityClass();
+        }
+
+        if (property_exists($this, 'modelClass') && is_string($this->modelClass)) {
+            return $this->modelClass;
+        }
+
+        // Try to guess from controller name
+        $className = class_basename($this);
+        $modelName = str_replace('Controller', '', $className);
+        if (class_exists('App\Models\\' . $modelName)) {
+            return 'App\Models\\' . $modelName;
+        }
+
+        throw new BadMethodCallException('Controller must implement getAuditEntityClass method or define $modelClass property');
+    }
+
+    protected function resolveAuditEntityName(): string
+    {
+        if (method_exists($this, 'getAuditEntityName')) {
+            return $this->getAuditEntityName();
+        }
+
+        try {
+            $entityClass = $this->resolveAuditEntityClass();
+            return AuditLogService::getTableNameFromEntityType($entityClass);
+        } catch (Exception) {
+            // Fallback to guessing from controller name
+            $className = class_basename($this);
+            return strtolower(str_replace('Controller', '', $className));
+        }
+    }
+
     /**
      * Log an audit event using the custom audit query.
      *
@@ -36,17 +72,9 @@ trait HasAuditQuery
             throw new BadMethodCallException('Controller must implement getAuditQuery method');
         }
 
-        if (!method_exists($this, 'getAuditEntityName')) {
-            throw new BadMethodCallException('Controller must implement getAuditEntityName method');
-        }
-
-        if (!method_exists($this, 'getAuditEntityClass')) {
-            throw new BadMethodCallException('Controller must implement getAuditEntityClass method');
-        }
-
         $queryData = $this->getAuditQuery($id);
-        $entityName = $this->getAuditEntityName();
-        $entityClass = $this->getAuditEntityClass();
+        $entityName = $this->resolveAuditEntityName();
+        $entityClass = $this->resolveAuditEntityClass();
         $entityType = AuditLogService::getTableNameFromEntityType($entityClass);
 
         AuditLogService::handleAuditDataEntry(
@@ -67,11 +95,7 @@ trait HasAuditQuery
      */
     protected function getAuditLogsForRecord(int $id, int $limit = 50): Collection
     {
-        if (!method_exists($this, 'getAuditEntityClass')) {
-            throw new BadMethodCallException('Controller must implement getAuditEntityClass method');
-        }
-
-        $entityClass = $this->getAuditEntityClass();
+        $entityClass = $this->resolveAuditEntityClass();
         $entityType = AuditLogService::getTableNameFromEntityType($entityClass);
 
         return AuditLogService::getEntityAuditLogs($entityType, $id, $limit);
@@ -108,11 +132,7 @@ trait HasAuditQuery
     public function auditStats(int $id): JsonResponse
     {
         try {
-            if (!method_exists($this, 'getAuditEntityClass')) {
-                throw new BadMethodCallException('Controller must implement getAuditEntityClass method');
-            }
-
-            $entityClass = $this->getAuditEntityClass();
+            $entityClass = $this->resolveAuditEntityClass();
             $entityType = AuditLogService::getTableNameFromEntityType($entityClass);
 
             $stats = AuditLogService::getAuditStats([
@@ -143,11 +163,7 @@ trait HasAuditQuery
     public function fieldTimeline(int $id, string $field, int $limit = 10): JsonResponse
     {
         try {
-            if (!method_exists($this, 'getAuditEntityClass')) {
-                throw new BadMethodCallException('Controller must implement getAuditEntityClass method');
-            }
-
-            $entityClass = $this->getAuditEntityClass();
+            $entityClass = $this->resolveAuditEntityClass();
             $entityType = AuditLogService::getTableNameFromEntityType($entityClass);
 
             $timeline = AuditLogService::getFieldTimeline($entityType, $id, $field, $limit);
@@ -174,11 +190,7 @@ trait HasAuditQuery
     public function fieldStats(int $id, string $field): JsonResponse
     {
         try {
-            if (!method_exists($this, 'getAuditEntityClass')) {
-                throw new BadMethodCallException('Controller must implement getAuditEntityClass method');
-            }
-
-            $entityClass = $this->getAuditEntityClass();
+            $entityClass = $this->resolveAuditEntityClass();
             $entityType = AuditLogService::getTableNameFromEntityType($entityClass);
 
             $stats = AuditLogService::getFieldStats($entityType, $id, $field);

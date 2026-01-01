@@ -24,29 +24,51 @@ use Illuminate\Database\Eloquent\Builder;
 interface AuditQueryInterface
 {
     /**
-     * Get the custom audit query for this controller
-     * This method should return a query builder with all necessary joins,
-     * selects, and relationships for audit logging
+     * Get audit query data with formatted relationship information.
+     * 
+     * This method should return a comprehensive array of data for audit logging,
+     * including related model data and formatted relationship strings.
+     * 
+     * @param int|string $id The ID of the record to query
+     * @return array Formatted audit data including relationships
      */
-    public function getAuditQuery(): Builder;
+    public static function getAuditQuery(int|string $id): array;
 
-    /**
-     * Get the entity name for audit logging
-     * This should return a human-readable name for the entity
-     */
-    public function getAuditEntityName(): string;
+    // Optional methods - implemented automatically by HasAuditQuery trait if missing
+    // /**
+    //  * Get the entity name for audit logging.
+    //  * 
+    //  * Optional: If not implemented, the entity name will be derived from the entity class.
+    //  * 
+    //  * @return string The entity name (e.g., 'invoices', 'customers')
+    //  */
+    // public static function getAuditEntityName(): string;
 
-    /**
-     * Get the entity class for audit logging
-     * This should return the fully qualified class name of the model
-     */
-    public function getAuditEntityClass(): string;
+    // /**
+    //  * Get the entity class for audit logging.
+    //  * 
+    //  * Optional: If not implemented, the system will attempt to derive it from $modelClass property or Controller name.
+    //  * 
+    //  * @return string The fully qualified class name of the entity
+    //  */
+    // public static function getAuditEntityClass(): string;
 }
 ```
 
 ## HasAuditQuery Trait
 
-The `HasAuditQuery` trait provides common audit functionality that can be used in controllers:
+The `HasAuditQuery` trait provides common audit functionality that can be used in controllers. It includes intelligent fallback logic for resolving entity names and classes if the optional interface methods are not implemented.
+
+### Automatic Resolution Logic
+
+1. **Entity Class Resolution**:
+   - Checks for `getAuditEntityClass()` method.
+   - Checks for `$modelClass` property.
+   - Attempts to guess from Controller name (e.g., `InvoiceController` -> `App\Models\Invoice`).
+
+2. **Entity Name Resolution**:
+   - Checks for `getAuditEntityName()` method.
+   - Derives from Entity Class (e.g., `App\Models\Invoice` -> `invoices`).
 
 ```php
 use Sopheak\Core\Traits\HasAuditQuery;
@@ -54,6 +76,9 @@ use Sopheak\Core\Traits\HasAuditQuery;
 class InvoiceController extends Controller
 {
     use HasAuditQuery;
+    
+    // Optional: Define model class explicitly if not following naming conventions
+    protected $modelClass = \App\Models\Invoice::class;
     
     // Your controller methods...
 }
@@ -89,7 +114,6 @@ Here's how to implement the audit interface in your controller, based on the `In
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Database\Eloquent\Builder;
 use Sopheak\Core\Interfaces\AuditQueryInterface;
 use Sopheak\Core\Traits\HasAuditQuery;
 use Sopheak\Core\Services\AuditLogService;
@@ -99,9 +123,12 @@ class InvoiceController extends Controller implements AuditQueryInterface
 {
     use HasAuditQuery;
 
-    public function getAuditQuery(): Builder
+    // Optional: Define model class if not following naming conventions
+    // protected $modelClass = Invoice::class;
+
+    public static function getAuditQuery(int|string $id): array
     {
-        return Invoice::select([
+        $invoice = Invoice::select([
             'invoices.id',
             'invoices.invoice_number',
             'invoices.invoice_date',
@@ -132,18 +159,23 @@ class InvoiceController extends Controller implements AuditQueryInterface
         ->leftJoin('classes', 'invoices.class_id', '=', 'classes.id')
         ->leftJoin('locations', 'invoices.location_id', '=', 'locations.id')
         ->leftJoin('terms', 'invoices.terms_id', '=', 'terms.id')
-        ->with(['items', 'relationship']);
+        ->with(['items', 'relationship'])
+        ->where('invoices.id', $id)
+        ->first();
+
+        return $invoice ? $invoice->toArray() : [];
     }
 
-    public function getAuditEntityName(): string
-    {
-        return 'Invoice';
-    }
+    // Optional: Implement only if default resolution logic doesn't work for you
+    // public static function getAuditEntityName(): string
+    // {
+    //     return 'Invoice';
+    // }
 
-    public function getAuditEntityClass(): string
-    {
-        return Invoice::class;
-    }
+    // public static function getAuditEntityClass(): string
+    // {
+    //     return Invoice::class;
+    // }
 
     public function store(Request $request)
     {

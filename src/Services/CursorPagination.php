@@ -548,7 +548,7 @@ class CursorPagination
         try {
             $tableName = self::getTableName($query);
 
-            if ($tableName === null || $tableName === '' || $tableName === '0') {
+            if (in_array($tableName, [null, '', '0'], true)) {
                 return 0;
             }
 
@@ -767,7 +767,7 @@ class CursorPagination
     {
         try {
             $tableName = self::getTableName($query);
-            if ($tableName === null || $tableName === '' || $tableName === '0') {
+            if (in_array($tableName, [null, '', '0'], true)) {
                 return; // Skip validation if table name cannot be determined
             }
 

@@ -2,6 +2,34 @@
 
 This document provides comprehensive documentation for the SP Laravel API package endpoints, request/response formats, and usage examples.
 
+## Query Builder Macro
+
+The package extends Laravel's `Illuminate\Database\Query\Builder` with a convenient macro `applyRequestFilters`. This allows you to apply all standard API filters, sorting, and pagination directly to any database query.
+
+```php
+use Illuminate\Support\Facades\DB;
+use Illuminate\Http\Request;
+
+public function index(Request $request)
+{
+    // Start with any base query
+    $query = DB::table('invoices')->where('active', true);
+
+    // Apply API filters from request (e.g. ?status=eq.paid&sortby=created_at)
+    $result = $query->applyRequestFilters($request);
+
+    return response()->json($result);
+}
+```
+
+The `applyRequestFilters` method returns an array containing:
+- `data`: The result set
+- `meta`: Pagination metadata
+- `headers`: Response headers
+- `filters`: Applied filters
+- `request`: Original request object
+- `cursor_meta`: Cursor pagination metadata (if applicable)
+
 ## Base Configuration
 
 ### API Prefix

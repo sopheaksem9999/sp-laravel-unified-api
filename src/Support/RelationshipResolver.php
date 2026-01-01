@@ -405,7 +405,7 @@ class RelationshipResolver
                 continue;
             }
 
-            $config = self::resolveRelationship($table, (string) $alias, null);
+            $config = self::resolveRelationship($table, (string) $alias);
             if (!$config) {
                 continue;
             }
@@ -508,7 +508,7 @@ class RelationshipResolver
                 continue;
             }
 
-            $config = self::resolveRelationship($table, (string) $key, null);
+            $config = self::resolveRelationship($table, (string) $key);
             if (!$config) {
                 continue;
             }

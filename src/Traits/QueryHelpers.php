@@ -24,7 +24,7 @@ trait QueryHelpers
      * @param string  $orderBy The column to use for ordering results (default: 'id')
      *
      * Supported query parameters:
-     * * s: search all fields in table (e.g., ?s=cambodia)
+     * * s or search: search all fields in table (e.g., ?s=cambodia or ?search=cambodia)
      * * select: Specify columns to retrieve including relationship columns (e.g., ?select=id,name,customer:id,name,location:id,name)
      * * with: Load related models (e.g., ?with=user,posts.comments)
      * * sortby: Specify column to sort by (e.g., ?sortby=name, default: id)
@@ -65,11 +65,24 @@ trait QueryHelpers
      */
     public function scopeApplyRequestFilters(Builder $builder, Request $request, bool $isArray = false, string $orderBy = 'id')
     {
+        $isTenantEnabled = config('record.enable_tenant_id', false);
+        $tenantColumn = config('record.tenant_column', 'tenant_id');
+        $tenantHeader = config('record.tenant_header', 'X-Tenant-ID');
+
         $tableName = $builder->getModel()->getTable();
 
+        // check if model has tenant_column
+        $hasCompanyId = in_array($tenantColumn, $builder->getModel()->getFillable());
+
         $commonQuery = $builder
-            ->when($request->has('s'), function ($query) use ($request) {
-                $keyword = $request->query('s');
+            // Apply tenant filter if tenant is enabled and model has tenant_column
+            ->when($isTenantEnabled && $hasCompanyId, function ($query) use ($request, $tenantColumn, $tenantHeader) {
+                $tenantId = $request->header($tenantHeader);
+
+                return $query->where($tenantColumn, $tenantId);
+            })
+            ->when($request->has('s') || $request->has('search'), function ($query) use ($request) {
+                $keyword = $request->query('s') ?? $request->query('search');
                 $columns = Schema::getColumnListing($query->getModel()->getTable());
 
                 return $query->where(function ($q) use ($columns, $keyword): void {
@@ -87,8 +100,7 @@ trait QueryHelpers
                 $selectColumns = $this->parseSelectColumns($request->query('select'), $tableName);
 
                 return $query->select($selectColumns['main']);
-            })
-        ;
+            });
 
         /*
          * Select columns from joined tables
@@ -160,16 +172,16 @@ trait QueryHelpers
         // handle check permission query only own user created record
         $modelClass = class_basename($commonQuery->getModel());
         $modelName = lcfirst($modelClass); // e.g., 'ReceivePayment' => 'receivePayment'
-        $permission = 'viewOnlyCreateBy_'.$modelName;
+        $permission = 'viewOnlyCreateBy_' . $modelName;
 
         if (Auth::check() && Gate::check($permission)) {
-            $commonQuery = $commonQuery->where($tableName.'.created_by', Auth::id());
+            $commonQuery = $commonQuery->where($tableName . '.created_by', Auth::id());
         }
 
         // Apply soft delete filter if model uses soft deletes
         $commonQuery = $commonQuery->when(
             method_exists($commonQuery->getModel(), 'getDeletedAtColumn'),
-            fn ($query) => $query->whereNull($tableName.'.'.$commonQuery->getModel()->getDeletedAtColumn())
+            fn($query) => $query->whereNull($tableName . '.' . $commonQuery->getModel()->getDeletedAtColumn())
         );
 
         // Apply sorting with sortby and order parameters
@@ -181,7 +193,7 @@ trait QueryHelpers
 
         // Prefix sortBy with table name if it doesn't already have a table prefix
         if (!str_contains($sortBy, '.')) {
-            $sortBy = $tableName.'.'.$sortBy;
+            $sortBy = $tableName . '.' . $sortBy;
         }
 
         $commonQuery = $commonQuery->orderBy($sortBy, $sortOrder);
@@ -235,10 +247,10 @@ trait QueryHelpers
     {
         // Check if multiple columns are specified for OR conditions
         $isMultipleColumns = str_contains($key, ',');
-        $columns = $isMultipleColumns ? array_map('trim', explode(',', $key)) : [$key];
+        $columns = $isMultipleColumns ? array_map(trim(...), explode(',', $key)) : [$key];
 
         // Prefix columns with table name if they don't already contain a table prefix
-        $columns = array_map(fn(string $column): string => str_contains($column, '.') ? $column : $tableName.'.'.$column, $columns);
+        $columns = array_map(fn(string $column): string => str_contains($column, '.') ? $column : $tableName . '.' . $column, $columns);
 
         // Update the key for single column operations
         if (!$isMultipleColumns) {
@@ -315,11 +327,11 @@ trait QueryHelpers
                 if ($isMultipleColumns) {
                     $builder->where(function ($q) use ($columns, $queryValue): void {
                         foreach ($columns as $column) {
-                            $q->orWhere($column, 'like', '%'.$queryValue.'%');
+                            $q->orWhere($column, 'like', '%' . $queryValue . '%');
                         }
                     });
                 } else {
-                    $builder->where($key, 'like', '%'.$queryValue.'%');
+                    $builder->where($key, 'like', '%' . $queryValue . '%');
                 }
 
                 break;
@@ -420,7 +432,7 @@ trait QueryHelpers
 
             case 'in':
                 $values = explode(',', $queryValue);
-                $trimmedValues = array_map('trim', $values);
+                $trimmedValues = array_map(trim(...), $values);
 
                 if ($isMultipleColumns) {
                     $builder->where(function ($q) use ($columns, $trimmedValues): void {
@@ -458,7 +470,7 @@ trait QueryHelpers
                 $relationName = trim($matches[1]);
                 $relationColumns = trim($matches[2]);
 
-                $relationships[$relationName] = '*' === $relationColumns ? ['*'] : array_map('trim', explode(',', $relationColumns));
+                $relationships[$relationName] = '*' === $relationColumns ? ['*'] : array_map(trim(...), explode(',', $relationColumns));
 
                 // IMPORTANT: Skip adding to main columns - this is a relationship!
                 continue;
@@ -468,7 +480,7 @@ trait QueryHelpers
             if (str_contains($column, ':')) {
                 $parts = explode(':', $column, 2);
                 $relationName = trim($parts[0]);
-                $relationColumns = array_map('trim', explode(',', $parts[1]));
+                $relationColumns = array_map(trim(...), explode(',', $parts[1]));
                 $relationships[$relationName] = $relationColumns;
 
                 // IMPORTANT: Skip adding to main columns - this is a relationship!
@@ -476,7 +488,7 @@ trait QueryHelpers
             }
 
             // Regular column - prefix with table name to avoid ambiguity
-            $mainColumns[] = str_contains($column, '.') ? $column : $tableName.'.'.$column;
+            $mainColumns[] = str_contains($column, '.') ? $column : $tableName . '.' . $column;
         }
 
         return [
@@ -509,16 +521,16 @@ trait QueryHelpers
                     $withRelations[] = $relationName;
                 } else {
                     // Apply specific column selection
-                    $columnArray = array_map('trim', explode(',', $columns));
+                    $columnArray = array_map(trim(...), explode(',', $columns));
                     // Ensure primary key is included for relationship to work
                     if (!in_array('id', $columnArray)) {
                         array_unshift($columnArray, 'id');
                     }
 
                     // Use Laravel's ORM format with colon syntax
-                    $withRelations[] = $relationName.':'.implode(',', $columnArray);
+                    $withRelations[] = $relationName . ':' . implode(',', $columnArray);
 
-                    $withRelations[$relationName] = (fn ($query) => $query->select($columnArray));
+                    $withRelations[$relationName] = (fn($query) => $query->select($columnArray));
                 }
             } else {
                 // Load relationship without column constraints

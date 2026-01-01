@@ -137,6 +137,7 @@ class QueryCacheService
                 // Pattern invalidation only supported on Redis
                 return 0;
             }
+
             $redis = $store->connection();
             $keys = $redis->keys(self::getCachePrefix() . $pattern);
 
@@ -207,6 +208,7 @@ class QueryCacheService
                     'cache_prefix' => self::getCachePrefix()
                 ];
             }
+
             $redis = $store->connection();
             $keys = $redis->keys(self::getCachePrefix() . '*');
 

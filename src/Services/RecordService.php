@@ -6,6 +6,7 @@ use Illuminate\Support\Str;
 use BackedEnum;
 use Exception;
 use UnitEnum;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +22,8 @@ use Sopheak\Core\Support\RelationshipResolver;
 use Sopheak\Core\Support\SchemaRegistry;
 use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Types\RecordTableTriggerType;
+
+use Sopheak\Core\Types\RecordTableType;
 
 class RecordService
 {
@@ -273,7 +276,9 @@ class RecordService
                 $auditData['id'] = $recordContext['id'];
             }
 
-            AuditLogService::insertAuditLog($event, $entityClass, $auditData);
+            $tenantId = $recordContext[config('record.tenant_column', 'tenant_id')] ?? null;
+
+            AuditLogService::insertAuditLog($event, $entityClass, $auditData, '', '', $tenantId);
         }
     }
 
@@ -300,7 +305,7 @@ class RecordService
             // Try pattern matching for parameterized function names
             foreach ($tableFunctions as $configuredFunctionName => $config) {
                 // Convert function name pattern to regex (e.g., 'role_permission/{id}' -> 'role_permission/(\d+)')
-                $pattern = preg_replace('/\{[^}]+\}/', '(\d+)', $configuredFunctionName);
+                $pattern = preg_replace('/\{[^}]+\}/', '(\d+)', (string) $configuredFunctionName);
                 $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/';
 
                 if (preg_match($pattern, $functionName, $matches)) {
@@ -610,7 +615,7 @@ class RecordService
 
                         if (!($tableSchema->disable_auditLog ?? false)) {
                             $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                            AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, $recordResult['data']);
+                            AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, $recordResult['data'], '', '', $tenantId);
                         }
                     }
                 }
@@ -998,6 +1003,218 @@ class RecordService
                 'tenant_enabled' => $this->shouldApplyTenantId($tableSchema),
             ];
             $ttl = $this->calculateOptimalCacheTTL($table, count($data), $request->has('select'));
+            QueryCacheService::put($cacheKey, $cacheData, $ttl);
+        }
+
+        return [
+            'data' => $data,
+            'meta' => $meta,
+            'headers' => $headers,
+            'filters' => $filters,
+            'request' => $request,
+            'cursor_meta' => $cursorMeta
+        ];
+    }
+
+    /**
+     * Helper method to handle common record query logic.
+     *
+     * @param Request $request The HTTP request object
+     * @param Builder|string|RecordTableType $tableOrBuilder The table name, query builder, or table config
+     * @param string|null $tanentColumn The tenant column name (optional)
+     * @return array The query result array
+     */
+    public static function applyRequestFilters(Request $request, Builder|string|RecordTableType $tableOrBuilder, ?string $tanentColumn = ''): array
+    {
+        $service = app(self::class);
+        $builder = null;
+        $table = '';
+        $customSchema = null;
+
+        if ($tableOrBuilder instanceof Builder) {
+            $builder = $tableOrBuilder;
+            $table = $builder->from;
+        } elseif ($tableOrBuilder instanceof RecordTableType) {
+            $customSchema = $tableOrBuilder;
+            $table = $customSchema->pms_name ?? $customSchema->table;
+
+            // Register custom schema to make it available for QueryBuilderFilters
+            // Ensure we register under the actual table name as that's what QueryBuilderFilters looks up
+            $registerKey = $customSchema->table ?? $table;
+            SchemaRegistry::register($registerKey, $customSchema);
+
+            // If pms_name is different, register under that too to ensure consistency
+            if ($table !== $registerKey) {
+                SchemaRegistry::register($table, $customSchema);
+            }
+        } else {
+            $table = $tableOrBuilder;
+        }
+
+        $schema = SchemaRegistry::get();
+        $tableSchema = $customSchema ?? ($schema[$table] ?? null);
+        $actualTableName = $tableSchema->table ?? $table;
+        $tenantId = $tanentColumn;
+
+        $filters = $request->except(['page', 'per_page', 'limit']);
+        $includes = $request->query('select', []);
+        if (is_string($includes)) {
+            $includes = explode(',', $includes);
+        }
+
+        $page = max((int) $request->get('page', 1), 1);
+        $perPage = $request->has('per_page') ? max(1, min((int) $request->get('per_page', 25), (int) config('record.per_page_max', 1000))) : null;
+        $limit = $request->has('limit') ? max(1, min((int) $request->get('limit'), (int) config('record.limit_max', 1000))) : config('record.limit_max', 1000);
+
+        // Disable cache if using builder as we can't easily key the builder state
+        $isCacheable = !$builder && $service->isCacheableRequest($request, $table);
+        $cacheKey = null;
+
+        if ($isCacheable) {
+            $cacheKey = $service->generateOptimizedCacheKey(
+                $table,
+                array_merge($filters, [
+                    config('record.tenant_column', 'tenant_id') => $tableSchema && $service->shouldApplyTenantId($tableSchema) ? $tanentColumn : null,
+                    'tenant_enabled' => $tableSchema && $service->shouldApplyTenantId($tableSchema),
+                ]),
+                $includes,
+                $page,
+                $perPage ?? $limit
+            );
+
+            $cached = QueryCacheService::get($cacheKey);
+            if (null !== $cached) {
+                return array_merge($cached, ['from_cache' => true, 'filters' => $filters, 'request' => $request]);
+            }
+        }
+
+        if (!$builder instanceof Builder) {
+            $builder = DB::table($actualTableName);
+            $service->applyTenantFilter($builder, $actualTableName, $tenantId);
+
+            if ($tableSchema && $tableSchema->soft_deletes) {
+                $builder->whereNull($actualTableName . '.deleted_at');
+            }
+        } else {
+            $service->applyTenantFilter($builder, $actualTableName, $tenantId);
+
+            if ($tableSchema && $tableSchema->soft_deletes) {
+                $builder->whereNull($actualTableName . '.deleted_at');
+            }
+        }
+
+        QueryBuilderFilters::apply($builder, $request, $actualTableName, ($tableSchema->primary_key ?? 'id'));
+
+        $headers = [];
+        $meta = [];
+        $cursorMeta = null;
+        $data = [];
+        $total = 0;
+
+        if ($request->has('limit') && !$request->has('per_page')) {
+            $limit = max(1, min((int) $request->get('limit'), (int) config('record.limit_max', 1000)));
+            $data = $builder->limit($limit)->get()->all();
+            $total = count($data);
+            $headers['X-Total-Count'] = (string) $total;
+            $meta = ['total' => $total];
+        } else {
+            $maxPerPage = (int) config('record.per_page_max', 100);
+            $perPage = max(1, min((int) $request->get('per_page', config('record.limit_max', 1000)), $maxPerPage));
+
+            if ($request->has('cursor') || CursorPagination::shouldUseCursorPagination($builder)) {
+                $primaryKey = $tableSchema->primary_key ?? 'id';
+                $cursorColumn = $request->get('cursor_column', $primaryKey);
+
+                if ($request->has('composite_cursor') || $request->has('sortby')) {
+                    $cursorColumns = [$cursorColumn];
+                    if ($cursorColumn !== $primaryKey) {
+                        $cursorColumns[] = $primaryKey;
+                    }
+
+                    $result = CursorPagination::paginateComposite($builder, $request, $cursorColumns, $perPage);
+                } else {
+                    $result = CursorPagination::paginate($builder, $request, $cursorColumn, $perPage);
+                }
+
+                $data = $result['data'];
+                $cursorMeta = $result['meta'];
+                $meta = $cursorMeta;
+            } else {
+                $page = max((int) $request->get('page', 1), 1);
+                $countQuery = clone $builder;
+                $total = $countQuery->count();
+                $data = $builder->forPage($page, $perPage)->get()->all();
+
+                $headers['X-Total-Count'] = (string) $total;
+                $lastPage = (int) ceil($total / $perPage);
+                $headers['X-Page'] = (string) $page;
+                $headers['X-Per-Page'] = (string) $perPage;
+                $headers['X-Total-Pages'] = (string) $lastPage;
+
+                $meta = [
+                    'page' => $page,
+                    'per_page' => $perPage,
+                    'total' => $total,
+                ];
+            }
+        }
+
+        if ($request->has('select')) {
+            $selectParam = $request->query('select');
+            $includes = RelationshipResolver::parseSelectForIncludes($selectParam);
+            $useSubqueryOptimization = config('record.use_subquery_optimization', true) && count($data) <= 100;
+
+            if ($useSubqueryOptimization && [] !== $includes) {
+                $primaryKey = $tableSchema->primary_key ?? 'id';
+                $recordIds = array_column($data, $primaryKey);
+
+                if ([] !== $recordIds) {
+                    $optimizedBuilder = DB::table($actualTableName);
+                    $mainCols = RelationshipResolver::getMainTableColumns($selectParam);
+                    if ([] !== $mainCols) {
+                        $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $mainCols);
+                        $optimizedBuilder->select($prefixedCols);
+                    } else {
+                        $optimizedBuilder->select($actualTableName . '.*');
+                    }
+
+                    $service->applyTenantFilter($optimizedBuilder, $actualTableName, $tenantId);
+
+                    if ($tableSchema && $tableSchema->soft_deletes) {
+                        $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
+                    }
+
+                    RelationshipResolver::applySubqueryRelationships(
+                        $optimizedBuilder,
+                        $table,
+                        $includes,
+                        $tableSchema && $service->shouldApplyTenantId($tableSchema) ? $tenantId : null
+                    );
+
+                    $optimizedData = $optimizedBuilder->whereIn($actualTableName . '.' . $primaryKey, $recordIds)->get()->all();
+                    $data = RelationshipResolver::processJsonRelationships($optimizedData, $includes, $table);
+                }
+            } else {
+                $data = RelationshipResolver::includeRelationships(
+                    $data,
+                    $table,
+                    $selectParam,
+                    $tableSchema && $service->shouldApplyTenantId($tableSchema) ? $tenantId : null
+                );
+            }
+        }
+
+        $data = RecordApiResponseService::removeDeletedAtFields($data);
+
+        if ($isCacheable && $cacheKey) {
+            $cacheData = [
+                'data' => $data,
+                'meta' => $meta,
+                'headers' => $headers,
+                'cached_at' => now()->toISOString(),
+                'tenant_enabled' => $tableSchema && $service->shouldApplyTenantId($tableSchema),
+            ];
+            $ttl = $service->calculateOptimalCacheTTL($table, count($data), $request->has('select'));
             QueryCacheService::put($cacheKey, $cacheData, $ttl);
         }
 
