@@ -41,6 +41,7 @@ class SetupPackage extends Command
             $created += $this->ensureFile('config/record/tables/README.md', $this->defaultRecordTablesReadme(), $force);
             $created += $this->ensureFile('config/record.php', $this->defaultRecordConfig(), $force);
             $created += $this->ensureFile('config/audit.php', $this->defaultAuditConfig(), $force);
+            $created += $this->ensureAppServiceProviderRateLimiters();
         } catch (Throwable $throwable) {
             $this->error('❌ Failed to create configuration files: ' . $throwable->getMessage());
             return self::FAILURE;
@@ -63,6 +64,159 @@ class SetupPackage extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    private function ensureAppServiceProviderRateLimiters(): int
+    {
+        $path = 'app/Providers/AppServiceProvider.php';
+        $relativePath = str_replace(base_path() . '/', '', $path);
+
+        if (!file_exists($path)) {
+            $this->ensureDirectory('app/Providers');
+            $this->writeFile($path, $this->defaultAppServiceProviderWithRateLimiters());
+            $this->info('  ✅ Created: ' . $relativePath);
+            return 1;
+        }
+
+        $existing = (string) (@file_get_contents($path) ?: '');
+        if (str_contains($existing, "RateLimiter::for('api-reads'")) {
+            $this->line('  ⏭️  Skipped (rate limiters already configured): ' . $relativePath);
+            return 0;
+        }
+
+        $updated = $this->injectRateLimitersIntoAppServiceProvider($existing);
+        if ($updated === $existing) {
+            $this->line('  ⏭️  Skipped (could not safely update): ' . $relativePath);
+            return 0;
+        }
+
+        $this->writeFile($path, $updated);
+        $this->info('  ✅ Updated: ' . $relativePath);
+        return 1;
+    }
+
+    private function injectRateLimitersIntoAppServiceProvider(string $contents): string
+    {
+        $rateLimiterUses = [
+            'Illuminate\\Cache\\RateLimiting\\Limit',
+            'Illuminate\\Http\\Request',
+            'Illuminate\\Support\\Facades\\RateLimiter',
+        ];
+
+        $useMatches = [];
+        preg_match_all('/^use\\s+([^;]+);\\s*$/m', $contents, $useMatches, PREG_OFFSET_CAPTURE);
+
+        $existingUses = [];
+        foreach ($useMatches[1] ?? [] as $match) {
+            $existingUses[] = trim((string) $match[0]);
+        }
+
+        $missingUses = array_values(array_filter($rateLimiterUses, fn(string $u): bool => !in_array($u, $existingUses, true)));
+        if ($missingUses !== []) {
+            $insertion = '';
+            foreach ($missingUses as $u) {
+                $insertion .= 'use ' . $u . ';' . PHP_EOL;
+            }
+
+            if (!empty($useMatches[0])) {
+                $lastUse = end($useMatches[0]);
+                $insertPos = (int) $lastUse[1] + strlen((string) $lastUse[0]) + 1;
+                $contents = substr($contents, 0, $insertPos) . $insertion . substr($contents, $insertPos);
+            } else {
+                $namespacePos = strpos($contents, 'namespace ');
+                if ($namespacePos === false) {
+                    return $contents;
+                }
+                $afterNamespace = strpos($contents, "\n", $namespacePos);
+                if ($afterNamespace === false) {
+                    return $contents;
+                }
+                $insertPos = $afterNamespace + 1;
+                $contents = substr($contents, 0, $insertPos) . PHP_EOL . $insertion . substr($contents, $insertPos);
+            }
+        }
+
+        $snippet =
+            "    RateLimiter::for('api-reads', function (Request \$request): Limit {" . PHP_EOL .
+            "        \$key = \$request->user()?->getAuthIdentifier() ?? \$request->ip();" . PHP_EOL .
+            "        return Limit::perMinute(200)->by((string) \$key);" . PHP_EOL .
+            "    });" . PHP_EOL . PHP_EOL .
+            "    RateLimiter::for('api-writes', function (Request \$request): Limit {" . PHP_EOL .
+            "        \$key = \$request->user()?->getAuthIdentifier() ?? \$request->ip();" . PHP_EOL .
+            "        return Limit::perMinute(100)->by((string) \$key);" . PHP_EOL .
+            "    });" . PHP_EOL . PHP_EOL .
+            "    RateLimiter::for('api-functions', function (Request \$request): Limit {" . PHP_EOL .
+            "        \$key = \$request->user()?->getAuthIdentifier() ?? \$request->ip();" . PHP_EOL .
+            "        return Limit::perMinute(100)->by((string) \$key);" . PHP_EOL .
+            "    });" . PHP_EOL;
+
+        if (str_contains($contents, "RateLimiter::for('api-reads'")) {
+            return $contents;
+        }
+
+        if (preg_match('/public\\s+function\\s+boot\\s*\\([^)]*\\)\\s*(?::\\s*\\w+)?\\s*\\{/m', $contents, $m, PREG_OFFSET_CAPTURE)) {
+            $match = $m[0];
+            $start = (int) $match[1];
+            $bracePos = strpos($contents, '{', $start);
+            if ($bracePos === false) {
+                return $contents;
+            }
+
+            $insertPos = $bracePos + 1;
+            return substr($contents, 0, $insertPos) . PHP_EOL . $snippet . substr($contents, $insertPos);
+        }
+
+        if (preg_match('/\\}\\s*$/', $contents, $m, PREG_OFFSET_CAPTURE)) {
+            $insertPos = (int) $m[0][1];
+            $bootMethod =
+                PHP_EOL .
+                '    public function boot(): void' . PHP_EOL .
+                '    {' . PHP_EOL .
+                $snippet .
+                '    }' . PHP_EOL;
+            return substr($contents, 0, $insertPos) . $bootMethod . substr($contents, $insertPos);
+        }
+
+        return $contents;
+    }
+
+    private function defaultAppServiceProviderWithRateLimiters(): string
+    {
+        return <<<'PHP'
+<?php
+
+namespace App\Providers;
+
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\ServiceProvider;
+
+class AppServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+    }
+
+    public function boot(): void
+    {
+        RateLimiter::for('api-reads', function (Request $request): Limit {
+            $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
+            return Limit::perMinute(200)->by((string) $key);
+        });
+
+        RateLimiter::for('api-writes', function (Request $request): Limit {
+            $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
+            return Limit::perMinute(100)->by((string) $key);
+        });
+
+        RateLimiter::for('api-functions', function (Request $request): Limit {
+            $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
+            return Limit::perMinute(100)->by((string) $key);
+        });
+    }
+}
+PHP;
     }
 
     private function ensureFile(string $path, string $contents, bool $force): int

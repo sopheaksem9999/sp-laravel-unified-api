@@ -48,6 +48,7 @@ class ValidateSetup extends Command
         $this->validatePermissions();
         $this->validateSchemaRegistry();
         $this->validateRoutes();
+        $this->validateRateLimiters();
 
         // Display results
         $this->displayResults();
@@ -304,6 +305,51 @@ class ValidateSetup extends Command
             }
         } catch (Exception $exception) {
             $this->addResult('❌', 'Route check failed: ' . $exception->getMessage(), 'error');
+        }
+    }
+
+    /**
+     * Validate required rate limiters exist for throttle middleware.
+     */
+    private function validateRateLimiters(): void
+    {
+        $this->info('⏱️ Checking Rate Limiters...');
+
+        $providerPath = app_path('Providers/AppServiceProvider.php');
+
+        if (!File::exists($providerPath)) {
+            $this->addResult('❌', 'Missing AppServiceProvider: app/Providers/AppServiceProvider.php', 'error');
+            $this->addResult('ℹ️', 'Define RateLimiter rules for api-reads/api-writes/api-functions or run: php artisan sp-laravel-api:setup', 'info');
+
+            if ($this->option('fix')) {
+                $this->info('🔧 Attempting to create/update AppServiceProvider rate limiters...');
+                $this->call('sp-laravel-api:setup', ['--force' => false]);
+            }
+
+            return;
+        }
+
+        $contents = (string) File::get($providerPath);
+        $required = ['api-reads', 'api-writes', 'api-functions'];
+
+        $missing = [];
+        foreach ($required as $name) {
+            if (!str_contains($contents, "RateLimiter::for('{$name}'")) {
+                $missing[] = $name;
+            }
+        }
+
+        if ($missing === []) {
+            $this->addResult('✅', 'Rate limiters configured: api-reads, api-writes, api-functions', 'success');
+            return;
+        }
+
+        $this->addResult('❌', 'Missing rate limiter(s): ' . implode(', ', $missing), 'error');
+        $this->addResult('ℹ️', 'Add RateLimiter::for(...) rules in AppServiceProvider boot() or run: php artisan sp-laravel-api:setup', 'info');
+
+        if ($this->option('fix')) {
+            $this->info('🔧 Attempting to add missing rate limiters...');
+            $this->call('sp-laravel-api:setup', ['--force' => false]);
         }
     }
 
