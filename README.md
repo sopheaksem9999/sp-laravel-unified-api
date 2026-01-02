@@ -48,15 +48,15 @@ curl -X GET http://your-app.test/api/users
 
 ## 📋 Requirements
 
-- **PHP**: 8.1 or higher
-- **Laravel**: 10.x / 11.x / 12.x
+- **PHP**: 8.2 or higher
+- **Laravel**: 12.x
 - **Database**: MySQL 8.0+, PostgreSQL 13+, or SQLite 3.8+
 - **Extensions**: BCMath, Ctype, JSON, Mbstring, OpenSSL, PDO, Tokenizer, XML
 
 ## 📦 Dependencies and Optional Integrations
 
 Core dependency installed with the package:
-- **Carbon** (^3.0) - Date manipulation library
+- **Carbon** (^2.0 or ^3.0) - Date manipulation library
 
 Optional integrations you can install in your application:
 - **Spatie Laravel Permission** (^6.21) - Role and permission management
@@ -115,9 +115,6 @@ php artisan sp-laravel-api:setup --force
 Add these environment variables to your `.env` file:
 
 ```env
-# API configuration
-RECORD_API_PREFIX=api
-
 # Audit logging
 AUDIT_LOG_ENABLED=true
 AUDIT_LOG_RETENTION_DAYS=365
@@ -187,7 +184,7 @@ use Sopheak\Core\Types\RecordBelongsToType;
 use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordTableTriggerType;
 return [
-    'api_prefix' => env('RECORD_API_PREFIX', 'api'),
+    'api_prefix' => 'api/v1',
 
     'tables' => [
         'users' => new RecordTableType(
@@ -259,7 +256,7 @@ return [
 ];
 ```
 
-The package routes are loaded automatically by `Sopheak\Core\CoreServiceProvider` using this prefix. Record endpoints authorize per-table using `RecordTablePublic` and permissions; audit endpoints always require authentication.
+The package routes are loaded automatically by `Sopheak\Core\CoreServiceProvider` using this prefix. Record endpoints authorize per-table using `RecordTablePublic` and permissions; audit endpoints include read endpoints (and additional authenticated endpoints) under the same prefix.
 
 ### Step 8: Test Your Installation
 
@@ -326,16 +323,29 @@ DB_DATABASE=/absolute/path/to/database.sqlite
 
 ```php
 return [
-    // API route prefix
-    'api_prefix' => env('RECORD_API_PREFIX', 'api'),
+    // Multi-tenant mode (optional)
+    'enable_tenant_id' => false,
     'tenant_column' => 'tenant_id',
     'tenant_header' => 'X-Tenant-ID',
-    
-    // Global settings
-    'max_depth' => env('RECORD_MAX_DEPTH', 3),
-    'cache_ttl' => env('RECORD_CACHE_TTL', 3600),
-    'lazy_cache_ttl' => env('RECORD_LAZY_CACHE_TTL', 300),
-    'enable_tenant_id' => false,
+
+    // API route prefix
+    'api_prefix' => 'api/v1',
+
+    // Global limits
+    'per_page_max' => 10000,
+    'limit_max' => 10000,
+    'bulk_max' => 1000,
+
+    // Relationship nesting limit
+    'max_depth' => 10,
+
+    // Query caching (used by QueryCacheService)
+    'cache' => [
+        'enabled' => env('CACHE_API', false),
+        'ttl' => 3600,
+        'prefix' => 'sp_laravel_api',
+        'per_table' => [],
+    ],
     
     // Table configurations
     'tables' => [
@@ -371,11 +381,17 @@ if (is_dir($tablesDirectory)) {
 }
 
 return [
-    'api_prefix' => env('RECORD_API_PREFIX', 'api'),
-    'max_depth' => env('RECORD_MAX_DEPTH', 3),
-    'cache_ttl' => env('RECORD_CACHE_TTL', 3600),
-    'lazy_cache_ttl' => env('RECORD_LAZY_CACHE_TTL', 300),
+    'api_prefix' => 'api/v1',
     'enable_tenant_id' => false,
+    'tenant_column' => 'tenant_id',
+    'tenant_header' => 'X-Tenant-ID',
+    'max_depth' => 10,
+    'cache' => [
+        'enabled' => env('CACHE_API', false),
+        'ttl' => 3600,
+        'prefix' => 'sp_laravel_api',
+        'per_table' => [],
+    ],
     'tables' => $tables,
 ];
 ```
@@ -631,10 +647,10 @@ php artisan route:clear
 **Solution:**
 ```bash
 # Clear all caches
-php artisan sp-laravel-api:clear-cache
+php artisan sp-laravel-api:cache-clear
 
-# Clear specific table cache
-php artisan sp-laravel-api:clear-cache users
+# Rebuild internal schema caches
+php artisan sp-laravel-api:cache-generate
 
 # Verify cache configuration
 php artisan config:show cache
@@ -656,11 +672,6 @@ Use the validation command to diagnose issues:
 ```bash
 # Run comprehensive validation
 php artisan sp-laravel-api:validate --verbose --fix
-
-# Check specific components
-php artisan sp-laravel-api:validate --check=database
-php artisan sp-laravel-api:validate --check=permissions
-php artisan sp-laravel-api:validate --check=config
 ```
 
 ## ⚙️ Advanced Configuration
@@ -672,10 +683,14 @@ php artisan sp-laravel-api:validate --check=config
 ```php
 // config/record.php
 return [
-    'cache_ttl' => 7200, // 2 hours
-    'lazy_cache_ttl' => 600, // 10 minutes
-    'max_depth' => 2, // Limit relationship depth
-    'enable_query_cache' => true,
+    // Limit relationship nesting depth for better performance
+    'max_depth' => 2,
+
+    // Enable/disable query caching
+    'cache' => [
+        'enabled' => true,
+        'ttl' => 3600,
+    ],
 ];
 ```
 
@@ -704,23 +719,11 @@ sudo apt-get install supervisor
 
 #### 1. API Rate Limiting
 
-```php
-// config/record.php
-return [
-    'rate_limiting' => [
-        'enabled' => true,
-        'max_attempts' => 60,
-        'decay_minutes' => 1,
-    ],
-];
-```
+The package routes use `throttle:api-reads`, `throttle:api-writes`, and `throttle:api-functions`. Define those limiters in your application (example shown in the installation steps).
 
 #### 2. CORS Configuration
 
-```bash
-composer require fruitcake/laravel-cors
-php artisan vendor:publish --tag="cors"
-```
+Laravel ships CORS configuration out of the box. Configure it in your app via `config/cors.php`.
 
 #### 3. API Versioning
 
@@ -728,11 +731,6 @@ php artisan vendor:publish --tag="cors"
 // config/record.php
 return [
     'api_prefix' => 'api/v1',
-    'versioning' => [
-        'enabled' => true,
-        'header' => 'Accept-Version',
-        'default' => 'v1',
-    ],
 ];
 ```
 
@@ -744,9 +742,10 @@ return [
     'enable_tenant_id' => true,
     'tenant_column' => 'tenant_id',
     'tenant_header' => 'X-Tenant-ID',
-    'tenant_resolver' => \App\Services\TenantResolver::class,
 ];
 ```
+
+When `enable_tenant_id=true`, requests for tables configured with `has_tenant_id=true` must include the tenant header (default: `X-Tenant-ID`).
 
 ### Custom Middleware
 
@@ -836,6 +835,8 @@ php artisan migrate
 -- Add indexes for better performance
 CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
 CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at);
+-- Optional (only if you enable multi-tenant mode and store tenant IDs in audit_logs)
+-- CREATE INDEX idx_audit_logs_tenant_id ON audit_logs(tenant_id);
 CREATE INDEX idx_users_email ON users(email);
 ```
 
@@ -844,10 +845,11 @@ CREATE INDEX idx_users_email ON users(email);
 ```php
 // config/record.php
 return [
-    'caching' => [
-        'schema_cache_ttl' => 86400, // 24 hours
-        'query_cache_ttl' => 3600,   // 1 hour
-        'relationship_cache_ttl' => 1800, // 30 minutes
+    'cache' => [
+        'enabled' => env('CACHE_API', false),
+        'ttl' => 3600,
+        'prefix' => 'sp_laravel_api',
+        'per_table' => [],
     ],
 ];
 ```
@@ -860,53 +862,6 @@ QUEUE_CONNECTION=redis
 
 # Configure queue workers
 php artisan queue:work --queue=high,default --sleep=3 --tries=3 --max-time=3600
-```
-
-## 📖 Additional Resources
-
-### Package Documentation
-
-- [API Reference](docs/api-reference.md)
-- [Configuration Guide](docs/configuration.md)
-- [Security Best Practices](docs/security.md)
-- [Performance Tuning](docs/performance.md)
-- [Troubleshooting Guide](docs/troubleshooting.md)
-
-### Core Classes Reference
-
-- **RecordApiResponseService**: Standardized API responses
-- **AuditLogService**: Audit logging functionality
-- **SchemaRegistry**: Database schema management
-- **QueryHelpers**: Advanced query building
-- **CursorPagination**: Efficient pagination
-- **RequestId**: Request tracking middleware
-
-### Community and Support
-
-- [GitHub Issues](https://github.com/your-username/sp-laravel-api/issues)
-- [Discussions](https://github.com/your-username/sp-laravel-api/discussions)
-- [Documentation](https://sp-laravel-api.readthedocs.io)
-
-## 📄 License
-
-This package is proprietary software.
-
-Generate and fetch OpenAPI JSON:
-
-```bash
-php artisan sp-laravel-api:openapi
-curl -X GET http://your-app.test/api/docs/openapi
-```
-
-Expected response:
-```json
-{
-    "openapi": "3.0.3",
-    "info": {
-        "title": "Laravel API v2",
-        "version": "2.0.0"
-    }
-}
 ```
 
 ### Step 10: Configure Your Models (Optional)
@@ -946,7 +901,7 @@ class User extends Authenticatable implements AuditQueryInterface
 }
 ```
 
-## Quick Start
+## Usage Examples
 
 Once installed, you can immediately start using the dynamic API endpoints:
 
@@ -986,6 +941,7 @@ GET /api/users?age=gt.18&created_at=between.2024-01-01,2024-12-31
 Provides standardized JSON responses:
 ```php
 use Sopheak\Core\Services\RecordApiResponseService;
+use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 
 $response = app('api.response');
 return $response->success($data, 'Operation successful');
@@ -996,9 +952,17 @@ return $response->error('Error message', RecordApiJsonResponseEnum::ERROR->value
 Comprehensive audit logging for data changes:
 ```php
 use Sopheak\Core\Services\AuditLogService;
+use Sopheak\Core\Enums\AuditLogEventEnum;
 
-$auditService = app(AuditLogService::class);
-$auditService->handleAuditData($event, $table, $oldData, $newData);
+AuditLogService::handleAuditDataEntry(
+    event: AuditLogEventEnum::CREATED,
+    entityName: 'users',
+    entityType: 'users',
+    queryData: ['id' => 1, 'name' => 'John Doe'],
+    subject: 'John Doe',
+    recap: null,
+    tenantId: null,
+);
 ```
 
 ### AuditLogJob
@@ -1011,8 +975,9 @@ use Sopheak\Core\Enums\AuditLogEventEnum;
 AuditLogJob::dispatch(
     event: AuditLogEventEnum::CREATED,
     entityName: 'users',
-    entityType: 'User',
-    queryData: $userData
+    entityType: 'users',
+    queryData: ['id' => 1, 'name' => 'John Doe'],
+    tenantId: null,
 );
 ```
 
@@ -1030,8 +995,11 @@ Intelligent query caching:
 ```php
 use Sopheak\Core\Services\QueryCacheService;
 
-$cache = app(QueryCacheService::class);
-$result = $cache->remember($key, $query, $ttl);
+$result = QueryCacheService::remember(
+    key: 'users:first',
+    callback: fn () => \Illuminate\Support\Facades\DB::table('users')->first(),
+    ttl: 3600,
+);
 ```
 
 ## Middleware
@@ -1194,7 +1162,7 @@ Controls database table operations and OpenAPI generation:
 ```php
 return [
     'enable_tenant_id' => false,
-    'api_prefix' => env('RECORD_API_PREFIX', 'api'),
+    'api_prefix' => 'api/v1',
     'global_functions' => [
         // Define custom RPC functions here
         // 'functionName' => YourFunctionClass::class,
@@ -1234,8 +1202,7 @@ class YourModel extends Model
 
 ### Available Methods
 
-- `applyCommonQueries($builder, $request, $isArray = false, $orderBy = 'id')` - Apply common query filters
-- `applyRequestFilters($request, $isArray = false)` - Apply request-based filters
+- `applyRequestFilters($request, $isArray = false, $orderBy = 'id')` - Apply request-based filters
 
 ### Supported Query Parameters
 
@@ -1331,11 +1298,11 @@ php artisan sp-laravel-api:clean-audit-logs --dry-run --days=90
 ## Documentation
 
 ### Package Documentation
-- **Deployment Guide**: [`DEPLOYMENT.md`](DEPLOYMENT.md) - How to deploy and distribute this private package
 - **API Documentation**: [`docs/api-documentation.md`](docs/api-documentation.md) - Comprehensive API endpoints and usage guide
 - **Audit Interface**: [`docs/audit-interface.md`](docs/audit-interface.md) - Custom audit queries and logging
 - **Cursor Pagination**: [`docs/cursor-pagination.md`](docs/cursor-pagination.md) - Efficient pagination for large datasets
-- **Package Overview**: [`docs/README.md`](docs/README.md) - Package features and quick reference
+- **Performance**: [`docs/performance.md`](docs/performance.md) - Benchmarks and optimization notes
+- **Use Cases**: [`docs/use-cases.md`](docs/use-cases.md) - Why use this for SaaS/ERP style APIs
 
 ### Core Classes Reference
 - **Request ID Middleware**: `Sopheak\Core\Http\Middleware\RequestId`
@@ -1343,10 +1310,15 @@ php artisan sp-laravel-api:clean-audit-logs --dry-run --days=90
 - **Audit Log Service**: `Sopheak\Core\Services\AuditLogService`
 - **Query Cache Service**: `Sopheak\Core\Services\QueryCacheService`
 - **Cursor Pagination Service**: `Sopheak\Core\Services\CursorPagination`
-- **Dynamic API Controller**: `Sopheak\Core\Http\Controllers\DynamicApiController`
+- **Record API Controller**: `Sopheak\Core\Http\Controllers\CoreRecordController`
+- **Audit Log Controller**: `Sopheak\Core\Http\Controllers\AuditLogController`
 - **Query Helpers Trait**: `Sopheak\Core\Traits\QueryHelpers`
 - **Audit Query Interface**: `Sopheak\Core\Interfaces\AuditQueryInterface`
 
 ## Notes
 - Keep `request.id` middleware active to ensure `meta.request_id` consistency.
 - Extend the OpenAPI generator as needed for your endpoints.
+
+## 📄 License
+
+This package is proprietary software.

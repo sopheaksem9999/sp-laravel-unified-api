@@ -260,7 +260,7 @@ return [
     | API Route Prefix Configuration
     |--------------------------------------------------------------------------
     */
-    'api_prefix' => env('RECORD_API_PREFIX', 'api'),
+    'api_prefix' => 'api/v1',
 
     // Maximum items returned per page for list endpoints
     'per_page_max' => 10000,
