@@ -36,10 +36,10 @@ The `applyRequestFilters` method returns an array containing:
 All endpoints are served under a configurable prefix defined in `config/record.php`:
 
 ```php
-'api_prefix' => env('RECORD_API_PREFIX', 'api'),
+'api_prefix' => 'api/v1',
 ```
 
-**Default**: `/api`  
+**Default**: `/api/v1`  
 **Examples**: `/api`, `/api/v1`, `/api/v2`
 
 ### Authentication
@@ -148,23 +148,28 @@ return [
 Each trigger method is called with the following signature:
 
 ```php
-public static function someTrigger(Request $request, string $table, array $context): void
+public static function someTrigger(Request $request, string $table, mixed ...$args): Request|array|null
 ```
 
-The `$context` payload depends on the event:
+Triggers are invoked with `call_user_func_array([$class, $method], $params)` where `$params` always starts with:
+- `Request $request`
+- `string $table`
 
-- `beforeRead` on list (`GET /{prefix}/{table}`): `['type' => 'index', 'filters' => [...], 'includes' => [...], 'page' => int, 'per_page' => ?int, 'limit' => int, 'tenant_id' => mixed]`
-- `afterRead` on list: `['type' => 'index', 'filters' => [...], 'data' => [...], 'meta' => [...], 'tenant_id' => mixed]`
-- `beforeRead` on show (`GET /{prefix}/{table}/{id}`): `['type' => 'show', 'id' => mixed]`
-- `afterRead` on show: `['type' => 'show', 'id' => mixed, 'record' => object|array]`
-- `beforeCreate` (`POST /{prefix}/{table}`): `['payload' => [...], 'tenant_id' => mixed]`
-- `afterCreate`: `['id' => mixed, 'payload' => [...], 'tenant_id' => mixed]`
-- `beforeUpdate` (`PUT|PATCH /{prefix}/{table}/{id}`): `['id' => mixed, 'payload' => [...], 'tenant_id' => mixed]`
-- `afterUpdate`: `['id' => mixed, 'payload' => [...], 'tenant_id' => mixed, 'updated' => int]`
-- `beforeDelete` (`DELETE /{prefix}/{table}/{id}`): `['id' => mixed, 'tenant_id' => mixed]`
-- `afterDelete`: `['id' => mixed, 'tenant_id' => mixed, 'affected' => int, 'soft_deleted' => bool]`
+Additional arguments depend on the event/endpoint. Common patterns:
 
-Trigger handlers are best-effort: if the configured class or method does not exist, or if the handler throws an exception, the error is logged and the main API operation still completes. Use validators when you need to block operations.
+- `beforeRead` on list: `[$request, $table, ['type' => 'index', 'tenant_id' => mixed]]`
+- `afterRead` on list: `[$request, $table, ['type' => 'index', 'filters' => [...], 'data' => [...], 'meta' => [...], 'tenant_id' => mixed, 'response' => JsonResponse]]`
+- `beforeCreate` (single): `[$request, $table, ['tenant_id' => mixed]]`
+- `beforeUpdate` (single): `[$request, $table, ['id' => mixed, 'tenant_id' => mixed]]`
+- `beforeDelete` (single): `[$request, $table, ['id' => mixed, 'tenant_id' => mixed]]`
+- Bulk endpoints may pass different params per item (e.g. `[$request, $table, $item]`, `[$request, $table, $id, $item]`, `[$request, $table, $id]`)
+
+Return values:
+- Return a `Request` to replace the current request (used mainly by `beforeRead`/`beforeCreate`/`beforeUpdate`/`beforeDelete`)
+- Return an `array` to merge into the request input (merged into `$request->merge($result)`)
+- Return `null` / no return to leave the request unchanged
+
+Trigger handlers are strict: invalid trigger config, missing class/method, or any runtime error will abort the request and surface as an API error response. Use validators when you want user-friendly `422` validation errors.
 
 ## Standard CRUD Operations
 
@@ -211,8 +216,8 @@ Retrieve a paginated list of records with filtering, sorting, and relationship l
 
 #### Example Request
 ```http
-GET /api/invoices?per_page=25&sortby=created_at&order=desc&with=customer,items&status=pending&total_gte=100
-Authorization: Bearer {jwt_token}
+GET /api/v1/invoices?per_page=25&sortby=created_at&order=desc&with=customer,items&status=pending&total_gte=100
+Authorization: Bearer {access_token}
 ```
 
 #### Response Format
@@ -250,10 +255,10 @@ Authorization: Bearer {jwt_token}
     "to": 25
   },
   "links": {
-    "first": "/api/invoices?page=1",
-    "last": "/api/invoices?page=6",
+    "first": "/api/v1/invoices?page=1",
+    "last": "/api/v1/invoices?page=6",
     "prev": null,
-    "next": "/api/invoices?page=2"
+    "next": "/api/v1/invoices?page=2"
   },
   "request_id": "req_abc123def456"
 }
@@ -274,8 +279,8 @@ Retrieve a single record by its primary key.
 
 #### Example Request
 ```http
-GET /api/invoices/123?with=customer,items,payments
-Authorization: Bearer {jwt_token}
+GET /api/v1/invoices/123?with=customer,items,payments
+Authorization: Bearer {access_token}
 ```
 
 #### Response Format
@@ -314,9 +319,9 @@ To return related records in the response of the create call, pass a nested `sel
 Example (return `customer` and `items.product` after creating an `orders` record):
 
 ```bash
-curl --location 'http://127.0.0.1:8000/api/v2/record/orders?select=*,customer(*),items(*,product(*))' \
+curl --location 'http://127.0.0.1:8000/api/v1/orders?select=*,customer(*),items(*,product(*))' \
   --header 'Content-Type: application/json' \
-  --header 'Authorization: Bearer {jwt_token}' \
+  --header 'Authorization: Bearer {access_token}' \
   --data '{
     "customer_id": 5,
     "status": "draft",
@@ -476,7 +481,7 @@ You can create public endpoints by setting `pms_name` to `null`. These functions
 
 **Request:**
 ```bash
-curl -X POST http://localhost:8000/api/v2/record/rpc/login \
+curl -X POST http://localhost:8000/api/v1/rpc/login \
   -H "Content-Type: application/json" \
   -d '{"email": "user@example.com", "password": "password"}'
 ```
@@ -499,7 +504,7 @@ By providing a `pms_name`, the function requires authentication and the user mus
 
 **Request:**
 ```bash
-curl -X GET http://localhost:8000/api/v2/record/rpc/system_stats \
+curl -X GET http://localhost:8000/api/v1/rpc/system_stats \
   -H "Authorization: Bearer {token}"
 ```
 
@@ -541,7 +546,7 @@ Create a parent record along with its related child records.
 
 #### Example Request
 ```bash
-curl --location 'http://127.0.0.1:8000/api/v2/record/invoices' \
+curl --location 'http://127.0.0.1:8000/api/v1/invoices' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer {token}' \
 --data '{
@@ -592,7 +597,7 @@ Update a parent record and manage its relationships simultaneously. You can:
 
 #### Example Request
 ```bash
-curl --location --request PUT 'http://127.0.0.1:8000/api/v2/record/invoices/123' \
+curl --location --request PUT 'http://127.0.0.1:8000/api/v1/invoices/123' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer {token}' \
 --data '{
@@ -742,8 +747,8 @@ Retrieve audit logs with filtering options.
 
 #### Example Request
 ```http
-GET /api/audit/logs?entity_type=invoices&entity_id=123&event=updated&per_page=20
-Authorization: Bearer {jwt_token}
+GET /api/v1/audit/logs?entity_type=invoices&entity_id=123&event=updated&per_page=20
+Authorization: Bearer {access_token}
 ```
 
 #### Response Format
@@ -937,7 +942,7 @@ Clean up old audit logs (admin only - requires `can:manage-audit-logs` permissio
 
 ### Global Functions
 ```http
-GET|POST|PUT|PATCH|DELETE /{api_prefix}/{functionName}
+GET|POST|PUT|PATCH|DELETE /{api_prefix}/rpc/{functionName}
 ```
 
 Execute global custom functions defined in `config/record.php`.
@@ -945,10 +950,10 @@ Execute global custom functions defined in `config/record.php`.
 #### Examples
 ```http
 # Simple global function
-GET /api/system_stats
+GET /api/v1/rpc/system_stats
 
 # Parameterized global function  
-POST /api/generate_report
+POST /api/v1/rpc/generate_report
 Content-Type: application/json
 {
   "report_type": "monthly",
@@ -966,10 +971,10 @@ Execute table-specific custom functions.
 #### Examples
 ```http
 # Simple table function
-GET /api/invoices/rpc/calculate_totals
+GET /api/v1/invoices/rpc/calculate_totals
 
 # Parameterized table function
-POST /api/users/rpc/send_notification
+POST /api/v1/users/rpc/send_notification
 Content-Type: application/json
 {
   "message": "Welcome to our platform!",

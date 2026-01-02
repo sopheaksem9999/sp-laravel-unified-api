@@ -662,33 +662,66 @@ class RecordService
             return $params;
         }
 
-        $triggers = $trigger instanceof RecordTableTriggerType ? [$trigger] : $trigger;
-
-        if (!is_array($triggers)) {
-            return $params;
+        if ($trigger instanceof RecordTableTriggerType) {
+            $triggers = [$trigger];
+        } elseif (is_array($trigger)) {
+            $isSingleTriggerConfig = isset($trigger['class']) || isset($trigger['function_method']);
+            $triggers = $isSingleTriggerConfig ? [$trigger] : $trigger;
+        } else {
+            throw new Exception(sprintf(
+                "Invalid table trigger configuration. Expected %s or array, got %s",
+                RecordTableTriggerType::class,
+                get_debug_type($trigger)
+            ));
         }
 
-        foreach ($triggers as $item) {
-            if (is_array($item)) {
+        if (!is_array($triggers)) {
+            throw new Exception(sprintf(
+                "Invalid table trigger configuration. Expected %s or array, got %s",
+                RecordTableTriggerType::class,
+                get_debug_type($triggers)
+            ));
+        }
+
+        foreach ($triggers as $index => $item) {
+            if ($item instanceof RecordTableTriggerType) {
+                $item = $item;
+            } elseif (is_array($item)) {
                 try {
                     $item = RecordTableTriggerType::fromArray($item);
-                } catch (Exception) {
-                    continue;
+                } catch (\Throwable $exception) {
+                    throw new Exception(sprintf(
+                        'Invalid table trigger config at index %s: %s',
+                        (string) $index,
+                        $exception->getMessage()
+                    ), 0, $exception);
                 }
+            } else {
+                throw new Exception(sprintf(
+                    'Invalid table trigger item at index %s. Expected %s or array, got %s',
+                    (string) $index,
+                    RecordTableTriggerType::class,
+                    get_debug_type($item)
+                ));
             }
 
             if (!$item instanceof RecordTableTriggerType) {
-                continue;
+                throw new Exception(sprintf(
+                    'Invalid table trigger item at index %s. Expected %s, got %s',
+                    (string) $index,
+                    RecordTableTriggerType::class,
+                    get_debug_type($item)
+                ));
             }
 
             $className = $item->class;
             $method = $item->function_method;
             if (!class_exists($className)) {
-                continue;
+                throw new Exception(sprintf("Table trigger class '%s' does not exist", $className));
             }
 
             if (!method_exists($className, $method)) {
-                continue;
+                throw new Exception(sprintf("Table trigger method '%s::%s' does not exist", $className, $method));
             }
 
             try {
@@ -698,7 +731,13 @@ class RecordService
                 } elseif (is_array($result) && isset($params[0]) && $params[0] instanceof Request) {
                     $params[0]->merge($result);
                 }
-            } catch (Exception) {
+            } catch (\Throwable $exception) {
+                throw new Exception(sprintf(
+                    "Table trigger execution failed for '%s::%s': %s",
+                    $className,
+                    $method,
+                    $exception->getMessage()
+                ), 0, $exception);
             }
         }
 
@@ -714,7 +753,28 @@ class RecordService
         }
 
         $perTableCache = config('record.cache.per_table', []);
-        if (isset($perTableCache[$table]) && !$perTableCache[$table]) {
+        $schema = SchemaRegistry::get();
+        $tableSchema = $schema[$table] ?? null;
+
+        $schemaTableName = null;
+        if (is_object($tableSchema)) {
+            $schemaTableName = $tableSchema->table ?? null;
+        } elseif (is_array($tableSchema)) {
+            $schemaTableName = $tableSchema['table'] ?? null;
+        }
+
+        if ((isset($perTableCache[$table]) && false === $perTableCache[$table]) || (null !== $schemaTableName && isset($perTableCache[$schemaTableName]) && false === $perTableCache[$schemaTableName])) {
+            return false;
+        }
+
+        $disableCache = false;
+        if (is_object($tableSchema)) {
+            $disableCache = (bool) ($tableSchema->disable_cache ?? false);
+        } elseif (is_array($tableSchema)) {
+            $disableCache = (bool) ($tableSchema['disable_cache'] ?? false);
+        }
+
+        if ($disableCache) {
             return false;
         }
 

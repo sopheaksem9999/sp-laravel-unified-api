@@ -3,9 +3,11 @@
 namespace Sopheak\Core\Tests\Unit;
 
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Schema;
+use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Support\SchemaRegistry;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordTablePublic;
@@ -151,5 +153,74 @@ class SchemaRegistryTest extends TestCase
 
         $this->assertArrayHasKey('users', $schema1);
         $this->assertArrayHasKey('users', $schema2);
+    }
+
+    public function test_is_cacheable_request_respects_per_table_cache_disable(): void
+    {
+        Config::set('record.cache.enabled', true);
+        Config::set('record.cache.per_table', ['users' => false]);
+        Config::set('record.tables', [
+            'users' => new RecordTableType(
+                pms_name: 'users',
+                table: 'users',
+                soft_deletes: false,
+                disable_cache: false,
+                public: new RecordTablePublic(read: true, write: true),
+                relationships: [],
+                has_tenant_id: false,
+            ),
+        ]);
+
+        SchemaRegistry::refresh();
+        $service = new RecordService();
+        $request = Request::create('/api/users', 'GET');
+
+        $this->assertFalse($service->isCacheableRequest($request, 'users'));
+    }
+
+    public function test_is_cacheable_request_respects_record_table_type_disable_cache(): void
+    {
+        Config::set('record.cache.enabled', true);
+        Config::set('record.cache.per_table', []);
+        Config::set('record.tables', [
+            'users' => new RecordTableType(
+                pms_name: 'users',
+                table: 'users',
+                soft_deletes: false,
+                disable_cache: true,
+                public: new RecordTablePublic(read: true, write: true),
+                relationships: [],
+                has_tenant_id: false,
+            ),
+        ]);
+
+        SchemaRegistry::refresh();
+        $service = new RecordService();
+        $request = Request::create('/api/users', 'GET');
+
+        $this->assertFalse($service->isCacheableRequest($request, 'users'));
+    }
+
+    public function test_is_cacheable_request_allows_cache_when_enabled_and_not_disabled(): void
+    {
+        Config::set('record.cache.enabled', true);
+        Config::set('record.cache.per_table', []);
+        Config::set('record.tables', [
+            'users' => new RecordTableType(
+                pms_name: 'users',
+                table: 'users',
+                soft_deletes: false,
+                disable_cache: false,
+                public: new RecordTablePublic(read: true, write: true),
+                relationships: [],
+                has_tenant_id: false,
+            ),
+        ]);
+
+        SchemaRegistry::refresh();
+        $service = new RecordService();
+        $request = Request::create('/api/users', 'GET');
+
+        $this->assertTrue($service->isCacheableRequest($request, 'users'));
     }
 }

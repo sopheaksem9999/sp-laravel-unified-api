@@ -8,7 +8,7 @@ A comprehensive Laravel package that provides standardized API responses, dynami
 # 1. Install the package
 composer require sopheak/sp-laravel-api
 
-# 2. Generate/publish configs (record/audit/sp-laravel-api + jwt.php)
+# 2. Generate/publish configs (record/audit/cursor_pagination/sp-laravel-api)
 php artisan sp-laravel-api:setup
 
 # 3. Publish package migrations + run migrations
@@ -20,7 +20,7 @@ php artisan migrate
 # 5. Configure at least 1 table in config/record.php (see below)
 
 # 6. Test a public read endpoint
-curl -X GET http://your-app.test/api/users
+curl -X GET http://your-app.test/api/v1/users
 ```
 
 ## ✨ Features
@@ -60,7 +60,7 @@ Core dependency installed with the package:
 
 Optional integrations you can install in your application:
 - **Spatie Laravel Permission** (^6.21) - Role and permission management
-- **PHP Open Source Saver JWT Auth** (^2.8.2) - JSON Web Token authentication
+- **PHP Open Source Saver JWT Auth** (^2.8.2) - JSON Web Token authentication (install/configure in your app)
 
 ## 📥 Installation & Setup
 
@@ -102,7 +102,6 @@ This command publishes package configs (tag: `sp-laravel-api-config`) and create
 - `config/audit.php` - Audit logging settings
 - `config/cursor_pagination.php` - Cursor pagination settings
 - `config/sp-laravel-api.php` - Package settings (auth guard, OpenAPI output)
-- `config/jwt.php` - JWT config scaffold (for JWT-based auth)
 
 To overwrite existing generated configs, run:
 
@@ -264,14 +263,14 @@ Test the dynamic API endpoints:
 
 ```bash
 # Test basic API functionality
-curl -X GET http://your-app.test/api/users
+curl -X GET http://your-app.test/api/v1/users
 
 # Test with authentication (if configured)
-curl -X GET http://your-app.test/api/users \
-  -H "Authorization: Bearer your-jwt-token"
+curl -X GET http://your-app.test/api/v1/users \
+  -H "Authorization: Bearer your-access-token"
 
 # Test creating a record
-curl -X POST http://your-app.test/api/users \
+curl -X POST http://your-app.test/api/v1/users \
   -H "Content-Type: application/json" \
   -d '{"name":"Test User","email":"test@example.com"}'
 ```
@@ -551,9 +550,9 @@ php artisan tinker
 >>> $user = \App\Models\User::create(['name' => 'Test User', 'email' => 'test@example.com', 'password' => bcrypt('password')]);
 
 # Test API endpoints
-curl -X GET http://your-app.test/api/users
-curl -X GET http://your-app.test/api/users/1
-curl -X POST http://your-app.test/api/users -H "Content-Type: application/json" -d '{"name":"New User","email":"new@example.com"}'
+curl -X GET http://your-app.test/api/v1/users
+curl -X GET http://your-app.test/api/v1/users/1
+curl -X POST http://your-app.test/api/v1/users -H "Content-Type: application/json" -d '{"name":"New User","email":"new@example.com"}'
 ```
 
 ## 🔍 Troubleshooting
@@ -614,19 +613,17 @@ php artisan tinker
 >>> $user->givePermissionTo('view_users');
 ```
 
-#### 5. "JWT token issues"
+#### 5. "Auth token issues" (JWT/Sanctum/Passport/etc)
 
 **Solution:**
 ```bash
-# Regenerate JWT secret
-php artisan jwt:secret --force
-
 # Clear config cache
 php artisan config:clear
-
-# Verify JWT configuration
-php artisan config:show jwt
 ```
+
+Verify your guard configuration:
+- `config/sp-laravel-api.php` → `auth.guard`
+- `config/auth.php` → the configured guard/driver setup
 
 #### 6. "API routes not working"
 
@@ -1053,8 +1050,8 @@ Generates a comprehensive OpenAPI 3.0 specification for your API with the follow
 - Compatible with Swagger UI, Postman, and other OpenAPI tools
 
 **Example Generated Features:**
-- RESTful endpoints: `GET /api/{table}`, `POST /api/{table}`, etc.
-- RPC endpoints: `POST /api/{functionName}`, `POST /api/{table}/rpc/{functionName}`
+- RESTful endpoints: `GET /{prefix}/{table}`, `POST /{prefix}/{table}`, etc.
+- RPC endpoints: `GET|POST|PUT|PATCH|DELETE /{prefix}/rpc/{functionName}`, `GET|POST|PUT|PATCH|DELETE /{prefix}/{table}/rpc/{functionName}`
 - Advanced filtering and pagination parameters
 - Comprehensive error response documentation
 
@@ -1065,18 +1062,22 @@ php artisan sp-laravel-api:setup
 Publishes default configurations for:
 - `config/record.php` - Database table configurations and relationships
 - `config/audit.php` - Audit logging settings  
-- `config/jwt.php` - JWT authentication settings
+- `config/cursor_pagination.php` - Cursor pagination settings
+- `config/sp-laravel-api.php` - Package settings (auth guard, OpenAPI output)
 
 ### Record Cache Management
 ```bash
 # Clear record cache
-php artisan record:cacheClear
+php artisan sp-laravel-api:cache-clear
 
-# Get record cache status
-php artisan record:getCache
+# Generate record schema cache
+php artisan sp-laravel-api:cache-generate
 
-# Refresh record cache
-php artisan record:refreshCache
+# Rebuild caches (SchemaRegistry/RelationshipResolver/QueryBuilderFilters)
+php artisan sp-laravel-api:cache-refresh
+
+# Rebuild caches and also write OpenAPI spec
+php artisan sp-laravel-api:cache-refresh --openapi
 
 # Clean old audit logs based on retention policy
 php artisan sp-laravel-api:clean-audit-logs
@@ -1089,13 +1090,13 @@ php artisan sp-laravel-api:clean-audit-logs --batch-size=500
 
 ## API Endpoints
 
-The package automatically registers RESTful API routes for dynamic database operations. The route prefix is configurable via `config('record.api_prefix')` (default: `api`).
+The package automatically registers RESTful API routes for dynamic database operations. The route prefix is configurable via `config('record.api_prefix')` (default: `api/v1`).
 
 ### Route Configuration
 
 ```php
 // config/record.php
-'api_prefix' => env('RECORD_API_PREFIX', 'api'),
+'api_prefix' => 'api/v1',
 ```
 
 **Examples:**
@@ -1120,8 +1121,8 @@ The package automatically registers RESTful API routes for dynamic database oper
 - `POST /{prefix}/{table}/bulk/delete` - Bulk delete
 
 ### RPC Functions
-- `POST /{prefix}/{functionName}` - Execute global functions
-- `POST /{prefix}/{table}/rpc/{functionName}` - Execute table-specific functions
+- `GET|POST|PUT|PATCH|DELETE /{prefix}/rpc/{functionName}` - Execute global functions
+- `GET|POST|PUT|PATCH|DELETE /{prefix}/{table}/rpc/{functionName}` - Execute table-specific functions
 
 ## Configuration
 
@@ -1130,7 +1131,7 @@ The package automatically registers RESTful API routes for dynamic database oper
 # Publish main package configuration
 php artisan vendor:publish --tag=sp-laravel-api-config
 
-# Publish all configurations (record, audit, jwt)
+# Publish all configurations (record, audit, cursor_pagination, sp-laravel-api)
 php artisan sp-laravel-api:setup
 ```
 

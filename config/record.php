@@ -4,7 +4,7 @@
  * Record API Configuration.
  *
  * This configuration file defines the settings and table configurations for the
- * /api/v2/record endpoints in the ERP system. It controls access permissions,
+ * /api/v1 endpoints in the ERP system. It controls access permissions,
  * static relationship definitions, table metadata, and various operational limits
  * for the generic record API that provides CRUD operations across multiple database tables.
  *
@@ -86,6 +86,11 @@ return [
             // 'audit_logs' => false,
             // 'real_time_data' => false,
         ],
+        'per_table_ttl' => [
+            // Example: override cache TTL for specific tables
+            // 'audit_logs' => 600,
+            // 'real_time_data' => 120,
+        ],
     ],
 
     // Legacy cache_ttl for backward compatibility (deprecated, use cache.ttl instead)
@@ -108,7 +113,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | Define global custom functions that can be accessed via the endpoint:
-    | POST/GET/PUT/DELETE /api/v2/record/{functionName}
+    | POST/GET/PUT/DELETE /api/v1/{functionName}
     |
     | Each function can be configured with:
     | - type: 'class', 'closure', or 'query'

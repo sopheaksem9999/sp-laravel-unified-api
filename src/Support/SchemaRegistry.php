@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Log;
 
 class SchemaRegistry
 {
-    private const CACHE_KEY = 'sp_laravel_api_schema_record_registry:v1';
+    private const CACHE_KEY = 'sopheak_core:sp_laravel_api:record_schema:v1';
 
     private static array $cache = [];
 
@@ -23,9 +23,9 @@ class SchemaRegistry
     private static int $cacheTtl = 31536000;
 
     // Redis cache keys
-    private static string $schemaCacheKey = 'sp_laravel_api_schema_record_registry:schema';
+    private static string $schemaCacheKey = 'sopheak_core:sp_laravel_api:record_schema:v1:schema';
 
-    private static string $columnCacheKey = 'sp_laravel_api_schema_record_registry:columns';
+    private static string $columnCacheKey = 'sopheak_core:sp_laravel_api:record_schema:v1:columns';
 
     /**
      * Get schema registry for allowed tables.
@@ -89,7 +89,7 @@ class SchemaRegistry
     {
         // Clear all caches
         Cache::forget(self::$schemaCacheKey);
-        Cache::forget(self::CACHE_KEY); // Legacy cache key
+        Cache::forget(self::CACHE_KEY);
 
         // Clear column caches for all tables
         $tables = config('record.tables', []);
@@ -253,9 +253,15 @@ class SchemaRegistry
 
             $source = $tables[$tableName];
 
-            $config->createValidator = $source->createValidator ?? null;
-            $config->updateValidator = $source->updateValidator ?? null;
-            $config->deleteValidator = $source->deleteValidator ?? null;
+            if (is_object($source)) {
+                $config->createValidator = $source->createValidator ?? null;
+                $config->updateValidator = $source->updateValidator ?? null;
+                $config->deleteValidator = $source->deleteValidator ?? null;
+            } elseif (is_array($source)) {
+                $config->createValidator = $source['createValidator'] ?? null;
+                $config->updateValidator = $source['updateValidator'] ?? null;
+                $config->deleteValidator = $source['deleteValidator'] ?? null;
+            }
         }
 
         return $schema;

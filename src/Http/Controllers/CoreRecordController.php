@@ -17,6 +17,7 @@ use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Support\PermissionHelper;
 use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Jobs\ProcessBulkOperationJob;
 
 class CoreRecordController extends Controller
@@ -40,11 +41,16 @@ class CoreRecordController extends Controller
      */
     public function listRecords(Request $request, string $table): JsonResponse
     {
-        $this->authorizeAction($table, 'read');
         $schema = $this->getCachedSchema();
         if (!isset($schema[$table])) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
+
+        if (!$this->isReadEndpointEnabled($schema[$table])) {
+            return $this->resourceNotAvailableResponse();
+        }
+
+        $this->authorizeAction($table, 'read');
 
         $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
         if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
@@ -92,11 +98,16 @@ class CoreRecordController extends Controller
      */
     public function getRecordById(Request $request, string $table, mixed $id): JsonResponse
     {
-        $this->authorizeAction($table, 'read');
         $schema = $this->getCachedSchema();
         if (!isset($schema[$table])) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
+
+        if (!$this->isReadEndpointEnabled($schema[$table])) {
+            return $this->resourceNotAvailableResponse();
+        }
+
+        $this->authorizeAction($table, 'read');
 
         $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
         if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
@@ -144,11 +155,16 @@ class CoreRecordController extends Controller
      */
     public function createRecord(Request $request, string $table): JsonResponse
     {
-        $this->authorizeAction($table, 'create');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
+
+        if (!$this->isWriteEndpointEnabled($schema[$table])) {
+            return $this->resourceNotAvailableResponse();
+        }
+
+        $this->authorizeAction($table, 'create');
 
         // Resolve actual table name from RecordTableType configuration
         $this->resolveActualTableName($table);
@@ -195,17 +211,18 @@ class CoreRecordController extends Controller
             DB::commit();
             QueryCacheService::invalidateTable($table);
 
-            $record = $this->getRecordById($request, $table, $insertedId);
+            $recordData = $this->fetchRecordData($request, $table, $insertedId, $tenantId);
+            $recordResponse = RecordApiResponseService::successWrapped($recordData);
 
             // Execute Post-Write Logic (Triggers and Audit Logs)
             $this->recordService->processPostWriteLogic($request, $table, 'create', [
                 'id' => $insertedId,
                 'payload' => $result['payload'],
                 config('record.tenant_column', 'tenant_id') => $result['tenant_id'],
-                'response' => $record,
+                'response' => $recordResponse,
             ]);
 
-            return $record;
+            return $recordResponse;
         } catch (Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
@@ -221,11 +238,16 @@ class CoreRecordController extends Controller
      */
     public function updateRecord(Request $request, string $table, string $id): JsonResponse
     {
-        $this->authorizeAction($table, 'update');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
+
+        if (!$this->isWriteEndpointEnabled($schema[$table])) {
+            return $this->resourceNotAvailableResponse();
+        }
+
+        $this->authorizeAction($table, 'update');
 
         // Resolve actual table name from RecordTableType configuration
         $this->resolveActualTableName($table);
@@ -282,7 +304,8 @@ class CoreRecordController extends Controller
             DB::commit();
             QueryCacheService::invalidateTable($table);
 
-            $record = $this->getRecordById($request, $table, $id);
+            $recordData = $this->fetchRecordData($request, $table, $id, $tenantId);
+            $recordResponse = RecordApiResponseService::successWrapped($recordData);
 
             // Execute Post-Write Logic (Triggers and Audit Logs)
             $this->recordService->processPostWriteLogic($request, $table, 'update', [
@@ -290,10 +313,10 @@ class CoreRecordController extends Controller
                 'payload' => $result['payload'],
                 config('record.tenant_column', 'tenant_id') => $result['tenant_id'],
                 'updated' => $updated,
-                'response' => $record,
+                'response' => $recordResponse,
             ]);
 
-            return $record;
+            return $recordResponse;
         } catch (Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
@@ -309,11 +332,16 @@ class CoreRecordController extends Controller
      */
     public function destroyRecord(Request $request, string $table, string $id): JsonResponse
     {
-        $this->authorizeAction($table, 'delete');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
+
+        if (!$this->isWriteEndpointEnabled($schema[$table])) {
+            return $this->resourceNotAvailableResponse();
+        }
+
+        $this->authorizeAction($table, 'delete');
 
         // Resolve actual table name from RecordTableType configuration
         $this->resolveActualTableName($table);
@@ -395,11 +423,16 @@ class CoreRecordController extends Controller
      */
     public function restoreRecord(Request $request, string $table, string $id): JsonResponse
     {
-        $this->authorizeAction($table, 'restore');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table]) || !$schema[$table]->soft_deletes) {
             return RecordApiResponseService::errorWrapped('Resource not restorable', RecordApiJsonResponseEnum::ERROR->value);
         }
+
+        if (!$this->isWriteEndpointEnabled($schema[$table])) {
+            return $this->resourceNotAvailableResponse();
+        }
+
+        $this->authorizeAction($table, 'restore');
 
         // Resolve actual table name from RecordTableType configuration
         $this->resolveActualTableName($table);
@@ -429,8 +462,7 @@ class CoreRecordController extends Controller
             DB::commit();
 
             QueryCacheService::invalidateTable($table);
-
-            $record = $this->getRecordById($request, $table, $id);
+            $response = RecordApiResponseService::successWrapped(['restored' => $affected]);
 
             // Execute Post-Write Logic (Triggers and Audit Logs)
             $this->recordService->processPostWriteLogic($request, $table, 'update', [
@@ -438,10 +470,10 @@ class CoreRecordController extends Controller
                 'payload' => [], // No payload for restore
                 config('record.tenant_column', 'tenant_id') => $tenantId,
                 'restored' => $affected,
-                'response' => $record,
+                'response' => $response,
             ]);
 
-            return RecordApiResponseService::successWrapped(['restored' => $affected]);
+            return $response;
         } catch (Exception $exception) {
             // Rollback transaction on any error
             DB::rollBack();
@@ -455,11 +487,16 @@ class CoreRecordController extends Controller
      */
     public function forceDeleteRecord(Request $request, string $table, string $id): JsonResponse
     {
-        $this->authorizeAction($table, 'delete');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
+
+        if (!$this->isWriteEndpointEnabled($schema[$table])) {
+            return $this->resourceNotAvailableResponse();
+        }
+
+        $this->authorizeAction($table, 'delete');
 
         // Resolve actual table name from RecordTableType configuration
         $this->resolveActualTableName($table);
@@ -522,12 +559,13 @@ class CoreRecordController extends Controller
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
-        // Resolve actual table name from RecordTableType configuration
-        $actualTableName = $this->resolveActualTableName($table);
+        if (!$this->isWriteEndpointEnabled($schema[$table])) {
+            return $this->resourceNotAvailableResponse();
+        }
 
-        $this->authorizeAction($actualTableName, 'create');
-        $this->authorizeAction($actualTableName, 'update');
-        $this->authorizeAction($actualTableName, 'delete');
+        $this->authorizeAction($table, 'create');
+        $this->authorizeAction($table, 'update');
+        $this->authorizeAction($table, 'delete');
 
         $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
         if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
@@ -557,11 +595,16 @@ class CoreRecordController extends Controller
      */
     public function bulkRecordCreate(Request $request, string $table): JsonResponse
     {
-        $this->authorizeAction($table, 'create');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
+
+        if (!$this->isWriteEndpointEnabled($schema[$table])) {
+            return $this->resourceNotAvailableResponse();
+        }
+
+        $this->authorizeAction($table, 'create');
 
         // Resolve actual table name from RecordTableType configuration
         $this->resolveActualTableName($table);
@@ -626,9 +669,9 @@ class CoreRecordController extends Controller
                 $result = $this->recordService->createRecord($request, $table, $item, $tenantId);
                 $insertId = $result['id'];
 
-                // Get created record using show method
-                $createdRecord = $this->getRecordById($request, $table, $insertId);
-                $recordData = json_decode(json_encode($createdRecord->getData()->data), true);
+                $createdRecordData = $this->fetchRecordData($request, $table, $insertId, $tenantId);
+                $createdRecordResponse = RecordApiResponseService::successWrapped($createdRecordData);
+                $recordData = json_decode(json_encode($createdRecordData), true);
                 $createdData[] = $recordData;
                 ++$affected;
 
@@ -637,7 +680,7 @@ class CoreRecordController extends Controller
                     'id' => $insertId,
                     'payload' => $result['payload'],
                     config('record.tenant_column', 'tenant_id') => $result['tenant_id'],
-                    'response' => $createdRecord,
+                    'response' => $createdRecordResponse,
                 ]);
             }
 
@@ -665,11 +708,16 @@ class CoreRecordController extends Controller
      */
     public function bulkRecordUpdate(Request $request, string $table): JsonResponse
     {
-        $this->authorizeAction($table, 'update');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
+
+        if (!$this->isWriteEndpointEnabled($schema[$table])) {
+            return $this->resourceNotAvailableResponse();
+        }
+
+        $this->authorizeAction($table, 'update');
 
         // Resolve actual table name from RecordTableType configuration
         $this->resolveActualTableName($table);
@@ -747,9 +795,9 @@ class CoreRecordController extends Controller
                 $updateCount = $result['updated'];
 
                 if ($updateCount > 0) {
-                    // Get updated record using show method
-                    $updatedRecord = $this->getRecordById($request, $table, $id);
-                    $recordData = json_decode(json_encode($updatedRecord->getData()->data), true);
+                    $updatedRecordData = $this->fetchRecordData($request, $table, $id, $tenantId);
+                    $updatedRecordResponse = RecordApiResponseService::successWrapped($updatedRecordData);
+                    $recordData = json_decode(json_encode($updatedRecordData), true);
                     $updatedData[] = $recordData;
                     $affected += $updateCount;
 
@@ -759,7 +807,7 @@ class CoreRecordController extends Controller
                         'payload' => $result['payload'],
                         config('record.tenant_column', 'tenant_id') => $result['tenant_id'],
                         'updated' => $updateCount,
-                        'response' => $updatedRecord,
+                        'response' => $updatedRecordResponse,
                     ]);
                 } else {
                     // Record not found or no changes made
@@ -793,11 +841,16 @@ class CoreRecordController extends Controller
      */
     public function bulkRecordDelete(Request $request, string $table): JsonResponse
     {
-        $this->authorizeAction($table, 'delete');
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
+
+        if (!$this->isWriteEndpointEnabled($schema[$table])) {
+            return $this->resourceNotAvailableResponse();
+        }
+
+        $this->authorizeAction($table, 'delete');
 
         // Resolve actual table name from RecordTableType configuration
         $this->resolveActualTableName($table);
@@ -923,9 +976,11 @@ class CoreRecordController extends Controller
                 return RecordApiResponseService::errorWrapped(sprintf("Table '%s' does not exist", $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
             }
 
-            // Resolve actual table name from RecordTableType configuration
-            $actualTableName = $this->resolveActualTableName($table);
-            $this->authorizeAction($actualTableName, 'read');
+            if (!$this->isReadEndpointEnabled($schema[$table])) {
+                return $this->resourceNotAvailableResponse();
+            }
+
+            $this->authorizeAction($table, 'read');
 
             return $this->recordService->executeTableFunction($request, $table, $functionName);
         } catch (Exception $exception) {
@@ -953,7 +1008,7 @@ class CoreRecordController extends Controller
      * @param object $tableSchema The table schema
      * @param bool   $isUpdate    Whether this is an update operation
      *
-     * @return array Modified payload with timestamps and audit fields
+     * @return string Modified payload with timestamps and audit fields
      */
     /**
      * Resolve the actual table name from schema configuration.
@@ -961,8 +1016,13 @@ class CoreRecordController extends Controller
     private function resolveActualTableName(string $table): string
     {
         $schema = SchemaRegistry::get();
+        $config = $schema[$table] ?? null;
 
-        return $schema[$table]->table ?? $table;
+        if ($config instanceof RecordTableType) {
+            return (string) ($config->table ?? $table);
+        }
+
+        return $table;
     }
 
     /**
@@ -1027,6 +1087,32 @@ class CoreRecordController extends Controller
         }
 
         return null;
+    }
+
+    private function resourceNotAvailableResponse(): JsonResponse
+    {
+        return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
+    }
+
+    private function isReadEndpointEnabled(object $tableSchema): bool
+    {
+        return (bool) ($tableSchema->can_read ?? true);
+    }
+
+    private function isWriteEndpointEnabled(object $tableSchema): bool
+    {
+        return (bool) ($tableSchema->can_write ?? true);
+    }
+
+    private function fetchRecordData(Request $request, string $table, mixed $id, mixed $tenantId): mixed
+    {
+        try {
+            $result = $this->recordService->getRecord($request, $table, $id, $tenantId);
+
+            return $result['data'] ?? null;
+        } catch (Exception) {
+            return null;
+        }
     }
 
     /**

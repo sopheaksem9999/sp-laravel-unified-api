@@ -2,7 +2,9 @@
 
 namespace Sopheak\Core\Tests\Unit;
 
+use Exception;
 use Illuminate\Http\Request;
+use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Tests\TestCase;
 
 class BasicTest extends TestCase
@@ -48,5 +50,53 @@ class BasicTest extends TestCase
             ]);
 
         @unlink($filePath);
+    }
+
+    /** @test */
+    public function it_throws_when_table_trigger_class_does_not_exist(): void
+    {
+        $service = new RecordService();
+        $request = Request::create('/test', 'GET');
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage("Table trigger class 'App\\DoesNotExist\\Trigger' does not exist");
+
+        $service->executeTableTrigger(
+            [
+                [
+                    'class' => 'App\\DoesNotExist\\Trigger',
+                    'function_method' => 'handle',
+                ],
+            ],
+            [$request, 'users', []]
+        );
+    }
+
+    /** @test */
+    public function it_executes_table_trigger_and_merges_array_result_into_request(): void
+    {
+        $service = new RecordService();
+        $request = Request::create('/test', 'GET');
+
+        $params = $service->executeTableTrigger(
+            [
+                [
+                    'class' => TestTriggerHandler::class,
+                    'function_method' => 'handle',
+                ],
+            ],
+            [$request, 'users', []]
+        );
+
+        $this->assertInstanceOf(Request::class, $params[0]);
+        $this->assertSame('bar', $params[0]->get('foo'));
+    }
+}
+
+class TestTriggerHandler
+{
+    public static function handle(Request $request, string $table, array $context): array
+    {
+        return ['foo' => 'bar'];
     }
 }
