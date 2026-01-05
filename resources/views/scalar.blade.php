@@ -7,7 +7,7 @@
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta name="robots" content="noindex, nofollow, noarchive">
     <meta name="googlebot" content="noindex">
-    <title>SP Laravel Unified API Docs</title>
+    <title>{{ env('APP_NAME', 'SP Laravel Unified') }} - API Docs</title>
     <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
     <style>
         html,

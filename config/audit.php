@@ -32,7 +32,7 @@ return [
     | Audit logs are stored directly in the audit_logs table.
     |
     */
-    'audit_log_model' => env('AUDIT_LOG_MODEL', 'audit_logs'),
+    'audit_log_model' => 'audit_logs',
 
     /*
     |--------------------------------------------------------------------------
