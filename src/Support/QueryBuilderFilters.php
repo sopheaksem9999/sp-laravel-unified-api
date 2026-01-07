@@ -181,7 +181,24 @@ class QueryBuilderFilters
             // Enhanced caching with request fingerprinting
             $cacheKey = md5($queryString . $table . serialize($allowedCols));
             if (!isset(self::$operatorCache[$cacheKey])) {
-                parse_str($queryString, $params);
+                // Preserve dots in parameter keys to support dot notation (e.g. relationship.column)
+                // PHP's parse_str automatically converts dots to underscores
+                $preservedQueryString = preg_replace_callback(
+                    '/(^|&)([^=]+)=/',
+                    fn($m) => $m[1] . str_replace('.', '___DOT___', $m[2]) . '=',
+                    $queryString
+                );
+
+                parse_str($preservedQueryString, $params);
+
+                // Restore dots in keys
+                $restoredParams = [];
+                foreach ($params as $key => $value) {
+                    $newKey = str_replace('___DOT___', '.', (string) $key);
+                    $restoredParams[$newKey] = $value;
+                }
+                $params = $restoredParams;
+
                 self::$operatorCache[$cacheKey] = $params;
             } else {
                 $params = self::$operatorCache[$cacheKey];
@@ -342,6 +359,7 @@ class QueryBuilderFilters
 
             // Resolve relationship configuration
             $config = RelationshipResolver::resolveRelationship($table, $relationshipAlias);
+
             if (!$config) {
                 continue;
             }
@@ -351,7 +369,12 @@ class QueryBuilderFilters
 
             // Validate related table exists in schema
             if (!isset($schema[$relatedTable])) {
-                continue;
+                $resolved = SchemaRegistry::resolveTableSchema($relatedTable);
+                if ($resolved) {
+                    $schema[$relatedTable] = $resolved;
+                } else {
+                    continue;
+                }
             }
 
             // Validate column exists in related table
@@ -443,7 +466,7 @@ class QueryBuilderFilters
                     $query->whereExists(function ($subquery) use ($relatedTable, $throughTable, $table, $firstKey, $secondKey, $localKey, $secondLocalKey, $column, $operator, $value, $tenantId, $schema, $enableTenantId): void {
                         $subquery->select(DB::raw('1'))
                             ->from($relatedTable)
-                            ->join($throughTable, sprintf('%s.%s', $throughTable, $secondKey), '=', sprintf('%s.%s', $relatedTable, $secondLocalKey))
+                            ->join($throughTable, sprintf('%s.%s', $throughTable, $secondLocalKey), '=', sprintf('%s.%s', $relatedTable, $secondKey))
                             ->whereColumn(sprintf('%s.%s', $throughTable, $firstKey), sprintf('%s.%s', $table, $localKey))
                         ;
 
@@ -472,6 +495,35 @@ class QueryBuilderFilters
                     });
 
                     break;
+
+                case 'belongsToMany':
+                    $pivotTable = $config['pivot_table'];
+                    $foreignPivotKey = $config['foreign_pivot_key'];
+                    $relatedPivotKey = $config['related_pivot_key'];
+                    $parentKey = $config['parent_key'];
+                    $relatedKey = $config['related_key'];
+
+                    $query->whereExists(function ($subquery) use ($relatedTable, $pivotTable, $table, $foreignPivotKey, $relatedPivotKey, $parentKey, $relatedKey, $column, $operator, $value, $tenantId, $schema, $enableTenantId): void {
+                        $subquery->select(DB::raw('1'))
+                            ->from($relatedTable)
+                            ->join($pivotTable, sprintf('%s.%s', $pivotTable, $relatedPivotKey), '=', sprintf('%s.%s', $relatedTable, $relatedKey))
+                            ->whereColumn(sprintf('%s.%s', $pivotTable, $foreignPivotKey), sprintf('%s.%s', $table, $parentKey));
+
+                        // Apply the filter condition
+                        self::applyOperatorToSubquery($subquery, $relatedTable, $column, $operator, $value);
+
+                        // Apply tenant filtering if enabled
+                        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[config('record.tenant_column', 'tenant_id')])) {
+                            $subquery->where($relatedTable . '.' . config('record.tenant_column', 'tenant_id'), $tenantId);
+                        }
+
+                        // Apply soft delete filtering
+                        if ($schema[$relatedTable]->soft_deletes ?? false) {
+                            $subquery->whereNull($relatedTable . '.deleted_at');
+                        }
+                    });
+
+                    break;
             }
         });
     }
@@ -479,7 +531,7 @@ class QueryBuilderFilters
     /**
      * Apply operator conditions to subquery for relationship filtering.
      */
-    private static function applyOperatorToSubquery(mixed $subquery, string $table, string $column, string $operator, string $value): void
+    public static function applyOperatorToSubquery(mixed $subquery, string $table, string $column, string $operator, string $value): void
     {
         $fullColumn = sprintf('%s.%s', $table, $column);
 

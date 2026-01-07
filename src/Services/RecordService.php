@@ -991,6 +991,7 @@ class RecordService
                 $page = max((int) $request->get('page', 1), 1);
                 $countQuery = clone $builder;
                 $total = $countQuery->count();
+
                 $data = $builder->forPage($page, $perPage)->get()->all();
 
                 $headers['X-Total-Count'] = (string) $total;
@@ -1011,6 +1012,29 @@ class RecordService
             $selectParam = $request->query('select');
             $includes = RelationshipResolver::parseSelectForIncludes($selectParam);
             $useSubqueryOptimization = config('record.use_subquery_optimization', true) && count($data) <= 100;
+
+
+            // Disable subquery optimization if nested filters or child relationships are detected
+            // This forces the use of includeRelationships which supports complex filtering and deep nesting
+            if ($useSubqueryOptimization) {
+                foreach ($includes as $include) {
+                    // Check for child relationships (recursion)
+                    if (!empty($include['children'])) {
+                        $useSubqueryOptimization = false;
+                        break;
+                    }
+
+                    // Check for filters in columns
+                    if (isset($include['columns']) && is_array($include['columns'])) {
+                        foreach ($include['columns'] as $col) {
+                            if (str_contains((string) $col, '=')) {
+                                $useSubqueryOptimization = false;
+                                break 2;
+                            }
+                        }
+                    }
+                }
+            }
 
             if ($useSubqueryOptimization && [] !== $includes) {
                 $primaryKey = $tableSchema->primary_key ?? 'id';
@@ -1224,6 +1248,25 @@ class RecordService
             $includes = RelationshipResolver::parseSelectForIncludes($selectParam);
             $useSubqueryOptimization = config('record.use_subquery_optimization', true) && count($data) <= 100;
 
+            // Disable subquery optimization if nested filters or child relationships are detected
+            if ($useSubqueryOptimization) {
+                foreach ($includes as $include) {
+                    if (!empty($include['children'])) {
+                        $useSubqueryOptimization = false;
+                        break;
+                    }
+
+                    if (isset($include['columns']) && is_array($include['columns'])) {
+                        foreach ($include['columns'] as $col) {
+                            if (str_contains((string) $col, '=')) {
+                                $useSubqueryOptimization = false;
+                                break 2;
+                            }
+                        }
+                    }
+                }
+            }
+
             if ($useSubqueryOptimization && [] !== $includes) {
                 $primaryKey = $tableSchema->primary_key ?? 'id';
                 $recordIds = array_column($data, $primaryKey);
@@ -1344,6 +1387,25 @@ class RecordService
             $selectParam = $request->query('select');
             $includes = RelationshipResolver::parseSelectForIncludes($selectParam);
             $useSubqueryOptimization = config('record.use_subquery_optimization', true);
+
+            // Disable subquery optimization if nested filters or child relationships are detected
+            if ($useSubqueryOptimization) {
+                foreach ($includes as $include) {
+                    if (!empty($include['children'])) {
+                        $useSubqueryOptimization = false;
+                        break;
+                    }
+
+                    if (isset($include['columns']) && is_array($include['columns'])) {
+                        foreach ($include['columns'] as $col) {
+                            if (str_contains((string) $col, '=')) {
+                                $useSubqueryOptimization = false;
+                                break 2;
+                            }
+                        }
+                    }
+                }
+            }
 
             if ($useSubqueryOptimization && [] !== $includes) {
                 $optimizedBuilder = DB::table($actualTableName);

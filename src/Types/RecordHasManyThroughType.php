@@ -48,7 +48,7 @@ class RecordHasManyThroughType
         public string $secondKey = 'id',
         public string $localKey = 'id',
         public string $secondLocalKey = '',
-        public array $orderBy = ['date' => 'desc'],
+        public array $orderBy = ['created_at' => 'desc'],
         public RecordRelationshipsEnum $type = RecordRelationshipsEnum::HAS_MANY_THROUGH,
     ) {}
 
@@ -65,7 +65,7 @@ class RecordHasManyThroughType
             secondKey: $properties['secondKey'] ?? 'id',
             localKey: $properties['localKey'] ?? 'id',
             secondLocalKey: $properties['secondLocalKey'] ?? '',
-            orderBy: $properties['orderBy'] ?? ['date' => 'desc'],
+            orderBy: $properties['orderBy'] ?? ['created_at' => 'desc'],
             type: $properties['type'] ?? RecordRelationshipsEnum::HAS_MANY_THROUGH,
         );
     }

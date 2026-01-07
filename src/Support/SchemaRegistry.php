@@ -83,6 +83,35 @@ class SchemaRegistry
     }
 
     /**
+     * Resolve table schema (columns) even if not in the allowed configuration.
+     * This allows filtering on related tables that are not exposed as top-level resources.
+     *
+     * @param string $tableName The table name to resolve
+     * @return object|null A minimal schema object with columns, or null if table not found
+     */
+    public static function resolveTableSchema(string $tableName): ?object
+    {
+        // Check if it's already in the allowed schema
+        if (isset(self::$cache[$tableName])) {
+            return self::$cache[$tableName];
+        }
+
+        // Check column cache directly (this will load from DB if not cached)
+        $columns = self::getTableColumns($tableName);
+        if (empty($columns)) {
+            return null;
+        }
+
+        // Return a minimal schema object
+        $schema = new \stdClass();
+        $schema->table = $tableName;
+        $schema->columns = $columns;
+        $schema->soft_deletes = isset($columns['deleted_at']); // Auto-detect soft deletes
+        
+        return $schema;
+    }
+
+    /**
      * Bust the cache.
      */
     public static function refresh(): void

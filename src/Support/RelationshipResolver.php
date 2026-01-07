@@ -911,7 +911,7 @@ class RelationshipResolver
         $subqueryRaw = "(
             SELECT {$jsonArrayAggExpr}
             FROM {$actualRelatedTableName}
-            INNER JOIN {$actualThroughTableName} ON {$actualThroughTableName}.{$secondKey} = {$actualRelatedTableName}.{$secondLocalKey}
+            INNER JOIN {$actualThroughTableName} ON {$actualThroughTableName}.{$secondLocalKey} = {$actualRelatedTableName}.{$secondKey}
             WHERE {$actualThroughTableName}.{$firstKey} = {$actualMainTableName}.{$localKey}";
 
         // Add tenant filtering if enabled
@@ -1076,9 +1076,14 @@ class RelationshipResolver
         $ownerKey = $config['owner_key'] ?? 'id';
 
         // Early validation and security check
-        $tablesConfig = config('record.tables', []);
-        if (!isset($tablesConfig[$relatedTable])) {
-            return [];
+        if (!isset($schema[$relatedTable])) {
+            // Try to resolve schema dynamically if not found (e.g. for implicit relationships)
+            $resolved = SchemaRegistry::resolveTableSchema($relatedTable);
+            if ($resolved) {
+                $schema[$relatedTable] = $resolved;
+            } else {
+                return [];
+            }
         }
 
         // Optimized value extraction with type-specific logic
@@ -1136,7 +1141,7 @@ class RelationshipResolver
         unset($records);
 
         if ('hasManyThrough' === $type) {
-            return self::loadHasManyThroughOptimized($config, $matchValues, $columns, $tenantId);
+            return self::loadHasManyThroughOptimized($config, $matchValues, $columns, $tenantId, $schema);
         }
 
         // Optimized non-through relationships with advanced bulk loading
@@ -1285,18 +1290,22 @@ class RelationshipResolver
      *
      * @param array $config      Relationship configuration with through table details
      * @param array $matchValues Parent record IDs to match against
+     * @param array $columns     Columns to select from related table (can include filters)
      * @param mixed $tenantId    Tenant ID for multi-tenant filtering (if enabled)
      * @param array $schema      Database schema information for validation
      * @return array Grouped related records indexed by parent record ID
      */
-    private static function loadHasManyThroughOptimized(array $config, array $matchValues, mixed $tenantId, array $schema): array
+    private static function loadHasManyThroughOptimized(array $config, array $matchValues, array $columns, mixed $tenantId, array $schema): array
     {
         $throughTable = $config['through_table'];
         $firstKey = $config['first_key'];
         $secondLocalKey = $config['second_local_key'];
+        $relatedTable = $config['table'];
+        $secondKey = $config['second_key'] ?? 'id';
 
         // Get actual table names from schema
         $actualThroughTableName = $schema[$throughTable]->table ?? $throughTable;
+        $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
 
         // Check if tenant_id functionality is enabled
         $enableTenantId = config('record.enable_tenant_id', false);
@@ -1311,6 +1320,92 @@ class RelationshipResolver
 
         if ($schema[$throughTable]->soft_deletes ?? false) {
             $builder->whereNull('deleted_at');
+        }
+
+        $throughColumns = array_keys($schema[$throughTable]->columns ?? []);
+        $relatedColumns = array_keys($schema[$relatedTable]->columns ?? []);
+
+        $selectColumns = [];
+        $relatedFilters = [];
+
+        foreach ($columns as $col) {
+            $col = trim((string) $col);
+            if ('' === $col || '*' === $col) {
+                if ('*' === $col) {
+                    $selectColumns[] = '*';
+                }
+
+                continue;
+            }
+
+            if (!str_contains($col, '=')) {
+                $selectColumns[] = $col;
+
+                continue;
+            }
+
+            [$rawFilterCol, $rawFilterExpr] = explode('=', $col, 2);
+            $rawFilterCol = trim($rawFilterCol);
+            $rawFilterExpr = trim($rawFilterExpr);
+
+            if ('' === $rawFilterCol || '' === $rawFilterExpr) {
+                continue;
+            }
+
+            $filterTarget = null;
+            $filterCol = $rawFilterCol;
+
+            if (str_contains($rawFilterCol, '.')) {
+                [$prefix, $realCol] = explode('.', $rawFilterCol, 2);
+                $prefix = strtolower(trim($prefix));
+                $realCol = trim($realCol);
+
+                if (in_array($prefix, ['pivot', 'through', strtolower($throughTable), strtolower($actualThroughTableName)], true)) {
+                    $filterTarget = 'through';
+                    $filterCol = $realCol;
+                } elseif (in_array($prefix, ['related', strtolower($relatedTable), strtolower($actualRelatedTableName)], true)) {
+                    $filterTarget = 'related';
+                    $filterCol = $realCol;
+                } else {
+                    $filterCol = $realCol;
+                }
+            }
+
+            $operator = 'eq';
+            $value = $rawFilterExpr;
+            if (str_contains($rawFilterExpr, '.')) {
+                [$operator, $value] = explode('.', $rawFilterExpr, 2);
+                $operator = trim((string) $operator);
+                $value = trim((string) $value);
+            }
+
+            if ('' === $filterCol || '' === $operator) {
+                continue;
+            }
+
+            if (null === $filterTarget) {
+                if (in_array($filterCol, $relatedColumns, true)) {
+                    $filterTarget = 'related';
+                } elseif (in_array($filterCol, $throughColumns, true)) {
+                    $filterTarget = 'through';
+                } else {
+                    continue;
+                }
+            }
+
+            if ('through' === $filterTarget) {
+                if (!in_array($filterCol, $throughColumns, true)) {
+                    continue;
+                }
+
+                QueryBuilderFilters::applyOperatorToSubquery($builder, $actualThroughTableName, $filterCol, $operator, $value);
+            } else {
+                if (!in_array($filterCol, $relatedColumns, true)) {
+                    continue;
+                }
+
+                $relatedFilters[] = ['column' => $filterCol, 'operator' => $operator, 'value' => $value];
+            }
         }
 
         // Chunk processing for large match value sets
@@ -1344,8 +1439,101 @@ class RelationshipResolver
         }
 
         unset($throughRows, $targetIdSet);
-        // Memory cleanup
-        return [];
+
+        // Step 3: Fetch related records
+        $relatedBuilder = DB::table($actualRelatedTableName);
+
+        // Apply tenant scoping only if enabled
+        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
+            $relatedBuilder->where($tenantCol, $tenantId);
+        }
+
+        // Apply soft delete filtering
+        if ($schema[$relatedTable]->soft_deletes ?? false) {
+            $relatedBuilder->whereNull('deleted_at');
+        }
+
+        foreach ($relatedFilters as $filter) {
+            QueryBuilderFilters::applyOperatorToSubquery(
+                $relatedBuilder,
+                $actualRelatedTableName,
+                (string) $filter['column'],
+                (string) $filter['operator'],
+                (string) $filter['value']
+            );
+        }
+
+        // Apply column selection if specific columns requested
+        if (!empty($selectColumns) && !in_array('*', $selectColumns, true)) {
+            // Ensure the primary key is always selected for mapping
+            if (!in_array($secondKey, $selectColumns, true)) {
+                $selectColumns[] = $secondKey;
+            }
+
+            $prefixedColumns = array_map(function ($col) use ($actualRelatedTableName) {
+                return str_contains($col, '.') ? $col : $actualRelatedTableName . '.' . $col;
+            }, $selectColumns);
+
+            $relatedBuilder->select($prefixedColumns);
+        }
+
+        if (isset($config['order_by']) && is_array($config['order_by'])) {
+            $orderBy = $config['order_by'];
+
+            $applyOrderBy = function (mixed $column, mixed $direction) use ($relatedBuilder, $actualRelatedTableName): void {
+                $column = trim((string) $column);
+                $direction = strtolower(trim((string) $direction));
+
+                if ('' === $column || '' === $direction) {
+                    return;
+                }
+
+                if (!in_array($direction, ['asc', 'desc'], true)) {
+                    return;
+                }
+
+                if (!str_contains($column, '.')) {
+                    $column = $actualRelatedTableName . '.' . $column;
+                }
+
+                $relatedBuilder->orderBy($column, $direction);
+            };
+
+            if (function_exists('array_is_list') && array_is_list($orderBy)) {
+                if (2 === count($orderBy)) {
+                    $applyOrderBy($orderBy[0] ?? null, $orderBy[1] ?? null);
+                } else {
+                    foreach ($orderBy as $item) {
+                        if (is_array($item) && function_exists('array_is_list') && array_is_list($item) && 2 === count($item)) {
+                            $applyOrderBy($item[0] ?? null, $item[1] ?? null);
+                        } elseif (is_array($item)) {
+                            foreach ($item as $col => $dir) {
+                                $applyOrderBy($col, $dir);
+                            }
+                        }
+                    }
+                }
+            } else {
+                foreach ($orderBy as $col => $dir) {
+                    $applyOrderBy($col, $dir);
+                }
+            }
+        }
+
+        $relatedRecords = $relatedBuilder->whereIn($secondKey, $targetIds)->get()->keyBy($secondKey);
+
+        // Step 4: Map back to main IDs
+        $results = [];
+        foreach ($mainToTargetIds as $mainId => $tIds) {
+            $results[$mainId] = [];
+            foreach ($tIds as $tId) {
+                if ($record = $relatedRecords->get($tId)) {
+                    $results[$mainId][] = $record;
+                }
+            }
+        }
+
+        return $results;
     }
 
     /**
@@ -1381,6 +1569,26 @@ class RelationshipResolver
      */
     private static function loadStandardRelationshipOptimized(string $type, string $relatedTable, string $foreignKey, string $ownerKey, array $matchValues, array $columns, mixed $tenantId, array $schema, array $relationshipConfig = []): array
     {
+        // Parse nested filters from columns (e.g. "status=eq.published")
+        $nestedFilters = [];
+        $cleanColumns = [];
+        foreach ($columns as $col) {
+            if (str_contains($col, '=')) {
+                [$filterCol, $filterExpression] = explode('=', $col, 2);
+                if (str_contains($filterExpression, '.')) {
+                    [$operator, $value] = explode('.', $filterExpression, 2);
+                    $nestedFilters[] = [
+                        'column' => trim($filterCol),
+                        'operator' => $operator,
+                        'value' => $value
+                    ];
+                }
+            } else {
+                $cleanColumns[] = $col;
+            }
+        }
+        $columns = $cleanColumns;
+
         // Get actual table name from schema
         $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
 
@@ -1398,6 +1606,17 @@ class RelationshipResolver
         // Apply soft delete filtering
         if ($schema[$relatedTable]->soft_deletes ?? false) {
             $builder->whereNull('deleted_at');
+        }
+
+        // Apply nested filters
+        foreach ($nestedFilters as $filter) {
+            QueryBuilderFilters::applyOperatorToSubquery(
+                $builder,
+                $actualRelatedTableName,
+                $filter['column'],
+                $filter['operator'],
+                $filter['value']
+            );
         }
 
         // Apply column selection with validation
@@ -1426,6 +1645,17 @@ class RelationshipResolver
             // Apply soft delete filtering
             if ($schema[$relatedTable]->soft_deletes ?? false) {
                 $builder->whereNull('deleted_at');
+            }
+
+            // Apply nested filters
+            foreach ($nestedFilters as $filter) {
+                QueryBuilderFilters::applyOperatorToSubquery(
+                    $builder,
+                    $relatedTableName,
+                    $filter['column'],
+                    $filter['operator'],
+                    $filter['value']
+                );
             }
 
             // Apply column selection with validation

@@ -1,0 +1,162 @@
+<?php
+
+namespace Sopheak\Core\Tests\Feature;
+
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Sopheak\Core\Services\RecordService;
+use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Tests\TestCase;
+use Sopheak\Core\Types\RecordHasManyThroughType;
+use Sopheak\Core\Types\RecordTablePublic;
+use Sopheak\Core\Types\RecordTableType;
+
+class RelationshipNestedFilterTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Create tables
+        Schema::create('tasks', function (Blueprint $table) {
+            $table->id();
+            $table->string('title');
+            $table->timestamps();
+        });
+
+        Schema::create('users', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->timestamps();
+        });
+
+        Schema::create('task_assignees', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('task_id');
+            $table->foreignId('user_id');
+            $table->timestamps();
+        });
+
+        // Insert data
+        $taskId1 = DB::table('tasks')->insertGetId(['title' => 'Task 1']);
+        $taskId2 = DB::table('tasks')->insertGetId(['title' => 'Task 2']);
+
+        $userId1 = DB::table('users')->insertGetId(['name' => 'User 1']);
+        $userId2 = DB::table('users')->insertGetId(['name' => 'User 2']);
+
+        // Task 1 has User 1 AND User 2
+        DB::table('task_assignees')->insert(['task_id' => $taskId1, 'user_id' => $userId1]);
+        DB::table('task_assignees')->insert(['task_id' => $taskId1, 'user_id' => $userId2]);
+
+        // Task 2 has User 2 only
+        DB::table('task_assignees')->insert(['task_id' => $taskId2, 'user_id' => $userId2]);
+
+        Config::set('record.tables', [
+            'tasks' => new RecordTableType(
+                pms_name: 'tasks',
+                table: 'tasks',
+                soft_deletes: false,
+                public: new RecordTablePublic(read: true, write: true),
+                relationships: [
+                    'assignees' => new RecordHasManyThroughType(
+                        table: 'users',
+                        through: 'task_assignees',
+                        firstKey: 'task_id',
+                        secondKey: 'id',
+                        localKey: 'id',
+                        secondLocalKey: 'user_id',
+                    )
+                ],
+                has_tenant_id: false,
+            ),
+            'users' => new RecordTableType(
+                pms_name: 'users',
+                table: 'users',
+                soft_deletes: false,
+                public: new RecordTablePublic(read: true, write: true),
+                relationships: [],
+                has_tenant_id: false,
+            ),
+        ]);
+
+        SchemaRegistry::refresh();
+    }
+
+    public function test_nested_filter_filters_loaded_relationships()
+    {
+        // Scenario 1: tasks?select=*,assignees(*,name=eq.User 1)
+        // Expect Task 1 (with only User 1) and Task 2 (with NO assignees, because User 2 != User 1)
+        // Wait, Task 2 has User 2. Filter excludes User 2. So Task 2 should show empty assignees.
+
+        $request = Request::create('/api/v1/tasks', 'GET', [
+            'select' => '*,assignees(*,name=eq.User 1)'
+        ]);
+
+        $schema = SchemaRegistry::get();
+        $config = $schema['tasks'];
+
+        $result = RecordService::applyRequestFilters($request, $config);
+        $data = $result['data'];
+
+        // Should return both tasks (because we didn't filter the tasks themselves, only the loaded assignees)
+        $this->assertCount(2, $data);
+
+        $task1 = collect($data)->firstWhere('id', 1);
+        $task2 = collect($data)->firstWhere('id', 2);
+
+        // Task 1 should have 1 assignee (User 1)
+        $this->assertCount(1, $task1->assignees);
+        $assignee = $task1->assignees[0];
+        $this->assertEquals('User 1', $assignee->name);
+
+        // Task 2 should have 0 assignees (User 2 filtered out)
+        $this->assertCount(0, $task2->assignees);
+    }
+
+    public function test_toplevel_filter_filters_tasks_but_loads_all_relationships()
+    {
+        // Scenario 2: tasks?select=*,assignees(*)&assignees.name=eq.User 1
+        // Expect Task 1 ONLY (because Task 2 doesn't have User 1).
+        // Expect Task 1 to have BOTH User 1 and User 2 loaded.
+
+        $request = Request::create('/api/v1/tasks', 'GET', [
+            'select' => '*,assignees(*)',
+            'assignees.name' => 'eq.User 1'
+        ]);
+
+        $schema = SchemaRegistry::get();
+        $config = $schema['tasks'];
+
+        $result = RecordService::applyRequestFilters($request, $config);
+        $data = $result['data'];
+
+        // Should return 1 task
+        $this->assertCount(1, $data);
+        $this->assertEquals(1, $data[0]->id);
+
+        // Task 1 should have 2 assignees (User 1 and User 2)
+        $this->assertCount(2, $data[0]->assignees);
+    }
+
+    public function test_toplevel_filter_with_non_existing_assignee_returns_empty()
+    {
+        $request = Request::create('/api/v1/tasks', 'GET', [
+            'select' => '*,assignees(*)',
+            'assignees.name' => 'eq.NonExistingUser'
+        ]);
+
+        $schema = SchemaRegistry::get();
+        $config = $schema['tasks'];
+
+        $result = RecordService::applyRequestFilters($request, $config);
+        $data = $result['data'];
+
+        $this->assertCount(0, $data);
+    }
+}

@@ -16,7 +16,7 @@ use Illuminate\Http\Request;
 public function index(Request $request)
 {
     // Start with any base query
-    $query = DB::table('invoices')->where('active', true);
+    $query = DB::table('invoices')->where('active', true);****
 
     // Apply filters from request (e.g. ?status=eq.paid&sortby=created_at)
     $result = $query->applyRequestFilters($request);
@@ -33,9 +33,61 @@ The `applyRequestFilters` method returns an array containing:
 - `request`: Original request object
 - `cursor_meta`: Cursor pagination metadata (if applicable)
 
-Notes:
-Notes:
-- Relationship loading uses the `select` query parameter (not `with`). Example: `?select=*,customer(*),items(*,product(*))`.
+### Relationship Selection & Filtering
+
+Relationship loading uses the `select` query parameter (not `with`). This supports nested relationships and filtering within those relationships.
+
+**Syntax:**
+`?select=column1,column2,relationship(column1,column2,filter)`
+
+**Examples:**
+
+1. **Basic Inclusion:**
+   `GET /api/v1/invoices?select=*,customer(*)`
+   Fetches all columns from invoices and all columns from the `customer` relationship.
+
+2. **Nested Inclusion:**
+   `GET /api/v1/customers?select=*,orders(*,items(*))`
+   Fetches customers with their orders and order items.
+
+3. **Filtering Nested Records (Embedding):**
+   You can apply filters to related records using the `column=operator.value` syntax inside the relationship parenthesis.
+
+   `GET /api/v1/projects?select=*,tasks(*,assignees(*,name=eq.admin))`
+   
+   This fetches:
+   - All columns from `projects`
+   - All columns from `tasks`
+   - All columns from `assignees` (users) WHERE `name` equals `admin`.
+
+   **Supported Operators in Nested Filters:**
+   - `eq`: Equal (`name=eq.John`)
+   - `neq`: Not equal (`status=neq.archived`)
+   - `gt`, `gte`: Greater than (or equal) (`age=gte.18`)
+   - `lt`, `lte`: Less than (or equal) (`price=lt.100`)
+   - `like`: Pattern matching (`name=like.%Smith%`)
+   - `in`: In list (`status=in.active,pending`)
+   
+   **Note:** If no operator is specified (e.g., `name=admin`), it defaults to equality (`eq`).
+
+4. **Filtering by Relationship (Top-Level):**
+   You can filter the main result set based on criteria in related tables using the dot notation `relationship.column=operator.value`.
+
+   `GET /api/v1/users?select=*,posts(*)&roles.name=eq.admin`
+
+   This fetches:
+   - Users who have a role named 'admin'.
+   - Includes their posts (if requested via `select`).
+
+   **Supported Relationships:**
+   - `belongsTo`
+   - `hasMany` (uses EXISTS subquery)
+   - `hasManyThrough`
+   - `belongsToMany` (uses pivot table)
+
+   **Example:**
+   `GET /api/v1/posts?author.name=eq.John`
+   Fetches posts where the author's name is 'John'.
 
 ### Base Configuration
 
