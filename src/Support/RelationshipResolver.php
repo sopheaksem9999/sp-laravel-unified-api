@@ -258,9 +258,9 @@ class RelationshipResolver
         }
 
         // 1) New config schema preferred
-        $tablesConfig = config('record.tables', []);
-        if (isset($tablesConfig[$mainTable], $tablesConfig[$mainTable]->relationships[$alias])) {
-            $rel = $tablesConfig[$mainTable]->relationships[$alias];
+        $schema = self::getSchema();
+        if (isset($schema[$mainTable], $schema[$mainTable]->relationships[$alias])) {
+            $rel = $schema[$mainTable]->relationships[$alias];
 
             if ($rel) {
                 $schema = self::getSchema();

@@ -8,6 +8,13 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\MessageBag;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
+use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Types\RecordHasManyType;
+use Sopheak\Core\Types\RecordBelongsToType;
+use Sopheak\Core\Types\RecordHasOneType;
+use Sopheak\Core\Types\RecordMetaBelongsToManyType;
+use Sopheak\Core\Types\RecordHasManyThroughType;
+use Sopheak\Core\Support\RelationshipResolver;
 
 class RecordApiResponseService
 {
@@ -26,6 +33,111 @@ class RecordApiResponseService
         $cleanData = static::removeDeletedAtFields($data);
 
         return response()->json($cleanData, $statusCode->value);
+    }
+
+    /**
+     * Remove hidden columns from data recursively based on table schema.
+     *
+     * @param mixed  $data  The data to clean
+     * @param string $table The table name for the current level of data
+     */
+    public static function removeHiddenFields(mixed $data, string $table): mixed
+    {
+        if (null === $data) {
+            return null;
+        }
+
+        // Handle Laravel Collections
+        if ($data instanceof Collection) {
+            return $data->map(fn($item): mixed => static::removeHiddenFields($item, $table));
+        }
+
+        // Handle Laravel Paginator
+        if ($data instanceof LengthAwarePaginator) {
+            $items = $data->getCollection()->map(fn($item): mixed => static::removeHiddenFields($item, $table));
+
+            return new LengthAwarePaginator(
+                $items,
+                $data->total(),
+                $data->perPage(),
+                $data->currentPage(),
+                [
+                    'path' => request()->url(),
+                    'pageName' => 'page',
+                ]
+            );
+        }
+
+        // Handle arrays of items (list of records)
+        // Check if array keys are all integers (sequential or not)
+        if (is_array($data) && !empty($data)) {
+            $isList = true;
+            foreach ($data as $k => $v) {
+                if (!is_int($k)) {
+                    $isList = false;
+                    break;
+                }
+            }
+
+            if ($isList) {
+                foreach ($data as $key => $value) {
+                    $data[$key] = static::removeHiddenFields($value, $table);
+                }
+                return $data;
+            }
+        }
+
+        // From here, $data is likely a single item (array or object) or a primitive
+
+        // If it's a primitive, return it (unless we want to handle single column selects?)
+        // Assuming records are objects/arrays.
+        if (!is_array($data) && !is_object($data)) {
+            return $data;
+        }
+
+        $schema = SchemaRegistry::resolveTableSchema($table);
+        $hiddenColumns = $schema->column_hiddens ?? [];
+
+        $isObject = is_object($data);
+
+        // Remove hidden columns
+        if (!empty($hiddenColumns)) {
+            foreach ($hiddenColumns as $col) {
+                if ($isObject) {
+
+                    if (property_exists($data, $col)) {
+                        unset($data->{$col});
+                    }
+                } else {
+                    if (array_key_exists($col, $data)) {
+                        unset($data[$col]);
+                    }
+                }
+            }
+        }
+
+        // Recursively clean relationships
+        $keys = $isObject ? array_keys(get_object_vars($data)) : array_keys($data);
+
+        foreach ($keys as $key) {
+            // Check if this key corresponds to a relationship
+            // We use RelationshipResolver to find if 'key' is a valid alias for 'table'
+            $relationConfig = RelationshipResolver::resolveRelationship($table, $key);
+
+            if ($relationConfig) {
+                $relatedTable = $relationConfig['table'];
+
+                if ($relatedTable) {
+                    if ($isObject) {
+                        $data->{$key} = static::removeHiddenFields($data->{$key}, $relatedTable);
+                    } else {
+                        $data[$key] = static::removeHiddenFields($data[$key], $relatedTable);
+                    }
+                }
+            }
+        }
+
+        return $data;
     }
 
     public static function successWrapped(mixed $data, array $meta = [], int $status = RecordApiJsonResponseEnum::SUCCESS->value, array $headers = []): JsonResponse

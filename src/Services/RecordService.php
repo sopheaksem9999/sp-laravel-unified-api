@@ -1077,6 +1077,7 @@ class RecordService
         }
 
         $data = RecordApiResponseService::removeDeletedAtFields($data);
+        $data = RecordApiResponseService::removeHiddenFields($data, $table);
 
         if ($isCacheable && $cacheKey) {
             $cacheData = [
@@ -1308,6 +1309,7 @@ class RecordService
         }
 
         $data = RecordApiResponseService::removeDeletedAtFields($data);
+        $data = RecordApiResponseService::removeHiddenFields($data, $table);
 
         if ($isCacheable && $cacheKey) {
             $cacheData = [
