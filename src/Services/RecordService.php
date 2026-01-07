@@ -1063,6 +1063,9 @@ class RecordService
                         $this->shouldApplyTenantId($tableSchema) ? $tenantId : null
                     );
 
+                    // Re-apply sorting to optimized query to ensure consistent order
+                    QueryBuilderFilters::applySort($optimizedBuilder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
+
                     $optimizedData = $optimizedBuilder->whereIn($actualTableName . '.' . $primaryKey, $recordIds)->get()->all();
                     $data = RelationshipResolver::processJsonRelationships($optimizedData, $includes, $table);
                 }
@@ -1294,6 +1297,9 @@ class RecordService
                         $includes,
                         $tableSchema && $service->shouldApplyTenantId($tableSchema) ? $tenantId : null
                     );
+
+                    // Re-apply sorting to optimized query to ensure consistent order
+                    QueryBuilderFilters::applySort($optimizedBuilder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
 
                     $optimizedData = $optimizedBuilder->whereIn($actualTableName . '.' . $primaryKey, $recordIds)->get()->all();
                     $data = RelationshipResolver::processJsonRelationships($optimizedData, $includes, $table);

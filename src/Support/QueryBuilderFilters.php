@@ -147,22 +147,7 @@ class QueryBuilderFilters
         }
 
         // Sort (validate against schema to avoid injection / invalid columns)
-        $sortByParam = $request->query('sortby', $defaultOrderBy);
-        $sortOrder = strtolower($request->query('order', 'desc'));
-        $sortOrder = in_array($sortOrder, ['asc', 'desc']) ? $sortOrder : 'desc';
-
-        // support table-qualified input like table.column
-        $requestedCol = $sortByParam;
-        if (str_contains($requestedCol, '.')) {
-            $parts = explode('.', $requestedCol);
-            $requestedCol = end($parts);
-        }
-
-        if (!in_array($requestedCol, $allowedCols, true)) {
-            $requestedCol = in_array($defaultOrderBy, $allowedCols, true) ? $defaultOrderBy : ($allowedCols[0] ?? 'id');
-        }
-
-        $builder->orderBy($table . '.' . $requestedCol, $sortOrder);
+        self::applySort($builder, $request, $table, $defaultOrderBy);
 
         // Handle check permission query only own user created record
         $recordConfig = config('record.tables.' . $table, []);
@@ -1044,7 +1029,49 @@ class QueryBuilderFilters
         return ['main' => $prefixed];
     }
 
-    private static function getAllowedColumns(string $table): array
+    /**
+     * Apply sorting to the query builder.
+     */
+    public static function applySort(Builder $builder, Request $request, string $table, string $defaultOrderBy = 'id'): void
+    {
+        $allowedCols = self::getAllowedColumns($table);
+
+        $sortByParam = $request->query('sortby');
+
+        // Default logic: prefer created_at if available and no sort specified
+        if (!$sortByParam) {
+            if (in_array('created_at', $allowedCols, true)) {
+                $sortByParam = 'created_at';
+            } else {
+                $sortByParam = $defaultOrderBy;
+            }
+        }
+
+        $sortOrder = strtolower($request->query('order', 'desc'));
+        $sortOrder = in_array($sortOrder, ['asc', 'desc']) ? $sortOrder : 'desc';
+
+        // support table-qualified input like table.column
+        $requestedCol = $sortByParam;
+        if (str_contains($requestedCol, '.')) {
+            $parts = explode('.', $requestedCol);
+            $requestedCol = end($parts);
+        }
+
+        if (!in_array($requestedCol, $allowedCols, true)) {
+            if (in_array('created_at', $allowedCols, true)) {
+                $requestedCol = 'created_at';
+            } else {
+                $requestedCol = in_array($defaultOrderBy, $allowedCols, true) ? $defaultOrderBy : ($allowedCols[0] ?? 'id');
+            }
+        }
+
+        $builder->orderBy($table . '.' . $requestedCol, $sortOrder);
+    }
+
+    /**
+     * Get allowed columns for a table.
+     */
+    public static function getAllowedColumns(string $table): array
     {
         // Cache allowed columns to avoid repeated schema lookups
         if (!isset(self::$columnCache[$table])) {
