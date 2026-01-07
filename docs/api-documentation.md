@@ -268,7 +268,7 @@ new RecordTableType(
 ```
 
 #### Identity & Routing
-- `pms_name` (string, required): Used for permission mapping (e.g. `view:{pms_name}`) and for deriving defaults in some features. If you don’t want permission names derived from the table key, set this explicitly.
+- `pms_name` (?string, default: `null`): Used for permission mapping (e.g. `view:{pms_name}`). If `null`, it falls back to the table name (singular, snake_case) for permission generation.
 - `table` (?string, default: `null`): Physical database table name. When `null`, the route table name is used as the DB table name.
 - `primary_key` (?string, default: `'id'`): Primary key column name used by show/update/delete endpoints.
 

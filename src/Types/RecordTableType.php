@@ -78,7 +78,7 @@ namespace Sopheak\Core\Types;
 class RecordTableType
 {
     public function __construct(
-        public string $pms_name,
+        public ?string $pms_name = null,
         public ?string $table = null,
         public bool $has_tenant_id = false,
         public bool $soft_deletes = false,
@@ -114,7 +114,7 @@ class RecordTableType
     public static function __set_state(array $properties): self
     {
         return new self(
-            pms_name: $properties['pms_name'],
+            pms_name: $properties['pms_name'] ?? null,
             table: $properties['table'] ?? null,
             soft_deletes: $properties['soft_deletes'] ?? false,
             disable_auditLog: $properties['disable_auditLog'] ?? false,
