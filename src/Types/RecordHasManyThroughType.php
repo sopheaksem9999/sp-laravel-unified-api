@@ -50,6 +50,9 @@ class RecordHasManyThroughType
         public string $secondLocalKey = '',
         public array $orderBy = ['created_at' => 'desc'],
         public RecordRelationshipsEnum $type = RecordRelationshipsEnum::HAS_MANY_THROUGH,
+        public bool $allowCreate = true,
+        public bool $allowUpdate = true,
+        public bool $allowDelete = true,
     ) {}
 
     /**
@@ -67,6 +70,9 @@ class RecordHasManyThroughType
             secondLocalKey: $properties['secondLocalKey'] ?? '',
             orderBy: $properties['orderBy'] ?? ['created_at' => 'desc'],
             type: $properties['type'] ?? RecordRelationshipsEnum::HAS_MANY_THROUGH,
+            allowCreate: $properties['allowCreate'] ?? true,
+            allowUpdate: $properties['allowUpdate'] ?? true,
+            allowDelete: $properties['allowDelete'] ?? true,
         );
     }
 }

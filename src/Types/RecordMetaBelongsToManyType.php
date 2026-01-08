@@ -96,6 +96,9 @@ class RecordMetaBelongsToManyType
         public bool $withTimestamps = false,
         public array $select = [],
         public array $pivotWhere = [], // Legacy support
+        public bool $allowCreate = true,
+        public bool $allowUpdate = true,
+        public bool $allowDelete = true,
     ) {
         if (empty($related)) {
             throw new InvalidArgumentException('related model/table name cannot be empty');
@@ -135,6 +138,9 @@ class RecordMetaBelongsToManyType
             withTimestamps: $properties['withTimestamps'] ?? false,
             select: $properties['select'] ?? [],
             pivotWhere: $properties['pivotWhere'] ?? [],
+            allowCreate: $properties['allowCreate'] ?? true,
+            allowUpdate: $properties['allowUpdate'] ?? true,
+            allowDelete: $properties['allowDelete'] ?? true,
         );
     }
 
@@ -149,6 +155,9 @@ class RecordMetaBelongsToManyType
         $config = [
             'related' => $this->related,
             'type' => $this->type,
+            'allowCreate' => $this->allowCreate,
+            'allowUpdate' => $this->allowUpdate,
+            'allowDelete' => $this->allowDelete,
         ];
 
         // Add optional properties only if they have values
@@ -241,6 +250,9 @@ class RecordMetaBelongsToManyType
             withTimestamps: $config['withTimestamps'] ?? false,
             select: $config['select'] ?? [],
             pivotWhere: $config['pivotWhere'] ?? [],
+            allowCreate: $config['allowCreate'] ?? true,
+            allowUpdate: $config['allowUpdate'] ?? true,
+            allowDelete: $config['allowDelete'] ?? true,
         );
     }
 

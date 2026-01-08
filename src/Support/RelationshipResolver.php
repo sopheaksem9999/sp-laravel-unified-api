@@ -313,6 +313,9 @@ class RelationshipResolver
                         'where_pivot' => $rel->wherePivot ?? [],
                         'with_timestamps' => $rel->withTimestamps ?? false,
                         'selectable' => ['*'],
+                        'allow_create' => $rel->allowCreate,
+                        'allow_update' => $rel->allowUpdate,
+                        'allow_delete' => $rel->allowDelete,
                     ];
                     self::$resolveCache[$cacheKey] = $result;
 
@@ -366,6 +369,9 @@ class RelationshipResolver
                         'local_key' => $rel->localKey ?? $localPk,
                         'order_by' => $rel->orderBy ?? null,
                         'selectable' => ['*'],
+                        'allow_create' => $rel->allowCreate,
+                        'allow_update' => $rel->allowUpdate,
+                        'allow_delete' => $rel->allowDelete,
                     ];
                     self::$resolveCache[$cacheKey] = $result;
 
@@ -413,12 +419,23 @@ class RelationshipResolver
             $relatedTable = $config['table'];
             $relatedSchema = $schema[$relatedTable] ?? null;
             $relatedPk = $relatedSchema->primary_key ?? 'id';
-            $foreignKey = $config['foreign_key'] ?? null;
+
+            $type = $config['type'] ?? 'hasMany';
             $allowCreate = $config['allow_create'] ?? true;
             $allowUpdate = $config['allow_update'] ?? true;
             $allowDelete = $config['allow_delete'] ?? true;
 
-            // Get actual table name from schema
+            if ($type === 'belongsToMany' || $type === 'morphToMany') {
+                self::processBelongsToManyOperation($table, $relatedData, $recordId, $config, $schema, $tenantId, $allowCreate, $allowUpdate, $allowDelete);
+                continue;
+            }
+
+            if ($type === 'hasManyThrough') {
+                self::processHasManyThroughOperation($table, $relatedData, $recordId, $config, $schema, $tenantId, $allowCreate, $allowUpdate, $allowDelete);
+                continue;
+            }
+
+            $foreignKey = $config['foreign_key'] ?? null;
             $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
 
             if (!$foreignKey) {
@@ -496,6 +513,147 @@ class RelationshipResolver
         }
 
         return $payload;
+    }
+
+    private static function processBelongsToManyOperation(string $mainTable, array $data, mixed $mainId, array $config, array $schema, mixed $tenantId, bool $allowCreate, bool $allowUpdate, bool $allowDelete): void
+    {
+        $pivotTable = $config['pivot_table'];
+        $foreignPivotKey = $config['foreign_pivot_key'];
+        $relatedPivotKey = $config['related_pivot_key'];
+        $relatedTable = $config['table'];
+        $relatedSchema = $schema[$relatedTable] ?? null;
+        $relatedPk = $relatedSchema->primary_key ?? 'id';
+        $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
+
+        foreach ($data as $item) {
+            if (!is_array($item)) continue;
+
+            $isDelete = ($item['_delete'] ?? false) || ($item['_destroy'] ?? false);
+            $relatedId = $item[$relatedPk] ?? null;
+
+            if ($isDelete) {
+                if ($allowDelete && $relatedId) {
+                    DB::table($pivotTable)
+                        ->where($foreignPivotKey, $mainId)
+                        ->where($relatedPivotKey, $relatedId)
+                        ->delete();
+                }
+                continue;
+            }
+
+            if (!$relatedId && $allowCreate) {
+                // Create new related record
+                $relatedFields = array_intersect_key($item, array_flip(array_keys($relatedSchema->columns ?? [])));
+                unset($relatedFields['id'], $relatedFields['created_at'], $relatedFields['updated_at'], $relatedFields['deleted_at']);
+
+                if ($tenantId && isset($relatedSchema->columns[config('record.tenant_column', 'tenant_id')])) {
+                    $relatedFields[config('record.tenant_column', 'tenant_id')] = $tenantId;
+                }
+
+                if (isset($relatedSchema->columns['created_at'])) $relatedFields['created_at'] = now();
+                if (isset($relatedSchema->columns['updated_at'])) $relatedFields['updated_at'] = now();
+
+                $relatedId = DB::table($actualRelatedTableName)->insertGetId($relatedFields);
+            }
+
+            if ($relatedId && ($allowCreate || $allowUpdate)) {
+                $pivotData = [];
+                $pivotFields = $config['with_pivot'] ?? [];
+
+                foreach ($pivotFields as $field) {
+                    if (array_key_exists($field, $item)) {
+                        $pivotData[$field] = $item[$field];
+                    }
+                }
+
+                $exists = DB::table($pivotTable)
+                    ->where($foreignPivotKey, $mainId)
+                    ->where($relatedPivotKey, $relatedId)
+                    ->exists();
+
+                if ($exists) {
+                    if ($allowUpdate && !empty($pivotData)) {
+                        if (($config['with_timestamps'] ?? false)) {
+                            $pivotData['updated_at'] = now();
+                        }
+                        DB::table($pivotTable)
+                            ->where($foreignPivotKey, $mainId)
+                            ->where($relatedPivotKey, $relatedId)
+                            ->update($pivotData);
+                    }
+                } else {
+                    if ($allowCreate) {
+                        $pivotData[$foreignPivotKey] = $mainId;
+                        $pivotData[$relatedPivotKey] = $relatedId;
+
+                        if (($config['with_timestamps'] ?? false)) {
+                            $pivotData['created_at'] = now();
+                            $pivotData['updated_at'] = now();
+                        }
+
+                        DB::table($pivotTable)->insert($pivotData);
+                    }
+                }
+            }
+        }
+    }
+
+    private static function processHasManyThroughOperation(string $mainTable, array $data, mixed $mainId, array $config, array $schema, mixed $tenantId, bool $allowCreate, bool $allowUpdate, bool $allowDelete): void
+    {
+        $throughTable = $config['through_table'];
+        $firstKey = $config['first_key'];
+        $secondLocalKey = $config['second_local_key'];
+        $targetTable = $config['table'];
+        $targetSchema = $schema[$targetTable] ?? null;
+        $targetPk = $targetSchema->primary_key ?? 'id';
+        $actualTargetTableName = $schema[$targetTable]->table ?? $targetTable;
+
+        foreach ($data as $item) {
+            if (!is_array($item)) continue;
+
+            $isDelete = ($item['_delete'] ?? false) || ($item['_destroy'] ?? false);
+            $targetId = $item[$targetPk] ?? null;
+
+            if ($isDelete) {
+                if ($allowDelete && $targetId) {
+                    DB::table($throughTable)
+                        ->where($firstKey, $mainId)
+                        ->where($secondLocalKey, $targetId)
+                        ->delete();
+                }
+                continue;
+            }
+
+            if (!$targetId && $allowCreate) {
+                $targetFields = array_intersect_key($item, array_flip(array_keys($targetSchema->columns ?? [])));
+                unset($targetFields['id'], $targetFields['created_at'], $targetFields['updated_at'], $targetFields['deleted_at']);
+
+                if ($tenantId && isset($targetSchema->columns[config('record.tenant_column', 'tenant_id')])) {
+                    $targetFields[config('record.tenant_column', 'tenant_id')] = $tenantId;
+                }
+
+                if (isset($targetSchema->columns['created_at'])) $targetFields['created_at'] = now();
+                if (isset($targetSchema->columns['updated_at'])) $targetFields['updated_at'] = now();
+
+                $targetId = DB::table($actualTargetTableName)->insertGetId($targetFields);
+            }
+
+            if ($targetId && ($allowCreate || $allowUpdate)) {
+                $exists = DB::table($throughTable)
+                    ->where($firstKey, $mainId)
+                    ->where($secondLocalKey, $targetId)
+                    ->exists();
+
+                if (!$exists && $allowCreate) {
+                    $insertData = [
+                        $firstKey => $mainId,
+                        $secondLocalKey => $targetId,
+                    ];
+
+                    DB::table($throughTable)->insert($insertData);
+                }
+            }
+        }
     }
 
     /**

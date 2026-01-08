@@ -428,6 +428,7 @@ Has-many-through relationship configuration.
 - `localKey` (string, default: `'id'`): PK on the source table.
 - `orderBy` (array, default: `['date' => 'desc']`): Sort configuration.
 - `type` (RecordRelationshipsEnum, default: `RecordRelationshipsEnum::HAS_MANY_THROUGH`)
+- `allowCreate`, `allowUpdate`, `allowDelete` (bool, default: `true`): Controls nested write operations for this relationship.
 
 ```php
 use Sopheak\Core\Types\RecordHasManyThroughType;
@@ -442,6 +443,9 @@ $payments = new RecordHasManyThroughType(
     secondLocalKey: 'payment_id',
     orderBy: ['payment_date' => 'desc'],
     type: RecordRelationshipsEnum::HAS_MANY_THROUGH,
+    allowCreate: true,
+    allowUpdate: true,
+    allowDelete: false, // Prevent deleting payments via this relationship
 );
 ```
 
@@ -459,6 +463,7 @@ Many-to-many relationship configuration with optional pivot details.
 - `withTimestamps` (bool, default: `false`): Include pivot timestamps.
 - `select` (array, default: `[]`): Columns to select from related table.
 - `pivotWhere` (array, default: `[]`): Legacy format; converted into `wherePivot` if `wherePivot` is empty.
+- `allowCreate`, `allowUpdate`, `allowDelete` (bool, default: `true`): Controls nested write operations (attaching/detaching/updating).
 
 ```php
 use Sopheak\Core\Types\RecordMetaBelongsToManyType;
@@ -474,6 +479,9 @@ $roles = new RecordMetaBelongsToManyType(
     wherePivot: [],
     withTimestamps: true,
     select: ['roles.id', 'roles.name'],
+    allowCreate: true,  // Allow attaching roles
+    allowUpdate: false, // Prevent updating role details
+    allowDelete: true,  // Allow detaching roles
 );
 ```
 
