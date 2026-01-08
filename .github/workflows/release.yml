@@ -40,6 +40,7 @@ jobs:
           git push origin "${{ steps.read.outputs.version }}"
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
+        if: steps.check.outputs.exists == 'false'
         with:
           tag_name: ${{ steps.read.outputs.version }}
           name: ${{ steps.read.outputs.version }}
