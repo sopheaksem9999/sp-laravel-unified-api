@@ -1,0 +1,46 @@
+name: Release
+on:
+  push:
+    branches:
+      - main
+permissions:
+  contents: write
+jobs:
+  release:
+    if: startsWith(github.ref, 'refs/heads/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Read version from composer.json
+        id: read
+        run: echo "version=$(jq -r .version composer.json)" >> $GITHUB_OUTPUT
+      - name: Validate version
+        run: |
+          if [ -z "${{ steps.read.outputs.version }}" ] || [ "${{ steps.read.outputs.version }}" = "null" ]; then
+            echo "composer.json version is missing"
+            exit 1
+          fi
+      - name: Check if tag exists
+        id: check
+        run: |
+          if git rev-parse "${{ steps.read.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+      - name: Create tag
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+          git tag "${{ steps.read.outputs.version }}"
+          git push origin "${{ steps.read.outputs.version }}"
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.read.outputs.version }}
+          name: ${{ steps.read.outputs.version }}
+          generate_release_notes: true
