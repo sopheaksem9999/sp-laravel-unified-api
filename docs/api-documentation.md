@@ -280,7 +280,9 @@ new RecordTableType(
   - `read`: allows unauthenticated access to read actions (`read`, `view`).
   - `write`: allows unauthenticated access to write actions (`create`, `update`, `delete`, `restore`).
 - `can_read` (bool, default: `true`): Enables/disables read endpoints for this table (list/show). When false, read routes respond as “not found”.
-- `can_write` (bool, default: `true`): Enables/disables write endpoints for this table (create/update/delete/restore). When false, write routes respond as “not found”.
+- `can_create` (bool, default: `true`): Enables/disables create endpoint.
+- `can_update` (bool, default: `true`): Enables/disables update and restore endpoints.
+- `can_delete` (bool, default: `true`): Enables/disables delete and force-delete endpoints.
 
 #### Soft Deletes
 - `soft_deletes` (bool, default: `false`): When true, list endpoints exclude `deleted_at` rows by default and restore/force-delete endpoints become relevant.

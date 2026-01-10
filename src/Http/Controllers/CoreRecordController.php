@@ -160,7 +160,7 @@ class CoreRecordController extends Controller
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
-        if (!$this->isWriteEndpointEnabled($schema[$table])) {
+        if (!$this->isCreateEndpointEnabled($schema[$table])) {
             return $this->resourceNotAvailableResponse();
         }
 
@@ -243,7 +243,7 @@ class CoreRecordController extends Controller
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
-        if (!$this->isWriteEndpointEnabled($schema[$table])) {
+        if (!$this->isUpdateEndpointEnabled($schema[$table])) {
             return $this->resourceNotAvailableResponse();
         }
 
@@ -337,7 +337,7 @@ class CoreRecordController extends Controller
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
-        if (!$this->isWriteEndpointEnabled($schema[$table])) {
+        if (!$this->isDeleteEndpointEnabled($schema[$table])) {
             return $this->resourceNotAvailableResponse();
         }
 
@@ -428,7 +428,7 @@ class CoreRecordController extends Controller
             return RecordApiResponseService::errorWrapped('Resource not restorable', RecordApiJsonResponseEnum::ERROR->value);
         }
 
-        if (!$this->isWriteEndpointEnabled($schema[$table])) {
+        if (!$this->isUpdateEndpointEnabled($schema[$table])) {
             return $this->resourceNotAvailableResponse();
         }
 
@@ -492,7 +492,7 @@ class CoreRecordController extends Controller
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
-        if (!$this->isWriteEndpointEnabled($schema[$table])) {
+        if (!$this->isDeleteEndpointEnabled($schema[$table])) {
             return $this->resourceNotAvailableResponse();
         }
 
@@ -559,7 +559,7 @@ class CoreRecordController extends Controller
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
-        if (!$this->isWriteEndpointEnabled($schema[$table])) {
+        if (!$this->isCreateEndpointEnabled($schema[$table]) || !$this->isUpdateEndpointEnabled($schema[$table]) || !$this->isDeleteEndpointEnabled($schema[$table])) {
             return $this->resourceNotAvailableResponse();
         }
 
@@ -600,7 +600,7 @@ class CoreRecordController extends Controller
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
-        if (!$this->isWriteEndpointEnabled($schema[$table])) {
+        if (!$this->isCreateEndpointEnabled($schema[$table])) {
             return $this->resourceNotAvailableResponse();
         }
 
@@ -713,7 +713,7 @@ class CoreRecordController extends Controller
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
-        if (!$this->isWriteEndpointEnabled($schema[$table])) {
+        if (!$this->isUpdateEndpointEnabled($schema[$table])) {
             return $this->resourceNotAvailableResponse();
         }
 
@@ -846,7 +846,7 @@ class CoreRecordController extends Controller
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
-        if (!$this->isWriteEndpointEnabled($schema[$table])) {
+        if (!$this->isDeleteEndpointEnabled($schema[$table])) {
             return $this->resourceNotAvailableResponse();
         }
 
@@ -1099,9 +1099,19 @@ class CoreRecordController extends Controller
         return (bool) ($tableSchema->can_read ?? true);
     }
 
-    private function isWriteEndpointEnabled(object $tableSchema): bool
+    private function isCreateEndpointEnabled(object $tableSchema): bool
     {
-        return (bool) ($tableSchema->can_write ?? true);
+        return (bool) ($tableSchema->can_create ?? true);
+    }
+
+    private function isUpdateEndpointEnabled(object $tableSchema): bool
+    {
+        return (bool) ($tableSchema->can_update ?? true);
+    }
+
+    private function isDeleteEndpointEnabled(object $tableSchema): bool
+    {
+        return (bool) ($tableSchema->can_delete ?? true);
     }
 
     private function fetchRecordData(Request $request, string $table, mixed $id, mixed $tenantId): mixed

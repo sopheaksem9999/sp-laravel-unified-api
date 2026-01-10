@@ -465,7 +465,9 @@ Accepts an array of IDs or an array of objects with the primary key.
             $schemaRefWrite = '#/components/schemas/' . self::schemaName($recordName) . 'Write';
             $tenantHeaderParameters = self::tenantHeaderParametersForTableConfig($config);
             $canRead = (bool) ($config->can_read ?? true);
-            $canWrite = (bool) ($config->can_write ?? true);
+            $canCreate = (bool) ($config->can_create ?? true);
+            $canUpdate = (bool) ($config->can_update ?? true);
+            $canDelete = (bool) ($config->can_delete ?? true);
 
             // Generate relationship description
             $relationshipDescription = self::generateRelationshipDescription($config);
@@ -512,7 +514,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                     ],
                     'security' => [['bearerAuth' => []]],
                 ] : [],
-                'post' => $canWrite ? [
+                'post' => $canCreate ? [
                     'tags' => [$formattedRecordName],
                     'summary' => 'Create ' . $recordName,
                     'description' => "Create a new {$recordName} record with comprehensive validation:\n\n**Advanced Validation:** Multiple rules ([Validation](#description/-getting-started))\n\n{$relationshipDescription}",
@@ -609,7 +611,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                     ],
                     'security' => [['bearerAuth' => []]],
                 ] : [],
-                'put' => $canWrite ? [
+                'put' => $canUpdate ? [
                     'tags' => [$formattedRecordName],
                     'summary' => 'Update ' . $formattedRecordName,
                     'description' => "Update an existing {$recordName} record with comprehensive validation:\n\n**Advanced Validation:** Multiple rules ([Validation](#description/-getting-started))\n\n{$relationshipDescription}",
@@ -668,7 +670,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                     ],
                     'security' => [['bearerAuth' => []]],
                 ] : [],
-                'patch' => $canWrite ? [
+                'patch' => $canUpdate ? [
                     'tags' => [$formattedRecordName],
                     'summary' => 'Partially update ' . $formattedRecordName,
                     'description' => "Update an existing {$recordName} record with comprehensive validation:\n\n**Advanced Validation:** Multiple rules ([Validation](#description/-getting-started))\n\n{$relationshipDescription}",
@@ -727,7 +729,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                     ],
                     'security' => [['bearerAuth' => []]],
                 ] : [],
-                'delete' => $canWrite ? [
+                'delete' => $canDelete ? [
                     'tags' => [$formattedRecordName],
                     'summary' => 'Delete ' . $formattedRecordName,
                     'responses' => [
@@ -789,56 +791,57 @@ Accepts an array of IDs or an array of objects with the primary key.
                 unset($paths[$idPath]);
             }
 
-            // Restore & Force Delete
-            if ($canWrite) {
-                if ((bool) ($config->soft_deletes ?? false)) {
-                    $paths[$basePath . '/{id}/restore'] = [
-                        'parameters' => [self::pathIdParameter()],
-                        'post' => [
-                            'tags' => [$formattedRecordName],
-                            'summary' => 'Restore ' . $formattedRecordName,
-                            'responses' => [
-                                '200' => [
-                                    'description' => 'Restored',
-                                    'content' => [
-                                        'application/json' => [
-                                            'schema' => [
-                                                'type' => 'object',
-                                                'properties' => [
-                                                    'message' => ['type' => 'string', 'example' => 'Record restored successfully'],
-                                                ],
-                                            ],
-                                        ],
-                                    ],
-                                ],
-                                '404' => [
-                                    'description' => 'Not Found',
-                                    'content' => [
-                                        'application/json' => [
-                                            'schema' => [
-                                                'type' => 'object',
-                                                'properties' => [
-                                                    'success' => ['type' => 'boolean', 'example' => false],
-                                                    'message' => ['type' => 'string', 'example' => 'Record not found'],
-                                                    'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
-                                                    'meta' => [
-                                                        'type' => 'object',
-                                                        'properties' => [
-                                                            'request_id' => ['type' => 'string'],
-                                                        ],
-                                                    ],
-                                                ],
-                                                'required' => ['success', 'message', 'errors', 'meta'],
+            // Restore
+            if ($canUpdate && (bool) ($config->soft_deletes ?? false)) {
+                $paths[$basePath . '/{id}/restore'] = [
+                    'parameters' => [self::pathIdParameter()],
+                    'post' => [
+                        'tags' => [$formattedRecordName],
+                        'summary' => 'Restore ' . $formattedRecordName,
+                        'responses' => [
+                            '200' => [
+                                'description' => 'Restored',
+                                'content' => [
+                                    'application/json' => [
+                                        'schema' => [
+                                            'type' => 'object',
+                                            'properties' => [
+                                                'message' => ['type' => 'string', 'example' => 'Record restored successfully'],
                                             ],
                                         ],
                                     ],
                                 ],
                             ],
-                            'security' => [['bearerAuth' => []]],
+                            '404' => [
+                                'description' => 'Not Found',
+                                'content' => [
+                                    'application/json' => [
+                                        'schema' => [
+                                            'type' => 'object',
+                                            'properties' => [
+                                                'success' => ['type' => 'boolean', 'example' => false],
+                                                'message' => ['type' => 'string', 'example' => 'Record not found'],
+                                                'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
+                                                'meta' => [
+                                                    'type' => 'object',
+                                                    'properties' => [
+                                                        'request_id' => ['type' => 'string'],
+                                                    ],
+                                                ],
+                                            ],
+                                            'required' => ['success', 'message', 'errors', 'meta'],
+                                        ],
+                                    ],
+                                ],
+                            ],
                         ],
-                    ];
-                }
+                        'security' => [['bearerAuth' => []]],
+                    ],
+                ];
+            }
 
+            // Force Delete
+            if ($canDelete) {
                 $paths[$basePath . '/{id}/force'] = [
                     'parameters' => [self::pathIdParameter()],
                     'delete' => [
