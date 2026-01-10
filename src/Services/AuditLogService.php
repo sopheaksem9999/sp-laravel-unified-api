@@ -105,7 +105,7 @@ class AuditLogService
             'event' => $data['event'],
             'metadata' => isset($data['metadata']) ? (is_array($data['metadata']) ? json_encode($data['metadata']) : $data['metadata']) : null,
             'created_at' => now()->toDateTimeString(),
-            'updated_at' => null,
+            'updated_at' => now()->toDateTimeString(),
         ];
 
         if (config('record.enable_tenant_id', false)) {
