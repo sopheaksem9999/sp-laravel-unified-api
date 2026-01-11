@@ -2,27 +2,19 @@
 
 namespace Sopheak\Core\Services;
 
-use Illuminate\Support\Str;
-use BackedEnum;
-use Exception;
-use UnitEnum;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
-use Sopheak\Core\Services\AuditLogService;
-use Sopheak\Core\Services\CursorPagination;
-use Sopheak\Core\Services\QueryCacheService;
-use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Support\QueryBuilderFilters;
 use Sopheak\Core\Support\RelationshipResolver;
 use Sopheak\Core\Support\SchemaRegistry;
 use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Types\RecordTableTriggerType;
-
 use Sopheak\Core\Types\RecordTableType;
 
 class RecordService
@@ -66,7 +58,7 @@ class RecordService
         return [
             'id' => $insertedId,
             'payload' => $payloadMain,
-            'tenant_id' => $tenantId
+            'tenant_id' => $tenantId,
         ];
     }
 
@@ -116,7 +108,7 @@ class RecordService
             'payload' => $payloadMain,
             'tenant_id' => $tenantId,
             'updated' => $updated,
-            'exists' => $exists
+            'exists' => $exists,
         ];
     }
 
@@ -139,7 +131,7 @@ class RecordService
 
         return [
             'id' => $id,
-            'affected' => $affected
+            'affected' => $affected,
         ];
     }
 
@@ -158,13 +150,13 @@ class RecordService
 
         $query = DB::table($actualTableName)->where($pk, $id);
         $this->applyTenantFilter($query, $table, $tenantId);
-        $query->whereNotNull($actualTableName . '.deleted_at');
+        $query->whereNotNull($actualTableName.'.deleted_at');
 
         $restored = $query->update(['deleted_at' => null]);
 
         return [
             'id' => $id,
-            'restored' => $restored
+            'restored' => $restored,
         ];
     }
 
@@ -188,7 +180,7 @@ class RecordService
 
         return [
             'id' => $id,
-            'deleted' => $deleted
+            'deleted' => $deleted,
         ];
     }
 
@@ -221,7 +213,7 @@ class RecordService
 
         return [
             'id' => $item[$pk] ?? null,
-            'payload' => $item
+            'payload' => $item,
         ];
     }
 
@@ -246,13 +238,13 @@ class RecordService
             $this->executeTableTrigger($triggerConfig, [
                 $request,
                 $table,
-                $recordContext
+                $recordContext,
             ]);
         }
 
         // 2. Insert Audit Log
         if (!($tableSchema->disable_auditLog ?? false)) {
-            $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
+            $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
             $event = match ($operation) {
                 'create' => AuditLogEventEnum::CREATED,
                 'update' => AuditLogEventEnum::UPDATED,
@@ -290,7 +282,7 @@ class RecordService
         // Get schema and validate table exists
         $schema = SchemaRegistry::get();
         if (!isset($schema[$table])) {
-            throw new Exception(sprintf("Table '%s' does not exist", $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
+            throw new \Exception(sprintf("Table '%s' does not exist", $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         // Check if function exists in table schema
@@ -306,7 +298,7 @@ class RecordService
             foreach ($tableFunctions as $configuredFunctionName => $config) {
                 // Convert function name pattern to regex (e.g., 'role_permission/{id}' -> 'role_permission/(\d+)')
                 $pattern = preg_replace('/\{[^}]+\}/', '(\d+)', (string) $configuredFunctionName);
-                $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/';
+                $pattern = '/^'.str_replace('/', '\/', $pattern).'$/';
 
                 if (preg_match($pattern, $functionName, $matches)) {
                     $functionConfig = $config;
@@ -322,7 +314,7 @@ class RecordService
         }
 
         if (!$functionConfig) {
-            throw new Exception(sprintf("Function '%s' not found for table '%s'", $functionName, $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
+            throw new \Exception(sprintf("Function '%s' not found for table '%s'", $functionName, $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         // Execute the custom function with extracted ID parameter
@@ -348,7 +340,7 @@ class RecordService
             foreach ($globalFunctions as $configuredFunctionName => $config) {
                 // Convert function name pattern to regex (e.g., 'role_permission/{id}' -> 'role_permission/(\d+)')
                 $pattern = preg_replace('/\{[^}]+\}/', '(\d+)', (string) $configuredFunctionName);
-                $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/';
+                $pattern = '/^'.str_replace('/', '\/', $pattern).'$/';
 
                 if (preg_match($pattern, $functionName, $matches)) {
                     $functionConfig = $config;
@@ -364,11 +356,998 @@ class RecordService
         }
 
         if (!$functionConfig) {
-            throw new Exception(sprintf("Function '%s' not found", $functionName), RecordApiJsonResponseEnum::NOT_FOUND->value);
+            throw new \Exception(sprintf("Function '%s' not found", $functionName), RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         // Execute the custom function with extracted ID parameter
         return $this->executeCustomFunction($request, $functionConfig, $extractedId);
+    }
+
+    /**
+     * Bulk create, update, or delete records.
+     */
+    public function bulkRecord(Request $request, string $table, mixed $tenantId, ?string $legacyAction = null): array
+    {
+        $schema = SchemaRegistry::get();
+        if (!isset($schema[$table])) {
+            throw new \Exception('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
+        }
+
+        $tableSchema = $schema[$table];
+
+        // Parse items
+        $requestData = $request->all();
+        if (isset($requestData['items']) && is_array($requestData['items'])) {
+            $items = $requestData['items'];
+        } else {
+            $jsonInput = $request->getContent();
+            $decodedJson = json_decode($jsonInput, true);
+
+            if (JSON_ERROR_NONE === json_last_error() && is_array($decodedJson) && [] !== $decodedJson) {
+                $items = array_keys($decodedJson) === range(0, count($decodedJson) - 1) ? $decodedJson : [$decodedJson];
+            } else {
+                $items = $request->input('items', []);
+            }
+        }
+
+        if (!is_array($items) || [] === $items) {
+            throw new \Exception('Data array required', RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
+        }
+
+        $maxBatch = (int) config('record.bulk_max', 100);
+        if (count($items) > $maxBatch) {
+            throw new \Exception('Batch too large, max '.$maxBatch, 413);
+        }
+
+        $pk = $tableSchema->primary_key ?? 'id';
+        $affected = 0;
+        $createdData = [];
+        $updatedData = [];
+        $deletedData = [];
+        $upsertedData = [];
+
+        // Begin transaction
+        DB::beginTransaction();
+
+        try {
+            foreach ($items as $item) {
+                $operation = $this->determineOperation($item, $pk, $legacyAction);
+
+                if ('create' === $operation) {
+                    $this->executeTableTrigger($tableSchema->beforeCreate ?? null, [$request, $table, $item]);
+
+                    $result = $this->createRecord($request, $table, $item, $tenantId);
+                    $insertId = $result['id'];
+                    $recordResult = $this->getRecord($request, $table, $insertId, $tenantId);
+                    $createdData[] = $recordResult['data'];
+                    ++$affected;
+
+                    $this->processPostWriteLogic($request, $table, 'create', [
+                        'id' => $insertId,
+                        'payload' => $result['payload'],
+                        config('record.tenant_column', 'tenant_id') => $result['tenant_id'],
+                        'response' => $recordResult['data'],
+                    ]);
+                } elseif ('update' === $operation) {
+                    if (!isset($item[$pk])) {
+                        throw new \Exception('Primary key required for update');
+                    }
+
+                    $id = $item[$pk];
+                    unset($item[$pk]);
+
+                    $this->executeTableTrigger($tableSchema->beforeUpdate ?? null, [$request, $table, $id, $item]);
+
+                    $result = $this->updateRecord($request, $table, $id, $item, $tenantId);
+                    if ($result['updated'] > 0) {
+                        $recordResult = $this->getRecord($request, $table, $id, $tenantId);
+                        $updatedData[] = $recordResult['data'];
+                        $affected += $result['updated'];
+
+                        $this->processPostWriteLogic($request, $table, 'update', [
+                            'id' => $id,
+                            'payload' => $result['payload'],
+                            config('record.tenant_column', 'tenant_id') => $result['tenant_id'],
+                            'updated' => $result['updated'],
+                            'response' => $recordResult['data'],
+                        ]);
+                    }
+                } elseif ('delete' === $operation) {
+                    if (!isset($item[$pk])) {
+                        throw new \Exception('Primary key required for delete');
+                    }
+
+                    $this->executeTableTrigger($tableSchema->beforeDelete ?? null, [$request, $table, $item[$pk]]);
+
+                    $result = $this->deleteRecord($request, $table, $item[$pk], $tenantId);
+                    if ($result['affected'] > 0) {
+                        $deletedData[] = ['id' => $item[$pk]];
+                        $affected += $result['affected'];
+
+                        $response = ['deleted' => $result['affected']];
+
+                        $this->processPostWriteLogic($request, $table, 'delete', [
+                            'id' => $item[$pk],
+                            config('record.tenant_column', 'tenant_id') => $tenantId,
+                            'affected' => $result['affected'],
+                            'soft_deleted' => $tableSchema->soft_deletes ?? false,
+                            'response' => $response,
+                        ]);
+                    }
+                } elseif ('upsert' === $operation) {
+                    $result = $this->upsertRecord($request, $table, $item, $tenantId);
+                    $upsertedId = $result['id'] ?? ($item[$pk] ?? null);
+
+                    if ($upsertedId) {
+                        $recordResult = $this->getRecord($request, $table, $upsertedId, $tenantId);
+                        $upsertedData[] = $recordResult['data'];
+                        ++$affected;
+
+                        if (!($tableSchema->disable_auditLog ?? false)) {
+                            $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
+                            AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, $recordResult['data'], '', '', $tenantId);
+                        }
+                    }
+                }
+            }
+
+            DB::commit();
+            QueryCacheService::invalidateTable($table);
+
+            $consolidatedData = array_merge($createdData, $updatedData, $upsertedData);
+
+            return [
+                'data' => $consolidatedData,
+                'meta' => ['affected' => count($consolidatedData)], // Matches Controller logic
+            ];
+        } catch (\Exception $exception) {
+            DB::rollBack();
+
+            throw $exception;
+        }
+    }
+
+    public function executeTableTrigger(mixed $trigger, array $params): array
+    {
+        if (null === $trigger) {
+            return $params;
+        }
+
+        if ($trigger instanceof RecordTableTriggerType) {
+            $triggers = [$trigger];
+        } elseif (is_array($trigger)) {
+            $isSingleTriggerConfig = isset($trigger['class']) || isset($trigger['function_method']);
+            $triggers = $isSingleTriggerConfig ? [$trigger] : $trigger;
+        } else {
+            throw new \Exception(sprintf(
+                'Invalid table trigger configuration. Expected %s or array, got %s',
+                RecordTableTriggerType::class,
+                get_debug_type($trigger)
+            ));
+        }
+
+        if (!is_array($triggers)) {
+            throw new \Exception(sprintf(
+                'Invalid table trigger configuration. Expected %s or array, got %s',
+                RecordTableTriggerType::class,
+                get_debug_type($triggers)
+            ));
+        }
+
+        foreach ($triggers as $index => $item) {
+            if ($item instanceof RecordTableTriggerType) {
+                $item = $item;
+            } elseif (is_array($item)) {
+                try {
+                    $item = RecordTableTriggerType::fromArray($item);
+                } catch (\Throwable $exception) {
+                    throw new \Exception(sprintf(
+                        'Invalid table trigger config at index %s: %s',
+                        (string) $index,
+                        $exception->getMessage()
+                    ), 0, $exception);
+                }
+            } else {
+                throw new \Exception(sprintf(
+                    'Invalid table trigger item at index %s. Expected %s or array, got %s',
+                    (string) $index,
+                    RecordTableTriggerType::class,
+                    get_debug_type($item)
+                ));
+            }
+
+            if (!$item instanceof RecordTableTriggerType) {
+                throw new \Exception(sprintf(
+                    'Invalid table trigger item at index %s. Expected %s, got %s',
+                    (string) $index,
+                    RecordTableTriggerType::class,
+                    get_debug_type($item)
+                ));
+            }
+
+            $className = $item->class;
+            $method = $item->function_method;
+            if (!class_exists($className)) {
+                throw new \Exception(sprintf("Table trigger class '%s' does not exist", $className));
+            }
+
+            if (!method_exists($className, $method)) {
+                throw new \Exception(sprintf("Table trigger method '%s::%s' does not exist", $className, $method));
+            }
+
+            try {
+                $result = call_user_func_array([$className, $method], $params);
+                if ($result instanceof Request && isset($params[0]) && $params[0] instanceof Request) {
+                    $params[0] = $result;
+                } elseif (is_array($result) && isset($params[0]) && $params[0] instanceof Request) {
+                    $params[0]->merge($result);
+                }
+            } catch (\Throwable $exception) {
+                throw new \Exception(sprintf(
+                    "Table trigger execution failed for '%s::%s': %s",
+                    $className,
+                    $method,
+                    $exception->getMessage()
+                ), 0, $exception);
+            }
+        }
+
+        return $params;
+    }
+
+    // --- Helper Methods ---
+
+    public function isCacheableRequest(Request $request, string $table): bool
+    {
+        if (!config('record.cache.enabled', true)) {
+            return false;
+        }
+
+        $perTableCache = config('record.cache.per_table', []);
+        $schema = SchemaRegistry::get();
+        $tableSchema = $schema[$table] ?? null;
+
+        $schemaTableName = null;
+        if (is_object($tableSchema)) {
+            $schemaTableName = $tableSchema->table ?? null;
+        } elseif (is_array($tableSchema)) {
+            $schemaTableName = $tableSchema['table'] ?? null;
+        }
+
+        if ((isset($perTableCache[$table]) && false === $perTableCache[$table]) || (null !== $schemaTableName && isset($perTableCache[$schemaTableName]) && false === $perTableCache[$schemaTableName])) {
+            return false;
+        }
+
+        $disableCache = false;
+        if (is_object($tableSchema)) {
+            $disableCache = (bool) ($tableSchema->disable_cache ?? false);
+        } elseif (is_array($tableSchema)) {
+            $disableCache = (bool) ($tableSchema['disable_cache'] ?? false);
+        }
+
+        if ($disableCache) {
+            return false;
+        }
+
+        if ('GET' !== $request->method()) {
+            return false;
+        }
+
+        return !$request->has(['search', 'filter', 'where']);
+    }
+
+    public function generateOptimizedCacheKey(string $table, array $filters, array $includes, int $page, int $limit): string
+    {
+        $keyData = [
+            'table' => $table,
+            'filters' => $filters,
+            'includes' => $includes,
+            'page' => $page,
+            'limit' => $limit,
+            'tenant_enabled' => $this->isTenantIdEnabled(),
+        ];
+
+        return 'record_index_'.md5(serialize($keyData));
+    }
+
+    public function generateRecordCacheKey(string $table, mixed $id, mixed $tenantId, mixed $select): string
+    {
+        $keyData = [
+            'table' => $table,
+            'id' => $id,
+            'tenant_id' => $this->isTenantIdEnabled() ? $tenantId : null,
+            'select' => $select,
+            'tenant_enabled' => $this->isTenantIdEnabled(),
+        ];
+
+        return 'record_show_'.md5(serialize($keyData));
+    }
+
+    public function calculateOptimalCacheTTL(string $table, int $recordCount, bool $hasRelationships): int
+    {
+        $baseTTL = config('record.cache.default_ttl', 3600);
+        if ($recordCount > 100) {
+            $baseTTL = (int) ($baseTTL * 0.5);
+        }
+
+        if ($hasRelationships) {
+            $baseTTL = (int) ($baseTTL * 0.7);
+        }
+
+        $perTableTTL = config('record.cache.per_table_ttl', []);
+        if (isset($perTableTTL[$table])) {
+            $baseTTL = $perTableTTL[$table];
+        }
+
+        return max($baseTTL, 300);
+    }
+
+    public function sanitizePayload(array $input, object $meta): array
+    {
+        $columns = array_keys($meta->columns ?? []);
+        $payload = array_intersect_key($input, array_flip($columns));
+        unset($payload['id'], $payload['deleted_at'], $payload['created_at'], $payload['updated_at']);
+
+        return $payload;
+    }
+
+    public function applyTimestampsAndAuditFields(array $payload, object $tableSchema, bool $isUpdate = false): array
+    {
+        $user = auth('api')->user();
+
+        if ($isUpdate) {
+            $payload['updated_at'] = now();
+            if ($user) {
+                if (isset($tableSchema->columns['updated_by'])) {
+                    $payload['updated_by'] = $user->id;
+                } elseif (isset($tableSchema->columns['last_updated_by'])) {
+                    $payload['last_updated_by'] = $user->id;
+                }
+            }
+        } else {
+            $payload['created_at'] = now();
+            $payload['updated_at'] = now();
+            if ($user && isset($tableSchema->columns['created_by'])) {
+                $payload['created_by'] = $user->id;
+            }
+        }
+
+        return $payload;
+    }
+
+    public function shouldApplyTenantId(object $tableSchema): bool
+    {
+        return $this->isTenantIdEnabled() && ($tableSchema->has_tenant_id ?? false);
+    }
+
+    public function normalizeTenantId(mixed $tenantId): mixed
+    {
+        if (is_string($tenantId)) {
+            return trim($tenantId);
+        }
+
+        return $tenantId;
+    }
+
+    public function isTenantIdEnabled(): bool
+    {
+        return config('record.enable_tenant_id', false);
+    }
+
+    public function applyTenantFilter(mixed $query, string $table, mixed $tenantId): void
+    {
+        $tenantId = $this->normalizeTenantId($tenantId);
+        $schema = SchemaRegistry::get();
+        if ($this->isTenantIdEnabled() && null !== $tenantId && '' !== $tenantId && ($schema[$table]->has_tenant_id ?? false)) {
+            $query->where($table.'.'.config('record.tenant_column', 'tenant_id'), $tenantId);
+        }
+    }
+
+    /**
+     * List records for a table.
+     */
+    public function listRecords(Request $request, string $table, mixed $tenantId): array
+    {
+        $schema = SchemaRegistry::get();
+        $tableSchema = $schema[$table];
+
+        $triggerParams = [
+            $request,
+            $table,
+            [
+                'type' => 'index',
+                config('record.tenant_column', 'tenant_id') => $tenantId,
+            ],
+        ];
+        $triggerParams = $this->executeTableTrigger($tableSchema->beforeRead ?? null, $triggerParams);
+        if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
+            $request = $triggerParams[0];
+        }
+
+        $actualTableName = $tableSchema->table ?? $table;
+
+        $filters = $request->except(['page', 'per_page', 'limit']);
+        $includes = $request->query('select', []);
+        if (is_string($includes)) {
+            $includes = explode(',', $includes);
+        }
+
+        $page = max((int) $request->get('page', 1), 1);
+        $perPage = $request->has('per_page') ? max(1, min((int) $request->get('per_page', 25), (int) config('record.per_page_max', 1000))) : null;
+        $limit = $request->has('limit') ? max(1, min((int) $request->get('limit'), (int) config('record.limit_max', 1000))) : config('record.limit_max', 1000);
+
+        $isCacheable = $this->isCacheableRequest($request, $table);
+        $cacheKey = null;
+
+        if ($isCacheable) {
+            $cacheKey = $this->generateOptimizedCacheKey(
+                $table,
+                array_merge($filters, [
+                    config('record.tenant_column', 'tenant_id') => $this->shouldApplyTenantId($tableSchema) ? $tenantId : null,
+                    'tenant_enabled' => $this->shouldApplyTenantId($tableSchema),
+                ]),
+                $includes,
+                $page,
+                $perPage ?? $limit
+            );
+
+            $cached = QueryCacheService::get($cacheKey);
+            if (null !== $cached) {
+                return array_merge($cached, ['from_cache' => true, 'filters' => $filters, 'request' => $request]);
+            }
+        }
+
+        $builder = DB::table($actualTableName);
+
+        $this->applyTenantFilter($builder, $actualTableName, $tenantId);
+
+        if ($tableSchema->soft_deletes) {
+            $builder->whereNull($actualTableName.'.deleted_at');
+        }
+
+        QueryBuilderFilters::apply($builder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
+
+        $headers = [];
+        $meta = [];
+        $cursorMeta = null;
+        $data = [];
+        $total = 0;
+
+        if ($request->has('limit') && !$request->has('per_page')) {
+            $limit = max(1, min((int) $request->get('limit'), (int) config('record.limit_max', 1000)));
+            $data = $builder->limit($limit)->get()->all();
+            $total = count($data);
+            $headers['X-Total-Count'] = (string) $total;
+            $meta = ['total' => $total];
+        } else {
+            $maxPerPage = (int) config('record.per_page_max', 100);
+            $perPage = max(1, min((int) $request->get('per_page', config('record.limit_max', 1000)), $maxPerPage));
+
+            if ($request->has('cursor') || CursorPagination::shouldUseCursorPagination($builder)) {
+                $primaryKey = $tableSchema->primary_key ?? 'id';
+                $cursorColumn = $request->get('cursor_column', $primaryKey);
+
+                if ($request->has('composite_cursor') || $request->has('sortby')) {
+                    $cursorColumns = [$cursorColumn];
+                    if ($cursorColumn !== $primaryKey) {
+                        $cursorColumns[] = $primaryKey;
+                    }
+
+                    $result = CursorPagination::paginateComposite($builder, $request, $cursorColumns, $perPage);
+                } else {
+                    $result = CursorPagination::paginate($builder, $request, $cursorColumn, $perPage);
+                }
+
+                $data = $result['data'];
+                $cursorMeta = $result['meta'];
+                $meta = $cursorMeta;
+            } else {
+                $page = max((int) $request->get('page', 1), 1);
+                $countQuery = clone $builder;
+                $total = $countQuery->count();
+
+                $data = $builder->forPage($page, $perPage)->get()->all();
+
+                $headers['X-Total-Count'] = (string) $total;
+                $lastPage = (int) ceil($total / $perPage);
+                $headers['X-Page'] = (string) $page;
+                $headers['X-Per-Page'] = (string) $perPage;
+                $headers['X-Total-Pages'] = (string) $lastPage;
+
+                $meta = [
+                    'page' => $page,
+                    'per_page' => $perPage,
+                    'total' => $total,
+                ];
+            }
+        }
+
+        if ($request->has('select')) {
+            $selectParam = $request->query('select');
+            $includes = RelationshipResolver::parseSelectForIncludes($selectParam);
+            $useSubqueryOptimization = config('record.use_subquery_optimization', true) && count($data) <= 100;
+
+            // Disable subquery optimization if nested filters or child relationships are detected
+            if ($useSubqueryOptimization) {
+                foreach ($includes as $alias => $include) {
+                    // Check for child relationships (recursion)
+                    if (!empty($include['children'])) {
+                        $useSubqueryOptimization = false;
+
+                        break;
+                    }
+
+                    // Check relationship type to avoid Postgres limit on json_build_object arguments
+                    // and to follow "N+1" pattern for complex relationships as requested
+                    $relConfig = RelationshipResolver::resolveRelationship($table, $alias);
+                    if ($relConfig && in_array($relConfig['type'], ['belongsToMany', 'morphToMany', 'hasManyThrough'])) {
+                        $useSubqueryOptimization = false;
+
+                        break;
+                    }
+
+                    // Check for filters in columns
+                    if (isset($include['columns']) && is_array($include['columns'])) {
+                        foreach ($include['columns'] as $col) {
+                            if (str_contains((string) $col, '=')) {
+                                $useSubqueryOptimization = false;
+
+                                break 2;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if ($useSubqueryOptimization && [] !== $includes) {
+                $primaryKey = $tableSchema->primary_key ?? 'id';
+                $recordIds = array_column($data, $primaryKey);
+
+                if ([] !== $recordIds) {
+                    $optimizedBuilder = DB::table($actualTableName);
+                    $mainCols = RelationshipResolver::getMainTableColumns($selectParam);
+                    if ([] !== $mainCols) {
+                        $prefixedCols = array_map(fn ($col) => '*' === $col ? $actualTableName.'.*' : (str_contains((string) $col, '.') ? $col : $actualTableName.'.'.$col), $mainCols);
+                        $optimizedBuilder->select($prefixedCols);
+                    } else {
+                        $optimizedBuilder->select($actualTableName.'.*');
+                    }
+
+                    $this->applyTenantFilter($optimizedBuilder, $actualTableName, $tenantId);
+
+                    if ($tableSchema->soft_deletes) {
+                        $optimizedBuilder->whereNull($actualTableName.'.deleted_at');
+                    }
+
+                    RelationshipResolver::applySubqueryRelationships(
+                        $optimizedBuilder,
+                        $table,
+                        $includes,
+                        $this->shouldApplyTenantId($tableSchema) ? $tenantId : null
+                    );
+
+                    // Re-apply sorting to optimized query to ensure consistent order
+                    QueryBuilderFilters::applySort($optimizedBuilder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
+
+                    $optimizedData = $optimizedBuilder->whereIn($actualTableName.'.'.$primaryKey, $recordIds)->get()->all();
+                    $data = RelationshipResolver::processJsonRelationships($optimizedData, $includes, $table);
+                }
+            } else {
+                $data = RelationshipResolver::includeRelationships(
+                    $data,
+                    $table,
+                    $selectParam,
+                    $this->shouldApplyTenantId($tableSchema) ? $tenantId : null
+                );
+            }
+        }
+
+        $data = RecordApiResponseService::removeDeletedAtFields($data);
+        $data = RecordApiResponseService::removeHiddenFields($data, $table);
+
+        if ($isCacheable && $cacheKey) {
+            $cacheData = [
+                'data' => $data,
+                'meta' => $meta,
+                'headers' => $headers,
+                'cached_at' => now()->toISOString(),
+                'tenant_enabled' => $this->shouldApplyTenantId($tableSchema),
+            ];
+            $ttl = $this->calculateOptimalCacheTTL($table, count($data), $request->has('select'));
+            QueryCacheService::put($cacheKey, $cacheData, $ttl);
+        }
+
+        return [
+            'data' => $data,
+            'meta' => $meta,
+            'headers' => $headers,
+            'filters' => $filters,
+            'request' => $request,
+            'cursor_meta' => $cursorMeta,
+        ];
+    }
+
+    /**
+     * Helper method to handle common record query logic.
+     *
+     * @param Request                        $request        The HTTP request object
+     * @param Builder|RecordTableType|string $tableOrBuilder The table name, query builder, or table config
+     * @param null|string                    $tanentColumn   The tenant column name (optional)
+     *
+     * @return array The query result array
+     */
+    public static function applyRequestFilters(Request $request, Builder|RecordTableType|string $tableOrBuilder, ?string $tanentColumn = ''): array
+    {
+        $service = app(self::class);
+        $builder = null;
+        $table = '';
+        $customSchema = null;
+
+        if ($tableOrBuilder instanceof Builder) {
+            $builder = $tableOrBuilder;
+            $table = $builder->from;
+        } elseif ($tableOrBuilder instanceof RecordTableType) {
+            $customSchema = $tableOrBuilder;
+            $table = $customSchema->pms_name ?? $customSchema->table;
+
+            // Register custom schema to make it available for QueryBuilderFilters
+            // Ensure we register under the actual table name as that's what QueryBuilderFilters looks up
+            $registerKey = $customSchema->table ?? $table;
+            SchemaRegistry::register($registerKey, $customSchema);
+
+            // If pms_name is different, register under that too to ensure consistency
+            if ($table !== $registerKey) {
+                SchemaRegistry::register($table, $customSchema);
+            }
+        } else {
+            $table = $tableOrBuilder;
+        }
+
+        $schema = SchemaRegistry::get();
+        $tableSchema = $customSchema ?? ($schema[$table] ?? null);
+        $actualTableName = $tableSchema->table ?? $table;
+        $tenantId = $tanentColumn;
+
+        $filters = $request->except(['page', 'per_page', 'limit']);
+        $includes = $request->query('select', []);
+        if (is_string($includes)) {
+            $includes = explode(',', $includes);
+        }
+
+        $page = max((int) $request->get('page', 1), 1);
+        $perPage = $request->has('per_page') ? max(1, min((int) $request->get('per_page', 25), (int) config('record.per_page_max', 1000))) : null;
+        $limit = $request->has('limit') ? max(1, min((int) $request->get('limit'), (int) config('record.limit_max', 1000))) : config('record.limit_max', 1000);
+
+        // Disable cache if using builder as we can't easily key the builder state
+        $isCacheable = !$builder && $service->isCacheableRequest($request, $table);
+        $cacheKey = null;
+
+        if ($isCacheable) {
+            $cacheKey = $service->generateOptimizedCacheKey(
+                $table,
+                array_merge($filters, [
+                    config('record.tenant_column', 'tenant_id') => $tableSchema && $service->shouldApplyTenantId($tableSchema) ? $tanentColumn : null,
+                    'tenant_enabled' => $tableSchema && $service->shouldApplyTenantId($tableSchema),
+                ]),
+                $includes,
+                $page,
+                $perPage ?? $limit
+            );
+
+            $cached = QueryCacheService::get($cacheKey);
+            if (null !== $cached) {
+                return array_merge($cached, ['from_cache' => true, 'filters' => $filters, 'request' => $request]);
+            }
+        }
+
+        if (!$builder instanceof Builder) {
+            $builder = DB::table($actualTableName);
+            $service->applyTenantFilter($builder, $actualTableName, $tenantId);
+
+            if ($tableSchema && $tableSchema->soft_deletes) {
+                $builder->whereNull($actualTableName.'.deleted_at');
+            }
+        } else {
+            $service->applyTenantFilter($builder, $actualTableName, $tenantId);
+
+            if ($tableSchema && $tableSchema->soft_deletes) {
+                $builder->whereNull($actualTableName.'.deleted_at');
+            }
+        }
+
+        QueryBuilderFilters::apply($builder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
+
+        $headers = [];
+        $meta = [];
+        $cursorMeta = null;
+        $data = [];
+        $total = 0;
+
+        if ($request->has('limit') && !$request->has('per_page')) {
+            $limit = max(1, min((int) $request->get('limit'), (int) config('record.limit_max', 1000)));
+            $data = $builder->limit($limit)->get()->all();
+            $total = count($data);
+            $headers['X-Total-Count'] = (string) $total;
+            $meta = ['total' => $total];
+        } else {
+            $maxPerPage = (int) config('record.per_page_max', 100);
+            $perPage = max(1, min((int) $request->get('per_page', config('record.limit_max', 1000)), $maxPerPage));
+
+            if ($request->has('cursor') || CursorPagination::shouldUseCursorPagination($builder)) {
+                $primaryKey = $tableSchema->primary_key ?? 'id';
+                $cursorColumn = $request->get('cursor_column', $primaryKey);
+
+                if ($request->has('composite_cursor') || $request->has('sortby')) {
+                    $cursorColumns = [$cursorColumn];
+                    if ($cursorColumn !== $primaryKey) {
+                        $cursorColumns[] = $primaryKey;
+                    }
+
+                    $result = CursorPagination::paginateComposite($builder, $request, $cursorColumns, $perPage);
+                } else {
+                    $result = CursorPagination::paginate($builder, $request, $cursorColumn, $perPage);
+                }
+
+                $data = $result['data'];
+                $cursorMeta = $result['meta'];
+                $meta = $cursorMeta;
+            } else {
+                $page = max((int) $request->get('page', 1), 1);
+                $countQuery = clone $builder;
+                $total = $countQuery->count();
+                $data = $builder->forPage($page, $perPage)->get()->all();
+
+                $headers['X-Total-Count'] = (string) $total;
+                $lastPage = (int) ceil($total / $perPage);
+                $headers['X-Page'] = (string) $page;
+                $headers['X-Per-Page'] = (string) $perPage;
+                $headers['X-Total-Pages'] = (string) $lastPage;
+
+                $meta = [
+                    'page' => $page,
+                    'per_page' => $perPage,
+                    'total' => $total,
+                ];
+            }
+        }
+
+        if ($request->has('select')) {
+            $selectParam = $request->query('select');
+            $includes = RelationshipResolver::parseSelectForIncludes($selectParam);
+            $useSubqueryOptimization = config('record.use_subquery_optimization', true) && count($data) <= 100;
+
+            // Disable subquery optimization if nested filters or child relationships are detected
+            if ($useSubqueryOptimization) {
+                foreach ($includes as $alias => $include) {
+                    if (!empty($include['children'])) {
+                        $useSubqueryOptimization = false;
+
+                        break;
+                    }
+
+                    // Check relationship type to avoid Postgres limit on json_build_object arguments
+                    // and to follow "N+1" pattern for complex relationships as requested
+                    $relConfig = RelationshipResolver::resolveRelationship($table, $alias);
+                    if ($relConfig && in_array($relConfig['type'], ['belongsToMany', 'morphToMany', 'hasManyThrough'])) {
+                        $useSubqueryOptimization = false;
+
+                        break;
+                    }
+
+                    if (isset($include['columns']) && is_array($include['columns'])) {
+                        foreach ($include['columns'] as $col) {
+                            if (str_contains((string) $col, '=')) {
+                                $useSubqueryOptimization = false;
+
+                                break 2;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if ($useSubqueryOptimization && [] !== $includes) {
+                $primaryKey = $tableSchema->primary_key ?? 'id';
+                $recordIds = array_column($data, $primaryKey);
+
+                if ([] !== $recordIds) {
+                    $optimizedBuilder = DB::table($actualTableName);
+                    $mainCols = RelationshipResolver::getMainTableColumns($selectParam);
+                    if ([] !== $mainCols) {
+                        $prefixedCols = array_map(fn ($col) => '*' === $col ? $actualTableName.'.*' : (str_contains((string) $col, '.') ? $col : $actualTableName.'.'.$col), $mainCols);
+                        $optimizedBuilder->select($prefixedCols);
+                    } else {
+                        $optimizedBuilder->select($actualTableName.'.*');
+                    }
+
+                    $service->applyTenantFilter($optimizedBuilder, $actualTableName, $tenantId);
+
+                    if ($tableSchema && $tableSchema->soft_deletes) {
+                        $optimizedBuilder->whereNull($actualTableName.'.deleted_at');
+                    }
+
+                    RelationshipResolver::applySubqueryRelationships(
+                        $optimizedBuilder,
+                        $table,
+                        $includes,
+                        $tableSchema && $service->shouldApplyTenantId($tableSchema) ? $tenantId : null
+                    );
+
+                    // Re-apply sorting to optimized query to ensure consistent order
+                    QueryBuilderFilters::applySort($optimizedBuilder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
+
+                    $optimizedData = $optimizedBuilder->whereIn($actualTableName.'.'.$primaryKey, $recordIds)->get()->all();
+                    $data = RelationshipResolver::processJsonRelationships($optimizedData, $includes, $table);
+                }
+            } else {
+                $data = RelationshipResolver::includeRelationships(
+                    $data,
+                    $table,
+                    $selectParam,
+                    $tableSchema && $service->shouldApplyTenantId($tableSchema) ? $tenantId : null
+                );
+            }
+        }
+
+        $data = RecordApiResponseService::removeDeletedAtFields($data);
+        $data = RecordApiResponseService::removeHiddenFields($data, $table);
+
+        if ($isCacheable && $cacheKey) {
+            $cacheData = [
+                'data' => $data,
+                'meta' => $meta,
+                'headers' => $headers,
+                'cached_at' => now()->toISOString(),
+                'tenant_enabled' => $tableSchema && $service->shouldApplyTenantId($tableSchema),
+            ];
+            $ttl = $service->calculateOptimalCacheTTL($table, count($data), $request->has('select'));
+            QueryCacheService::put($cacheKey, $cacheData, $ttl);
+        }
+
+        return [
+            'data' => $data,
+            'meta' => $meta,
+            'headers' => $headers,
+            'filters' => $filters,
+            'request' => $request,
+            'cursor_meta' => $cursorMeta,
+        ];
+    }
+
+    /**
+     * Get a single record by ID.
+     */
+    public function getRecord(Request $request, string $table, mixed $id, mixed $tenantId): array
+    {
+        $schema = SchemaRegistry::get();
+        $tableSchema = $schema[$table];
+
+        $triggerParams = [
+            $request,
+            $table,
+            [
+                'type' => 'show',
+                'id' => $id,
+                config('record.tenant_column', 'tenant_id') => $tenantId,
+            ],
+        ];
+        $triggerParams = $this->executeTableTrigger($tableSchema->beforeRead ?? null, $triggerParams);
+        if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
+            $request = $triggerParams[0];
+        }
+
+        $actualTableName = $tableSchema->table ?? $table;
+        $pk = $tableSchema->primary_key ?? 'id';
+
+        $recordCacheKey = $this->generateRecordCacheKey($table, $id, $tenantId, $request->query('select'));
+        if ($this->isCacheableRequest($request, $table)) {
+            $cachedRecord = QueryCacheService::get($recordCacheKey);
+            if ($cachedRecord) {
+                return ['data' => $cachedRecord, 'request' => $request, 'from_cache' => true];
+            }
+        }
+
+        $builder = DB::table($actualTableName);
+        $this->applyTenantFilter($builder, $actualTableName, $tenantId);
+
+        if ($tableSchema->soft_deletes) {
+            $builder->whereNull($actualTableName.'.deleted_at');
+        }
+
+        if ($request->has('select')) {
+            $mainCols = RelationshipResolver::getMainTableColumns($request->query('select'));
+            if ([] !== $mainCols) {
+                $builder->addSelect($mainCols);
+            }
+        }
+
+        $record = $builder->where($pk, $id)->first();
+        if (!$record) {
+            return ['data' => null, 'request' => $request];
+        }
+
+        if ($request->has('select')) {
+            $selectParam = $request->query('select');
+            $includes = RelationshipResolver::parseSelectForIncludes($selectParam);
+            $useSubqueryOptimization = config('record.use_subquery_optimization', true);
+
+            // Disable subquery optimization if nested filters or child relationships are detected
+            if ($useSubqueryOptimization) {
+                foreach ($includes as $alias => $include) {
+                    if (!empty($include['children'])) {
+                        $useSubqueryOptimization = false;
+
+                        break;
+                    }
+
+                    // Check relationship type to avoid Postgres limit on json_build_object arguments
+                    // and to follow "N+1" pattern for complex relationships as requested
+                    $relConfig = RelationshipResolver::resolveRelationship($table, $alias);
+                    if ($relConfig && in_array($relConfig['type'], ['belongsToMany', 'morphToMany', 'hasManyThrough'])) {
+                        $useSubqueryOptimization = false;
+
+                        break;
+                    }
+
+                    if (isset($include['columns']) && is_array($include['columns'])) {
+                        foreach ($include['columns'] as $col) {
+                            if (str_contains((string) $col, '=')) {
+                                $useSubqueryOptimization = false;
+
+                                break 2;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if ($useSubqueryOptimization && [] !== $includes) {
+                $optimizedBuilder = DB::table($actualTableName);
+                if ([] !== $mainCols) {
+                    $prefixedCols = array_map(fn ($col) => '*' === $col ? $actualTableName.'.*' : (str_contains((string) $col, '.') ? $col : $actualTableName.'.'.$col), $mainCols);
+                    $optimizedBuilder->select($prefixedCols);
+                } else {
+                    $optimizedBuilder->select($actualTableName.'.*');
+                }
+
+                $this->applyTenantFilter($optimizedBuilder, $actualTableName, $tenantId);
+
+                if ($tableSchema->soft_deletes) {
+                    $optimizedBuilder->whereNull($actualTableName.'.deleted_at');
+                }
+
+                RelationshipResolver::applySubqueryRelationships(
+                    $optimizedBuilder,
+                    $table,
+                    $includes,
+                    $this->shouldApplyTenantId($tableSchema) ? $tenantId : null
+                );
+
+                $optimizedRecord = $optimizedBuilder->where($pk, $id)->first();
+
+                if ($optimizedRecord) {
+                    $processedData = RelationshipResolver::processJsonRelationships([$optimizedRecord], $includes, $table);
+                    $record = $processedData[0] ?? $record;
+                }
+            } else {
+                $data = RelationshipResolver::includeRelationships(
+                    [$record],
+                    $table,
+                    $selectParam,
+                    $this->shouldApplyTenantId($tableSchema) ? $tenantId : null
+                );
+                $record = $data[0] ?? $record;
+            }
+        }
+
+        $record = RecordApiResponseService::removeDeletedAtFields($record);
+
+        if ($this->isCacheableRequest($request, $table)) {
+            $ttl = $this->calculateOptimalCacheTTL($table, 1, $request->has('select'));
+            QueryCacheService::put($recordCacheKey, $record, $ttl);
+        }
+
+        return ['data' => $record, 'request' => $request];
     }
 
     /**
@@ -413,9 +1392,9 @@ class RecordService
         if (isset($config['method'])) {
             $allowedMethods = is_array($config['method']) ? $config['method'] : [$config['method']];
             $allowedMethods = array_map(function (mixed $method): string {
-                if ($method instanceof BackedEnum) {
+                if ($method instanceof \BackedEnum) {
                     $method = $method->value;
-                } elseif ($method instanceof UnitEnum) {
+                } elseif ($method instanceof \UnitEnum) {
                     $method = $method->name;
                 }
 
@@ -488,151 +1467,8 @@ class RecordService
             }
 
             return RecordApiResponseService::successWrapped($result);
-        } catch (Exception $exception) {
-            return RecordApiResponseService::errorWrapped('Function execution failed: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
-        }
-    }
-
-    /**
-     * Bulk create, update, or delete records.
-     */
-    public function bulkRecord(Request $request, string $table, mixed $tenantId, ?string $legacyAction = null): array
-    {
-        $schema = SchemaRegistry::get();
-        if (!isset($schema[$table])) {
-            throw new Exception('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
-        }
-
-        $tableSchema = $schema[$table];
-
-        // Parse items
-        $requestData = $request->all();
-        if (isset($requestData['items']) && is_array($requestData['items'])) {
-            $items = $requestData['items'];
-        } else {
-            $jsonInput = $request->getContent();
-            $decodedJson = json_decode($jsonInput, true);
-
-            if (JSON_ERROR_NONE === json_last_error() && is_array($decodedJson) && [] !== $decodedJson) {
-                $items = array_keys($decodedJson) === range(0, count($decodedJson) - 1) ? $decodedJson : [$decodedJson];
-            } else {
-                $items = $request->input('items', []);
-            }
-        }
-
-        if (!is_array($items) || [] === $items) {
-            throw new Exception('Data array required', RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
-        }
-
-        $maxBatch = (int) config('record.bulk_max', 100);
-        if (count($items) > $maxBatch) {
-            throw new Exception('Batch too large, max ' . $maxBatch, 413);
-        }
-
-        $pk = $tableSchema->primary_key ?? 'id';
-        $affected = 0;
-        $createdData = [];
-        $updatedData = [];
-        $deletedData = [];
-        $upsertedData = [];
-
-        // Begin transaction
-        DB::beginTransaction();
-
-        try {
-            foreach ($items as $item) {
-                $operation = $this->determineOperation($item, $pk, $legacyAction);
-
-                if ('create' === $operation) {
-                    $this->executeTableTrigger($tableSchema->beforeCreate ?? null, [$request, $table, $item]);
-
-                    $result = $this->createRecord($request, $table, $item, $tenantId);
-                    $insertId = $result['id'];
-                    $recordResult = $this->getRecord($request, $table, $insertId, $tenantId);
-                    $createdData[] = $recordResult['data'];
-                    $affected++;
-
-                    $this->processPostWriteLogic($request, $table, 'create', [
-                        'id' => $insertId,
-                        'payload' => $result['payload'],
-                        config('record.tenant_column', 'tenant_id') => $result['tenant_id'],
-                        'response' => $recordResult['data'],
-                    ]);
-                } elseif ('update' === $operation) {
-                    if (!isset($item[$pk])) {
-                        throw new Exception("Primary key required for update");
-                    }
-
-                    $id = $item[$pk];
-                    unset($item[$pk]);
-
-                    $this->executeTableTrigger($tableSchema->beforeUpdate ?? null, [$request, $table, $id, $item]);
-
-                    $result = $this->updateRecord($request, $table, $id, $item, $tenantId);
-                    if ($result['updated'] > 0) {
-                        $recordResult = $this->getRecord($request, $table, $id, $tenantId);
-                        $updatedData[] = $recordResult['data'];
-                        $affected += $result['updated'];
-
-                        $this->processPostWriteLogic($request, $table, 'update', [
-                            'id' => $id,
-                            'payload' => $result['payload'],
-                            config('record.tenant_column', 'tenant_id') => $result['tenant_id'],
-                            'updated' => $result['updated'],
-                            'response' => $recordResult['data'],
-                        ]);
-                    }
-                } elseif ('delete' === $operation) {
-                    if (!isset($item[$pk])) {
-                        throw new Exception("Primary key required for delete");
-                    }
-
-                    $this->executeTableTrigger($tableSchema->beforeDelete ?? null, [$request, $table, $item[$pk]]);
-
-                    $result = $this->deleteRecord($request, $table, $item[$pk], $tenantId);
-                    if ($result['affected'] > 0) {
-                        $deletedData[] = ['id' => $item[$pk]];
-                        $affected += $result['affected'];
-
-                        $response = ['deleted' => $result['affected']];
-
-                        $this->processPostWriteLogic($request, $table, 'delete', [
-                            'id' => $item[$pk],
-                            config('record.tenant_column', 'tenant_id') => $tenantId,
-                            'affected' => $result['affected'],
-                            'soft_deleted' => $tableSchema->soft_deletes ?? false,
-                            'response' => $response,
-                        ]);
-                    }
-                } elseif ('upsert' === $operation) {
-                    $result = $this->upsertRecord($request, $table, $item, $tenantId);
-                    $upsertedId = $result['id'] ?? ($item[$pk] ?? null);
-
-                    if ($upsertedId) {
-                        $recordResult = $this->getRecord($request, $table, $upsertedId, $tenantId);
-                        $upsertedData[] = $recordResult['data'];
-                        $affected++;
-
-                        if (!($tableSchema->disable_auditLog ?? false)) {
-                            $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                            AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, $recordResult['data'], '', '', $tenantId);
-                        }
-                    }
-                }
-            }
-
-            DB::commit();
-            QueryCacheService::invalidateTable($table);
-
-            $consolidatedData = array_merge($createdData, $updatedData, $upsertedData);
-
-            return [
-                'data' => $consolidatedData,
-                'meta' => ['affected' => count($consolidatedData)] // Matches Controller logic
-            ];
-        } catch (Exception $exception) {
-            DB::rollBack();
-            throw $exception;
+        } catch (\Exception $exception) {
+            return RecordApiResponseService::errorWrapped('Function execution failed: '.$exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -654,813 +1490,5 @@ class RecordService
         }
 
         return 'delete';
-    }
-
-    public function executeTableTrigger(mixed $trigger, array $params): array
-    {
-        if (null === $trigger) {
-            return $params;
-        }
-
-        if ($trigger instanceof RecordTableTriggerType) {
-            $triggers = [$trigger];
-        } elseif (is_array($trigger)) {
-            $isSingleTriggerConfig = isset($trigger['class']) || isset($trigger['function_method']);
-            $triggers = $isSingleTriggerConfig ? [$trigger] : $trigger;
-        } else {
-            throw new Exception(sprintf(
-                "Invalid table trigger configuration. Expected %s or array, got %s",
-                RecordTableTriggerType::class,
-                get_debug_type($trigger)
-            ));
-        }
-
-        if (!is_array($triggers)) {
-            throw new Exception(sprintf(
-                "Invalid table trigger configuration. Expected %s or array, got %s",
-                RecordTableTriggerType::class,
-                get_debug_type($triggers)
-            ));
-        }
-
-        foreach ($triggers as $index => $item) {
-            if ($item instanceof RecordTableTriggerType) {
-                $item = $item;
-            } elseif (is_array($item)) {
-                try {
-                    $item = RecordTableTriggerType::fromArray($item);
-                } catch (\Throwable $exception) {
-                    throw new Exception(sprintf(
-                        'Invalid table trigger config at index %s: %s',
-                        (string) $index,
-                        $exception->getMessage()
-                    ), 0, $exception);
-                }
-            } else {
-                throw new Exception(sprintf(
-                    'Invalid table trigger item at index %s. Expected %s or array, got %s',
-                    (string) $index,
-                    RecordTableTriggerType::class,
-                    get_debug_type($item)
-                ));
-            }
-
-            if (!$item instanceof RecordTableTriggerType) {
-                throw new Exception(sprintf(
-                    'Invalid table trigger item at index %s. Expected %s, got %s',
-                    (string) $index,
-                    RecordTableTriggerType::class,
-                    get_debug_type($item)
-                ));
-            }
-
-            $className = $item->class;
-            $method = $item->function_method;
-            if (!class_exists($className)) {
-                throw new Exception(sprintf("Table trigger class '%s' does not exist", $className));
-            }
-
-            if (!method_exists($className, $method)) {
-                throw new Exception(sprintf("Table trigger method '%s::%s' does not exist", $className, $method));
-            }
-
-            try {
-                $result = call_user_func_array([$className, $method], $params);
-                if ($result instanceof Request && isset($params[0]) && $params[0] instanceof Request) {
-                    $params[0] = $result;
-                } elseif (is_array($result) && isset($params[0]) && $params[0] instanceof Request) {
-                    $params[0]->merge($result);
-                }
-            } catch (\Throwable $exception) {
-                throw new Exception(sprintf(
-                    "Table trigger execution failed for '%s::%s': %s",
-                    $className,
-                    $method,
-                    $exception->getMessage()
-                ), 0, $exception);
-            }
-        }
-
-        return $params;
-    }
-
-    // --- Helper Methods ---
-
-    public function isCacheableRequest(Request $request, string $table): bool
-    {
-        if (!config('record.cache.enabled', true)) {
-            return false;
-        }
-
-        $perTableCache = config('record.cache.per_table', []);
-        $schema = SchemaRegistry::get();
-        $tableSchema = $schema[$table] ?? null;
-
-        $schemaTableName = null;
-        if (is_object($tableSchema)) {
-            $schemaTableName = $tableSchema->table ?? null;
-        } elseif (is_array($tableSchema)) {
-            $schemaTableName = $tableSchema['table'] ?? null;
-        }
-
-        if ((isset($perTableCache[$table]) && false === $perTableCache[$table]) || (null !== $schemaTableName && isset($perTableCache[$schemaTableName]) && false === $perTableCache[$schemaTableName])) {
-            return false;
-        }
-
-        $disableCache = false;
-        if (is_object($tableSchema)) {
-            $disableCache = (bool) ($tableSchema->disable_cache ?? false);
-        } elseif (is_array($tableSchema)) {
-            $disableCache = (bool) ($tableSchema['disable_cache'] ?? false);
-        }
-
-        if ($disableCache) {
-            return false;
-        }
-
-        if ('GET' !== $request->method()) {
-            return false;
-        }
-
-        return !$request->has(['search', 'filter', 'where']);
-    }
-
-    public function generateOptimizedCacheKey(string $table, array $filters, array $includes, int $page, int $limit): string
-    {
-        $keyData = [
-            'table' => $table,
-            'filters' => $filters,
-            'includes' => $includes,
-            'page' => $page,
-            'limit' => $limit,
-            'tenant_enabled' => $this->isTenantIdEnabled(),
-        ];
-        return 'record_index_' . md5(serialize($keyData));
-    }
-
-    public function generateRecordCacheKey(string $table, mixed $id, mixed $tenantId, mixed $select): string
-    {
-        $keyData = [
-            'table' => $table,
-            'id' => $id,
-            'tenant_id' => $this->isTenantIdEnabled() ? $tenantId : null,
-            'select' => $select,
-            'tenant_enabled' => $this->isTenantIdEnabled(),
-        ];
-        return 'record_show_' . md5(serialize($keyData));
-    }
-
-    public function calculateOptimalCacheTTL(string $table, int $recordCount, bool $hasRelationships): int
-    {
-        $baseTTL = config('record.cache.default_ttl', 3600);
-        if ($recordCount > 100) {
-            $baseTTL = (int) ($baseTTL * 0.5);
-        }
-
-        if ($hasRelationships) {
-            $baseTTL = (int) ($baseTTL * 0.7);
-        }
-
-        $perTableTTL = config('record.cache.per_table_ttl', []);
-        if (isset($perTableTTL[$table])) {
-            $baseTTL = $perTableTTL[$table];
-        }
-
-        return max($baseTTL, 300);
-    }
-
-    public function sanitizePayload(array $input, object $meta): array
-    {
-        $columns = array_keys($meta->columns ?? []);
-        $payload = array_intersect_key($input, array_flip($columns));
-        unset($payload['id'], $payload['deleted_at'], $payload['created_at'], $payload['updated_at']);
-        return $payload;
-    }
-
-    public function applyTimestampsAndAuditFields(array $payload, object $tableSchema, bool $isUpdate = false): array
-    {
-        $user = auth('api')->user();
-
-        if ($isUpdate) {
-            $payload['updated_at'] = now();
-            if ($user) {
-                if (isset($tableSchema->columns['updated_by'])) {
-                    $payload['updated_by'] = $user->id;
-                } elseif (isset($tableSchema->columns['last_updated_by'])) {
-                    $payload['last_updated_by'] = $user->id;
-                }
-            }
-        } else {
-            $payload['created_at'] = now();
-            $payload['updated_at'] = now();
-            if ($user && isset($tableSchema->columns['created_by'])) {
-                $payload['created_by'] = $user->id;
-            }
-        }
-
-        return $payload;
-    }
-
-    public function shouldApplyTenantId(object $tableSchema): bool
-    {
-        return $this->isTenantIdEnabled() && ($tableSchema->has_tenant_id ?? false);
-    }
-
-    public function normalizeTenantId(mixed $tenantId): mixed
-    {
-        if (is_string($tenantId)) {
-            return trim($tenantId);
-        }
-
-        return $tenantId;
-    }
-
-    public function isTenantIdEnabled(): bool
-    {
-        return config('record.enable_tenant_id', false);
-    }
-
-    public function applyTenantFilter(mixed $query, string $table, mixed $tenantId): void
-    {
-        $tenantId = $this->normalizeTenantId($tenantId);
-        $schema = SchemaRegistry::get();
-        if ($this->isTenantIdEnabled() && $tenantId !== null && $tenantId !== '' && ($schema[$table]->has_tenant_id ?? false)) {
-            $query->where($table . '.' . config('record.tenant_column', 'tenant_id'), $tenantId);
-        }
-    }
-
-    /**
-     * List records for a table.
-     */
-    public function listRecords(Request $request, string $table, mixed $tenantId): array
-    {
-        $schema = SchemaRegistry::get();
-        $tableSchema = $schema[$table];
-
-        $triggerParams = [
-            $request,
-            $table,
-            [
-                'type' => 'index',
-                config('record.tenant_column', 'tenant_id') => $tenantId,
-            ],
-        ];
-        $triggerParams = $this->executeTableTrigger($tableSchema->beforeRead ?? null, $triggerParams);
-        if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
-            $request = $triggerParams[0];
-        }
-
-        $actualTableName = $tableSchema->table ?? $table;
-
-        $filters = $request->except(['page', 'per_page', 'limit']);
-        $includes = $request->query('select', []);
-        if (is_string($includes)) {
-            $includes = explode(',', $includes);
-        }
-
-        $page = max((int) $request->get('page', 1), 1);
-        $perPage = $request->has('per_page') ? max(1, min((int) $request->get('per_page', 25), (int) config('record.per_page_max', 1000))) : null;
-        $limit = $request->has('limit') ? max(1, min((int) $request->get('limit'), (int) config('record.limit_max', 1000))) : config('record.limit_max', 1000);
-
-        $isCacheable = $this->isCacheableRequest($request, $table);
-        $cacheKey = null;
-
-        if ($isCacheable) {
-            $cacheKey = $this->generateOptimizedCacheKey(
-                $table,
-                array_merge($filters, [
-                    config('record.tenant_column', 'tenant_id') => $this->shouldApplyTenantId($tableSchema) ? $tenantId : null,
-                    'tenant_enabled' => $this->shouldApplyTenantId($tableSchema),
-                ]),
-                $includes,
-                $page,
-                $perPage ?? $limit
-            );
-
-            $cached = QueryCacheService::get($cacheKey);
-            if (null !== $cached) {
-                return array_merge($cached, ['from_cache' => true, 'filters' => $filters, 'request' => $request]);
-            }
-        }
-
-        $builder = DB::table($actualTableName);
-
-        $this->applyTenantFilter($builder, $actualTableName, $tenantId);
-
-        if ($tableSchema->soft_deletes) {
-            $builder->whereNull($actualTableName . '.deleted_at');
-        }
-
-        QueryBuilderFilters::apply($builder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
-
-        $headers = [];
-        $meta = [];
-        $cursorMeta = null;
-        $data = [];
-        $total = 0;
-
-        if ($request->has('limit') && !$request->has('per_page')) {
-            $limit = max(1, min((int) $request->get('limit'), (int) config('record.limit_max', 1000)));
-            $data = $builder->limit($limit)->get()->all();
-            $total = count($data);
-            $headers['X-Total-Count'] = (string) $total;
-            $meta = ['total' => $total];
-        } else {
-            $maxPerPage = (int) config('record.per_page_max', 100);
-            $perPage = max(1, min((int) $request->get('per_page', config('record.limit_max', 1000)), $maxPerPage));
-
-            if ($request->has('cursor') || CursorPagination::shouldUseCursorPagination($builder)) {
-                $primaryKey = $tableSchema->primary_key ?? 'id';
-                $cursorColumn = $request->get('cursor_column', $primaryKey);
-
-                if ($request->has('composite_cursor') || $request->has('sortby')) {
-                    $cursorColumns = [$cursorColumn];
-                    if ($cursorColumn !== $primaryKey) {
-                        $cursorColumns[] = $primaryKey;
-                    }
-
-                    $result = CursorPagination::paginateComposite($builder, $request, $cursorColumns, $perPage);
-                } else {
-                    $result = CursorPagination::paginate($builder, $request, $cursorColumn, $perPage);
-                }
-
-                $data = $result['data'];
-                $cursorMeta = $result['meta'];
-                $meta = $cursorMeta;
-            } else {
-                $page = max((int) $request->get('page', 1), 1);
-                $countQuery = clone $builder;
-                $total = $countQuery->count();
-
-                $data = $builder->forPage($page, $perPage)->get()->all();
-
-                $headers['X-Total-Count'] = (string) $total;
-                $lastPage = (int) ceil($total / $perPage);
-                $headers['X-Page'] = (string) $page;
-                $headers['X-Per-Page'] = (string) $perPage;
-                $headers['X-Total-Pages'] = (string) $lastPage;
-
-                $meta = [
-                    'page' => $page,
-                    'per_page' => $perPage,
-                    'total' => $total,
-                ];
-            }
-        }
-
-        if ($request->has('select')) {
-            $selectParam = $request->query('select');
-            $includes = RelationshipResolver::parseSelectForIncludes($selectParam);
-            $useSubqueryOptimization = config('record.use_subquery_optimization', true) && count($data) <= 100;
-
-
-            // Disable subquery optimization if nested filters or child relationships are detected
-            // This forces the use of includeRelationships which supports complex filtering and deep nesting
-            if ($useSubqueryOptimization) {
-                foreach ($includes as $include) {
-                    // Check for child relationships (recursion)
-                    if (!empty($include['children'])) {
-                        $useSubqueryOptimization = false;
-                        break;
-                    }
-
-                    // Check for filters in columns
-                    if (isset($include['columns']) && is_array($include['columns'])) {
-                        foreach ($include['columns'] as $col) {
-                            if (str_contains((string) $col, '=')) {
-                                $useSubqueryOptimization = false;
-                                break 2;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if ($useSubqueryOptimization && [] !== $includes) {
-                $primaryKey = $tableSchema->primary_key ?? 'id';
-                $recordIds = array_column($data, $primaryKey);
-
-                if ([] !== $recordIds) {
-                    $optimizedBuilder = DB::table($actualTableName);
-                    $mainCols = RelationshipResolver::getMainTableColumns($selectParam);
-                    if ([] !== $mainCols) {
-                        $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $mainCols);
-                        $optimizedBuilder->select($prefixedCols);
-                    } else {
-                        $optimizedBuilder->select($actualTableName . '.*');
-                    }
-
-                    $this->applyTenantFilter($optimizedBuilder, $actualTableName, $tenantId);
-
-                    if ($tableSchema->soft_deletes) {
-                        $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
-                    }
-
-                    RelationshipResolver::applySubqueryRelationships(
-                        $optimizedBuilder,
-                        $table,
-                        $includes,
-                        $this->shouldApplyTenantId($tableSchema) ? $tenantId : null
-                    );
-
-                    // Re-apply sorting to optimized query to ensure consistent order
-                    QueryBuilderFilters::applySort($optimizedBuilder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
-
-                    $optimizedData = $optimizedBuilder->whereIn($actualTableName . '.' . $primaryKey, $recordIds)->get()->all();
-                    $data = RelationshipResolver::processJsonRelationships($optimizedData, $includes, $table);
-                }
-            } else {
-                $data = RelationshipResolver::includeRelationships(
-                    $data,
-                    $table,
-                    $selectParam,
-                    $this->shouldApplyTenantId($tableSchema) ? $tenantId : null
-                );
-            }
-        }
-
-        $data = RecordApiResponseService::removeDeletedAtFields($data);
-        $data = RecordApiResponseService::removeHiddenFields($data, $table);
-
-        if ($isCacheable && $cacheKey) {
-            $cacheData = [
-                'data' => $data,
-                'meta' => $meta,
-                'headers' => $headers,
-                'cached_at' => now()->toISOString(),
-                'tenant_enabled' => $this->shouldApplyTenantId($tableSchema),
-            ];
-            $ttl = $this->calculateOptimalCacheTTL($table, count($data), $request->has('select'));
-            QueryCacheService::put($cacheKey, $cacheData, $ttl);
-        }
-
-        return [
-            'data' => $data,
-            'meta' => $meta,
-            'headers' => $headers,
-            'filters' => $filters,
-            'request' => $request,
-            'cursor_meta' => $cursorMeta
-        ];
-    }
-
-    /**
-     * Helper method to handle common record query logic.
-     *
-     * @param Request $request The HTTP request object
-     * @param Builder|string|RecordTableType $tableOrBuilder The table name, query builder, or table config
-     * @param string|null $tanentColumn The tenant column name (optional)
-     * @return array The query result array
-     */
-    public static function applyRequestFilters(Request $request, Builder|string|RecordTableType $tableOrBuilder, ?string $tanentColumn = ''): array
-    {
-        $service = app(self::class);
-        $builder = null;
-        $table = '';
-        $customSchema = null;
-
-        if ($tableOrBuilder instanceof Builder) {
-            $builder = $tableOrBuilder;
-            $table = $builder->from;
-        } elseif ($tableOrBuilder instanceof RecordTableType) {
-            $customSchema = $tableOrBuilder;
-            $table = $customSchema->pms_name ?? $customSchema->table;
-
-            // Register custom schema to make it available for QueryBuilderFilters
-            // Ensure we register under the actual table name as that's what QueryBuilderFilters looks up
-            $registerKey = $customSchema->table ?? $table;
-            SchemaRegistry::register($registerKey, $customSchema);
-
-            // If pms_name is different, register under that too to ensure consistency
-            if ($table !== $registerKey) {
-                SchemaRegistry::register($table, $customSchema);
-            }
-        } else {
-            $table = $tableOrBuilder;
-        }
-
-        $schema = SchemaRegistry::get();
-        $tableSchema = $customSchema ?? ($schema[$table] ?? null);
-        $actualTableName = $tableSchema->table ?? $table;
-        $tenantId = $tanentColumn;
-
-        $filters = $request->except(['page', 'per_page', 'limit']);
-        $includes = $request->query('select', []);
-        if (is_string($includes)) {
-            $includes = explode(',', $includes);
-        }
-
-        $page = max((int) $request->get('page', 1), 1);
-        $perPage = $request->has('per_page') ? max(1, min((int) $request->get('per_page', 25), (int) config('record.per_page_max', 1000))) : null;
-        $limit = $request->has('limit') ? max(1, min((int) $request->get('limit'), (int) config('record.limit_max', 1000))) : config('record.limit_max', 1000);
-
-        // Disable cache if using builder as we can't easily key the builder state
-        $isCacheable = !$builder && $service->isCacheableRequest($request, $table);
-        $cacheKey = null;
-
-        if ($isCacheable) {
-            $cacheKey = $service->generateOptimizedCacheKey(
-                $table,
-                array_merge($filters, [
-                    config('record.tenant_column', 'tenant_id') => $tableSchema && $service->shouldApplyTenantId($tableSchema) ? $tanentColumn : null,
-                    'tenant_enabled' => $tableSchema && $service->shouldApplyTenantId($tableSchema),
-                ]),
-                $includes,
-                $page,
-                $perPage ?? $limit
-            );
-
-            $cached = QueryCacheService::get($cacheKey);
-            if (null !== $cached) {
-                return array_merge($cached, ['from_cache' => true, 'filters' => $filters, 'request' => $request]);
-            }
-        }
-
-        if (!$builder instanceof Builder) {
-            $builder = DB::table($actualTableName);
-            $service->applyTenantFilter($builder, $actualTableName, $tenantId);
-
-            if ($tableSchema && $tableSchema->soft_deletes) {
-                $builder->whereNull($actualTableName . '.deleted_at');
-            }
-        } else {
-            $service->applyTenantFilter($builder, $actualTableName, $tenantId);
-
-            if ($tableSchema && $tableSchema->soft_deletes) {
-                $builder->whereNull($actualTableName . '.deleted_at');
-            }
-        }
-
-        QueryBuilderFilters::apply($builder, $request, $actualTableName, ($tableSchema->primary_key ?? 'id'));
-
-        $headers = [];
-        $meta = [];
-        $cursorMeta = null;
-        $data = [];
-        $total = 0;
-
-        if ($request->has('limit') && !$request->has('per_page')) {
-            $limit = max(1, min((int) $request->get('limit'), (int) config('record.limit_max', 1000)));
-            $data = $builder->limit($limit)->get()->all();
-            $total = count($data);
-            $headers['X-Total-Count'] = (string) $total;
-            $meta = ['total' => $total];
-        } else {
-            $maxPerPage = (int) config('record.per_page_max', 100);
-            $perPage = max(1, min((int) $request->get('per_page', config('record.limit_max', 1000)), $maxPerPage));
-
-            if ($request->has('cursor') || CursorPagination::shouldUseCursorPagination($builder)) {
-                $primaryKey = $tableSchema->primary_key ?? 'id';
-                $cursorColumn = $request->get('cursor_column', $primaryKey);
-
-                if ($request->has('composite_cursor') || $request->has('sortby')) {
-                    $cursorColumns = [$cursorColumn];
-                    if ($cursorColumn !== $primaryKey) {
-                        $cursorColumns[] = $primaryKey;
-                    }
-
-                    $result = CursorPagination::paginateComposite($builder, $request, $cursorColumns, $perPage);
-                } else {
-                    $result = CursorPagination::paginate($builder, $request, $cursorColumn, $perPage);
-                }
-
-                $data = $result['data'];
-                $cursorMeta = $result['meta'];
-                $meta = $cursorMeta;
-            } else {
-                $page = max((int) $request->get('page', 1), 1);
-                $countQuery = clone $builder;
-                $total = $countQuery->count();
-                $data = $builder->forPage($page, $perPage)->get()->all();
-
-                $headers['X-Total-Count'] = (string) $total;
-                $lastPage = (int) ceil($total / $perPage);
-                $headers['X-Page'] = (string) $page;
-                $headers['X-Per-Page'] = (string) $perPage;
-                $headers['X-Total-Pages'] = (string) $lastPage;
-
-                $meta = [
-                    'page' => $page,
-                    'per_page' => $perPage,
-                    'total' => $total,
-                ];
-            }
-        }
-
-        if ($request->has('select')) {
-            $selectParam = $request->query('select');
-            $includes = RelationshipResolver::parseSelectForIncludes($selectParam);
-            $useSubqueryOptimization = config('record.use_subquery_optimization', true) && count($data) <= 100;
-
-            // Disable subquery optimization if nested filters or child relationships are detected
-            if ($useSubqueryOptimization) {
-                foreach ($includes as $include) {
-                    if (!empty($include['children'])) {
-                        $useSubqueryOptimization = false;
-                        break;
-                    }
-
-                    if (isset($include['columns']) && is_array($include['columns'])) {
-                        foreach ($include['columns'] as $col) {
-                            if (str_contains((string) $col, '=')) {
-                                $useSubqueryOptimization = false;
-                                break 2;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if ($useSubqueryOptimization && [] !== $includes) {
-                $primaryKey = $tableSchema->primary_key ?? 'id';
-                $recordIds = array_column($data, $primaryKey);
-
-                if ([] !== $recordIds) {
-                    $optimizedBuilder = DB::table($actualTableName);
-                    $mainCols = RelationshipResolver::getMainTableColumns($selectParam);
-                    if ([] !== $mainCols) {
-                        $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $mainCols);
-                        $optimizedBuilder->select($prefixedCols);
-                    } else {
-                        $optimizedBuilder->select($actualTableName . '.*');
-                    }
-
-                    $service->applyTenantFilter($optimizedBuilder, $actualTableName, $tenantId);
-
-                    if ($tableSchema && $tableSchema->soft_deletes) {
-                        $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
-                    }
-
-                    RelationshipResolver::applySubqueryRelationships(
-                        $optimizedBuilder,
-                        $table,
-                        $includes,
-                        $tableSchema && $service->shouldApplyTenantId($tableSchema) ? $tenantId : null
-                    );
-
-                    // Re-apply sorting to optimized query to ensure consistent order
-                    QueryBuilderFilters::applySort($optimizedBuilder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
-
-                    $optimizedData = $optimizedBuilder->whereIn($actualTableName . '.' . $primaryKey, $recordIds)->get()->all();
-                    $data = RelationshipResolver::processJsonRelationships($optimizedData, $includes, $table);
-                }
-            } else {
-                $data = RelationshipResolver::includeRelationships(
-                    $data,
-                    $table,
-                    $selectParam,
-                    $tableSchema && $service->shouldApplyTenantId($tableSchema) ? $tenantId : null
-                );
-            }
-        }
-
-        $data = RecordApiResponseService::removeDeletedAtFields($data);
-        $data = RecordApiResponseService::removeHiddenFields($data, $table);
-
-        if ($isCacheable && $cacheKey) {
-            $cacheData = [
-                'data' => $data,
-                'meta' => $meta,
-                'headers' => $headers,
-                'cached_at' => now()->toISOString(),
-                'tenant_enabled' => $tableSchema && $service->shouldApplyTenantId($tableSchema),
-            ];
-            $ttl = $service->calculateOptimalCacheTTL($table, count($data), $request->has('select'));
-            QueryCacheService::put($cacheKey, $cacheData, $ttl);
-        }
-
-        return [
-            'data' => $data,
-            'meta' => $meta,
-            'headers' => $headers,
-            'filters' => $filters,
-            'request' => $request,
-            'cursor_meta' => $cursorMeta
-        ];
-    }
-
-    /**
-     * Get a single record by ID.
-     */
-    public function getRecord(Request $request, string $table, mixed $id, mixed $tenantId): array
-    {
-        $schema = SchemaRegistry::get();
-        $tableSchema = $schema[$table];
-
-        $triggerParams = [
-            $request,
-            $table,
-            [
-                'type' => 'show',
-                'id' => $id,
-                config('record.tenant_column', 'tenant_id') => $tenantId,
-            ],
-        ];
-        $triggerParams = $this->executeTableTrigger($tableSchema->beforeRead ?? null, $triggerParams);
-        if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
-            $request = $triggerParams[0];
-        }
-
-        $actualTableName = $tableSchema->table ?? $table;
-        $pk = $tableSchema->primary_key ?? 'id';
-
-        $recordCacheKey = $this->generateRecordCacheKey($table, $id, $tenantId, $request->query('select'));
-        if ($this->isCacheableRequest($request, $table)) {
-            $cachedRecord = QueryCacheService::get($recordCacheKey);
-            if ($cachedRecord) {
-                return ['data' => $cachedRecord, 'request' => $request, 'from_cache' => true];
-            }
-        }
-
-        $builder = DB::table($actualTableName);
-        $this->applyTenantFilter($builder, $actualTableName, $tenantId);
-
-        if ($tableSchema->soft_deletes) {
-            $builder->whereNull($actualTableName . '.deleted_at');
-        }
-
-        if ($request->has('select')) {
-            $mainCols = RelationshipResolver::getMainTableColumns($request->query('select'));
-            if ([] !== $mainCols) {
-                $builder->addSelect($mainCols);
-            }
-        }
-
-        $record = $builder->where($pk, $id)->first();
-        if (!$record) {
-            return ['data' => null, 'request' => $request];
-        }
-
-        if ($request->has('select')) {
-            $selectParam = $request->query('select');
-            $includes = RelationshipResolver::parseSelectForIncludes($selectParam);
-            $useSubqueryOptimization = config('record.use_subquery_optimization', true);
-
-            // Disable subquery optimization if nested filters or child relationships are detected
-            if ($useSubqueryOptimization) {
-                foreach ($includes as $include) {
-                    if (!empty($include['children'])) {
-                        $useSubqueryOptimization = false;
-                        break;
-                    }
-
-                    if (isset($include['columns']) && is_array($include['columns'])) {
-                        foreach ($include['columns'] as $col) {
-                            if (str_contains((string) $col, '=')) {
-                                $useSubqueryOptimization = false;
-                                break 2;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if ($useSubqueryOptimization && [] !== $includes) {
-                $optimizedBuilder = DB::table($actualTableName);
-                if ([] !== $mainCols) {
-                    $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $mainCols);
-                    $optimizedBuilder->select($prefixedCols);
-                } else {
-                    $optimizedBuilder->select($actualTableName . '.*');
-                }
-
-                $this->applyTenantFilter($optimizedBuilder, $actualTableName, $tenantId);
-
-                if ($tableSchema->soft_deletes) {
-                    $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
-                }
-
-                RelationshipResolver::applySubqueryRelationships(
-                    $optimizedBuilder,
-                    $table,
-                    $includes,
-                    $this->shouldApplyTenantId($tableSchema) ? $tenantId : null
-                );
-
-                $optimizedRecord = $optimizedBuilder->where($pk, $id)->first();
-
-                if ($optimizedRecord) {
-                    $processedData = RelationshipResolver::processJsonRelationships([$optimizedRecord], $includes, $table);
-                    $record = $processedData[0] ?? $record;
-                }
-            } else {
-                $data = RelationshipResolver::includeRelationships(
-                    [$record],
-                    $table,
-                    $selectParam,
-                    $this->shouldApplyTenantId($tableSchema) ? $tenantId : null
-                );
-                $record = $data[0] ?? $record;
-            }
-        }
-
-        $record = RecordApiResponseService::removeDeletedAtFields($record);
-
-        if ($this->isCacheableRequest($request, $table)) {
-            $ttl = $this->calculateOptimalCacheTTL($table, 1, $request->has('select'));
-            QueryCacheService::put($recordCacheKey, $record, $ttl);
-        }
-
-        return ['data' => $record, 'request' => $request];
     }
 }

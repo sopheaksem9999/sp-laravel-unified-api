@@ -57,7 +57,7 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.i
     */
     Route::prefix('rpc')->group(function (): void {
         Route::match(['get', 'post', 'put', 'patch', 'delete'], '{functionName}', [CoreRecordController::class, 'executeGlobalFunction'])
-            ->where('functionName', '[a-zA-Z_][a-zA-Z0-9_]*')
+            ->where('functionName', '.*')
             ->middleware('throttle:api-functions');
     });
 
@@ -67,7 +67,7 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.i
     |--------------------------------------------------------------------------
     */
     Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/rpc/{functionName}', [CoreRecordController::class, 'executeTableFunction'])
-        ->where(['table' => '[a-zA-Z_][a-zA-Z0-9_]*', 'functionName' => '[a-zA-Z_][a-zA-Z0-9_]*'])
+        ->where(['table' => '[a-zA-Z_][a-zA-Z0-9_]*', 'functionName' => '.*'])
         ->middleware('throttle:api-functions');
 
     if (config('audit.enabled', false)) {
