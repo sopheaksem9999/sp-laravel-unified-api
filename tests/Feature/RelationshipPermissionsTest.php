@@ -8,7 +8,6 @@ use Illuminate\Foundation\Testing\WithFaker;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Sopheak\Core\Enums\RecordRelationshipsEnum;
 use Sopheak\Core\Support\SchemaRegistry;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordHasManyThroughType;
@@ -26,33 +25,33 @@ class RelationshipPermissionsTest extends TestCase
         parent::setUp();
 
         // 1. Setup Database Schema
-        Schema::create('projects', function (Blueprint $table) {
+        Schema::create('projects', function (Blueprint $table): void {
             $table->id();
             $table->string('name');
             $table->timestamps();
         });
 
-        Schema::create('tags', function (Blueprint $table) {
+        Schema::create('tags', function (Blueprint $table): void {
             $table->id();
             $table->string('name');
             $table->timestamps();
         });
 
-        Schema::create('project_tags', function (Blueprint $table) {
+        Schema::create('project_tags', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('project_id');
             $table->foreignId('tag_id');
             $table->timestamps();
         });
 
-        Schema::create('tasks', function (Blueprint $table) {
+        Schema::create('tasks', function (Blueprint $table): void {
             $table->id();
             $table->string('title');
             $table->timestamps();
         });
 
         // "Through" table acting as a link table for this test
-        Schema::create('project_tasks', function (Blueprint $table) {
+        Schema::create('project_tasks', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('project_id');
             $table->foreignId('task_id');
@@ -70,8 +69,8 @@ class RelationshipPermissionsTest extends TestCase
                     // Allowed: Create (Attach/Create), Delete (Detach)
                     // Denied: Update (not testing pivot update here, but the flag is set)
                     'tags' => new RecordMetaBelongsToManyType(
-                        table: 'project_tags',
                         related: 'tags',
+                        table: 'project_tags',
                         foreignPivotKey: 'project_id',
                         relatedPivotKey: 'tag_id',
                         allowCreate: true,
@@ -110,7 +109,7 @@ class RelationshipPermissionsTest extends TestCase
     }
 
     /** @test */
-    public function it_can_create_and_detach_belongs_to_many_with_permissions()
+    public function it_can_create_and_detach_belongs_to_many_with_permissions(): void
     {
         // 1. Create Project with a new Tag
         $payload = [
@@ -139,7 +138,7 @@ class RelationshipPermissionsTest extends TestCase
             ]
         ];
 
-        $response = $this->putJson("/api/projects/{$projectId}", $updatePayload);
+        $response = $this->putJson('/api/projects/' . $projectId, $updatePayload);
         $response->assertStatus(200);
 
         $this->assertDatabaseMissing('project_tags', [
@@ -149,7 +148,7 @@ class RelationshipPermissionsTest extends TestCase
     }
 
     /** @test */
-    public function it_respects_delete_restriction_on_has_many_through()
+    public function it_respects_delete_restriction_on_has_many_through(): void
     {
         // 1. Create Project with a new Task
         $payload = [
@@ -178,7 +177,7 @@ class RelationshipPermissionsTest extends TestCase
             ]
         ];
 
-        $response = $this->putJson("/api/projects/{$projectId}", $updatePayload);
+        $response = $this->putJson('/api/projects/' . $projectId, $updatePayload);
         $response->assertStatus(200);
 
         // The link should STILL exist because allowDelete = false

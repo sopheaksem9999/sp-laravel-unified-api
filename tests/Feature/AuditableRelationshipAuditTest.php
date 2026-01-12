@@ -42,6 +42,7 @@ class AuditableRelationshipAuditTest extends TestCase
             'parents' => new RecordTableType(
                 pms_name: 'parents',
                 table: 'parents',
+                has_tenant_id: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [
                     'children' => new RecordHasManyType(
@@ -49,7 +50,6 @@ class AuditableRelationshipAuditTest extends TestCase
                         foreignKey: 'parent_id',
                     ),
                 ],
-                has_tenant_id: false,
             ),
         ]);
         SchemaRegistry::refresh();

@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Tests\Feature;
 
+use Sopheak\Core\Types\RecordTablePublic;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
@@ -22,14 +23,14 @@ class LegacyConfigTest extends TestCase
     {
         parent::setUp();
 
-        Schema::create('legacy_items', function (Blueprint $table) {
+        Schema::create('legacy_items', function (Blueprint $table): void {
             $table->id();
             $table->string('name');
             $table->timestamps();
         });
     }
 
-    public function test_legacy_array_table_config_is_normalized()
+    public function test_legacy_array_table_config_is_normalized(): void
     {
         // Define a table using a legacy array configuration
         Config::set('record.tables', [
@@ -60,7 +61,7 @@ class LegacyConfigTest extends TestCase
         $this->assertInstanceOf(RecordTableType::class, $tableConfig);
         
         // Assert public property was converted to RecordTablePublic
-        $this->assertInstanceOf(\Sopheak\Core\Types\RecordTablePublic::class, $tableConfig->public);
+        $this->assertInstanceOf(RecordTablePublic::class, $tableConfig->public);
         $this->assertTrue($tableConfig->public->read);
         $this->assertTrue($tableConfig->public->write);
 
@@ -86,7 +87,7 @@ class LegacyConfigTest extends TestCase
         $this->assertEquals('Legacy function executed', $response->getData()->data->message);
     }
 
-    public function test_legacy_global_function_array_config()
+    public function test_legacy_global_function_array_config(): void
     {
         // Define global function using array
         Config::set('record.global_functions', [
@@ -107,7 +108,7 @@ class LegacyConfigTest extends TestCase
         $this->assertEquals('Legacy function executed', $response->getData()->data->message);
     }
 
-    public function test_legacy_relationship_array_config()
+    public function test_legacy_relationship_array_config(): void
     {
         // Mock schema with legacy relationship array
         Config::set('record.tables', [

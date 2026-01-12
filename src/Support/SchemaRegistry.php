@@ -2,6 +2,8 @@
 
 namespace Sopheak\Core\Support;
 
+use Sopheak\Core\Interfaces\RecordResourceInterface;
+use stdClass;
 use Closure;
 use Exception;
 use Throwable;
@@ -42,6 +44,7 @@ class SchemaRegistry
             if ($cached instanceof RecordTableType) {
                 return $cached;
             }
+
             // If pending resolution (string/class), use it
             $config = $cached;
         } elseif (!empty(self::$cache)) {
@@ -69,7 +72,7 @@ class SchemaRegistry
             $instance = new $config();
             if ($instance instanceof RecordTableType) {
                 $config = $instance;
-            } elseif ($instance instanceof \Sopheak\Core\Interfaces\RecordResourceInterface) {
+            } elseif ($instance instanceof RecordResourceInterface) {
                 $config = $instance->toTableType();
             }
         }
@@ -135,7 +138,7 @@ class SchemaRegistry
                     $instance = new $config();
                     if ($instance instanceof RecordTableType) {
                         $config = $instance;
-                    } elseif ($instance instanceof \Sopheak\Core\Interfaces\RecordResourceInterface) {
+                    } elseif ($instance instanceof RecordResourceInterface) {
                         $config = $instance->toTableType();
                     }
                 }
@@ -198,7 +201,7 @@ class SchemaRegistry
         }
 
         // Return a minimal schema object
-        $schema = new \stdClass();
+        $schema = new stdClass();
         $schema->table = $tableName;
         $schema->columns = $columns;
         $schema->soft_deletes = isset($columns['deleted_at']); // Auto-detect soft deletes
@@ -235,7 +238,7 @@ class SchemaRegistry
     public static function register(string $tableName, string|object $config): void
     {
         // If it's a class string or resource interface, store it for lazy loading
-        if (is_string($config) || ($config instanceof \Sopheak\Core\Interfaces\RecordResourceInterface)) {
+        if (is_string($config) || ($config instanceof RecordResourceInterface)) {
             self::$cache[$tableName] = $config;
             return;
         }

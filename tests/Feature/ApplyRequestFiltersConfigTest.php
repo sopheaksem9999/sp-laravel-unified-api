@@ -43,10 +43,10 @@ class ApplyRequestFiltersConfigTest extends TestCase
         $config = new RecordTableType(
             pms_name: 'custom_items_endpoint',
             table: 'custom_items',
+            has_tenant_id: false,
             soft_deletes: false,
             public: new RecordTablePublic(true, true),
-            relationships: [],
-            has_tenant_id: false
+            relationships: []
         );
 
         // Pass config object directly

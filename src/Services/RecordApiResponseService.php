@@ -9,11 +9,6 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\MessageBag;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 use Sopheak\Core\Support\SchemaRegistry;
-use Sopheak\Core\Types\RecordHasManyType;
-use Sopheak\Core\Types\RecordBelongsToType;
-use Sopheak\Core\Types\RecordHasOneType;
-use Sopheak\Core\Types\RecordMetaBelongsToManyType;
-use Sopheak\Core\Types\RecordHasManyThroughType;
 use Sopheak\Core\Support\RelationshipResolver;
 
 class RecordApiResponseService
@@ -72,7 +67,7 @@ class RecordApiResponseService
         // Check if array keys are all integers (sequential or not)
         if (is_array($data) && !empty($data)) {
             $isList = true;
-            foreach ($data as $k => $v) {
+            foreach (array_keys($data) as $k) {
                 if (!is_int($k)) {
                     $isList = false;
                     break;
@@ -83,6 +78,7 @@ class RecordApiResponseService
                 foreach ($data as $key => $value) {
                     $data[$key] = static::removeHiddenFields($value, $table);
                 }
+
                 return $data;
             }
         }
@@ -104,14 +100,11 @@ class RecordApiResponseService
         if (!empty($hiddenColumns)) {
             foreach ($hiddenColumns as $col) {
                 if ($isObject) {
-
                     if (property_exists($data, $col)) {
                         unset($data->{$col});
                     }
-                } else {
-                    if (array_key_exists($col, $data)) {
-                        unset($data[$col]);
-                    }
+                } elseif (array_key_exists($col, $data)) {
+                    unset($data[$col]);
                 }
             }
         }

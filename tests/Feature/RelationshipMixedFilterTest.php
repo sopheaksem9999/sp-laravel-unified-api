@@ -20,13 +20,13 @@ class RelationshipMixedFilterTest extends TestCase
         parent::setUp();
 
         // Create tables
-        Schema::create('users', function (Blueprint $table) {
+        Schema::create('users', function (Blueprint $table): void {
             $table->id();
             $table->string('name');
             $table->timestamps();
         });
 
-        Schema::create('posts', function (Blueprint $table) {
+        Schema::create('posts', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('user_id');
             $table->string('title');
@@ -34,13 +34,13 @@ class RelationshipMixedFilterTest extends TestCase
             $table->timestamps();
         });
 
-        Schema::create('roles', function (Blueprint $table) {
+        Schema::create('roles', function (Blueprint $table): void {
             $table->id();
             $table->string('name');
             $table->timestamps();
         });
 
-        Schema::create('user_roles', function (Blueprint $table) {
+        Schema::create('user_roles', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('user_id');
             $table->foreignId('role_id');
@@ -104,7 +104,7 @@ class RelationshipMixedFilterTest extends TestCase
         SchemaRegistry::register('roles', new RecordTableType('roles'));
     }
 
-    public function test_mixed_nested_and_top_level_filtering()
+    public function test_mixed_nested_and_top_level_filtering(): void
     {
         // Query: users?select=*,posts(*,status=eq.published),roles(*)&roles.name=eq.admin
         // Expects:

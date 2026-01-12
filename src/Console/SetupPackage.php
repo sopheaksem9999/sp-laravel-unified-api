@@ -2,6 +2,9 @@
 
 namespace Sopheak\Core\Console;
 
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Throwable;
 use RuntimeException;
 use Illuminate\Console\Command;
@@ -78,7 +81,7 @@ class SetupPackage extends Command
             return 1;
         }
 
-        $existing = (string) (@file_get_contents($path) ?: '');
+        $existing = @file_get_contents($path) ?: '';
         if (str_contains($existing, "RateLimiter::for('api-reads'")) {
             $this->line('  ⏭️  Skipped (rate limiters already configured): ' . $relativePath);
             return 0;
@@ -98,9 +101,9 @@ class SetupPackage extends Command
     private function injectRateLimitersIntoAppServiceProvider(string $contents): string
     {
         $rateLimiterUses = [
-            'Illuminate\\Cache\\RateLimiting\\Limit',
-            'Illuminate\\Http\\Request',
-            'Illuminate\\Support\\Facades\\RateLimiter',
+            Limit::class,
+            Request::class,
+            RateLimiter::class,
         ];
 
         $useMatches = [];
@@ -108,7 +111,7 @@ class SetupPackage extends Command
 
         $existingUses = [];
         foreach ($useMatches[1] ?? [] as $match) {
-            $existingUses[] = trim((string) $match[0]);
+            $existingUses[] = trim($match[0]);
         }
 
         $missingUses = array_values(array_filter($rateLimiterUses, fn(string $u): bool => !in_array($u, $existingUses, true)));
@@ -127,10 +130,12 @@ class SetupPackage extends Command
                 if ($namespacePos === false) {
                     return $contents;
                 }
+
                 $afterNamespace = strpos($contents, "\n", $namespacePos);
                 if ($afterNamespace === false) {
                     return $contents;
                 }
+
                 $insertPos = $afterNamespace + 1;
                 $contents = substr($contents, 0, $insertPos) . PHP_EOL . $insertion . substr($contents, $insertPos);
             }
@@ -156,7 +161,7 @@ class SetupPackage extends Command
 
         if (preg_match('/public\\s+function\\s+boot\\s*\\([^)]*\\)\\s*(?::\\s*\\w+)?\\s*\\{/m', $contents, $m, PREG_OFFSET_CAPTURE)) {
             $match = $m[0];
-            $start = (int) $match[1];
+            $start = $match[1];
             $bracePos = strpos($contents, '{', $start);
             if ($bracePos === false) {
                 return $contents;
@@ -167,7 +172,7 @@ class SetupPackage extends Command
         }
 
         if (preg_match('/\\}\\s*$/', $contents, $m, PREG_OFFSET_CAPTURE)) {
-            $insertPos = (int) $m[0][1];
+            $insertPos = $m[0][1];
             $bootMethod =
                 PHP_EOL .
                 '    public function boot(): void' . PHP_EOL .

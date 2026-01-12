@@ -24,19 +24,19 @@ class RelationshipNestedFilterTest extends TestCase
         parent::setUp();
 
         // Create tables
-        Schema::create('tasks', function (Blueprint $table) {
+        Schema::create('tasks', function (Blueprint $table): void {
             $table->id();
             $table->string('title');
             $table->timestamps();
         });
 
-        Schema::create('users', function (Blueprint $table) {
+        Schema::create('users', function (Blueprint $table): void {
             $table->id();
             $table->string('name');
             $table->timestamps();
         });
 
-        Schema::create('task_assignees', function (Blueprint $table) {
+        Schema::create('task_assignees', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('task_id');
             $table->foreignId('user_id');
@@ -61,6 +61,7 @@ class RelationshipNestedFilterTest extends TestCase
             'tasks' => new RecordTableType(
                 pms_name: 'tasks',
                 table: 'tasks',
+                has_tenant_id: false,
                 soft_deletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [
@@ -73,22 +74,21 @@ class RelationshipNestedFilterTest extends TestCase
                         secondLocalKey: 'user_id',
                     )
                 ],
-                has_tenant_id: false,
             ),
             'users' => new RecordTableType(
                 pms_name: 'users',
                 table: 'users',
+                has_tenant_id: false,
                 soft_deletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
-                has_tenant_id: false,
             ),
         ]);
 
         SchemaRegistry::refresh();
     }
 
-    public function test_nested_filter_filters_loaded_relationships()
+    public function test_nested_filter_filters_loaded_relationships(): void
     {
         // Scenario 1: tasks?select=*,assignees(*,name=eq.User 1)
         // Expect Task 1 (with only User 1) and Task 2 (with NO assignees, because User 2 != User 1)
@@ -119,7 +119,7 @@ class RelationshipNestedFilterTest extends TestCase
         $this->assertCount(0, $task2->assignees);
     }
 
-    public function test_toplevel_filter_filters_tasks_but_loads_all_relationships()
+    public function test_toplevel_filter_filters_tasks_but_loads_all_relationships(): void
     {
         // Scenario 2: tasks?select=*,assignees(*)&assignees.name=eq.User 1
         // Expect Task 1 ONLY (because Task 2 doesn't have User 1).
@@ -144,7 +144,7 @@ class RelationshipNestedFilterTest extends TestCase
         $this->assertCount(2, $data[0]->assignees);
     }
 
-    public function test_toplevel_filter_with_non_existing_assignee_returns_empty()
+    public function test_toplevel_filter_with_non_existing_assignee_returns_empty(): void
     {
         $request = Request::create('/api/v1/tasks', 'GET', [
             'select' => '*,assignees(*)',

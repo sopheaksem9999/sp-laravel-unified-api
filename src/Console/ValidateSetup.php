@@ -334,7 +334,7 @@ class ValidateSetup extends Command
 
         $missing = [];
         foreach ($required as $name) {
-            if (!str_contains($contents, "RateLimiter::for('{$name}'")) {
+            if (!str_contains($contents, sprintf("RateLimiter::for('%s'", $name))) {
                 $missing[] = $name;
             }
         }

@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Traits;
 
+use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 use Illuminate\Database\Eloquent\Model;
 use Sopheak\Core\Jobs\AuditLogJob;
@@ -119,7 +120,7 @@ trait Auditable
                 'id' => $id,
                 $tenantColumn => $tenantId,
                 'new_data' => $newData,
-            ], static fn ($value) => null !== $value);
+            ], static fn ($value): bool => null !== $value);
         }
 
         if ($event === AuditLogEventEnum::UPDATED) {
@@ -131,7 +132,7 @@ trait Auditable
                 $tenantColumn => $tenantId,
                 'old_data' => $oldData,
                 'new_data' => $newData,
-            ], static fn ($value) => null !== $value);
+            ], static fn ($value): bool => null !== $value);
         }
 
         if ($event === AuditLogEventEnum::DELETED) {
@@ -141,13 +142,13 @@ trait Auditable
                 'id' => $id,
                 $tenantColumn => $tenantId,
                 'old_data' => $oldData,
-            ], static fn ($value) => null !== $value);
+            ], static fn ($value): bool => null !== $value);
         }
 
         return array_filter([
             'id' => $id,
             $tenantColumn => $tenantId,
-        ], static fn ($value) => null !== $value);
+        ], static fn ($value): bool => null !== $value);
     }
 
     protected function buildAuditSnapshot(AuditLogEventEnum $event, bool $fromDatabase): array
@@ -220,7 +221,7 @@ trait Auditable
             $with = [];
         }
 
-        $with = array_values(array_filter(array_unique($with), static fn ($value) => is_string($value) && '' !== $value));
+        $with = array_values(array_filter(array_unique($with), static fn ($value): bool => is_string($value) && '' !== $value));
         $max = (int) config('audit.performance.max_relationships', 10);
 
         return array_slice($with, 0, $max);
@@ -239,7 +240,7 @@ trait Auditable
 
         $schema = SchemaRegistry::get();
         foreach ($schema as $resourceName => $tableConfig) {
-            if (!($tableConfig instanceof \Sopheak\Core\Types\RecordTableType)) {
+            if (!($tableConfig instanceof RecordTableType)) {
                 continue;
             }
 

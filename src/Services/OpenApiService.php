@@ -2,6 +2,8 @@
 
 namespace Sopheak\Core\Services;
 
+use Sopheak\Core\Interfaces\RecordFunctionInterface;
+use Sopheak\Core\Types\RecordFunctionType;
 use Exception;
 use Sopheak\Core\Support\SchemaRegistry;
 use Illuminate\Support\Arr;
@@ -68,7 +70,7 @@ class OpenApiService
             $schemas['AuditLog'] = self::auditLogSchema();
             $schemas['AuditStats'] = self::auditStatsSchema();
             $schemas['AuditTimelineEntry'] = self::auditTimelineEntrySchema();
-            $paths = $paths + self::auditPaths();
+            $paths += self::auditPaths();
         }
 
         $servers = [
@@ -912,9 +914,9 @@ Accepts an array of IDs or an array of objects with the primary key.
             // Resolve Class-Based Config
             if (is_string($functionConfig) && class_exists($functionConfig)) {
                 $instance = new $functionConfig();
-                if ($instance instanceof \Sopheak\Core\Interfaces\RecordFunctionInterface) {
+                if ($instance instanceof RecordFunctionInterface) {
                     $functionConfig = $instance->toFunctionType();
-                } elseif ($instance instanceof \Sopheak\Core\Types\RecordFunctionType) {
+                } elseif ($instance instanceof RecordFunctionType) {
                     $functionConfig = $instance;
                 }
             }
@@ -1132,9 +1134,9 @@ Accepts an array of IDs or an array of objects with the primary key.
                 // Resolve Class-Based Config
                 if (is_string($functionConfig) && class_exists($functionConfig)) {
                     $instance = new $functionConfig();
-                    if ($instance instanceof \Sopheak\Core\Interfaces\RecordFunctionInterface) {
+                    if ($instance instanceof RecordFunctionInterface) {
                         $functionConfig = $instance->toFunctionType();
-                    } elseif ($instance instanceof \Sopheak\Core\Types\RecordFunctionType) {
+                    } elseif ($instance instanceof RecordFunctionType) {
                         $functionConfig = $instance;
                     }
                 }

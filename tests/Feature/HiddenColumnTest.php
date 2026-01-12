@@ -23,7 +23,7 @@ class HiddenColumnTest extends TestCase
         parent::setUp();
 
         // Create tables
-        Schema::create('users', function (Blueprint $table) {
+        Schema::create('users', function (Blueprint $table): void {
             $table->id();
             $table->string('name');
             $table->string('password');
@@ -33,7 +33,7 @@ class HiddenColumnTest extends TestCase
             $table->timestamps();
         });
 
-        Schema::create('posts', function (Blueprint $table) {
+        Schema::create('posts', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('user_id');
             $table->string('title');
@@ -41,14 +41,14 @@ class HiddenColumnTest extends TestCase
             $table->timestamps();
         });
 
-        Schema::create('tasks', function (Blueprint $table) {
+        Schema::create('tasks', function (Blueprint $table): void {
             $table->id();
             $table->string('title');
             $table->foreignId('reporter_id')->nullable();
             $table->timestamps();
         });
 
-        Schema::create('task_assignees', function (Blueprint $table) {
+        Schema::create('task_assignees', function (Blueprint $table): void {
             $table->foreignId('task_id');
             $table->foreignId('user_id');
         });
@@ -115,7 +115,7 @@ class HiddenColumnTest extends TestCase
         SchemaRegistry::register('tasks', $taskConfig);
     }
 
-    public function test_hidden_columns_are_removed_from_main_resource()
+    public function test_hidden_columns_are_removed_from_main_resource(): void
     {
         $request = Request::create('/api/v1/users', 'GET', [
             'select' => '*'
@@ -134,7 +134,7 @@ class HiddenColumnTest extends TestCase
         $this->assertArrayNotHasKey('email_verified_at', $user);
     }
 
-    public function test_hidden_columns_are_removed_from_nested_relationships()
+    public function test_hidden_columns_are_removed_from_nested_relationships(): void
     {
         // Query users with posts
         $request = Request::create('/api/v1/users', 'GET', [
@@ -158,7 +158,7 @@ class HiddenColumnTest extends TestCase
         }
     }
 
-    public function test_hidden_columns_are_removed_from_belongs_to_relationship()
+    public function test_hidden_columns_are_removed_from_belongs_to_relationship(): void
     {
         // Query posts with user
         $request = Request::create('/api/v1/posts', 'GET', [
@@ -180,7 +180,7 @@ class HiddenColumnTest extends TestCase
         $this->assertArrayNotHasKey('password', $user);
     }
 
-    public function test_hidden_columns_are_removed_from_has_many_through_relationship()
+    public function test_hidden_columns_are_removed_from_has_many_through_relationship(): void
     {
         // Query tasks with assignees (users) and reporter
         $request = Request::create('/api/v1/tasks', 'GET', [

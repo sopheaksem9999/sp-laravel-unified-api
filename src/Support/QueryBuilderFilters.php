@@ -170,11 +170,11 @@ class QueryBuilderFilters
                 // PHP's parse_str automatically converts dots to underscores
                 $preservedQueryString = preg_replace_callback(
                     '/(^|&)([^=]+)=/',
-                    fn($m) => $m[1] . str_replace('.', '___DOT___', $m[2]) . '=',
+                    fn($m): string => $m[1] . str_replace('.', '___DOT___', $m[2]) . '=',
                     $queryString
                 );
 
-                parse_str($preservedQueryString, $params);
+                parse_str((string) $preservedQueryString, $params);
 
                 // Restore dots in keys
                 $restoredParams = [];
@@ -182,6 +182,7 @@ class QueryBuilderFilters
                     $newKey = str_replace('___DOT___', '.', (string) $key);
                     $restoredParams[$newKey] = $value;
                 }
+
                 $params = $restoredParams;
 
                 self::$operatorCache[$cacheKey] = $params;
@@ -355,7 +356,7 @@ class QueryBuilderFilters
             // Validate related table exists in schema
             if (!isset($schema[$relatedTable])) {
                 $resolved = SchemaRegistry::resolveTableSchema($relatedTable);
-                if ($resolved) {
+                if ($resolved !== null) {
                     $schema[$relatedTable] = $resolved;
                 } else {
                     continue;
@@ -1040,11 +1041,7 @@ class QueryBuilderFilters
 
         // Default logic: prefer created_at if available and no sort specified
         if (!$sortByParam) {
-            if (in_array('created_at', $allowedCols, true)) {
-                $sortByParam = 'created_at';
-            } else {
-                $sortByParam = $defaultOrderBy;
-            }
+            $sortByParam = in_array('created_at', $allowedCols, true) ? 'created_at' : $defaultOrderBy;
         }
 
         $sortOrder = strtolower($request->query('order', 'desc'));

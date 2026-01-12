@@ -24,19 +24,19 @@ class RelationshipFilterMissingTableTest extends TestCase
         parent::setUp();
 
         // Create tables
-        Schema::create('tasks', function (Blueprint $table) {
+        Schema::create('tasks', function (Blueprint $table): void {
             $table->id();
             $table->string('title');
             $table->timestamps();
         });
 
-        Schema::create('users', function (Blueprint $table) {
+        Schema::create('users', function (Blueprint $table): void {
             $table->id();
             $table->string('name');
             $table->timestamps();
         });
 
-        Schema::create('task_assignees', function (Blueprint $table) {
+        Schema::create('task_assignees', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('task_id');
             $table->foreignId('user_id');
@@ -56,13 +56,14 @@ class RelationshipFilterMissingTableTest extends TestCase
         DB::table('task_assignees')->insert(['task_id' => $taskId2, 'user_id' => $userId2]);
     }
 
-    public function test_filter_relationship_missing_from_schema_registry_is_ignored()
+    public function test_filter_relationship_missing_from_schema_registry_is_ignored(): void
     {
         // Configure ONLY tasks table, not users
         Config::set('record.tables', [
             'tasks' => new RecordTableType(
                 pms_name: 'tasks',
                 table: 'tasks',
+                has_tenant_id: false,
                 soft_deletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [
@@ -75,7 +76,6 @@ class RelationshipFilterMissingTableTest extends TestCase
                         secondLocalKey: 'user_id',
                     )
                 ],
-                has_tenant_id: false,
             ),
         ]);
 

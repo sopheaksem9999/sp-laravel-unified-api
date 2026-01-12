@@ -123,6 +123,7 @@ class RecordTableType
         return new self(
             pms_name: $properties['pms_name'] ?? null,
             table: $properties['table'] ?? null,
+            has_tenant_id: $properties['has_tenant_id'] ?? false,
             soft_deletes: $properties['soft_deletes'] ?? false,
             disable_auditLog: $properties['disable_auditLog'] ?? false,
             disable_cache: $properties['disable_cache'] ?? false,
@@ -134,7 +135,6 @@ class RecordTableType
             relationships: $properties['relationships'] ?? [],
             functions: $properties['functions'] ?? [],
             primary_key: $properties['primary_key'] ?? 'id',
-            has_tenant_id: $properties['has_tenant_id'] ?? false,
             columns: $properties['columns'] ?? [],
             column_hiddens: $properties['column_hiddens'] ?? [],
             fulltext_indexes: $properties['fulltext_indexes'] ?? [],

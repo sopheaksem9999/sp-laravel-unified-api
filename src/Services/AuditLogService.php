@@ -31,6 +31,7 @@ class AuditLogService
         if (is_array($providedNewData) && (null === $entityId || '' === $entityId) && isset($providedNewData['id'])) {
             $entityId = $providedNewData['id'];
         }
+
         if (is_array($providedOldData) && (null === $entityId || '' === $entityId) && isset($providedOldData['id'])) {
             $entityId = $providedOldData['id'];
         }

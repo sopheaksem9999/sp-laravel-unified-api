@@ -42,7 +42,7 @@ class CoreRecordController extends Controller
     public function listRecords(Request $request, string $table): JsonResponse
     {
         $tableSchema = SchemaRegistry::getTable($table);
-        if (!$tableSchema) {
+        if (!$tableSchema instanceof RecordTableType) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
@@ -99,7 +99,7 @@ class CoreRecordController extends Controller
     public function getRecordById(Request $request, string $table, mixed $id): JsonResponse
     {
         $tableSchema = SchemaRegistry::getTable($table);
-        if (!$tableSchema) {
+        if (!$tableSchema instanceof RecordTableType) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
@@ -156,7 +156,7 @@ class CoreRecordController extends Controller
     public function createRecord(Request $request, string $table): JsonResponse
     {
         $tableSchema = SchemaRegistry::getTable($table);
-        if (!$tableSchema) {
+        if (!$tableSchema instanceof RecordTableType) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
@@ -239,7 +239,7 @@ class CoreRecordController extends Controller
     public function updateRecord(Request $request, string $table, string $id): JsonResponse
     {
         $tableSchema = SchemaRegistry::getTable($table);
-        if (!$tableSchema) {
+        if (!$tableSchema instanceof RecordTableType) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
@@ -333,7 +333,7 @@ class CoreRecordController extends Controller
     public function destroyRecord(Request $request, string $table, string $id): JsonResponse
     {
         $tableSchema = SchemaRegistry::getTable($table);
-        if (!$tableSchema) {
+        if (!$tableSchema instanceof RecordTableType) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
@@ -424,7 +424,7 @@ class CoreRecordController extends Controller
     public function restoreRecord(Request $request, string $table, string $id): JsonResponse
     {
         $tableSchema = SchemaRegistry::getTable($table);
-        if (!$tableSchema || !$tableSchema->soft_deletes) {
+        if (!$tableSchema instanceof RecordTableType || !$tableSchema->soft_deletes) {
             return RecordApiResponseService::errorWrapped('Resource not restorable', RecordApiJsonResponseEnum::ERROR->value);
         }
 
@@ -1019,7 +1019,7 @@ class CoreRecordController extends Controller
         $config = $schema[$table] ?? null;
 
         if ($config instanceof RecordTableType) {
-            return (string) ($config->table ?? $table);
+            return $config->table ?? $table;
         }
 
         return $table;

@@ -46,10 +46,10 @@ class SchemaRegistryTest extends TestCase
             'users' => new RecordTableType(
                 pms_name: 'users',
                 table: 'users',
+                has_tenant_id: false,
                 soft_deletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
-                has_tenant_id: false,
             ),
         ]);
 
@@ -67,10 +67,10 @@ class SchemaRegistryTest extends TestCase
             'users' => new RecordTableType(
                 pms_name: 'users',
                 table: 'users',
+                has_tenant_id: false,
                 soft_deletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
-                has_tenant_id: false,
             ),
         ]);
 
@@ -88,10 +88,10 @@ class SchemaRegistryTest extends TestCase
             'users' => new RecordTableType(
                 pms_name: 'users',
                 table: 'users',
+                has_tenant_id: false,
                 soft_deletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
-                has_tenant_id: false,
             ),
         ]);
 
@@ -109,10 +109,10 @@ class SchemaRegistryTest extends TestCase
             'users' => new RecordTableType(
                 pms_name: 'users',
                 table: 'users',
+                has_tenant_id: false,
                 soft_deletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
-                has_tenant_id: false,
             ),
         ]);
 
@@ -140,10 +140,10 @@ class SchemaRegistryTest extends TestCase
             'users' => new RecordTableType(
                 pms_name: 'users',
                 table: 'users',
+                has_tenant_id: false,
                 soft_deletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
-                has_tenant_id: false,
             ),
         ]);
 
@@ -163,11 +163,11 @@ class SchemaRegistryTest extends TestCase
             'users' => new RecordTableType(
                 pms_name: 'users',
                 table: 'users',
+                has_tenant_id: false,
                 soft_deletes: false,
                 disable_cache: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
-                has_tenant_id: false,
             ),
         ]);
 
@@ -186,11 +186,11 @@ class SchemaRegistryTest extends TestCase
             'users' => new RecordTableType(
                 pms_name: 'users',
                 table: 'users',
+                has_tenant_id: false,
                 soft_deletes: false,
                 disable_cache: true,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
-                has_tenant_id: false,
             ),
         ]);
 
@@ -209,11 +209,11 @@ class SchemaRegistryTest extends TestCase
             'users' => new RecordTableType(
                 pms_name: 'users',
                 table: 'users',
+                has_tenant_id: false,
                 soft_deletes: false,
                 disable_cache: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
-                has_tenant_id: false,
             ),
         ]);
 

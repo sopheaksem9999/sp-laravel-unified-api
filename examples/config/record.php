@@ -29,6 +29,7 @@ $tables = [
     'users' => new RecordTableType(
         pms_name: 'user',
         table: 'users',
+        has_tenant_id: false,
         soft_deletes: false,
         public: new RecordTablePublic(
             read: false,
@@ -90,7 +91,6 @@ $tables = [
                 ],
             ),
         ],
-        has_tenant_id: false,
         createValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'email' => 'required|email',
@@ -142,6 +142,7 @@ $tables = [
     */
     'posts' => new RecordTableType(
         pms_name: 'post',
+        has_tenant_id: false,
         soft_deletes: true, // The PMS name for permissions (e.g., view_post, create_post)
         public: new RecordTablePublic(
             read: false, // Requires authentication for read operations
@@ -171,8 +172,7 @@ $tables = [
                 parentKey: 'id',
                 relatedKey: 'id'
             ),
-        ],
-        has_tenant_id: false
+        ]
     ),
 
     /*
@@ -182,6 +182,7 @@ $tables = [
     */
     'comments' => new RecordTableType(
         pms_name: 'comment',
+        has_tenant_id: false,
         soft_deletes: true, // The PMS name for permissions (e.g., view_comment, create_comment)
         public: new RecordTablePublic(
             read: false, // Requires authentication for read operations
@@ -201,8 +202,7 @@ $tables = [
                 foreignKey: 'user_id',
                 ownerKey: 'id'
             ),
-        ],
-        has_tenant_id: false
+        ]
     ),
 
     /*
@@ -212,6 +212,7 @@ $tables = [
     */
     'orders' => new RecordTableType(
         pms_name: 'order',
+        has_tenant_id: true,
         soft_deletes: true, // The PMS name for permissions (e.g., view_order, create_order)
         public: new RecordTablePublic(
             read: false, // Requires authentication for read operations
@@ -241,8 +242,7 @@ $tables = [
                 localKey: 'id',
                 secondLocalKey: 'product_id'
             ),
-        ],
-        has_tenant_id: true // This table supports multi-tenancy
+        ] // This table supports multi-tenancy
     ),
 
     /*
@@ -252,6 +252,7 @@ $tables = [
     */
     'products' => new RecordTableType(
         pms_name: 'product',
+        has_tenant_id: true,
         soft_deletes: true, // The PMS name for permissions (e.g., view_product, create_product)
         public: new RecordTablePublic(
             read: false, // Requires authentication for read operations
@@ -271,8 +272,7 @@ $tables = [
                 foreignKey: 'category_id',
                 ownerKey: 'id'
             ),
-        ],
-        has_tenant_id: true
+        ]
     ),
 
     /*
@@ -282,6 +282,7 @@ $tables = [
     */
     'categories' => new RecordTableType(
         pms_name: 'category',
+        has_tenant_id: false,
         soft_deletes: false, // The PMS name for permissions (e.g., view_category, create_category)
         public: new RecordTablePublic(
             read: false, // Requires authentication for read operations
@@ -308,8 +309,7 @@ $tables = [
                 foreignKey: 'parent_id',
                 ownerKey: 'id'
             ),
-        ],
-        has_tenant_id: false
+        ]
     ),
 ];
 

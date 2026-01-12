@@ -2,6 +2,11 @@
 
 namespace Sopheak\Core\Services;
 
+use Exception;
+use Sopheak\Core\Interfaces\RecordFunctionInterface;
+use Throwable;
+use BackedEnum;
+use UnitEnum;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -274,8 +279,8 @@ class RecordService
     {
         // Get schema and validate table exists
         $tableSchema = SchemaRegistry::getTable($table);
-        if (!$tableSchema) {
-            throw new \Exception(sprintf("Table '%s' does not exist", $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
+        if (!$tableSchema instanceof RecordTableType) {
+            throw new Exception(sprintf("Table '%s' does not exist", $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         // Check if function exists in table schema
@@ -309,15 +314,15 @@ class RecordService
         // Resolve Class-Based Config
         if (is_string($functionConfig) && class_exists($functionConfig)) {
             $instance = new $functionConfig();
-            if ($instance instanceof \Sopheak\Core\Interfaces\RecordFunctionInterface) {
+            if ($instance instanceof RecordFunctionInterface) {
                 $functionConfig = $instance->toFunctionType();
-            } elseif ($instance instanceof \Sopheak\Core\Types\RecordFunctionType) {
+            } elseif ($instance instanceof RecordFunctionType) {
                 $functionConfig = $instance;
             }
         }
 
         if (!$functionConfig) {
-            throw new \Exception(sprintf("Function '%s' not found for table '%s'", $functionName, $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
+            throw new Exception(sprintf("Function '%s' not found for table '%s'", $functionName, $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         // Execute the custom function with extracted ID parameter
@@ -361,15 +366,15 @@ class RecordService
         // Resolve Class-Based Config
         if (is_string($functionConfig) && class_exists($functionConfig)) {
             $instance = new $functionConfig();
-            if ($instance instanceof \Sopheak\Core\Interfaces\RecordFunctionInterface) {
+            if ($instance instanceof RecordFunctionInterface) {
                 $functionConfig = $instance->toFunctionType();
-            } elseif ($instance instanceof \Sopheak\Core\Types\RecordFunctionType) {
+            } elseif ($instance instanceof RecordFunctionType) {
                 $functionConfig = $instance;
             }
         }
 
         if (!$functionConfig) {
-            throw new \Exception(sprintf("Function '%s' not found", $functionName), RecordApiJsonResponseEnum::NOT_FOUND->value);
+            throw new Exception(sprintf("Function '%s' not found", $functionName), RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         // Execute the custom function with extracted ID parameter
@@ -382,8 +387,8 @@ class RecordService
     public function bulkRecord(Request $request, string $table, mixed $tenantId, ?string $legacyAction = null): array
     {
         $tableSchema = SchemaRegistry::getTable($table);
-        if (!$tableSchema) {
-            throw new \Exception('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
+        if (!$tableSchema instanceof RecordTableType) {
+            throw new Exception('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         // Parse items
@@ -402,12 +407,12 @@ class RecordService
         }
 
         if (!is_array($items) || [] === $items) {
-            throw new \Exception('Data array required', RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
+            throw new Exception('Data array required', RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
         }
 
         $maxBatch = (int) config('record.bulk_max', 100);
         if (count($items) > $maxBatch) {
-            throw new \Exception('Batch too large, max '.$maxBatch, 413);
+            throw new Exception('Batch too large, max '.$maxBatch, 413);
         }
 
         $pk = $tableSchema->primary_key ?? 'id';
@@ -441,7 +446,7 @@ class RecordService
                     ]);
                 } elseif ('update' === $operation) {
                     if (!isset($item[$pk])) {
-                        throw new \Exception('Primary key required for update');
+                        throw new Exception('Primary key required for update');
                     }
 
                     $id = $item[$pk];
@@ -465,7 +470,7 @@ class RecordService
                     }
                 } elseif ('delete' === $operation) {
                     if (!isset($item[$pk])) {
-                        throw new \Exception('Primary key required for delete');
+                        throw new Exception('Primary key required for delete');
                     }
 
                     $this->executeTableTrigger($tableSchema->beforeDelete ?? null, [$request, $table, $item[$pk]]);
@@ -511,7 +516,7 @@ class RecordService
                 'data' => $consolidatedData,
                 'meta' => ['affected' => count($consolidatedData)], // Matches Controller logic
             ];
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             DB::rollBack();
 
             throw $exception;
@@ -530,7 +535,7 @@ class RecordService
             $isSingleTriggerConfig = isset($trigger['class']) || isset($trigger['function_method']);
             $triggers = $isSingleTriggerConfig ? [$trigger] : $trigger;
         } else {
-            throw new \Exception(sprintf(
+            throw new Exception(sprintf(
                 'Invalid table trigger configuration. Expected %s or array, got %s',
                 RecordTableTriggerType::class,
                 get_debug_type($trigger)
@@ -538,7 +543,7 @@ class RecordService
         }
 
         if (!is_array($triggers)) {
-            throw new \Exception(sprintf(
+            throw new Exception(sprintf(
                 'Invalid table trigger configuration. Expected %s or array, got %s',
                 RecordTableTriggerType::class,
                 get_debug_type($triggers)
@@ -547,29 +552,19 @@ class RecordService
 
         foreach ($triggers as $index => $item) {
             if ($item instanceof RecordTableTriggerType) {
-                $item = $item;
             } elseif (is_array($item)) {
                 try {
                     $item = RecordTableTriggerType::fromArray($item);
-                } catch (\Throwable $exception) {
-                    throw new \Exception(sprintf(
+                } catch (Throwable $exception) {
+                    throw new Exception(sprintf(
                         'Invalid table trigger config at index %s: %s',
                         (string) $index,
                         $exception->getMessage()
                     ), 0, $exception);
                 }
             } else {
-                throw new \Exception(sprintf(
+                throw new Exception(sprintf(
                     'Invalid table trigger item at index %s. Expected %s or array, got %s',
-                    (string) $index,
-                    RecordTableTriggerType::class,
-                    get_debug_type($item)
-                ));
-            }
-
-            if (!$item instanceof RecordTableTriggerType) {
-                throw new \Exception(sprintf(
-                    'Invalid table trigger item at index %s. Expected %s, got %s',
                     (string) $index,
                     RecordTableTriggerType::class,
                     get_debug_type($item)
@@ -579,11 +574,11 @@ class RecordService
             $className = $item->class;
             $method = $item->function_method;
             if (!class_exists($className)) {
-                throw new \Exception(sprintf("Table trigger class '%s' does not exist", $className));
+                throw new Exception(sprintf("Table trigger class '%s' does not exist", $className));
             }
 
             if (!method_exists($className, $method)) {
-                throw new \Exception(sprintf("Table trigger method '%s::%s' does not exist", $className, $method));
+                throw new Exception(sprintf("Table trigger method '%s::%s' does not exist", $className, $method));
             }
 
             try {
@@ -593,8 +588,8 @@ class RecordService
                 } elseif (is_array($result) && isset($params[0]) && $params[0] instanceof Request) {
                     $params[0]->merge($result);
                 }
-            } catch (\Throwable $exception) {
-                throw new \Exception(sprintf(
+            } catch (Throwable $exception) {
+                throw new Exception(sprintf(
                     "Table trigger execution failed for '%s::%s': %s",
                     $className,
                     $method,
@@ -1036,8 +1031,8 @@ class RecordService
             $cacheKey = $service->generateOptimizedCacheKey(
                 $table,
                 array_merge($filters, [
-                    config('record.tenant_column', 'tenant_id') => $tableSchema && $service->shouldApplyTenantId($tableSchema) ? $tanentColumn : null,
-                    'tenant_enabled' => $tableSchema && $service->shouldApplyTenantId($tableSchema),
+                    config('record.tenant_column', 'tenant_id') => $tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema) ? $tanentColumn : null,
+                    'tenant_enabled' => $tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema),
                 ]),
                 $includes,
                 $page,
@@ -1054,13 +1049,13 @@ class RecordService
             $builder = DB::table($actualTableName);
             $service->applyTenantFilter($builder, $actualTableName, $tenantId);
 
-            if ($tableSchema && $tableSchema->soft_deletes) {
+            if ($tableSchema instanceof RecordTableType && $tableSchema->soft_deletes) {
                 $builder->whereNull($actualTableName.'.deleted_at');
             }
         } else {
             $service->applyTenantFilter($builder, $actualTableName, $tenantId);
 
-            if ($tableSchema && $tableSchema->soft_deletes) {
+            if ($tableSchema instanceof RecordTableType && $tableSchema->soft_deletes) {
                 $builder->whereNull($actualTableName.'.deleted_at');
             }
         }
@@ -1172,7 +1167,7 @@ class RecordService
 
                     $service->applyTenantFilter($optimizedBuilder, $actualTableName, $tenantId);
 
-                    if ($tableSchema && $tableSchema->soft_deletes) {
+                    if ($tableSchema instanceof RecordTableType && $tableSchema->soft_deletes) {
                         $optimizedBuilder->whereNull($actualTableName.'.deleted_at');
                     }
 
@@ -1180,7 +1175,7 @@ class RecordService
                         $optimizedBuilder,
                         $table,
                         $includes,
-                        $tableSchema && $service->shouldApplyTenantId($tableSchema) ? $tenantId : null
+                        $tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema) ? $tenantId : null
                     );
 
                     // Re-apply sorting to optimized query to ensure consistent order
@@ -1194,7 +1189,7 @@ class RecordService
                     $data,
                     $table,
                     $selectParam,
-                    $tableSchema && $service->shouldApplyTenantId($tableSchema) ? $tenantId : null
+                    $tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema) ? $tenantId : null
                 );
             }
         }
@@ -1208,7 +1203,7 @@ class RecordService
                 'meta' => $meta,
                 'headers' => $headers,
                 'cached_at' => now()->toISOString(),
-                'tenant_enabled' => $tableSchema && $service->shouldApplyTenantId($tableSchema),
+                'tenant_enabled' => $tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema),
             ];
             $ttl = $service->calculateOptimalCacheTTL($table, count($data), $request->has('select'));
             QueryCacheService::put($cacheKey, $cacheData, $ttl);
@@ -1402,9 +1397,9 @@ class RecordService
         if (isset($config['method'])) {
             $allowedMethods = is_array($config['method']) ? $config['method'] : [$config['method']];
             $allowedMethods = array_map(function (mixed $method): string {
-                if ($method instanceof \BackedEnum) {
+                if ($method instanceof BackedEnum) {
                     $method = $method->value;
-                } elseif ($method instanceof \UnitEnum) {
+                } elseif ($method instanceof UnitEnum) {
                     $method = $method->name;
                 }
 
@@ -1477,7 +1472,7 @@ class RecordService
             }
 
             return RecordApiResponseService::successWrapped($result);
-        } catch (\Exception $exception) {
+        } catch (Exception $exception) {
             return RecordApiResponseService::errorWrapped('Function execution failed: '.$exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }

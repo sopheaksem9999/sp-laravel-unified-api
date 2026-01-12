@@ -433,12 +433,12 @@ class RelationshipResolver
             $allowDelete = $config['allow_delete'] ?? true;
 
             if ($type === 'belongsToMany' || $type === 'morphToMany') {
-                self::processBelongsToManyOperation($table, $relatedData, $recordId, $config, $schema, $tenantId, $allowCreate, $allowUpdate, $allowDelete);
+                self::processBelongsToManyOperation($relatedData, $recordId, $config, $schema, $tenantId, $allowCreate, $allowUpdate, $allowDelete);
                 continue;
             }
 
             if ($type === 'hasManyThrough') {
-                self::processHasManyThroughOperation($table, $relatedData, $recordId, $config, $schema, $tenantId, $allowCreate, $allowUpdate, $allowDelete);
+                self::processHasManyThroughOperation($relatedData, $recordId, $config, $schema, $tenantId, $allowCreate, $allowUpdate, $allowDelete);
                 continue;
             }
 
@@ -522,7 +522,7 @@ class RelationshipResolver
         return $payload;
     }
 
-    private static function processBelongsToManyOperation(string $mainTable, array $data, mixed $mainId, array $config, array $schema, mixed $tenantId, bool $allowCreate, bool $allowUpdate, bool $allowDelete): void
+    private static function processBelongsToManyOperation(array $data, mixed $mainId, array $config, array $schema, mixed $tenantId, bool $allowCreate, bool $allowUpdate, bool $allowDelete): void
     {
         $pivotTable = $config['pivot_table'];
         $foreignPivotKey = $config['foreign_pivot_key'];
@@ -533,7 +533,9 @@ class RelationshipResolver
         $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
 
         foreach ($data as $item) {
-            if (!is_array($item)) continue;
+            if (!is_array($item)) {
+                continue;
+            }
 
             $isDelete = ($item['_delete'] ?? false) || ($item['_destroy'] ?? false);
             $relatedId = $item[$relatedPk] ?? null;
@@ -545,6 +547,7 @@ class RelationshipResolver
                         ->where($relatedPivotKey, $relatedId)
                         ->delete();
                 }
+
                 continue;
             }
 
@@ -556,9 +559,13 @@ class RelationshipResolver
                 if ($tenantId && isset($relatedSchema->columns[config('record.tenant_column', 'tenant_id')])) {
                     $relatedFields[config('record.tenant_column', 'tenant_id')] = $tenantId;
                 }
+                if (isset($relatedSchema->columns['created_at'])) {
+                    $relatedFields['created_at'] = now();
+                }
 
-                if (isset($relatedSchema->columns['created_at'])) $relatedFields['created_at'] = now();
-                if (isset($relatedSchema->columns['updated_at'])) $relatedFields['updated_at'] = now();
+                if (isset($relatedSchema->columns['updated_at'])) {
+                    $relatedFields['updated_at'] = now();
+                }
 
                 $relatedId = DB::table($actualRelatedTableName)->insertGetId($relatedFields);
             }
@@ -583,29 +590,26 @@ class RelationshipResolver
                         if (($config['with_timestamps'] ?? false)) {
                             $pivotData['updated_at'] = now();
                         }
+
                         DB::table($pivotTable)
                             ->where($foreignPivotKey, $mainId)
                             ->where($relatedPivotKey, $relatedId)
                             ->update($pivotData);
                     }
-                } else {
-                    if ($allowCreate) {
-                        $pivotData[$foreignPivotKey] = $mainId;
-                        $pivotData[$relatedPivotKey] = $relatedId;
-
-                        if (($config['with_timestamps'] ?? false)) {
-                            $pivotData['created_at'] = now();
-                            $pivotData['updated_at'] = now();
-                        }
-
-                        DB::table($pivotTable)->insert($pivotData);
+                } elseif ($allowCreate) {
+                    $pivotData[$foreignPivotKey] = $mainId;
+                    $pivotData[$relatedPivotKey] = $relatedId;
+                    if (($config['with_timestamps'] ?? false)) {
+                        $pivotData['created_at'] = now();
+                        $pivotData['updated_at'] = now();
                     }
+                    DB::table($pivotTable)->insert($pivotData);
                 }
             }
         }
     }
 
-    private static function processHasManyThroughOperation(string $mainTable, array $data, mixed $mainId, array $config, array $schema, mixed $tenantId, bool $allowCreate, bool $allowUpdate, bool $allowDelete): void
+    private static function processHasManyThroughOperation(array $data, mixed $mainId, array $config, array $schema, mixed $tenantId, bool $allowCreate, bool $allowUpdate, bool $allowDelete): void
     {
         $throughTable = $config['through_table'];
         $firstKey = $config['first_key'];
@@ -616,7 +620,9 @@ class RelationshipResolver
         $actualTargetTableName = $schema[$targetTable]->table ?? $targetTable;
 
         foreach ($data as $item) {
-            if (!is_array($item)) continue;
+            if (!is_array($item)) {
+                continue;
+            }
 
             $isDelete = ($item['_delete'] ?? false) || ($item['_destroy'] ?? false);
             $targetId = $item[$targetPk] ?? null;
@@ -628,6 +634,7 @@ class RelationshipResolver
                         ->where($secondLocalKey, $targetId)
                         ->delete();
                 }
+
                 continue;
             }
 
@@ -638,9 +645,13 @@ class RelationshipResolver
                 if ($tenantId && isset($targetSchema->columns[config('record.tenant_column', 'tenant_id')])) {
                     $targetFields[config('record.tenant_column', 'tenant_id')] = $tenantId;
                 }
+                if (isset($targetSchema->columns['created_at'])) {
+                    $targetFields['created_at'] = now();
+                }
 
-                if (isset($targetSchema->columns['created_at'])) $targetFields['created_at'] = now();
-                if (isset($targetSchema->columns['updated_at'])) $targetFields['updated_at'] = now();
+                if (isset($targetSchema->columns['updated_at'])) {
+                    $targetFields['updated_at'] = now();
+                }
 
                 $targetId = DB::table($actualTargetTableName)->insertGetId($targetFields);
             }
@@ -1244,7 +1255,7 @@ class RelationshipResolver
         if (!isset($schema[$relatedTable])) {
             // Try to resolve schema dynamically if not found (e.g. for implicit relationships)
             $resolved = SchemaRegistry::resolveTableSchema($relatedTable);
-            if ($resolved) {
+            if ($resolved !== null) {
                 $schema[$relatedTable] = $resolved;
             } else {
                 return [];
@@ -1512,8 +1523,10 @@ class RelationshipResolver
             [$rawFilterCol, $rawFilterExpr] = explode('=', $col, 2);
             $rawFilterCol = trim($rawFilterCol);
             $rawFilterExpr = trim($rawFilterExpr);
-
-            if ('' === $rawFilterCol || '' === $rawFilterExpr) {
+            if ('' === $rawFilterCol) {
+                continue;
+            }
+            if ('' === $rawFilterExpr) {
                 continue;
             }
 
@@ -1525,10 +1538,10 @@ class RelationshipResolver
                 $prefix = strtolower(trim($prefix));
                 $realCol = trim($realCol);
 
-                if (in_array($prefix, ['pivot', 'through', strtolower($throughTable), strtolower($actualThroughTableName)], true)) {
+                if (in_array($prefix, ['pivot', 'through', strtolower((string) $throughTable), strtolower((string) $actualThroughTableName)], true)) {
                     $filterTarget = 'through';
                     $filterCol = $realCol;
-                } elseif (in_array($prefix, ['related', strtolower($relatedTable), strtolower($actualRelatedTableName)], true)) {
+                } elseif (in_array($prefix, ['related', strtolower((string) $relatedTable), strtolower((string) $actualRelatedTableName)], true)) {
                     $filterTarget = 'related';
                     $filterCol = $realCol;
                 } else {
@@ -1540,11 +1553,13 @@ class RelationshipResolver
             $value = $rawFilterExpr;
             if (str_contains($rawFilterExpr, '.')) {
                 [$operator, $value] = explode('.', $rawFilterExpr, 2);
-                $operator = trim((string) $operator);
-                $value = trim((string) $value);
+                $operator = trim($operator);
+                $value = trim($value);
             }
-
-            if ('' === $filterCol || '' === $operator) {
+            if ('' === $filterCol) {
+                continue;
+            }
+            if ('' === $operator) {
                 continue;
             }
 
@@ -1622,9 +1637,9 @@ class RelationshipResolver
             QueryBuilderFilters::applyOperatorToSubquery(
                 $relatedBuilder,
                 $actualRelatedTableName,
-                (string) $filter['column'],
-                (string) $filter['operator'],
-                (string) $filter['value']
+                $filter['column'],
+                $filter['operator'],
+                $filter['value']
             );
         }
 
@@ -1635,9 +1650,7 @@ class RelationshipResolver
                 $selectColumns[] = $secondKey;
             }
 
-            $prefixedColumns = array_map(function ($col) use ($actualRelatedTableName) {
-                return str_contains($col, '.') ? $col : $actualRelatedTableName . '.' . $col;
-            }, $selectColumns);
+            $prefixedColumns = array_map(fn($col) => str_contains((string) $col, '.') ? $col : $actualRelatedTableName . '.' . $col, $selectColumns);
 
             $relatedBuilder->select($prefixedColumns);
         }
@@ -1738,8 +1751,8 @@ class RelationshipResolver
         $nestedFilters = [];
         $cleanColumns = [];
         foreach ($columns as $col) {
-            if (str_contains($col, '=')) {
-                [$filterCol, $filterExpression] = explode('=', $col, 2);
+            if (str_contains((string) $col, '=')) {
+                [$filterCol, $filterExpression] = explode('=', (string) $col, 2);
                 if (str_contains($filterExpression, '.')) {
                     [$operator, $value] = explode('.', $filterExpression, 2);
                     $nestedFilters[] = [
@@ -1752,6 +1765,7 @@ class RelationshipResolver
                 $cleanColumns[] = $col;
             }
         }
+
         $columns = $cleanColumns;
 
         // Get actual table name from schema

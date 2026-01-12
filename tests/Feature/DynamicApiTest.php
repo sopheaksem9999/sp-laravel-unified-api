@@ -39,13 +39,13 @@ class DynamicApiTest extends TestCase
             'users' => new RecordTableType(
                 pms_name: 'users',
                 table: 'users',
+                has_tenant_id: false,
                 soft_deletes: false,
                 public: new RecordTablePublic(
                     read: true,
                     write: true
                 ),
                 relationships: [],
-                has_tenant_id: false,
                 createValidator: fn(Request $request, ?int $id = null): ValidatorContract => Validator::make($request->all(), [
                     'name' => 'required|string|max:255',
                     'email' => 'required|email',

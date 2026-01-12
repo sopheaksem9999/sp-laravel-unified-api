@@ -16,13 +16,13 @@ use Illuminate\Support\Facades\Schema;
 
 class OrderByWithRelationshipTest extends TestCase
 {
-    public function setUp(): void
+    protected function setUp(): void
     {
         parent::setUp();
 
         // Setup tables
         if (!Schema::hasTable('users')) {
-            Schema::create('users', function ($table) {
+            Schema::create('users', function ($table): void {
                 $table->id();
                 $table->string('name');
                 $table->timestamps();
@@ -30,7 +30,7 @@ class OrderByWithRelationshipTest extends TestCase
         }
 
         if (!Schema::hasTable('posts')) {
-            Schema::create('posts', function ($table) {
+            Schema::create('posts', function ($table): void {
                 $table->id();
                 $table->string('title');
                 $table->foreignId('user_id');
@@ -39,7 +39,7 @@ class OrderByWithRelationshipTest extends TestCase
         }
     }
 
-    public function test_order_by_is_preserved_with_relationships()
+    public function test_order_by_is_preserved_with_relationships(): void
     {
         // Insert data with specific timestamps to test sorting
         $userId = DB::table('users')->insertGetId(['name' => 'User 1', 'created_at' => now(), 'updated_at' => now()]);
@@ -73,20 +73,20 @@ class OrderByWithRelationshipTest extends TestCase
             'posts' => new RecordTableType(
                 pms_name: 'post',
                 table: 'posts',
+                has_tenant_id: false,
                 public: new RecordTablePublic(read: true),
                 relationships: [
                     'user' => new RecordBelongsToType(
                         table: 'users',
                         foreignKey: 'user_id'
                     )
-                ],
-                has_tenant_id: false
+                ]
             ),
             'users' => new RecordTableType(
                 pms_name: 'user',
                 table: 'users',
-                public: new RecordTablePublic(read: true),
-                has_tenant_id: false
+                has_tenant_id: false,
+                public: new RecordTablePublic(read: true)
             )
         ];
 
@@ -110,7 +110,7 @@ class OrderByWithRelationshipTest extends TestCase
         $this->assertEquals(['Post 2', 'Post 3', 'Post 1'], $titles, 'Explicit sort order failed with relationship');
     }
 
-    public function test_default_order_by_created_at_desc()
+    public function test_default_order_by_created_at_desc(): void
     {
         // Config (Reuse setup from previous test or re-setup if needed, but schema is persistent in memory db usually)
         // We need to re-config because previous test might have modified global config state?
@@ -144,20 +144,20 @@ class OrderByWithRelationshipTest extends TestCase
             'posts' => new RecordTableType(
                 pms_name: 'post',
                 table: 'posts',
+                has_tenant_id: false,
                 public: new RecordTablePublic(read: true),
                 relationships: [
                     'user' => new RecordBelongsToType(
                         table: 'users',
                         foreignKey: 'user_id'
                     )
-                ],
-                has_tenant_id: false
+                ]
             ),
             'users' => new RecordTableType(
                 pms_name: 'user',
                 table: 'users',
-                public: new RecordTablePublic(read: true),
-                has_tenant_id: false
+                has_tenant_id: false,
+                public: new RecordTablePublic(read: true)
             )
         ];
 
