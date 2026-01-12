@@ -28,6 +28,80 @@ class SchemaRegistry
     private static string $columnCacheKey = 'sopheak_core:sp_laravel_api:record_schema:v1:columns';
 
     /**
+     * Get a specific table schema.
+     * This is the preferred method for runtime access as it supports lazy loading.
+     */
+    public static function getTable(string $tableName): ?RecordTableType
+    {
+        $config = null;
+
+        // 1. Check memory cache
+        if (isset(self::$cache[$tableName])) {
+            $cached = self::$cache[$tableName];
+            // If fully resolved, return it
+            if ($cached instanceof RecordTableType) {
+                return $cached;
+            }
+            // If pending resolution (string/class), use it
+            $config = $cached;
+        } elseif (!empty(self::$cache)) {
+             // 2. Legacy: If cache is populated but key missing, it's missing.
+             // Unless we allow partial loading. 
+             // Current logic assumes if cache is not empty, it contains everything. 
+             // But with lazy loading, cache might be partial.
+             // So we should fallback to config if not found.
+        }
+
+        // 3. Try to load from config if not yet found
+        if ($config === null) {
+            $tables = config('record.tables', []);
+            if (isset($tables[$tableName])) {
+                $config = $tables[$tableName];
+            }
+        }
+
+        if ($config === null) {
+            return null;
+        }
+
+        // 4. Handle Class-Based Config (Lazy Loading)
+        if (is_string($config) && class_exists($config)) {
+            $instance = new $config();
+            if ($instance instanceof RecordTableType) {
+                $config = $instance;
+            } elseif ($instance instanceof \Sopheak\Core\Interfaces\RecordResourceInterface) {
+                $config = $instance->toTableType();
+            }
+        }
+
+        // 5. Normalize config
+        if (is_array($config)) {
+            // Convert array to RecordTableType object using __set_state for safe mapping
+            $config = RecordTableType::__set_state($config);
+        }
+
+        if (!($config instanceof RecordTableType)) {
+            return null;
+        }
+
+        // 6. Enrich with columns
+        $actualTableName = $config->table ?? $tableName;
+        if (empty($config->columns)) {
+            $config->columns = self::getTableColumns($actualTableName);
+        }
+
+        // 7. Apply defaults
+        $config->primary_key ??= 'id';
+        $config->has_tenant_id ??= true;
+
+        // 8. Cache in memory
+        self::$cache[$tableName] = $config;
+        self::$columnCache[$tableName] = $config->columns;
+
+        return $config;
+    }
+
+    /**
      * Get schema registry for allowed tables.
      *
      * @return array<string,RecordTableType>
@@ -56,11 +130,32 @@ class SchemaRegistry
             // Build schema cache directly from static configuration
             self::$cache = [];
             foreach ($tables as $tableName => $config) {
+                // 1. Resolve Class-Based Config
+                if (is_string($config) && class_exists($config)) {
+                    $instance = new $config();
+                    if ($instance instanceof RecordTableType) {
+                        $config = $instance;
+                    } elseif ($instance instanceof \Sopheak\Core\Interfaces\RecordResourceInterface) {
+                        $config = $instance->toTableType();
+                    }
+                }
+
+                // 2. Normalize Array Config
+                if (is_array($config)) {
+                    $config = RecordTableType::__set_state($config);
+                }
+
+                if (!($config instanceof RecordTableType)) {
+                    continue;
+                }
+
                 // Use actual table name from config, fallback to record name
                 $actualTableName = $config->table ?? $tableName;
 
                 // Add columns property using actual table name
-                $config->columns = self::getTableColumns($actualTableName);
+                if (empty($config->columns)) {
+                    $config->columns = self::getTableColumns($actualTableName);
+                }
 
                 $config->primary_key ??= 'id';
                 $config->has_tenant_id ??= true;
@@ -135,10 +230,16 @@ class SchemaRegistry
      * Register a table schema at runtime.
      * 
      * @param string $tableName The key name of the table in schema
-     * @param RecordTableType $config The configuration object
+     * @param string|object $config The configuration object or class name
      */
-    public static function register(string $tableName, RecordTableType $config): void
+    public static function register(string $tableName, string|object $config): void
     {
+        // If it's a class string or resource interface, store it for lazy loading
+        if (is_string($config) || ($config instanceof \Sopheak\Core\Interfaces\RecordResourceInterface)) {
+            self::$cache[$tableName] = $config;
+            return;
+        }
+
         // Ensure cache is populated first
         if (empty(self::$cache)) {
             self::get();

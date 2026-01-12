@@ -96,10 +96,24 @@ All endpoints are served under a configurable prefix defined in `config/record.p
 
 ```php
 'api_prefix' => 'api/v1',
+'rpc_prefix' => 'rpc',
 ```
 
-**Default**: `/api/v1`  
+**Default**:
+- CRUD API: `/api/v1`
+- Global RPC: `/api/v1/rpc`
+
 **Examples**: `/api`, `/api/v1`, `/api/v2`
+
+### Global RPC
+Global functions can be executed via the configured RPC prefix. Nested function names are supported.
+
+`POST /api/v1/rpc/{functionName}`
+
+Example:
+- `POST /api/v1/rpc/auth/login`
+- `POST /api/v1/rpc/system/status`
+
 
 ### Authentication
 Record endpoints use table-level access rules from `config/record.php`:
@@ -244,7 +258,9 @@ new RecordTableType(
     disable_auditLog: false,
     disable_cache: false,
     can_read: true,
-    can_write: true,
+    can_create: true,
+    can_update: true,
+    can_delete: true,
     public: new RecordTablePublic(),
     relationships: [],
     functions: [],
@@ -277,8 +293,8 @@ new RecordTableType(
 
 #### Access Control & Endpoint Availability
 - `public` (RecordTablePublic, default: `new RecordTablePublic()`): Public access flags for grouped actions:
-  - `read`: allows unauthenticated access to read actions (`read`, `view`).
-  - `write`: allows unauthenticated access to write actions (`create`, `update`, `delete`, `restore`).
+  - `read`: Allows unauthenticated access to read actions (`read`, `view`).
+  - `write`: Allows unauthenticated access to write actions (`create`, `update`, `delete`, `restore`).
 - `can_read` (bool, default: `true`): Enables/disables read endpoints for this table (list/show). When false, read routes respond as “not found”.
 - `can_create` (bool, default: `true`): Enables/disables create endpoint.
 - `can_update` (bool, default: `true`): Enables/disables update and restore endpoints.
@@ -317,6 +333,72 @@ fn(\Illuminate\Http\Request $request, ?int $id = null): \Illuminate\Contracts\Va
   - a `RecordTableTriggerType` instance,
   - a single array trigger config (`['class' => ..., 'function_method' => ..., 'description' => ...]`),
   - or an array of trigger configs to run sequentially.
+
+### Class-Based Configuration (Lazy Loading)
+
+For large applications with many tables or complex schemas, you can define configurations in separate classes. This improves performance by only loading the necessary configuration for the requested endpoint (Lazy Loading).
+
+#### 1. Table Configuration
+Create a class extending `Sopheak\Core\Resources\RecordResource`:
+
+```php
+namespace App\Api\Tables;
+
+use Sopheak\Core\Resources\RecordResource;
+use Sopheak\Core\Types\RecordTableType;
+
+class UserTable extends RecordResource
+{
+    public function configure(): RecordTableType
+    {
+        return new RecordTableType(
+            table: 'users',
+            can_create: true,
+            can_update: true,
+            can_delete: false,
+            // ...
+        );
+    }
+}
+```
+
+#### 2. Global Function Configuration
+Create a class extending `Sopheak\Core\Resources\GlobalFunction`:
+
+```php
+namespace App\Api\Functions\Auth;
+
+use Sopheak\Core\Resources\GlobalFunction;
+use Sopheak\Core\Types\RecordFunctionType;
+
+class LoginFunction extends GlobalFunction
+{
+    public function configure(): RecordFunctionType
+    {
+        return new RecordFunctionType(
+            method: 'POST',
+            class: \App\Services\AuthService::class,
+            function_method: 'login',
+            payload_schema: [ ... ]
+        );
+    }
+}
+```
+
+#### 3. Registration
+Register your classes in `config/record.php` or via `SchemaRegistry::register()`:
+
+```php
+// config/record.php
+return [
+    'tables' => [
+        'users' => \App\Api\Tables\UserTable::class,
+    ],
+    'global_functions' => [
+        'auth/login' => \App\Api\Functions\Auth\LoginFunction::class,
+    ],
+];
+```
 
 ### Type Reference
 

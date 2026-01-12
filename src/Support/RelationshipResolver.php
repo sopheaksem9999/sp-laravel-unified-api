@@ -281,6 +281,13 @@ class RelationshipResolver
                     return $result;
                 }
 
+                // Handle legacy array configuration
+                if (is_array($rel)) {
+                    self::$resolveCache[$cacheKey] = $rel;
+
+                    return $rel;
+                }
+
                 // Handle RecordHasManyType
                 if ($rel instanceof RecordHasManyType) {
                     $result = [

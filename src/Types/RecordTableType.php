@@ -27,7 +27,9 @@ namespace Sopheak\Core\Types;
  *     disable_auditLog: false,
  *     disable_cache: false,
  *     can_read: true,
- *     can_write: true,
+ *     can_create: true,
+ *     can_update: true,
+ *     can_delete: true,
  *     public: new RecordTablePublic(),
  *     relationships: [
  *         'roles' => new RecordMetaBelongsToManyType(...),
@@ -85,9 +87,10 @@ class RecordTableType
         public bool $disable_auditLog = false,
         public bool $disable_cache = false,
         public bool $can_read = true,
-        public bool $can_create = true,
-        public bool $can_update = true,
-        public bool $can_delete = true,
+        public ?bool $can_create = null,
+        public ?bool $can_update = null,
+        public ?bool $can_delete = null,
+        public bool $can_write = true, // Deprecated: use can_create, can_update, can_delete
         public RecordTablePublic $public = new RecordTablePublic(),
         public ?array $relationships = [],
         public ?array $functions = [],
@@ -107,7 +110,11 @@ class RecordTableType
         public RecordTableTriggerType|array|null $afterUpdate = null,
         public RecordTableTriggerType|array|null $beforeDelete = null,
         public RecordTableTriggerType|array|null $afterDelete = null,
-    ) {}
+    ) {
+        $this->can_create = $can_create ?? $can_write;
+        $this->can_update = $can_update ?? $can_write;
+        $this->can_delete = $can_delete ?? $can_write;
+    }
 
     /**
      * Handle var_export() for configuration caching.
@@ -122,10 +129,11 @@ class RecordTableType
             disable_auditLog: $properties['disable_auditLog'] ?? false,
             disable_cache: $properties['disable_cache'] ?? false,
             can_read: $properties['can_read'] ?? true,
-            can_create: $properties['can_create'] ?? true,
-            can_update: $properties['can_update'] ?? true,
-            can_delete: $properties['can_delete'] ?? true,
-            public: $properties['public'] ?? new RecordTablePublic(),
+            can_create: $properties['can_create'] ?? null,
+            can_update: $properties['can_update'] ?? null,
+            can_delete: $properties['can_delete'] ?? null,
+            can_write: $properties['can_write'] ?? true,
+            public: is_array($properties['public'] ?? null) ? RecordTablePublic::__set_state($properties['public']) : ($properties['public'] ?? new RecordTablePublic()),
             relationships: $properties['relationships'] ?? [],
             functions: $properties['functions'] ?? [],
             primary_key: $properties['primary_key'] ?? 'id',

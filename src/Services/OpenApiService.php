@@ -904,6 +904,21 @@ Accepts an array of IDs or an array of objects with the primary key.
 
         // Global RPC Functions - Generate individual endpoints
         foreach ($globalFunctions as $functionName => $functionConfig) {
+            // Normalize Array Config to Object (for legacy support)
+            if (is_array($functionConfig)) {
+                $functionConfig = (object) $functionConfig;
+            }
+
+            // Resolve Class-Based Config
+            if (is_string($functionConfig) && class_exists($functionConfig)) {
+                $instance = new $functionConfig();
+                if ($instance instanceof \Sopheak\Core\Interfaces\RecordFunctionInterface) {
+                    $functionConfig = $instance->toFunctionType();
+                } elseif ($instance instanceof \Sopheak\Core\Types\RecordFunctionType) {
+                    $functionConfig = $instance;
+                }
+            }
+
             $allowedMethods = $functionConfig->method ?? ['GET'];
             $methodName = empty($functionConfig->description) ? self::schemaName($functionName) : $functionConfig->description;
             $summary = sprintf('RPC - %s', $methodName);
@@ -914,7 +929,7 @@ Accepts an array of IDs or an array of objects with the primary key.
             $payloadSchema = $functionConfig->payload_schema ?? null;
             $responseSchema = $functionConfig->response_schema ?? null;
 
-            $endpoint = '/' . $apiPrefix . '/rpc/' . $functionName;
+            $endpoint = '/' . $apiPrefix . '/' . config('record.rpc_prefix', 'rpc') . '/' . $functionName;
             $paths[$endpoint] = [];
 
             foreach ($allowedMethods as $method) {
@@ -1109,6 +1124,21 @@ Accepts an array of IDs or an array of objects with the primary key.
             $tenantHeaderParameters = self::tenantHeaderParametersForTableConfig($config);
 
             foreach ($functions as $functionName => $functionConfig) {
+                // Normalize Array Config to Object (for legacy support)
+                if (is_array($functionConfig)) {
+                    $functionConfig = (object) $functionConfig;
+                }
+
+                // Resolve Class-Based Config
+                if (is_string($functionConfig) && class_exists($functionConfig)) {
+                    $instance = new $functionConfig();
+                    if ($instance instanceof \Sopheak\Core\Interfaces\RecordFunctionInterface) {
+                        $functionConfig = $instance->toFunctionType();
+                    } elseif ($instance instanceof \Sopheak\Core\Types\RecordFunctionType) {
+                        $functionConfig = $instance;
+                    }
+                }
+
                 $allowedMethods = $functionConfig->method ?? ['GET'];
                 $methodName = empty($functionConfig->description) ? self::schemaName($functionName) : $functionConfig->description;
                 $summary = sprintf('RPC - %s', $methodName);
@@ -1120,7 +1150,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                 $responseSchema = $functionConfig->response_schema ?? null;
 
                 // Handle parameterized endpoints like 'update/{id}'
-                $endpoint = sprintf('/%s/%s/rpc/%s', $apiPrefix, $tableName, $functionName);
+                $endpoint = sprintf('/%s/%s/%s/%s', $apiPrefix, $tableName, config('record.rpc_prefix', 'rpc'), $functionName);
                 $paths[$endpoint] = [];
 
                 // Check if function name contains parameters

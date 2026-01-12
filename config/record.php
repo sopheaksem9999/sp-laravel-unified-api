@@ -60,6 +60,17 @@ return [
     */
     'api_prefix' => 'api/v1',
 
+    /*
+    |--------------------------------------------------------------------------
+    | RPC Route Prefix Configuration
+    |--------------------------------------------------------------------------
+    |
+    | This option controls the route prefix for the Global RPC endpoints.
+    | By default, routes are registered under 'rpc' (e.g., /api/v1/rpc/my_function).
+    |
+    */
+    'rpc_prefix' => 'rpc',
+
     // Maximum items returned per page for list endpoints
     'per_page_max' => 10000,
 

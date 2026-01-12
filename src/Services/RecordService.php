@@ -26,8 +26,7 @@ class RecordService
      */
     public function createRecord(Request $request, string $table, array $payload, mixed $tenantId): array
     {
-        $schema = SchemaRegistry::get();
-        $tableSchema = $schema[$table];
+        $tableSchema = SchemaRegistry::getTable($table);
 
         // Sanitize payload
         $payloadMain = $this->sanitizePayload($payload, $tableSchema);
@@ -69,8 +68,7 @@ class RecordService
      */
     public function updateRecord(Request $request, string $table, mixed $id, array $payload, mixed $tenantId): array
     {
-        $schema = SchemaRegistry::get();
-        $tableSchema = $schema[$table];
+        $tableSchema = SchemaRegistry::getTable($table);
 
         // Sanitize payload
         $payloadMain = $this->sanitizePayload($payload, $tableSchema);
@@ -119,8 +117,7 @@ class RecordService
      */
     public function deleteRecord(Request $request, string $table, mixed $id, mixed $tenantId): array
     {
-        $schema = SchemaRegistry::get();
-        $tableSchema = $schema[$table];
+        $tableSchema = SchemaRegistry::getTable($table);
 
         $actualTableName = $tableSchema->table ?? $table;
         $pk = $tableSchema->primary_key ?? 'id';
@@ -142,8 +139,7 @@ class RecordService
      */
     public function restoreRecord(Request $request, string $table, mixed $id, mixed $tenantId): array
     {
-        $schema = SchemaRegistry::get();
-        $tableSchema = $schema[$table];
+        $tableSchema = SchemaRegistry::getTable($table);
 
         $actualTableName = $tableSchema->table ?? $table;
         $pk = $tableSchema->primary_key ?? 'id';
@@ -167,8 +163,7 @@ class RecordService
      */
     public function forceDeleteRecord(Request $request, string $table, mixed $id, mixed $tenantId): array
     {
-        $schema = SchemaRegistry::get();
-        $tableSchema = $schema[$table];
+        $tableSchema = SchemaRegistry::getTable($table);
 
         $actualTableName = $tableSchema->table ?? $table;
         $pk = $tableSchema->primary_key ?? 'id';
@@ -191,8 +186,7 @@ class RecordService
      */
     public function upsertRecord(Request $request, string $table, array $payload, mixed $tenantId): array
     {
-        $schema = SchemaRegistry::get();
-        $tableSchema = $schema[$table];
+        $tableSchema = SchemaRegistry::getTable($table);
 
         $actualTableName = $tableSchema->table ?? $table;
         $pk = $tableSchema->primary_key ?? 'id';
@@ -223,8 +217,7 @@ class RecordService
      */
     public function processPostWriteLogic(Request $request, string $table, string $operation, array $recordContext): void
     {
-        $schema = SchemaRegistry::get();
-        $tableSchema = $schema[$table];
+        $tableSchema = SchemaRegistry::getTable($table);
 
         // 1. Execute Table Trigger
         $triggerConfig = match ($operation) {
@@ -280,13 +273,13 @@ class RecordService
     public function executeTableFunction(Request $request, string $table, string $functionName): JsonResponse
     {
         // Get schema and validate table exists
-        $schema = SchemaRegistry::get();
-        if (!isset($schema[$table])) {
+        $tableSchema = SchemaRegistry::getTable($table);
+        if (!$tableSchema) {
             throw new \Exception(sprintf("Table '%s' does not exist", $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         // Check if function exists in table schema
-        $tableFunctions = $schema[$table]->functions ?? [];
+        $tableFunctions = $tableSchema->functions ?? [];
         $functionConfig = null;
         $extractedId = null;
 
@@ -310,6 +303,16 @@ class RecordService
 
                     break;
                 }
+            }
+        }
+
+        // Resolve Class-Based Config
+        if (is_string($functionConfig) && class_exists($functionConfig)) {
+            $instance = new $functionConfig();
+            if ($instance instanceof \Sopheak\Core\Interfaces\RecordFunctionInterface) {
+                $functionConfig = $instance->toFunctionType();
+            } elseif ($instance instanceof \Sopheak\Core\Types\RecordFunctionType) {
+                $functionConfig = $instance;
             }
         }
 
@@ -355,6 +358,16 @@ class RecordService
             }
         }
 
+        // Resolve Class-Based Config
+        if (is_string($functionConfig) && class_exists($functionConfig)) {
+            $instance = new $functionConfig();
+            if ($instance instanceof \Sopheak\Core\Interfaces\RecordFunctionInterface) {
+                $functionConfig = $instance->toFunctionType();
+            } elseif ($instance instanceof \Sopheak\Core\Types\RecordFunctionType) {
+                $functionConfig = $instance;
+            }
+        }
+
         if (!$functionConfig) {
             throw new \Exception(sprintf("Function '%s' not found", $functionName), RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
@@ -368,12 +381,10 @@ class RecordService
      */
     public function bulkRecord(Request $request, string $table, mixed $tenantId, ?string $legacyAction = null): array
     {
-        $schema = SchemaRegistry::get();
-        if (!isset($schema[$table])) {
+        $tableSchema = SchemaRegistry::getTable($table);
+        if (!$tableSchema) {
             throw new \Exception('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
-
-        $tableSchema = $schema[$table];
 
         // Parse items
         $requestData = $request->all();
@@ -1003,8 +1014,7 @@ class RecordService
             $table = $tableOrBuilder;
         }
 
-        $schema = SchemaRegistry::get();
-        $tableSchema = $customSchema ?? ($schema[$table] ?? null);
+        $tableSchema = $customSchema ?? SchemaRegistry::getTable($table);
         $actualTableName = $tableSchema->table ?? $table;
         $tenantId = $tanentColumn;
 
