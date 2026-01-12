@@ -9,7 +9,10 @@ namespace Sopheak\Core\Types;
  * This class defines the structure and behavior of a database table.
  *
  * @property string            $pms_name         The name of the table in the PMS system
+ * @property bool              $disable_auditLog Whether audit logging is disabled for this table
+ * @property bool              $disable_cache    Whether query caching is disabled for this table
  * @property bool              $soft_deletes     Whether soft deletes are enabled for this table
+ * @property bool              $has_tenant_id    Whether the table has tenant ID column
  * @property RecordTablePublic $public           Public configuration settings for the table
  * @property null|array        $relationships    Array of relationships with other tables
  * @property null|array        $functions        Array of function configurations
@@ -90,7 +93,6 @@ class RecordTableType
         public ?bool $can_create = null,
         public ?bool $can_update = null,
         public ?bool $can_delete = null,
-        public bool $can_write = true, // Deprecated: use can_create, can_update, can_delete
         public RecordTablePublic $public = new RecordTablePublic(),
         public ?array $relationships = [],
         public ?array $functions = [],
@@ -110,11 +112,7 @@ class RecordTableType
         public RecordTableTriggerType|array|null $afterUpdate = null,
         public RecordTableTriggerType|array|null $beforeDelete = null,
         public RecordTableTriggerType|array|null $afterDelete = null,
-    ) {
-        $this->can_create = $can_create ?? $can_write;
-        $this->can_update = $can_update ?? $can_write;
-        $this->can_delete = $can_delete ?? $can_write;
-    }
+    ) {}
 
     /**
      * Handle var_export() for configuration caching.
@@ -132,7 +130,6 @@ class RecordTableType
             can_create: $properties['can_create'] ?? null,
             can_update: $properties['can_update'] ?? null,
             can_delete: $properties['can_delete'] ?? null,
-            can_write: $properties['can_write'] ?? true,
             public: is_array($properties['public'] ?? null) ? RecordTablePublic::__set_state($properties['public']) : ($properties['public'] ?? new RecordTablePublic()),
             relationships: $properties['relationships'] ?? [],
             functions: $properties['functions'] ?? [],

@@ -66,7 +66,7 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.i
     | Table-specific RPC Functions
     |--------------------------------------------------------------------------
     */
-    Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/rpc/{functionName}', [CoreRecordController::class, 'executeTableFunction'])
+    Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/'.config('record.rpc_prefix', 'rpc').'/{functionName}', [CoreRecordController::class, 'executeTableFunction'])
         ->where(['table' => '[a-zA-Z0-9_\-]*', 'functionName' => '.*'])
         ->middleware('throttle:api-functions');
 
@@ -93,7 +93,6 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.i
     Route::delete('{table}/{id}', [CoreRecordController::class, 'destroyRecord'])->middleware('throttle:api-writes');
 
 
-
     /*
     |--------------------------------------------------------------------------
     | Advanced CRUD Operations
@@ -111,47 +110,4 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.i
     Route::post('{table}/bulk/create', [CoreRecordController::class, 'bulkRecordCreate'])->middleware('throttle:api-writes');
     Route::post('{table}/bulk/update', [CoreRecordController::class, 'bulkRecordUpdate'])->middleware('throttle:api-writes');
     Route::post('{table}/bulk/delete', [CoreRecordController::class, 'bulkRecordDelete'])->middleware('throttle:api-writes');
-});
-
-/*
-|--------------------------------------------------------------------------
-| Authenticated API Routes (Always require authentication)
-|--------------------------------------------------------------------------
-*/
-Route::prefix(config('record.api_prefix', 'api'))->middleware([
-    'api',
-    'auth:' . config('sp-laravel-api.auth.guard', 'api'),
-    'request.id',
-])->group(function (): void {
-
-    if (config('audit.enabled', false)) {
-        /*
-    |--------------------------------------------------------------------------
-    | Audit Management Routes
-    |--------------------------------------------------------------------------
-    */
-        Route::prefix('audit')->group(function (): void {
-            // Get audit logs for a specific entity
-            Route::get('logs', [AuditLogController::class, 'getLogs'])->middleware('throttle:api-reads');
-
-            // Get audit statistics
-            // Route::get('stats', [AuditLogController::class, 'getStats'])->middleware('throttle:api-reads');
-
-            // // Get field timeline for a specific field
-            // Route::get('field-timeline', [AuditLogController::class, 'getFieldTimeline'])->middleware('throttle:api-reads');
-
-            // // Get field statistics for a specific field
-            // Route::get('field-stats', [AuditLogController::class, 'getFieldStats'])->middleware('throttle:api-reads');
-
-            // // Manually create an audit log entry
-            // Route::post('logs', [AuditLogController::class, 'createLog'])->middleware('throttle:api-writes');
-
-            // Get specific audit log by ID
-            Route::get('logs/{id}', [AuditLogController::class, 'show'])->middleware('throttle:api-reads');
-
-            // Clean up old audit logs (admin only)
-            // Route::delete('cleanup', [AuditLogController::class, 'cleanup'])
-            //     ->middleware(['throttle:api-writes', 'can:manage-audit-logs']);
-        });
-    }
 });

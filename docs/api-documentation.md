@@ -16,7 +16,7 @@ use Illuminate\Http\Request;
 public function index(Request $request)
 {
     // Start with any base query
-    $query = DB::table('invoices')->where('active', true);****
+    $query = DB::table('invoices')->where('active', true);
 
     // Apply filters from request (e.g. ?status=eq.paid&sortby=created_at)
     $result = $query->applyRequestFilters($request);
@@ -1207,18 +1207,13 @@ GET /{api_prefix}/audit/logs
 Retrieve audit logs with filtering options.
 
 #### Query Parameters
-- `entity_type` (string) - Filter by entity type (table name, e.g. `invoices`)
-- `entity_id` (integer) - Filter by specific entity ID
-- `event` (string) - Filter by event type (created, updated, deleted, etc.)
-- `user_id` (integer) - Filter by user who performed the action
-- `date_from` (date: Y-m-d) - Filter from date
-- `date_to` (date: Y-m-d) - Filter to date
-- `per_page` (integer) - Items per page
-- `page` (integer) - Page number
+- `entity_type` (string, required) - Filter by entity type (table name, e.g. `invoices`)
+- `entity_id` (integer, required) - Filter by specific entity ID
+- `limit` (integer) - Max results (default: 50, max: 100)
 
 #### Example Request
 ```http
-GET /api/v1/audit/logs?entity_type=invoices&entity_id=123&event=updated&per_page=20
+GET /api/v1/audit/logs?entity_type=invoices&entity_id=123&limit=20
 Authorization: Bearer {access_token}
 ```
 
@@ -1232,28 +1227,20 @@ Authorization: Bearer {access_token}
       "entity_type": "invoices",
       "entity_id": 123,
       "event": "updated",
-      "old_data": {
-        "status": "draft",
-        "total": 250.00
-      },
-      "new_data": {
-        "status": "sent",
-        "total": 275.00
-      },
+      "old_data": "{\\n  \\\"id\\\": 123,\\n  \\\"status\\\": \\\"draft\\\"\\n}",
+      "new_data": "{\\n  \\\"id\\\": 123,\\n  \\\"status\\\": \\\"sent\\\"\\n}",
+      "subject": "INV-001",
+      "recap": "",
       "user_id": 5,
-      "user_name": "John Admin",
-      "ip_address": "192.168.1.100",
-      "user_agent": "Mozilla/5.0...",
+      "entity_name": "invoices",
+      "metadata": "{\\n  \\\"change_summary\\\": { ... },\\n  \\\"field_changes\\\": { ... }\\n}",
       "created_at": "2024-01-15T11:30:00Z"
     }
-  ],
-  "meta": {
-    "current_page": 1,
-    "per_page": 20,
-    "total": 45
-  }
+  ]
 }
 ```
+
+**Note:** `old_data`, `new_data`, and `metadata` are stored as JSON strings in the database. Clients can `JSON.parse` / `json_decode` them when needed.
 
 ### Get Audit Statistics
 ```http
@@ -1263,31 +1250,28 @@ GET /{api_prefix}/audit/stats
 Get audit statistics and metrics.
 
 #### Query Parameters
-- `entity_type` (string) - Filter by entity type
+- `entity_type` (string) - Filter by entity type (table name)
 - `entity_id` (integer) - Filter by specific entity ID
-- `date_from` (date) - Filter from date
-- `date_to` (date) - Filter to date
-- `group_by` (string: `event`|`user`|`date`|`entity_type`) - Group results by
+- `start_date` (date: Y-m-d) - Filter from date
+- `end_date` (date: Y-m-d) - Filter to date (must be >= start_date)
+- `event` (string) - Filter by event type (`created`, `updated`, `deleted`, `login`, `logout`, `failed_login`)
 
 #### Response Format
 ```json
 {
   "success": true,
   "data": {
-    "total_events": 1250,
-    "events_by_type": {
-      "created": 450,
-      "updated": 650,
-      "deleted": 150
+    "total_logs": 45,
+    "actions_breakdown": {
+      "created": 10,
+      "updated": 30,
+      "deleted": 5
     },
-    "events_by_user": {
-      "5": 800,
-      "10": 300,
-      "15": 150
-    },
-    "date_range": {
-      "from": "2024-01-01",
-      "to": "2024-01-15"
+    "top_users": [
+      { "user_name": "John Admin", "count": 20 }
+    ],
+    "entity_types": {
+      "invoices": 45
     }
   }
 }
@@ -1306,8 +1290,7 @@ Get timeline of changes for a specific field.
 - `field` (string) - Field name
 
 #### Optional Parameters
-- `date_from` (date) - Filter from date
-- `date_to` (date) - Filter to date
+- `limit` (integer) - Max results (default: 50, max: 50)
 
 #### Response Format
 ```json
@@ -1315,18 +1298,24 @@ Get timeline of changes for a specific field.
   "success": true,
   "data": [
     {
-      "date": "2024-01-15T11:30:00Z",
+      "id": 1001,
+      "changed_at": "2024-01-15T11:30:00Z",
       "old_value": "draft",
       "new_value": "sent",
-      "user_id": 5,
-      "user_name": "John Admin"
+      "change_type": "updated",
+      "data_type": "string",
+      "user_name": "John Admin",
+      "event": "updated"
     },
     {
-      "date": "2024-01-10T09:15:00Z",
+      "id": 990,
+      "changed_at": "2024-01-10T09:15:00Z",
       "old_value": null,
       "new_value": "draft",
-      "user_id": 3,
-      "user_name": "Jane User"
+      "change_type": "created",
+      "data_type": "string",
+      "user_name": "Jane User",
+      "event": "created"
     }
   ]
 }
@@ -1341,6 +1330,7 @@ Get statistics for a specific field across entities.
 
 #### Query Parameters (Required)
 - `entity_type` (string) - Entity type
+- `entity_id` (integer) - Entity ID
 - `field` (string) - Field name
 
 #### Response Format
@@ -1348,22 +1338,14 @@ Get statistics for a specific field across entities.
 {
   "success": true,
   "data": {
-    "field": "status",
-    "entity_type": "invoices",
     "total_changes": 150,
-    "value_distribution": {
-      "draft": 45,
-      "sent": 60,
-      "paid": 30,
-      "cancelled": 15
+    "first_changed_at": "2024-01-01T08:00:00Z",
+    "last_changed_at": "2024-01-15T11:30:00Z",
+    "changes_by_user": {
+      "John Admin": 80,
+      "Jane User": 70
     },
-    "most_active_users": [
-      {
-        "user_id": 5,
-        "user_name": "John Admin",
-        "changes": 80
-      }
-    ]
+    "field_name": "status"
   }
 }
 ```
@@ -1378,18 +1360,21 @@ Manually create an audit log entry.
 #### Request Body
 ```json
 {
+  "event": "updated",
   "entity_type": "invoices",
+  "entity_name": "invoices",
   "entity_id": 123,
-  "event": "status_changed",
-  "old_data": {
-    "status": "draft"
-  },
-  "new_data": {
-    "status": "sent"
-  },
-  "description": "Status changed via API"
+  "subject": "INV-001",
+  "recap": "Status changed via API",
+  "metadata": {
+    "id": 123,
+    "old_data": { "status": "draft" },
+    "new_data": { "status": "sent" }
+  }
 }
 ```
+
+**Note:** If `metadata.old_data` and `metadata.new_data` are provided, they are used as the explicit old/new snapshots for the audit record. If omitted for updates, the system may infer `old_data` from the most recent `new_data` stored for the same entity.
 
 ### Get Specific Audit Log
 ```http

@@ -4,9 +4,10 @@ The `sp-laravel-api` package provides a comprehensive audit interface that allow
 
 ## Overview
 
-The audit interface consists of:
+The audit system consists of:
 - `AuditQueryInterface` - Interface for controllers to implement custom audit queries
 - `HasAuditQuery` trait - Provides common audit functionality for controllers
+- `Auditable` trait - Provides model-level automatic audit logging with old/new snapshots and relationships
 - `AuditLogController` - Dedicated controller for audit operations
 - Audit routes - API endpoints for audit functionality
 
@@ -86,8 +87,9 @@ class InvoiceController extends Controller
 
 ### Available Methods
 
-#### `logAuditWithCustomQuery($recordId, $event, $oldData = null, $newData = null)`
-Logs an audit event using the custom audit query if the controller implements `AuditQueryInterface`.
+#### `logAuditWithCustomQuery($recordId, $event, $subject = null, $recap = null)`
+Logs an audit event using the custom audit query if the controller implements `AuditQueryInterface`.  
+The `getAuditQuery($id)` implementation is responsible for returning a full snapshot (including relationships) to be stored as `new_data` (and compared with existing logs for `old_data` on updates where the `Auditable` trait is not used).
 
 #### `getAuditLogsForRecord($recordId, $perPage = 15)`
 Retrieves audit logs for a specific record with pagination.
@@ -182,12 +184,10 @@ class InvoiceController extends Controller implements AuditQueryInterface
         // Validate and create invoice
         $invoice = Invoice::create($request->validated());
         
-        // Log audit with custom query
+        // Log audit with custom query (controller-level snapshot)
         $this->logAuditWithCustomQuery(
             $invoice->id,
-            'created',
-            null,
-            $invoice->toArray()
+            AuditLogEventEnum::CREATED,
         );
         
         return response()->json($invoice);
@@ -196,16 +196,13 @@ class InvoiceController extends Controller implements AuditQueryInterface
     public function update(Request $request, $id)
     {
         $invoice = Invoice::findOrFail($id);
-        $oldData = $invoice->toArray();
         
         $invoice->update($request->validated());
         
-        // Log audit with custom query
+        // Log audit with custom query (controller-level snapshot)
         $this->logAuditWithCustomQuery(
             $invoice->id,
-            'updated',
-            $oldData,
-            $invoice->fresh()->toArray()
+            AuditLogEventEnum::UPDATED,
         );
         
         return response()->json($invoice);
@@ -221,6 +218,175 @@ class InvoiceController extends Controller implements AuditQueryInterface
     {
         return $this->auditStats($request);
     }
+}
+```
+
+## Auditable Trait (Model-Level)
+
+The `Auditable` trait can be applied directly to Eloquent models to automatically capture **old/new data** and **relationships** around `created`, `updated`, and `deleted` events.
+
+### How It Works
+
+- Hooks into model events:
+  - `created` → logs a `created` event with `new_data` snapshot
+  - `updating` → captures `old_data` from the database before changes
+  - `updated` → logs an `updated` event with both `old_data` and `new_data`
+  - `deleting` → captures `old_data` from the database
+  - `deleted` → logs a `deleted` event with `old_data`
+- Uses the configured tenant column (e.g. `tenant_id`) from `record.tenant_column` to populate `tenant_id` on audit logs.
+- Builds snapshots including:
+  - model attributes (excluding configured sensitive fields)
+  - related models based on:
+    - explicit model-level configuration `auditWith` / `getAuditWith()`
+    - or `RecordTableType::relationships` in `config/record.php`
+
+### Snapshot Composition
+
+For each event, the trait sends structured data to `AuditLogService::handleAuditDataEntry`:
+
+- **Create**
+
+```json
+{
+  "id": 123,
+  "tenant_id": "tenant-1",
+  "new_data": {
+    "id": 123,
+    "number": "INV-001",
+    "status": "draft",
+    "customer_id": 5,
+    "items": [
+      {"id": 1, "description": "Item 1", "qty": 1, "price": 10}
+    ]
+  }
+}
+```
+
+- **Update**
+
+```json
+{
+  "id": 123,
+  "tenant_id": "tenant-1",
+  "old_data": {
+    "id": 123,
+    "status": "draft",
+    "items": [
+      {"id": 1, "description": "Item 1", "qty": 1, "price": 10}
+    ]
+  },
+  "new_data": {
+    "id": 123,
+    "status": "sent",
+    "items": [
+      {"id": 1, "description": "Item 1", "qty": 2, "price": 10}
+    ]
+  }
+}
+```
+
+- **Delete**
+
+```json
+{
+  "id": 123,
+  "tenant_id": "tenant-1",
+  "old_data": {
+    "id": 123,
+    "status": "cancelled"
+  }
+}
+```
+
+### Relationship Inclusion
+
+The `Auditable` trait determines which relationships to eagerly load into the snapshot as follows:
+
+1. If the model defines:
+
+```php
+protected array $auditWith = ['items', 'customer'];
+```
+
+or:
+
+```php
+public function getAuditWith(): array
+{
+    return ['items', 'customer'];
+}
+```
+
+these relations are always loaded.
+
+2. Otherwise, it checks `RecordTableType` configuration in `config/record.php`:
+
+```php
+'invoices' => new RecordTableType(
+    pms_name: 'invoices',
+    table: 'invoices',
+    relationships: [
+        'items' => new RecordHasManyType(table: 'invoice_items', foreignKey: 'invoice_id'),
+        'customer' => new RecordBelongsToType(table: 'customers'),
+    ],
+),
+```
+
+In this case, `items` and `customer` are automatically loaded when building the snapshot, assuming those are valid Eloquent relationship methods on the model.
+
+3. The maximum number of relationships included per snapshot is controlled by:
+
+```php
+// config/audit.php
+'performance' => [
+    'max_relationships' => 10,
+],
+```
+
+### Excluding Sensitive Fields
+
+The trait uses `config('audit.excluded_attributes')` and always excludes common audit columns:
+
+```php
+'excluded_attributes' => [
+    'password',
+    'remember_token',
+    'email_verified_at',
+    'created_at',
+    'updated_at',
+    'deleted_at',
+],
+```
+
+These keys are removed recursively from both the main model and nested relationships.
+
+### Example Model Usage
+
+```php
+use Illuminate\Database\Eloquent\Model;
+use Sopheak\Core\Traits\Auditable;
+
+class Invoice extends Model
+{
+    use Auditable;
+
+    protected $table = 'invoices';
+
+    protected $guarded = [];
+
+    // Option 1: Let RecordTableType relationships drive audit relations
+    public function items()
+    {
+        return $this->hasMany(InvoiceItem::class);
+    }
+
+    public function customer()
+    {
+        return $this->belongsTo(Customer::class);
+    }
+
+    // Option 2: Force a specific set of relations
+    protected array $auditWith = ['items', 'customer'];
 }
 ```
 

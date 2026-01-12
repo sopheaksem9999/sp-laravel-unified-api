@@ -24,17 +24,36 @@ class AuditLogService
 
         $oldData = [];
         $newData = [];
+        $providedOldData = $queryData['old_data'] ?? $queryData['__old_data'] ?? null;
+        $providedNewData = $queryData['new_data'] ?? $queryData['__new_data'] ?? null;
+        $entityId = $queryData['id'] ?? $queryData['entity_id'] ?? null;
+
+        if (is_array($providedNewData) && (null === $entityId || '' === $entityId) && isset($providedNewData['id'])) {
+            $entityId = $providedNewData['id'];
+        }
+        if (is_array($providedOldData) && (null === $entityId || '' === $entityId) && isset($providedOldData['id'])) {
+            $entityId = $providedOldData['id'];
+        }
+
+        if (in_array($event, [AuditLogEventEnum::UPDATED, AuditLogEventEnum::DELETED], true) && (null === $entityId || '' === $entityId)) {
+            return;
+        }
 
         switch ($event) {
             case AuditLogEventEnum::CREATED:
-                $newData = $queryData;
+                $newData = is_array($providedNewData) ? $providedNewData : $queryData;
 
                 break;
 
             case AuditLogEventEnum::UPDATED:
-                $getOldAuditLogDate = static::getOldAuditLogDate($queryData['id'], $entityName);
-                $oldData = null === $getOldAuditLogDate || [] === $getOldAuditLogDate ? [] : $getOldAuditLogDate;
-                $newData = $queryData;
+                if (is_array($providedOldData)) {
+                    $oldData = $providedOldData;
+                } else {
+                    $getOldAuditLogDate = static::getOldAuditLogDate($entityId, $entityName);
+                    $oldData = null === $getOldAuditLogDate || [] === $getOldAuditLogDate ? [] : $getOldAuditLogDate;
+                }
+
+                $newData = is_array($providedNewData) ? $providedNewData : $queryData;
 
                 // Check if there are actual changes for UPDATE events
                 if (!self::hasDataChanges($oldData, $newData)) {
@@ -45,8 +64,12 @@ class AuditLogService
                 break;
 
             case AuditLogEventEnum::DELETED:
-                $getOldAuditLogDate = static::getOldAuditLogDate($queryData['id'], $entityName);
-                $oldData = null === $getOldAuditLogDate || [] === $getOldAuditLogDate ? [] : $getOldAuditLogDate;
+                if (is_array($providedOldData)) {
+                    $oldData = $providedOldData;
+                } else {
+                    $getOldAuditLogDate = static::getOldAuditLogDate($entityId, $entityName);
+                    $oldData = null === $getOldAuditLogDate || [] === $getOldAuditLogDate ? [] : $getOldAuditLogDate;
+                }
 
                 break;
         }
@@ -59,7 +82,7 @@ class AuditLogService
             'recap' => null != $recap ? $recap : static::generateRecap($event, $entityName, $oldData, $newData),
             'subject' => null != $subject ? $subject : static::getAuditSubject([] === $newData ? ([] !== $oldData ? $oldData : $queryData) : ($newData)),
             'entity_type' => $entityType ?? null,
-            'entity_id' => $queryData['id'] ?? null,
+            'entity_id' => $entityId,
             'event' => $event->value,
             'tenant_id' => $tenantId,
             'metadata' => $queryData,
