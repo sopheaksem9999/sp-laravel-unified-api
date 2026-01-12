@@ -1128,6 +1128,11 @@ class CoreRecordController extends Controller
             abort(RecordApiJsonResponseEnum::UNAUTHORIZED->value, 'Unauthenticated');
         }
 
+        $tableSchema = SchemaRegistry::getTable($table);
+        if ($tableSchema instanceof RecordTableType && is_null($tableSchema->pms_name)) {
+            return;
+        }
+
         $perm = PermissionHelper::mapPermission($table, $action);
 
         if (!Gate::forUser($user)->allows($perm)) {
