@@ -8,7 +8,7 @@ A comprehensive Laravel package that provides standardized API responses, dynami
 # 1. Install the package
 composer require sopheak/sp-laravel-api
 
-# 2. Generate/publish configs (record/audit/cursor_pagination/sp-laravel-api)
+# 2. Generate/publish configs (record/audit/sp-laravel-api)
 php artisan sp-laravel-api:setup
 
 # 3. Publish package migrations + run migrations
@@ -33,7 +33,7 @@ curl -X GET http://your-app.test/api/v1/users
 - **🔑 Authentication Driver Agnostic**: Works with any Laravel auth guard (JWT, Sanctum, Passport, etc.)
 - **📚 OpenAPI Spec Generation**: CLI command to generate API documentation
 - **🎯 Request ID Middleware**: Automatic request tracking for debugging and monitoring
-- **⚡ Performance Optimized**: Query caching, lazy loading, and cursor pagination
+- **⚡ Performance Optimized**: Query caching and lazy loading
 - **🧹 Audit Log Cleanup**: CLI command for cleaning old audit logs based on retention policy
 - **🏢 Multi-Tenant Ready**: Built-in support for tenant isolation
 - **🔧 Configuration Publishing**: Easy setup with sensible defaults
@@ -43,7 +43,7 @@ curl -X GET http://your-app.test/api/v1/users
 - [API Documentation](docs/api-documentation.md): Detailed guide on endpoints, request/response formats, and bulk operations.
 - [Performance & Scalability](docs/performance.md): Benchmark results and optimization strategies.
 - [Audit Interface](docs/audit-interface.md): How to implement custom audit logging.
-- [Cursor Pagination](docs/cursor-pagination.md): Usage of cursor-based pagination.
+- [Legacy Cursor Pagination](docs/cursor-pagination.md): Background on the removed cursor-based paginator.
 - [Use Cases](docs/use-cases.md): Why use this for SaaS ERP or E-commerce.
 
 ## 📋 Requirements
@@ -100,7 +100,6 @@ php artisan sp-laravel-api:setup
 This command publishes package configs (tag: `sp-laravel-api-config`) and creates missing app config files:
 - `config/record.php` - Database table configurations and relationships
 - `config/audit.php` - Audit logging settings
-- `config/cursor_pagination.php` - Cursor pagination settings
 - `config/sp-laravel-api.php` - Package settings (auth guard, OpenAPI output)
 
 To overwrite existing generated configs, run:
@@ -978,15 +977,6 @@ AuditLogJob::dispatch(
 );
 ```
 
-### CursorPagination
-Efficient pagination for large datasets:
-```php
-use Sopheak\Core\Services\CursorPagination;
-
-$pagination = app(CursorPagination::class);
-$result = $pagination->paginate($query, $request);
-```
-
 ### QueryCacheService
 Intelligent query caching:
 ```php
@@ -1062,7 +1052,6 @@ php artisan sp-laravel-api:setup
 Publishes default configurations for:
 - `config/record.php` - Database table configurations and relationships
 - `config/audit.php` - Audit logging settings  
-- `config/cursor_pagination.php` - Cursor pagination settings
 - `config/sp-laravel-api.php` - Package settings (auth guard, OpenAPI output)
 
 ### Record Cache Management
@@ -1070,14 +1059,8 @@ Publishes default configurations for:
 # Clear record cache
 php artisan sp-laravel-api:cache-clear
 
-# Generate record schema cache
-php artisan sp-laravel-api:cache-generate
-
-# Rebuild caches (SchemaRegistry/RelationshipResolver/QueryBuilderFilters)
-php artisan sp-laravel-api:cache-refresh
-
-# Rebuild caches and also write OpenAPI spec
-php artisan sp-laravel-api:cache-refresh --openapi
+# Sync RecordTableType columns in config/record/tables from DB schema
+php artisan sp-laravel-api:sync-record-columns
 
 # Clean old audit logs based on retention policy
 php artisan sp-laravel-api:clean-audit-logs
@@ -1301,7 +1284,7 @@ php artisan sp-laravel-api:clean-audit-logs --dry-run --days=90
 ### Package Documentation
 - **API Documentation**: [`docs/api-documentation.md`](docs/api-documentation.md) - Comprehensive API endpoints and usage guide
 - **Audit Interface**: [`docs/audit-interface.md`](docs/audit-interface.md) - Custom audit queries and logging
-- **Cursor Pagination**: [`docs/cursor-pagination.md`](docs/cursor-pagination.md) - Efficient pagination for large datasets
+- **Legacy Cursor Pagination**: [`docs/cursor-pagination.md`](docs/cursor-pagination.md) - Background on the removed paginator
 - **Performance**: [`docs/performance.md`](docs/performance.md) - Benchmarks and optimization notes
 - **Use Cases**: [`docs/use-cases.md`](docs/use-cases.md) - Why use this for SaaS/ERP style APIs
 
@@ -1310,7 +1293,6 @@ php artisan sp-laravel-api:clean-audit-logs --dry-run --days=90
 - **API Response Service**: `Sopheak\Core\Services\RecordApiResponseService`
 - **Audit Log Service**: `Sopheak\Core\Services\AuditLogService`
 - **Query Cache Service**: `Sopheak\Core\Services\QueryCacheService`
-- **Cursor Pagination Service**: `Sopheak\Core\Services\CursorPagination`
 - **Record API Controller**: `Sopheak\Core\Http\Controllers\CoreRecordController`
 - **Audit Log Controller**: `Sopheak\Core\Http\Controllers\AuditLogController`
 - **Query Helpers Trait**: `Sopheak\Core\Traits\QueryHelpers`

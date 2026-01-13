@@ -604,10 +604,6 @@ Retrieve a paginated list of records with filtering, sorting, and relationship l
 **Pagination**
 - `per_page` (integer, max: 100) - Items per page
 - `page` (integer) - Page number (offset pagination)
-- `cursor` (string) - Cursor value (cursor pagination)
-- `direction` (string: `next`|`prev`) - Cursor direction
-- `cursor_column` (string) - Cursor column (defaults to the primary key)
-- `composite_cursor` (boolean) - Enables composite cursor pagination when combined with sorting
 
 **Search**
 - `s` (string) - Search across searchable columns (uses full-text index when available, otherwise LIKE)

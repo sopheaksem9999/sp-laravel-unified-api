@@ -672,65 +672,65 @@ Accepts an array of IDs or an array of objects with the primary key.
                     ],
                     'security' => [['bearerAuth' => []]],
                 ] : [],
-                'patch' => $canUpdate ? [
-                    'tags' => [$formattedRecordName],
-                    'summary' => 'Partially update ' . $formattedRecordName,
-                    'description' => "Update an existing {$recordName} record with comprehensive validation:\n\n**Advanced Validation:** Multiple rules ([Validation](#description/-getting-started))\n\n{$relationshipDescription}",
-                    'requestBody' => [
-                        'required' => true,
-                        'content' => [
-                            'application/json' => [
-                                'schema' => ['$ref' => $schemaRefWrite],
-                            ],
-                        ],
-                    ],
-                    'responses' => [
-                        '200' => [
-                            'description' => 'Updated',
-                            'content' => [
-                                'application/json' => [
-                                    'schema' => [
-                                        'type' => 'object',
-                                        'properties' => [
-                                            'success' => ['type' => 'boolean', 'example' => true],
-                                            'data' => ['$ref' => $schemaRef],
-                                            'meta' => [
-                                                'type' => 'object',
-                                                'properties' => [
-                                                    'request_id' => ['type' => 'string'],
-                                                ],
-                                            ],
-                                        ],
-                                        'required' => ['success', 'data', 'meta'],
-                                    ],
-                                ],
-                            ],
-                        ],
-                        '404' => [
-                            'description' => 'Not Found',
-                            'content' => [
-                                'application/json' => [
-                                    'schema' => [
-                                        'type' => 'object',
-                                        'properties' => [
-                                            'success' => ['type' => 'boolean', 'example' => false],
-                                            'message' => ['type' => 'string', 'example' => 'Record not found'],
-                                            'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
-                                            'meta' => [
-                                                'type' => 'object',
-                                                'properties' => [
-                                                    'request_id' => ['type' => 'string'],
-                                                ],
-                                            ],
-                                        ],
-                                        'required' => ['success', 'message', 'errors', 'meta'],
-                                    ],
-                                ],
-                            ],
-                        ],
-                    ],
-                    'security' => [['bearerAuth' => []]],
-                ] : [],
+                // 'patch' => $canUpdate ? [
+                //     'tags' => [$formattedRecordName],
+                //     'summary' => 'Partially update ' . $formattedRecordName,
+                //     'description' => "Update an existing {$recordName} record with comprehensive validation:\n\n**Advanced Validation:** Multiple rules ([Validation](#description/-getting-started))\n\n{$relationshipDescription}",
+                //     'requestBody' => [
+                //         'required' => true,
+                //         'content' => [
+                //             'application/json' => [
+                //                 'schema' => ['$ref' => $schemaRefWrite],
+                //             ],
+                //         ],
+                //     ],
+                //     'responses' => [
+                //         '200' => [
+                //             'description' => 'Updated',
+                //             'content' => [
+                //                 'application/json' => [
+                //                     'schema' => [
+                //                         'type' => 'object',
+                //                         'properties' => [
+                //                             'success' => ['type' => 'boolean', 'example' => true],
+                //                             'data' => ['$ref' => $schemaRef],
+                //                             'meta' => [
+                //                                 'type' => 'object',
+                //                                 'properties' => [
+                //                                     'request_id' => ['type' => 'string'],
+                //                                 ],
+                //                             ],
+                //                         ],
+                //                         'required' => ['success', 'data', 'meta'],
+                //                     ],
+                //                 ],
+                //             ],
+                //         ],
+                //         '404' => [
+                //             'description' => 'Not Found',
+                //             'content' => [
+                //                 'application/json' => [
+                //                     'schema' => [
+                //                         'type' => 'object',
+                //                         'properties' => [
+                //                             'success' => ['type' => 'boolean', 'example' => false],
+                //                             'message' => ['type' => 'string', 'example' => 'Record not found'],
+                //                             'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
+                //                             'meta' => [
+                //                                 'type' => 'object',
+                //                                 'properties' => [
+                //                                     'request_id' => ['type' => 'string'],
+                //                                 ],
+                //                             ],
+                //                         ],
+                //                         'required' => ['success', 'message', 'errors', 'meta'],
+                //                     ],
+                //                 ],
+                //             ],
+                //         ],
+                //     ],
+                //     'security' => [['bearerAuth' => []]],
+                // ] : [],
                 'delete' => $canDelete ? [
                     'tags' => [$formattedRecordName],
                     'summary' => 'Delete ' . $formattedRecordName,

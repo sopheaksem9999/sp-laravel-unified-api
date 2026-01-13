@@ -13,17 +13,10 @@ use Sopheak\Core\Support\SchemaRegistry;
 class QueryBuilderFilters
 {
     private static array $columnCache = [];
-
     private static array $operatorCache = [];
-
     private static array $lazyOperations = [];
-
     private static array $lazyCache = [];
-
     private static array $searchableCache = [];
-
-    private static array $compiledFilters = [];
-
     private static string $lazyMarkerPrefix = 'LAZY_OP_';
 
     private static array $lazyBuilders = [];

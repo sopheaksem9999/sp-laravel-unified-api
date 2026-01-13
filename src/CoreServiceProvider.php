@@ -10,13 +10,10 @@ use Sopheak\Core\Http\Middleware\RequestId;
 use Sopheak\Core\Console\GenerateOpenApiSpec;
 use Sopheak\Core\Console\SetupPackage;
 use Sopheak\Core\Console\ValidateSetup;
-use Sopheak\Core\Console\Records\ClearRecordCache;
-use Sopheak\Core\Console\Records\GetRecordCache;
-use Sopheak\Core\Console\Records\RecordRefreshCache;
+use Sopheak\Core\Console\GenerateRecordSchemaCache;
 use Sopheak\Core\Console\CleanAuditLogs;
 use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\AuditLogService;
-use Sopheak\Core\Services\CursorPagination;
 use Sopheak\Core\Services\QueryCacheService;
 use Sopheak\Core\Services\RecordService;
 
@@ -29,7 +26,6 @@ class CoreServiceProvider extends ServiceProvider
         $this->app->singleton('api.response', fn(): RecordApiResponseService => new RecordApiResponseService());
 
         $this->app->singleton(AuditLogService::class);
-        $this->app->singleton(CursorPagination::class);
         $this->app->singleton(QueryCacheService::class);
     }
 
@@ -39,7 +35,6 @@ class CoreServiceProvider extends ServiceProvider
             __DIR__ . '/../config/sp-laravel-api.php' => config_path('sp-laravel-api.php'),
             __DIR__ . '/../config/audit.php' => config_path('audit.php'),
             __DIR__ . '/../config/record.php' => config_path('record.php'),
-            __DIR__ . '/../config/cursor_pagination.php' => config_path('cursor_pagination.php'),
         ], 'sp-laravel-api-config');
 
         $this->publishes([
@@ -57,9 +52,7 @@ class CoreServiceProvider extends ServiceProvider
                 GenerateOpenApiSpec::class,
                 SetupPackage::class,
                 ValidateSetup::class,
-                ClearRecordCache::class,
-                GetRecordCache::class,
-                RecordRefreshCache::class,
+                GenerateRecordSchemaCache::class,
                 CleanAuditLogs::class,
             ];
 

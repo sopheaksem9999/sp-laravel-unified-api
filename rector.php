@@ -11,7 +11,8 @@ return RectorConfig::configure()
         __DIR__ . '/vendor/*',
     ])
     ->withPaths([
-        __DIR__ . '/',
+        __DIR__ . '/src',
+        __DIR__ . '/tests',
     ])
     ->withPhpSets(php84: true)
     ->withImportNames(importNames: true, removeUnusedImports: true)

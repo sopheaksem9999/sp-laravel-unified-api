@@ -829,43 +829,23 @@ class RecordService
             $maxPerPage = (int) config('record.per_page_max', 100);
             $perPage = max(1, min((int) $request->get('per_page', config('record.limit_max', 1000)), $maxPerPage));
 
-            if ($request->has('cursor') || CursorPagination::shouldUseCursorPagination($builder)) {
-                $primaryKey = $tableSchema->primary_key ?? 'id';
-                $cursorColumn = $request->get('cursor_column', $primaryKey);
+            $page = max((int) $request->get('page', 1), 1);
+            $countQuery = clone $builder;
+            $total = $countQuery->count();
 
-                if ($request->has('composite_cursor') || $request->has('sortby')) {
-                    $cursorColumns = [$cursorColumn];
-                    if ($cursorColumn !== $primaryKey) {
-                        $cursorColumns[] = $primaryKey;
-                    }
+            $data = $builder->forPage($page, $perPage)->get()->all();
 
-                    $result = CursorPagination::paginateComposite($builder, $request, $cursorColumns, $perPage);
-                } else {
-                    $result = CursorPagination::paginate($builder, $request, $cursorColumn, $perPage);
-                }
+            $headers['X-Total-Count'] = (string) $total;
+            $lastPage = (int) ceil($total / $perPage);
+            $headers['X-Page'] = (string) $page;
+            $headers['X-Per-Page'] = (string) $perPage;
+            $headers['X-Total-Pages'] = (string) $lastPage;
 
-                $data = $result['data'];
-                $cursorMeta = $result['meta'];
-                $meta = $cursorMeta;
-            } else {
-                $page = max((int) $request->get('page', 1), 1);
-                $countQuery = clone $builder;
-                $total = $countQuery->count();
-
-                $data = $builder->forPage($page, $perPage)->get()->all();
-
-                $headers['X-Total-Count'] = (string) $total;
-                $lastPage = (int) ceil($total / $perPage);
-                $headers['X-Page'] = (string) $page;
-                $headers['X-Per-Page'] = (string) $perPage;
-                $headers['X-Total-Pages'] = (string) $lastPage;
-
-                $meta = [
-                    'page' => $page,
-                    'per_page' => $perPage,
-                    'total' => $total,
-                ];
-            }
+            $meta = [
+                'page' => $page,
+                'per_page' => $perPage,
+                'total' => $total,
+            ];
         }
 
         if ($request->has('select')) {
@@ -1078,42 +1058,22 @@ class RecordService
             $maxPerPage = (int) config('record.per_page_max', 100);
             $perPage = max(1, min((int) $request->get('per_page', config('record.limit_max', 1000)), $maxPerPage));
 
-            if ($request->has('cursor') || CursorPagination::shouldUseCursorPagination($builder)) {
-                $primaryKey = $tableSchema->primary_key ?? 'id';
-                $cursorColumn = $request->get('cursor_column', $primaryKey);
+            $page = max((int) $request->get('page', 1), 1);
+            $countQuery = clone $builder;
+            $total = $countQuery->count();
+            $data = $builder->forPage($page, $perPage)->get()->all();
 
-                if ($request->has('composite_cursor') || $request->has('sortby')) {
-                    $cursorColumns = [$cursorColumn];
-                    if ($cursorColumn !== $primaryKey) {
-                        $cursorColumns[] = $primaryKey;
-                    }
+            $headers['X-Total-Count'] = (string) $total;
+            $lastPage = (int) ceil($total / $perPage);
+            $headers['X-Page'] = (string) $page;
+            $headers['X-Per-Page'] = (string) $perPage;
+            $headers['X-Total-Pages'] = (string) $lastPage;
 
-                    $result = CursorPagination::paginateComposite($builder, $request, $cursorColumns, $perPage);
-                } else {
-                    $result = CursorPagination::paginate($builder, $request, $cursorColumn, $perPage);
-                }
-
-                $data = $result['data'];
-                $cursorMeta = $result['meta'];
-                $meta = $cursorMeta;
-            } else {
-                $page = max((int) $request->get('page', 1), 1);
-                $countQuery = clone $builder;
-                $total = $countQuery->count();
-                $data = $builder->forPage($page, $perPage)->get()->all();
-
-                $headers['X-Total-Count'] = (string) $total;
-                $lastPage = (int) ceil($total / $perPage);
-                $headers['X-Page'] = (string) $page;
-                $headers['X-Per-Page'] = (string) $perPage;
-                $headers['X-Total-Pages'] = (string) $lastPage;
-
-                $meta = [
-                    'page' => $page,
-                    'per_page' => $perPage,
-                    'total' => $total,
-                ];
-            }
+            $meta = [
+                'page' => $page,
+                'per_page' => $perPage,
+                'total' => $total,
+            ];
         }
 
         if ($request->has('select')) {

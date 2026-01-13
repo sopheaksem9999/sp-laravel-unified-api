@@ -13,7 +13,7 @@ class SetupPackage extends Command
 {
     protected $signature = 'sp-laravel-api:setup {--force : Overwrite existing configs}';
 
-    protected $description = 'Setup SP Laravel API package: publish configs and create record/audit configurations.';
+    protected $description = 'Setup SP Laravel API package: publish configs and create record/audit configurations using config/record.php + config/record/tables/*.php.';
 
     public function handle(): int
     {
@@ -58,7 +58,7 @@ class SetupPackage extends Command
             $this->line('📋 Next steps:');
             $this->line('  1. Review and customize the generated configuration files');
             $this->line('  2. Set up your environment variables (.env file)');
-            $this->line('  3. Configure your database tables in config/record.php');
+            $this->line('  3. Configure your database tables in config/record.php and config/record/tables/*.php');
         }
 
         if (!$force && $created === 0) {
