@@ -20,7 +20,7 @@ class GenerateRecordSchemaCache extends Command
             $force = (bool) $this->option('force');
 
             // 1. Build mapping from table name => config file(s) under config/record/tables
-            $tablesDirectory = config_path('record/tables');
+            $tablesDirectory = config_path(config('record.table_config_path'));
             $tableFiles = [];
 
             if (is_dir($tablesDirectory)) {

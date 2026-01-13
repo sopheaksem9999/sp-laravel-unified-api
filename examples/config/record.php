@@ -354,6 +354,7 @@ return [
     'cache_ttl' => env('RECORD_CACHE_TTL', 3600),
     'lazy_cache_ttl' => env('RECORD_LAZY_CACHE_TTL', 300),
     'enable_tenant_id' => false,
+    'table_config_path' => 'records/tables',
 
     /*
     |--------------------------------------------------------------------------

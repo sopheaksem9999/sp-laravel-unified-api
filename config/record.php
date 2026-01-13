@@ -47,6 +47,7 @@ return [
     'enable_tenant_id' => false,
     'tenant_column' => 'tenant_id',
     'tenant_header' => 'X-Tenant-ID',
+    'table_config_path' => 'records/tables',
 
     /*
     |--------------------------------------------------------------------------
