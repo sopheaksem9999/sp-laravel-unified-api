@@ -13,7 +13,7 @@ class SetupPackage extends Command
 {
     protected $signature = 'sp-laravel-api:setup {--force : Overwrite existing configs}';
 
-    protected $description = 'Setup SP Laravel API package: publish configs and create record/audit configurations using config/record.php + config/record/tables/*.php.';
+    protected $description = 'Setup SP Laravel API package: publish configs and create record/audit configurations using config/record.php + config/records/tables/*.php.';
 
     public function handle(): int
     {
@@ -40,8 +40,8 @@ class SetupPackage extends Command
         $created = 0;
 
         try {
-            $this->ensureDirectory('config/record/tables');
-            $created += $this->ensureFile('config/record/tables/README.md', $this->defaultRecordTablesReadme(), $force);
+            $this->ensureDirectory('config/records/tables');
+            $created += $this->ensureFile('config/records/tables/README.md', $this->defaultRecordTablesReadme(), $force);
             $created += $this->ensureFile('config/record.php', $this->defaultRecordConfig(), $force);
             $created += $this->ensureFile('config/audit.php', $this->defaultAuditConfig(), $force);
             $created += $this->ensureAppServiceProviderRateLimiters();
@@ -58,7 +58,7 @@ class SetupPackage extends Command
             $this->line('📋 Next steps:');
             $this->line('  1. Review and customize the generated configuration files');
             $this->line('  2. Set up your environment variables (.env file)');
-            $this->line('  3. Configure your database tables in config/record.php and config/record/tables/*.php');
+            $this->line('  3. Configure your database tables in config/record.php and config/records/tables/*.php');
         }
 
         if (!$force && $created === 0) {
@@ -289,7 +289,7 @@ Put table config files in this folder to keep `config/record.php` clean.
 
 ## Example (single table)
 
-Create `config/record/tables/customers.php`:
+Create `config/records/tables/customers.php`:
 
 ```php
 <?php
@@ -320,7 +320,7 @@ return new RecordTableType(
 
 ## Example (multiple tables in one file)
 
-Create `config/record/tables/core.php`:
+Create `config/records/tables/core.php`:
 
 ```php
 <?php
@@ -387,7 +387,7 @@ $tables = [
     ),
 ];
 
-$tablesDirectory = __DIR__ . '/record/tables';
+$tablesDirectory = __DIR__ . '/records/tables';
 
 if (is_dir($tablesDirectory)) {
     foreach (glob($tablesDirectory . '/*.php') as $path) {

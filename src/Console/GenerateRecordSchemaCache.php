@@ -10,7 +10,7 @@ use Throwable;
 class GenerateRecordSchemaCache extends Command
 {
     protected $signature = 'sp-laravel-api:sync-record-columns {--force : Force regeneration even if columns already exist}';
-    protected $description = 'Populate RecordTableType columns in config/record/tables PHP files based on DB schema';
+    protected $description = 'Populate RecordTableType columns in config/records/tables PHP files based on DB schema';
 
     public function handle(): int
     {
@@ -19,8 +19,8 @@ class GenerateRecordSchemaCache extends Command
 
             $force = (bool) $this->option('force');
 
-            // 1. Build mapping from table name => config file(s) under config/record/tables
-            $tablesDirectory = config_path(config('record.table_config_path'));
+            // 1. Build mapping from table name => config file(s) under config/records/tables
+            $tablesDirectory = config_path(config('record.table_config_path', 'records/tables'));
             $tableFiles = [];
 
             if (is_dir($tablesDirectory)) {
@@ -48,7 +48,7 @@ class GenerateRecordSchemaCache extends Command
             }
 
             if (empty($tableFiles)) {
-                $this->warn('No config/record/tables/*.php files with RecordTableType found. Nothing to update.');
+                $this->warn('No config/records/tables/*.php files with RecordTableType found. Nothing to update.');
 
                 return self::SUCCESS;
             }
@@ -76,7 +76,7 @@ class GenerateRecordSchemaCache extends Command
 
                 if (!isset($tableFiles[$tableName])) {
                     // Table is defined inline in config/record.php or elsewhere; we only manage per-file configs
-                    $this->line("Skipping table {$tableName}: not found in config/record/tables/*.php");
+                    $this->line("Skipping table {$tableName}: not found in config/records/tables/*.php");
                     continue;
                 }
 
@@ -106,7 +106,7 @@ class GenerateRecordSchemaCache extends Command
                 $updatedTables++;
             }
 
-            $this->info("Finished updating columns for {$updatedTables} tables in config/record/tables.");
+            $this->info("Finished updating columns for {$updatedTables} tables in config/records/tables.");
 
             return self::SUCCESS;
 

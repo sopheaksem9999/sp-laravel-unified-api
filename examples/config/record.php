@@ -313,7 +313,7 @@ $tables = [
     ),
 ];
 
-$tablesDirectory = __DIR__ . '/record/tables';
+$tablesDirectory = __DIR__ . '/records/tables';
 
 if (is_dir($tablesDirectory)) {
     foreach (glob($tablesDirectory . '/*.php') as $path) {
