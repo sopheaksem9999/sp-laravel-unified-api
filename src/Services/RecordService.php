@@ -749,6 +749,18 @@ class RecordService
         }
     }
 
+    public function shouldIncludeDebug(Request $request): bool
+    {
+        $headerValue = $request->headers->get('X-Debug') ?? $request->headers->get('x-debug');
+        if (null === $headerValue) {
+            return false;
+        }
+
+        $normalized = strtolower(trim((string) $headerValue));
+
+        return in_array($normalized, ['1', 'true', 'yes', 'on'], true);
+    }
+
     /**
      * List records for a table.
      */
@@ -808,7 +820,15 @@ class RecordService
         $this->applyTenantFilter($builder, $actualTableName, $tenantId);
 
         if ($tableSchema->soft_deletes) {
-            $builder->whereNull($actualTableName.'.deleted_at');
+            if ($request->boolean('only_trashed')) {
+                $builder->whereNotNull($actualTableName.'.deleted_at');
+            } else {
+                $builder->whereNull($actualTableName.'.deleted_at');
+            }
+        }
+
+        if ($request->boolean('distinct')) {
+            $builder->distinct();
         }
 
         QueryBuilderFilters::apply($builder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
@@ -819,7 +839,13 @@ class RecordService
         $data = [];
         $total = 0;
 
-        if ($request->has('limit') && !$request->has('per_page')) {
+        $aggregateResult = QueryBuilderFilters::applyAggregateAndGroupBy($builder, $request, $actualTableName);
+
+        if (null !== $aggregateResult) {
+            $data = $aggregateResult['data'];
+            $meta = $aggregateResult['meta'];
+            $headers = $aggregateResult['headers'];
+        } elseif ($request->has('limit') && !$request->has('per_page')) {
             $limit = max(1, min((int) $request->get('limit'), (int) config('record.limit_max', 1000)));
             $data = $builder->limit($limit)->get()->all();
             $total = count($data);
@@ -943,6 +969,10 @@ class RecordService
             QueryCacheService::put($cacheKey, $cacheData, $ttl);
         }
 
+        if ($this->shouldIncludeDebug($request)) {
+            $meta['debug']['lazy_stats'] = QueryBuilderFilters::getLazyStats();
+        }
+
         return [
             'data' => $data,
             'meta' => $meta,
@@ -1030,14 +1060,26 @@ class RecordService
             $service->applyTenantFilter($builder, $actualTableName, $tenantId);
 
             if ($tableSchema instanceof RecordTableType && $tableSchema->soft_deletes) {
-                $builder->whereNull($actualTableName.'.deleted_at');
+                if ($request->boolean('only_trashed')) {
+                    $builder->whereNotNull($actualTableName.'.deleted_at');
+                } else {
+                    $builder->whereNull($actualTableName.'.deleted_at');
+                }
             }
         } else {
             $service->applyTenantFilter($builder, $actualTableName, $tenantId);
 
             if ($tableSchema instanceof RecordTableType && $tableSchema->soft_deletes) {
-                $builder->whereNull($actualTableName.'.deleted_at');
+                if ($request->boolean('only_trashed')) {
+                    $builder->whereNotNull($actualTableName.'.deleted_at');
+                } else {
+                    $builder->whereNull($actualTableName.'.deleted_at');
+                }
             }
+        }
+
+        if ($request->boolean('distinct')) {
+            $builder->distinct();
         }
 
         QueryBuilderFilters::apply($builder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
@@ -1048,7 +1090,13 @@ class RecordService
         $data = [];
         $total = 0;
 
-        if ($request->has('limit') && !$request->has('per_page')) {
+        $aggregateResult = QueryBuilderFilters::applyAggregateAndGroupBy($builder, $request, $actualTableName);
+
+        if (null !== $aggregateResult) {
+            $data = $aggregateResult['data'];
+            $meta = $aggregateResult['meta'];
+            $headers = $aggregateResult['headers'];
+        } elseif ($request->has('limit') && !$request->has('per_page')) {
             $limit = max(1, min((int) $request->get('limit'), (int) config('record.limit_max', 1000)));
             $data = $builder->limit($limit)->get()->all();
             $total = count($data);
@@ -1169,6 +1217,10 @@ class RecordService
             QueryCacheService::put($cacheKey, $cacheData, $ttl);
         }
 
+        if ($service->shouldIncludeDebug($request)) {
+            $meta['debug']['lazy_stats'] = QueryBuilderFilters::getLazyStats();
+        }
+
         return [
             'data' => $data,
             'meta' => $meta,
@@ -1178,6 +1230,7 @@ class RecordService
             'cursor_meta' => $cursorMeta,
         ];
     }
+
 
     /**
      * Get a single record by ID.

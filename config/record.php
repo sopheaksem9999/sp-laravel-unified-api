@@ -117,7 +117,11 @@ return [
         'update' => false,  // allow nested update on update
         'upsert' => false,  // upsert by primary key when provided
     ],
-    'permission_prefix' => '_',
+
+    // permission 
+    'permission_separator' => ':', // separator for permission ex: view:invoice
+    'restrict_to_own_records' => false, // limit queries to records created by the authenticated user
+    'own_records_permission_prefix' => 'viewOwn', // example: viewOwn_invoice
 
     /*
     |--------------------------------------------------------------------------

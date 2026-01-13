@@ -53,7 +53,7 @@ class PermissionHelper
     {
         // Get resource name from config pms_name or fallback to table name
         $tables = config('record.tables', []);
-        $permissionPrefix = config('record.permission_prefix', ':');
+        $permissionPrefix = config('record.permission_separator', ':');
         $tableConfig = $tables[$table] ?? [];
         $resource = $tableConfig->pms_name ?? Str::snake(Str::singular($table));
 

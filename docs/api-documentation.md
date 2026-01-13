@@ -619,6 +619,27 @@ Retrieve a paginated list of records with filtering, sorting, and relationship l
 **Limiting**
 - `limit` (integer, max: 1000) - Limit results (only applied when `per_page` is not provided)
 
+**Result Shape & Aggregation**
+- `distinct` (boolean) - Apply SQL `DISTINCT` to the main query.
+- `only_trashed` (boolean) - For soft-deleted tables, return only rows where `deleted_at` is not null.
+- `aggregate` (string) - One or more aggregate expressions (comma-separated):
+  - Supported functions: `count`, `sum`, `avg`, `min`, `max`.
+  - Syntax:
+    - `count` (no column) ⇒ `COUNT(*)`
+    - `count:column` ⇒ `COUNT(column)`
+    - `sum:column`, `avg:column`, `min:column`, `max:column`
+  - Column names are validated against the table schema.
+- `group_by` (string) - Comma-separated list of columns to group by. Column names are validated against the table schema.
+
+**Debugging**
+- `X-Debug` (HTTP header, boolean) - When sent as `true`, `1`, `yes`, or `on`, responses include lazy-loading diagnostics:
+  - `meta.debug.lazy_stats` with the output of `QueryBuilderFilters::getLazyStats()`:
+    - `total_operations`
+    - `executed_operations`
+    - `pending_operations`
+    - `cache_hits`
+    - `cache_efficiency`
+
 **Filter Operators**
 Filters are passed as `{column}={operator}.{value}` (operators validated against the table schema):
 - `is.null`, `is_not.null`
@@ -628,6 +649,12 @@ Filters are passed as `{column}={operator}.{value}` (operators validated against
 - `between.{start,end}`, `not_between.{start,end}`
 - `date_eq.{YYYY-MM-DD}`, `date_gt.{YYYY-MM-DD}`, `date_gte.{YYYY-MM-DD}`, `date_lt.{YYYY-MM-DD}`, `date_lte.{YYYY-MM-DD}`
 - `empty.null`, `not_empty.null`
+
+When `aggregate` is present and valid, the list endpoint returns aggregated rows instead of paginated records. The response still follows the standard shape, with:
+- `data`: Aggregated rows (including `group_by` columns and aggregate aliases like `count_id`).
+- `meta.total`: Number of aggregated rows.
+- `meta.group_by`: Grouped columns (when provided).
+- `meta.aggregate`: List of aggregate operations with function, column, and alias metadata.
 
 #### Example Request
 ```http

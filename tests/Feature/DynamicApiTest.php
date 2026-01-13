@@ -2,17 +2,18 @@
 
 namespace Sopheak\Core\Tests\Feature;
 
-use Sopheak\Core\Support\SchemaRegistry;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\WithFaker;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Sopheak\Core\Tests\TestCase;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Http\Request;
 use Illuminate\Contracts\Validation\Validator as ValidatorContract;
 use Illuminate\Support\Facades\Validator;
+use Sopheak\Core\Support\QueryBuilderFilters;
+use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
@@ -31,6 +32,14 @@ class DynamicApiTest extends TestCase
             $table->string('name');
             $table->string('email');
             $table->string('password')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('tasks', function (Blueprint $table): void {
+            $table->id();
+            $table->string('name');
+            $table->string('status')->nullable();
+            $table->softDeletes();
             $table->timestamps();
         });
 
@@ -54,6 +63,17 @@ class DynamicApiTest extends TestCase
                     'name' => 'sometimes|required|string|max:255',
                     'email' => 'sometimes|required|email',
                 ]),
+            ),
+            'tasks' => new RecordTableType(
+                pms_name: 'tasks',
+                table: 'tasks',
+                has_tenant_id: false,
+                soft_deletes: true,
+                public: new RecordTablePublic(
+                    read: true,
+                    write: true
+                ),
+                relationships: [],
             ),
         ]);
 
@@ -299,6 +319,136 @@ class DynamicApiTest extends TestCase
         // Ensure email is not included
         $data = $testResponse->json('data');
         $this->assertArrayNotHasKey('email', $data[0]);
+    }
+
+    /** @test */
+    public function it_supports_group_by_and_aggregate(): void
+    {
+        DB::table('tasks')->insert([
+            'name' => 'Task A',
+            'status' => 'open',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('tasks')->insert([
+            'name' => 'Task B',
+            'status' => 'open',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('tasks')->insert([
+            'name' => 'Task C',
+            'status' => 'closed',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $testResponse = $this->getJson('/api/tasks?group_by=status&aggregate=count:id');
+
+        $testResponse->assertStatus(200)
+            ->assertJsonStructure([
+                'success',
+                'data' => [
+                    '*' => [
+                        'status',
+                        'count_id',
+                    ],
+                ],
+                'meta' => [
+                    'total',
+                    'group_by',
+                    'aggregate',
+                ],
+            ]);
+
+        $data = collect($testResponse->json('data'))->keyBy('status');
+        $this->assertEquals(2, $data['open']['count_id']);
+        $this->assertEquals(1, $data['closed']['count_id']);
+    }
+
+    /** @test */
+    public function it_clears_ordering_for_simple_count_aggregate(): void
+    {
+        DB::table('tasks')->insert([
+            'name' => 'Task A',
+            'status' => 'open',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $request = Request::create('/api/tasks', 'GET', [
+            'aggregate' => 'count',
+        ]);
+
+        $builder = DB::table('tasks');
+
+        QueryBuilderFilters::apply($builder, $request, 'tasks', 'id');
+
+        $this->assertStringContainsStringIgnoringCase('order by', $builder->toSql());
+
+        QueryBuilderFilters::applyAggregateAndGroupBy($builder, $request, 'tasks');
+
+        $this->assertStringNotContainsStringIgnoringCase('order by', $builder->toSql());
+    }
+
+    /** @test */
+    public function it_ignores_previous_select_for_simple_count_aggregate(): void
+    {
+        DB::table('tasks')->insert([
+            'name' => 'Task A',
+            'status' => 'open',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $request = Request::create('/api/tasks', 'GET', [
+            'aggregate' => 'count',
+            'select' => '*',
+        ]);
+
+        $builder = DB::table('tasks');
+
+        QueryBuilderFilters::apply($builder, $request, 'tasks', 'id');
+
+        QueryBuilderFilters::applyAggregateAndGroupBy($builder, $request, 'tasks');
+
+        $sql = $builder->toSql();
+
+        $this->assertStringContainsStringIgnoringCase('count(*) as count', $sql);
+        $this->assertStringNotContainsStringIgnoringCase('\"tasks\".*', $sql);
+    }
+
+    /** @test */
+    public function it_supports_only_trashed_for_soft_deleted_tables(): void
+    {
+        $activeId = (int) DB::table('tasks')->insertGetId([
+            'name' => 'Active Task',
+            'status' => 'open',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $deletedId = (int) DB::table('tasks')->insertGetId([
+            'name' => 'Deleted Task',
+            'status' => 'open',
+            'deleted_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $allResponse = $this->getJson('/api/tasks');
+        $allResponse->assertStatus(200);
+        $allIds = collect($allResponse->json('data'))->pluck('id')->all();
+        $this->assertContains($activeId, $allIds);
+        $this->assertNotContains($deletedId, $allIds);
+
+        $trashedResponse = $this->getJson('/api/tasks?only_trashed=1');
+        $trashedResponse->assertStatus(200);
+        $trashedIds = collect($trashedResponse->json('data'))->pluck('id')->all();
+        $this->assertContains($deletedId, $trashedIds);
+        $this->assertNotContains($activeId, $trashedIds);
     }
 
     /** @test */

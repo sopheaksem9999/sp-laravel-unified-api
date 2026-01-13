@@ -172,9 +172,9 @@ trait QueryHelpers
         // handle check permission query only own user created record
         $modelClass = class_basename($commonQuery->getModel());
         $modelName = lcfirst($modelClass); // e.g., 'ReceivePayment' => 'receivePayment'
-        $permission = 'viewOnlyCreateBy_' . $modelName;
+        $permission = config('record.own_records_permission_prefix', 'viewOwn') . config('record.permission_separator', '_') . $modelName;
 
-        if (Auth::check() && Gate::check($permission)) {
+        if (Auth::check() && Gate::check($permission) && config('record.own_records_permission_prefix', false)) {
             $commonQuery = $commonQuery->where($tableName . '.created_by', Auth::id());
         }
 
@@ -210,7 +210,7 @@ trait QueryHelpers
             $total = $totalQuery->count();
 
             // Get limited data
-            $limit = $request->query('limit', 500);
+            $limit = $request->query('limit', 1000);
             $data = $commonQuery->limit($limit)->get();
 
             return [

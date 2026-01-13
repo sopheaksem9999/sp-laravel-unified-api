@@ -407,6 +407,15 @@ return [
     |--------------------------------------------------------------------------
     | Tenant ID Configuration
     |--------------------------------------------------------------------------
+    |
+    | This option controls whether tenant_id filtering is enabled across the
+    | Record API system. When enabled, all queries will include tenant_id
+    | filtering for multi-tenant data isolation. When disabled, tenant_id
+    | filtering is completely bypassed for optimal performance in single-tenant
+    | or non-tenant environments.
+    |
+    | Default: false (for backward compatibility with existing projects)
+    |
     */
     'enable_tenant_id' => false,
     'tenant_column' => 'tenant_id',
@@ -417,8 +426,24 @@ return [
     |--------------------------------------------------------------------------
     | API Route Prefix Configuration
     |--------------------------------------------------------------------------
+    |
+    | This option controls the route prefix for the Record API endpoints.
+    | By default, routes are registered under 'api' (e.g., /api/customers).
+    | You can customize this prefix to match your application's routing structure.
+    |
     */
     'api_prefix' => 'api/v1',
+
+    /*
+    |--------------------------------------------------------------------------
+    | RPC Route Prefix Configuration
+    |--------------------------------------------------------------------------
+    |
+    | This option controls the route prefix for the Global RPC endpoints.
+    | By default, routes are registered under 'rpc' (e.g., /api/v1/rpc/my_function).
+    |
+    */
+    'rpc_prefix' => 'rpc',
 
     // Maximum items returned per page for list endpoints
     'per_page_max' => 10000,
@@ -431,21 +456,45 @@ return [
 
     // Cache configuration
     'cache' => [
+        // Enable/disable caching globally for the Records API
         'enabled' => env('CACHE_API', false),
+
+        // Cache TTL for query results (seconds)
         'ttl' => 3600,
+
+        // Cache key prefix for Records API
         'prefix' => 'sp_laravel_api',
-        'per_table' => [],
-        'per_table_ttl' => [],
+
+        // Per-table cache control (overrides global setting)
+        'per_table' => [
+            // Example: disable cache for specific tables
+            // 'audit_logs' => false,
+            // 'real_time_data' => false,
+        ],
+        'per_table_ttl' => [
+            // Example: override cache TTL for specific tables
+            // 'audit_logs' => 600,
+            // 'real_time_data' => 120,
+        ],
     ],
 
-    // Legacy cache_ttl for backward compatibility
+    // Legacy cache_ttl for backward compatibility (deprecated, use cache.ttl instead)
     'cache_ttl' => 3600,
 
-    // Maximum depth for nested relationships
-    'max_relationship_depth' => 3,
+    // Maximum nesting depth to prevent performance issues (default: 2)
+    'max_depth' => 10,
 
-    // Cascade behavior for nested operations
-    'cascade_operations' => false,
+    // Default cascade behavior for nested writes (can be overridden per endpoint)
+    'default_cascade' => [
+        'create' => false,  // allow nested create on store
+        'update' => false,  // allow nested update on update
+        'upsert' => false,  // upsert by primary key when provided
+    ],
+
+    // permission 
+    'permission_separator' => ':', // separator for permission ex: view:invoice
+    'restrict_to_own_records' => false, // limit queries to records created by the authenticated user
+    'own_records_permission_prefix' => 'viewOwn', // example: viewOwn_invoice
 
     // Table configurations
     'tables' => $tables,

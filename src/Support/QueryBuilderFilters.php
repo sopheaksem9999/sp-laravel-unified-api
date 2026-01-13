@@ -146,8 +146,9 @@ class QueryBuilderFilters
         $recordConfig = config('record.tables.' . $table, []);
         $pmsName = $recordConfig->pms_name ?? null;
 
-        if ($pmsName && Auth::check()) {
-            $permission = 'viewOnlyCreateBy_' . $pmsName;
+        if ($pmsName && Auth::check() && config('record.own_records_permission_prefix', false)) {
+            // $permission = 'viewOnlyCreateBy_' . $pmsName;
+            $permission = config('record.own_records_permission_prefix', 'viewOwn') . config('record.permission_separator', '_') . $pmsName;
             if (Auth::check() && Gate::check($permission)) {
                 $builder->where($table . '.created_by', Auth::user()->id);
             }
@@ -1079,6 +1080,130 @@ class QueryBuilderFilters
         }
 
         return self::$columnCache[$table];
+    }
+
+    public static function applyAggregateAndGroupBy(Builder $builder, Request $request, string $table): ?array
+    {
+        $aggregateParam = $request->query('aggregate');
+        if (!$aggregateParam) {
+            return null;
+        }
+
+        $builder->orders = null;
+        $builder->columns = null;
+
+        $groupByParam = $request->query('group_by');
+        $allowedCols = QueryBuilderFilters::getAllowedColumns($table);
+
+        $groupByCols = [];
+        if ($groupByParam) {
+            $candidates = array_map('trim', explode(',', (string) $groupByParam));
+            foreach ($candidates as $candidate) {
+                if ('' === $candidate) {
+                    continue;
+                }
+
+                $col = $candidate;
+                if (str_contains($col, '.')) {
+                    $parts = explode('.', $col);
+                    $col = end($parts);
+                }
+
+                if (in_array($col, $allowedCols, true) && !in_array($col, $groupByCols, true)) {
+                    $groupByCols[] = $col;
+                }
+            }
+        }
+
+        $selects = [];
+        foreach ($groupByCols as $col) {
+            $selects[] = $table . '.' . $col . ' as ' . $col;
+        }
+
+        $aggregateMeta = [];
+
+        $tokens = array_map('trim', explode(',', (string) $aggregateParam));
+        foreach ($tokens as $token) {
+            if ('' === $token) {
+                continue;
+            }
+
+            $func = $token;
+            $column = null;
+
+            if (str_contains($token, ':')) {
+                [$func, $column] = explode(':', $token, 2);
+            } elseif (str_contains($token, '.')) {
+                [$func, $column] = explode('.', $token, 2);
+            }
+
+            $func = strtolower((string) $func);
+            $column = null !== $column ? trim((string) $column) : null;
+
+            if (!in_array($func, ['count', 'sum', 'avg', 'min', 'max'], true)) {
+                continue;
+            }
+
+            $colName = $column;
+            if ($colName && str_contains($colName, '.')) {
+                $parts = explode('.', $colName);
+                $colName = end($parts);
+            }
+
+            if ($colName && !in_array($colName, $allowedCols, true)) {
+                continue;
+            }
+
+            if ('count' !== $func && !$colName) {
+                continue;
+            }
+
+            $alias = $func . ($colName ? '_' . $colName : '');
+
+            if ('count' === $func && !$colName) {
+                $selects[] = 'COUNT(*) as ' . $alias;
+            } else {
+                $target = $table . '.' . $colName;
+                $selects[] = strtoupper($func) . '(' . $target . ') as ' . $alias;
+            }
+
+            $aggregateMeta[] = ['function' => $func, 'column' => $colName, 'alias' => $alias];
+        }
+
+        if (empty($selects)) {
+            return null;
+        }
+
+        $builder->selectRaw(implode(', ', $selects));
+
+        foreach ($groupByCols as $col) {
+            $builder->groupBy($table . '.' . $col);
+        }
+
+        $rows = $builder->get()->map(static fn($row) => (array) $row)->all();
+        $total = count($rows);
+
+        $headers = [
+            'X-Total-Count' => (string) $total,
+        ];
+
+        $meta = [
+            'total' => $total,
+        ];
+
+        if (!empty($groupByCols)) {
+            $meta['group_by'] = $groupByCols;
+        }
+
+        if (!empty($aggregateMeta)) {
+            $meta['aggregate'] = $aggregateMeta;
+        }
+
+        return [
+            'data' => $rows,
+            'meta' => $meta,
+            'headers' => $headers,
+        ];
     }
 
     /**
