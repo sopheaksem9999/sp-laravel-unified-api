@@ -325,9 +325,15 @@ return [
     'enable_tenant_id' => false,
     'tenant_column' => 'tenant_id',
     'tenant_header' => 'X-Tenant-ID',
+    'table_config_path' => 'records/tables',
 
     // API route prefix
     'api_prefix' => 'api/v1',
+
+    // permission 
+    'permission_separator' => ':', // separator for permission ex: view:invoice
+    'restrict_to_own_records' => false, // limit queries to records created by the authenticated user
+    'own_records_permission_prefix' => 'viewOwn', // example: viewOwn_invoice
 
     // Global limits
     'per_page_max' => 10000,
@@ -638,18 +644,20 @@ php artisan route:list --middleware=api
 php artisan route:clear
 ```
 
-#### 7. "Cache-related issues"
-
+#### 7. "Command summary"
+**Available artisan commands:**
 **Solution:**
 ```bash
-# Clear all caches
-php artisan sp-laravel-api:cache-clear
-
-# Rebuild internal schema caches
-php artisan sp-laravel-api:cache-generate
-
-# Verify cache configuration
-php artisan config:show cache
+  # Clean old audit logs based on retention configuration
+  php artisan sp-laravel-api:clean-audit-logs
+  #  Generate OpenAPI 3 specification based on record configuration.
+  php artisan sp-laravel-api:openapi             
+  # Setup SP Laravel API package: publish configs and create record/audit configurations using config/record.php + config/records/tables/*.php.
+  php artisansp-laravel-api:setup         
+   # Populate RecordTableType columns in config/records/tables PHP files based on DB schema       
+  php artisansp-laravel-api:sync-record-columns  
+  # Validate SP Laravel API package setup and configuration
+  php artisan sp-laravel-api:validate             
 ```
 
 ### Debug Mode
@@ -1284,7 +1292,6 @@ php artisan sp-laravel-api:clean-audit-logs --dry-run --days=90
 ### Package Documentation
 - **API Documentation**: [`docs/api-documentation.md`](docs/api-documentation.md) - Comprehensive API endpoints and usage guide
 - **Audit Interface**: [`docs/audit-interface.md`](docs/audit-interface.md) - Custom audit queries and logging
-- **Legacy Cursor Pagination**: [`docs/cursor-pagination.md`](docs/cursor-pagination.md) - Background on the removed paginator
 - **Performance**: [`docs/performance.md`](docs/performance.md) - Benchmarks and optimization notes
 - **Use Cases**: [`docs/use-cases.md`](docs/use-cases.md) - Why use this for SaaS/ERP style APIs
 

@@ -77,9 +77,6 @@ class SchemaRegistry
 
     /**
      * Resolve table schema (columns) even if not in the allowed configuration.
-     *
-     * @param string $tableName
-     * @return object|null
      */
     public static function resolveTableSchema(string $tableName): ?object
     {
@@ -110,9 +107,6 @@ class SchemaRegistry
 
     /**
      * Register a table schema at runtime.
-     *
-     * @param string $tableName
-     * @param string|object $config
      */
     public static function register(string $tableName, string|object $config): void
     {

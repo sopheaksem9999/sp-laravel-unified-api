@@ -440,12 +440,14 @@ class DynamicApiTest extends TestCase
 
         $allResponse = $this->getJson('/api/tasks');
         $allResponse->assertStatus(200);
+
         $allIds = collect($allResponse->json('data'))->pluck('id')->all();
         $this->assertContains($activeId, $allIds);
         $this->assertNotContains($deletedId, $allIds);
 
         $trashedResponse = $this->getJson('/api/tasks?only_trashed=1');
         $trashedResponse->assertStatus(200);
+
         $trashedIds = collect($trashedResponse->json('data'))->pluck('id')->all();
         $this->assertContains($deletedId, $trashedIds);
         $this->assertNotContains($activeId, $trashedIds);

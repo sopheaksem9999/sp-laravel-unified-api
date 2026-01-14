@@ -756,7 +756,7 @@ class RecordService
             return false;
         }
 
-        $normalized = strtolower(trim((string) $headerValue));
+        $normalized = strtolower(trim($headerValue));
 
         return in_array($normalized, ['1', 'true', 'yes', 'on'], true);
     }

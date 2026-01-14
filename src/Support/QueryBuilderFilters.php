@@ -13,10 +13,15 @@ use Sopheak\Core\Support\SchemaRegistry;
 class QueryBuilderFilters
 {
     private static array $columnCache = [];
+
     private static array $operatorCache = [];
+
     private static array $lazyOperations = [];
+
     private static array $lazyCache = [];
+
     private static array $searchableCache = [];
+
     private static string $lazyMarkerPrefix = 'LAZY_OP_';
 
     private static array $lazyBuilders = [];
@@ -1097,7 +1102,7 @@ class QueryBuilderFilters
 
         $groupByCols = [];
         if ($groupByParam) {
-            $candidates = array_map('trim', explode(',', (string) $groupByParam));
+            $candidates = array_map(trim(...), explode(',', (string) $groupByParam));
             foreach ($candidates as $candidate) {
                 if ('' === $candidate) {
                     continue;
@@ -1122,7 +1127,7 @@ class QueryBuilderFilters
 
         $aggregateMeta = [];
 
-        $tokens = array_map('trim', explode(',', (string) $aggregateParam));
+        $tokens = array_map(trim(...), explode(',', (string) $aggregateParam));
         foreach ($tokens as $token) {
             if ('' === $token) {
                 continue;
@@ -1138,7 +1143,7 @@ class QueryBuilderFilters
             }
 
             $func = strtolower((string) $func);
-            $column = null !== $column ? trim((string) $column) : null;
+            $column = null !== $column ? trim($column) : null;
 
             if (!in_array($func, ['count', 'sum', 'avg', 'min', 'max'], true)) {
                 continue;
@@ -1180,7 +1185,7 @@ class QueryBuilderFilters
             $builder->groupBy($table . '.' . $col);
         }
 
-        $rows = $builder->get()->map(static fn($row) => (array) $row)->all();
+        $rows = $builder->get()->map(static fn($row): array => (array) $row)->all();
         $total = count($rows);
 
         $headers = [

@@ -559,6 +559,7 @@ class RelationshipResolver
                 if ($tenantId && isset($relatedSchema->columns[config('record.tenant_column', 'tenant_id')])) {
                     $relatedFields[config('record.tenant_column', 'tenant_id')] = $tenantId;
                 }
+
                 if (isset($relatedSchema->columns['created_at'])) {
                     $relatedFields['created_at'] = now();
                 }
@@ -603,6 +604,7 @@ class RelationshipResolver
                         $pivotData['created_at'] = now();
                         $pivotData['updated_at'] = now();
                     }
+
                     DB::table($pivotTable)->insert($pivotData);
                 }
             }
@@ -645,6 +647,7 @@ class RelationshipResolver
                 if ($tenantId && isset($targetSchema->columns[config('record.tenant_column', 'tenant_id')])) {
                     $targetFields[config('record.tenant_column', 'tenant_id')] = $tenantId;
                 }
+
                 if (isset($targetSchema->columns['created_at'])) {
                     $targetFields['created_at'] = now();
                 }
@@ -1526,6 +1529,7 @@ class RelationshipResolver
             if ('' === $rawFilterCol) {
                 continue;
             }
+
             if ('' === $rawFilterExpr) {
                 continue;
             }
@@ -1556,9 +1560,11 @@ class RelationshipResolver
                 $operator = trim($operator);
                 $value = trim($value);
             }
+
             if ('' === $filterCol) {
                 continue;
             }
+
             if ('' === $operator) {
                 continue;
             }

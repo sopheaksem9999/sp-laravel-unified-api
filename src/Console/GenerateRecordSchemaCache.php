@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Console;
 
+use Sopheak\Core\Support\SchemaRegistry;
 use Illuminate\Console\Command;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Interfaces\RecordResourceInterface;
@@ -10,6 +11,7 @@ use Throwable;
 class GenerateRecordSchemaCache extends Command
 {
     protected $signature = 'sp-laravel-api:sync-record-columns {--force : Force regeneration even if columns already exist}';
+
     protected $description = 'Populate RecordTableType columns in config/records/tables PHP files based on DB schema';
 
     public function handle(): int
@@ -70,21 +72,21 @@ class GenerateRecordSchemaCache extends Command
                 }
 
                 if (!($config instanceof RecordTableType)) {
-                    $this->warn("Skipping invalid configuration for table: {$tableName}");
+                    $this->warn('Skipping invalid configuration for table: ' . $tableName);
                     continue;
                 }
 
                 if (!isset($tableFiles[$tableName])) {
                     // Table is defined inline in config/record.php or elsewhere; we only manage per-file configs
-                    $this->line("Skipping table {$tableName}: not found in config/records/tables/*.php");
+                    $this->line(sprintf('Skipping table %s: not found in config/records/tables/*.php', $tableName));
                     continue;
                 }
 
                 $actualTableName = $config->table ?? $tableName;
-                $this->line("Processing table: {$actualTableName} ({$tableName})");
+                $this->line(sprintf('Processing table: %s (%s)', $actualTableName, $tableName));
 
                 // 3. Get columns from DB schema
-                $columns = \Sopheak\Core\Support\SchemaRegistry::getTableColumns($actualTableName);
+                $columns = SchemaRegistry::getTableColumns($actualTableName);
 
                 if (empty($columns)) {
                     $this->warn("  - No columns found or table does not exist in DB.");
@@ -92,7 +94,7 @@ class GenerateRecordSchemaCache extends Command
                 }
 
                 $this->info('  - Found ' . count($columns) . ' columns.');
-            
+
                 // 5. Update all corresponding config files
                 foreach ($tableFiles[$tableName] as $fileInfo) {
                     $this->updateConfigFile(
@@ -106,29 +108,24 @@ class GenerateRecordSchemaCache extends Command
                 $updatedTables++;
             }
 
-            $this->info("Finished updating columns for {$updatedTables} tables in config/records/tables.");
+            $this->info(sprintf('Finished updating columns for %d tables in config/records/tables.', $updatedTables));
 
             return self::SUCCESS;
 
-        } catch (Throwable $e) {
-            $this->error('Failed to generate schema cache: ' . $e->getMessage());
+        } catch (Throwable $throwable) {
+            $this->error('Failed to generate schema cache: ' . $throwable->getMessage());
             return self::FAILURE;
         }
     }
 
     /**
      * Inject columns into a RecordTableType constructor inside a config file.
-     *
-     * @param string $filePath
-     * @param string $tableName
-     * @param array $columns
-     * @param bool $isArrayFile
      */
     protected function updateConfigFile(string $filePath, string $tableName, array $columns, bool $isArrayFile): void
     {
         $content = file_get_contents($filePath);
         if ($content === false) {
-            $this->warn("  - Failed to read file: {$filePath}");
+            $this->warn('  - Failed to read file: ' . $filePath);
             return;
         }
 
@@ -139,21 +136,21 @@ class GenerateRecordSchemaCache extends Command
 
         $pos = strpos($content, $needle);
         if ($pos === false) {
-            $this->warn("  - Could not locate RecordTableType definition for table {$tableName} in {$filePath}");
+            $this->warn(sprintf('  - Could not locate RecordTableType definition for table %s in %s', $tableName, $filePath));
             return;
         }
 
         // Find start of constructor arguments
         $start = strpos($content, 'new RecordTableType(', $pos);
         if ($start === false) {
-            $this->warn("  - Could not locate RecordTableType constructor for table {$tableName} in {$filePath}");
+            $this->warn(sprintf('  - Could not locate RecordTableType constructor for table %s in %s', $tableName, $filePath));
             return;
         }
 
         // Find end of constructor: first occurrence of ');' after start
         $end = strpos($content, ');', $start);
         if ($end === false) {
-            $this->warn("  - Could not determine end of RecordTableType constructor for table {$tableName} in {$filePath}");
+            $this->warn(sprintf('  - Could not determine end of RecordTableType constructor for table %s in %s', $tableName, $filePath));
             return;
         }
 
@@ -168,7 +165,7 @@ class GenerateRecordSchemaCache extends Command
             || str_contains($constructor, 'columns:');
 
         if (!$usesNamedArguments) {
-            $this->warn("  - Skipping file {$filePath}: RecordTableType uses positional arguments; sync-record-columns currently supports only named arguments.");
+            $this->warn(sprintf('  - Skipping file %s: RecordTableType uses positional arguments; sync-record-columns currently supports only named arguments.', $filePath));
             return;
         }
 
@@ -176,7 +173,7 @@ class GenerateRecordSchemaCache extends Command
         $closeParenPos = strrpos($constructor, ')');
 
         if ($openParenPos === false || $closeParenPos === false || $closeParenPos <= $openParenPos) {
-            $this->warn("  - Could not parse RecordTableType constructor arguments for table {$tableName} in {$filePath}");
+            $this->warn(sprintf('  - Could not parse RecordTableType constructor arguments for table %s in %s', $tableName, $filePath));
             return;
         }
 
@@ -263,7 +260,7 @@ class GenerateRecordSchemaCache extends Command
         $newContent = substr($content, 0, $start) . $newConstructor . substr($content, $end + 2);
 
         file_put_contents($filePath, $newContent);
-        $this->info("  - Updated columns in file: {$filePath}");
+        $this->info('  - Updated columns in file: ' . $filePath);
     }
 
     private function exportColumnsAsShortArray(array $columns, string $baseIndent): string
@@ -324,7 +321,7 @@ class GenerateRecordSchemaCache extends Command
 
         $segmentEnd = $i;
 
-        while ($segmentEnd < $len && ($arguments[$segmentEnd] === ' ' || $arguments[$segmentEnd] === "\t" || $arguments[$segmentEnd] === "\r" || $arguments[$segmentEnd] === "\n" || $arguments[$segmentEnd] === ',')) {
+        while ($segmentEnd < $len && (in_array($arguments[$segmentEnd], [' ', "\t", "\r", "\n", ','], true))) {
             $segmentEnd++;
         }
 
