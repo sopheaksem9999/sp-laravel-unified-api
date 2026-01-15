@@ -105,6 +105,11 @@ class SchemaRegistry
         self::$cache = [];
     }
 
+    public static function clearAllCache(): void
+    {
+        self::$cache = [];
+    }
+
     /**
      * Register a table schema at runtime.
      */

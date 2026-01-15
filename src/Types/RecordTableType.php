@@ -8,7 +8,7 @@ namespace Sopheak\Core\Types;
  * Represents a table configuration for record management.
  * This class defines the structure and behavior of a database table.
  *
- * @property string            $pms_name         The name of the table in the PMS system
+ * @property string|array|null            $pms_name         The name of the table in the PMS system
  * @property bool              $disable_auditLog Whether audit logging is disabled for this table
  * @property bool              $disable_cache    Whether query caching is disabled for this table
  * @property bool              $soft_deletes     Whether soft deletes are enabled for this table
@@ -83,7 +83,7 @@ namespace Sopheak\Core\Types;
 class RecordTableType
 {
     public function __construct(
-        public ?string $pms_name = null,
+        public string|array|null $pms_name = null,
         public ?string $table = null,
         public bool $has_tenant_id = false,
         public bool $soft_deletes = false,

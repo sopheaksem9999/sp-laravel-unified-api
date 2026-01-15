@@ -152,9 +152,29 @@ class QueryBuilderFilters
         $pmsName = $recordConfig->pms_name ?? null;
 
         if ($pmsName && Auth::check() && config('record.own_records_permission_prefix', false)) {
-            // $permission = 'viewOnlyCreateBy_' . $pmsName;
-            $permission = config('record.own_records_permission_prefix', 'viewOwn') . config('record.permission_separator', '_') . $pmsName;
-            if (Auth::check() && Gate::check($permission)) {
+            $pmsNames = is_array($pmsName) ? $pmsName : [$pmsName];
+            $prefix = config('record.own_records_permission_prefix', 'viewOwn');
+            $separator = config('record.permission_separator', '_');
+
+            $shouldRestrictToOwn = false;
+            foreach ($pmsNames as $candidate) {
+                if (!is_string($candidate)) {
+                    continue;
+                }
+
+                $candidate = trim($candidate);
+                if ('' === $candidate) {
+                    continue;
+                }
+
+                $permission = $prefix . $separator . $candidate;
+                if (Gate::check($permission)) {
+                    $shouldRestrictToOwn = true;
+                    break;
+                }
+            }
+
+            if ($shouldRestrictToOwn) {
                 $builder->where($table . '.created_by', Auth::user()->id);
             }
         }

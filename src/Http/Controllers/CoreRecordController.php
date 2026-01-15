@@ -1129,13 +1129,27 @@ class CoreRecordController extends Controller
         }
 
         $tableSchema = SchemaRegistry::getTable($table);
-        if ($tableSchema instanceof RecordTableType && is_null($tableSchema->pms_name)) {
-            return;
+        if ($tableSchema instanceof RecordTableType) {
+            if (is_null($tableSchema->pms_name)) {
+                return;
+            }
+
+            if (is_array($tableSchema->pms_name) && [] === $tableSchema->pms_name) {
+                return;
+            }
         }
 
-        $perm = PermissionHelper::mapPermission($table, $action);
+        $perms = PermissionHelper::mapPermissions($table, $action);
 
-        if (!Gate::forUser($user)->allows($perm)) {
+        $allowed = false;
+        foreach ($perms as $perm) {
+            if (Gate::forUser($user)->allows($perm)) {
+                $allowed = true;
+                break;
+            }
+        }
+
+        if (!$allowed) {
             abort(RecordApiJsonResponseEnum::FORBIDDEN->value, 'Forbidden');
         }
     }

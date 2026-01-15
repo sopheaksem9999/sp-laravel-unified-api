@@ -1004,16 +1004,44 @@ class RecordService
             $table = $builder->from;
         } elseif ($tableOrBuilder instanceof RecordTableType) {
             $customSchema = $tableOrBuilder;
-            $table = $customSchema->pms_name ?? $customSchema->table;
+            if (is_string($customSchema->table) && '' !== trim($customSchema->table)) {
+                $table = $customSchema->table;
+            } elseif (is_string($customSchema->pms_name) && '' !== trim($customSchema->pms_name)) {
+                $table = trim($customSchema->pms_name);
+            } elseif (is_array($customSchema->pms_name) && [] !== $customSchema->pms_name) {
+                $first = $customSchema->pms_name[0] ?? null;
+                $table = is_string($first) ? trim($first) : '';
+            } else {
+                $table = '';
+            }
 
             // Register custom schema to make it available for QueryBuilderFilters
             // Ensure we register under the actual table name as that's what QueryBuilderFilters looks up
             $registerKey = $customSchema->table ?? $table;
             SchemaRegistry::register($registerKey, $customSchema);
 
-            // If pms_name is different, register under that too to ensure consistency
-            if ($table !== $registerKey) {
-                SchemaRegistry::register($table, $customSchema);
+            $aliases = [];
+            if (is_string($customSchema->pms_name) && '' !== trim($customSchema->pms_name)) {
+                $aliases[] = trim($customSchema->pms_name);
+            } elseif (is_array($customSchema->pms_name)) {
+                foreach ($customSchema->pms_name as $candidate) {
+                    if (!is_string($candidate)) {
+                        continue;
+                    }
+
+                    $candidate = trim($candidate);
+                    if ('' === $candidate) {
+                        continue;
+                    }
+
+                    $aliases[] = $candidate;
+                }
+            }
+
+            foreach (array_values(array_unique($aliases)) as $alias) {
+                if ($alias !== $registerKey) {
+                    SchemaRegistry::register($alias, $customSchema);
+                }
             }
         } else {
             $table = $tableOrBuilder;

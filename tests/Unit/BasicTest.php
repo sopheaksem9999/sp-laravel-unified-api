@@ -4,7 +4,9 @@ namespace Sopheak\Core\Tests\Unit;
 
 use Exception;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Config;
 use Sopheak\Core\Services\RecordService;
+use Sopheak\Core\Support\PermissionHelper;
 use Sopheak\Core\Tests\TestCase;
 
 class BasicTest extends TestCase
@@ -90,6 +92,34 @@ class BasicTest extends TestCase
 
         $this->assertInstanceOf(Request::class, $params[0]);
         $this->assertSame('bar', $params[0]->get('foo'));
+    }
+
+    /** @test */
+    public function it_maps_permission_for_string_pms_name(): void
+    {
+        Config::set('record.permission_separator', ':');
+        Config::set('record.tables', [
+            'departments' => (object) ['pms_name' => 'department'],
+        ]);
+
+        $perms = PermissionHelper::mapPermissions('departments', 'read');
+
+        $this->assertSame(['view:department'], $perms);
+        $this->assertSame('view:department', PermissionHelper::mapPermission('departments', 'read'));
+    }
+
+    /** @test */
+    public function it_maps_permissions_for_array_pms_name(): void
+    {
+        Config::set('record.permission_separator', ':');
+        Config::set('record.tables', [
+            'departments' => (object) ['pms_name' => ['department', 'dept']],
+        ]);
+
+        $perms = PermissionHelper::mapPermissions('departments', 'read');
+
+        $this->assertSame(['view:department', 'view:dept'], $perms);
+        $this->assertSame('view:department', PermissionHelper::mapPermission('departments', 'read'));
     }
 }
 
