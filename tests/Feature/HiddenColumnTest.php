@@ -96,6 +96,7 @@ class HiddenColumnTest extends TestCase
 
         // Register Schema for Tasks
         $taskConfig = new RecordTableType(
+            table: 'tasks',
             pms_name: 'task',
             public: new RecordTablePublic(read: true, write: false),
             relationships: [

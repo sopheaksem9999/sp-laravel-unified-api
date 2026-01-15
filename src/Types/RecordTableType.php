@@ -93,7 +93,7 @@ class RecordTableType
         public bool $can_create = true,
         public bool $can_update = true,
         public bool $can_delete = true,
-        public RecordTablePublic $public = new RecordTablePublic(),
+        public RecordTablePublic|bool $public = new RecordTablePublic(),
         public ?array $relationships = [],
         public ?array $functions = [],
         public ?string $primary_key = 'id',

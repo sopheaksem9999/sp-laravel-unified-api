@@ -121,6 +121,21 @@ class BasicTest extends TestCase
         $this->assertSame(['view:department', 'view:dept'], $perms);
         $this->assertSame('view:department', PermissionHelper::mapPermission('departments', 'read'));
     }
+
+    /** @test */
+    public function it_allows_public_action_when_public_is_true(): void
+    {
+        Config::set('record.tables', [
+            'departments' => new \Sopheak\Core\Types\RecordTableType(
+                table: 'departments',
+                pms_name: 'department',
+                public: true,
+            ),
+        ]);
+
+        $this->assertTrue(PermissionHelper::isPublicAction('departments', 'read'));
+        $this->assertTrue(PermissionHelper::isPublicAction('departments', 'create'));
+    }
 }
 
 class TestTriggerHandler
