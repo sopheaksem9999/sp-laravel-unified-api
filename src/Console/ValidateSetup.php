@@ -6,7 +6,7 @@ use Exception;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Config;
+use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Support\SchemaRegistry;
 
 class ValidateSetup extends Command
@@ -287,7 +287,7 @@ class ValidateSetup extends Command
             $router = app('router');
             $routes = $router->getRoutes();
 
-            $apiPrefix = config('record.api_prefix', 'api');
+            $apiPrefix = RecordConfigService::apiPrefix();
             $hasApiRoutes = false;
 
             foreach ($routes as $route) {

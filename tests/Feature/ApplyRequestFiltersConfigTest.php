@@ -41,8 +41,8 @@ class ApplyRequestFiltersConfigTest extends TestCase
         $request = Request::create('/api/custom_items', 'GET', ['category' => 'eq.cat1']);
 
         $config = new RecordTableType(
-            pms_name: 'custom_items_endpoint',
             table: 'custom_items',
+            pms_name: 'custom_items_endpoint',
             has_tenant_id: false,
             soft_deletes: false,
             public: new RecordTablePublic(true, true),

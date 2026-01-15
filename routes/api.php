@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 use Sopheak\Core\Http\Controllers\CoreRecordController;
 use Sopheak\Core\Http\Controllers\AuditLogController;
+use Sopheak\Core\Services\RecordConfigService;
 
 /*
 |--------------------------------------------------------------------------
@@ -25,7 +26,7 @@ use Sopheak\Core\Http\Controllers\AuditLogController;
 |--------------------------------------------------------------------------
 */
 
-Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.id'])->group(function (): void {
+Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'])->group(function (): void {
 
     Route::get('docs/openapi', function () {
         $filePath = storage_path('openapi-schema.json');
@@ -55,7 +56,7 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.i
     | Global RPC Functions (not table-specific)
     |--------------------------------------------------------------------------
     */
-    Route::prefix(config('record.rpc_prefix', 'rpc'))->group(function (): void {
+    Route::prefix(RecordConfigService::rpcPrefix())->group(function (): void {
         Route::match(['get', 'post', 'put', 'patch', 'delete'], '{functionName}', [CoreRecordController::class, 'executeGlobalFunction'])
             ->where('functionName', '.*')
             ->middleware('throttle:api-functions');
@@ -66,11 +67,11 @@ Route::prefix(config('record.api_prefix', 'api'))->middleware(['api', 'request.i
     | Table-specific RPC Functions
     |--------------------------------------------------------------------------
     */
-    Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/'.config('record.rpc_prefix', 'rpc').'/{functionName}', [CoreRecordController::class, 'executeTableFunction'])
+    Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/'.RecordConfigService::rpcPrefix().'/{functionName}', [CoreRecordController::class, 'executeTableFunction'])
         ->where(['table' => '[a-zA-Z0-9_\-]*', 'functionName' => '.*'])
         ->middleware('throttle:api-functions');
 
-    if (config('audit.enabled', false)) {
+    if (RecordConfigService::auditEnabled()) {
         /*
         |--------------------------------------------------------------------------
         | Audit Log Operations

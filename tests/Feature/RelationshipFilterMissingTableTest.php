@@ -61,8 +61,8 @@ class RelationshipFilterMissingTableTest extends TestCase
         // Configure ONLY tasks table, not users
         Config::set('record.tables', [
             'tasks' => new RecordTableType(
-                pms_name: 'tasks',
                 table: 'tasks',
+                pms_name: 'tasks',
                 has_tenant_id: false,
                 soft_deletes: false,
                 public: new RecordTablePublic(read: true, write: true),

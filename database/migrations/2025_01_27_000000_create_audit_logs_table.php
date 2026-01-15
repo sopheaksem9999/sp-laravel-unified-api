@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Sopheak\Core\Services\RecordConfigService;
 
 return new class extends Migration
 {
@@ -11,12 +12,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        if (config('audit.enabled', false)) {
+        if (RecordConfigService::auditEnabled()) {
             Schema::create('audit_logs', function (Blueprint $blueprint): void {
                 $blueprint->id();
 
-                if (config('record.enable_tenant_id', false)) {
-                    $tenantColumn = config('record.tenant_column', 'tenant_id');
+                if (RecordConfigService::enableTenantId()) {
+                    $tenantColumn = RecordConfigService::tenantColumn();
                     $blueprint->unsignedBigInteger($tenantColumn)->nullable();
                     $blueprint->index([$tenantColumn]);
                 }
@@ -47,7 +48,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        if (config('audit.enabled', false)) {
+        if (RecordConfigService::auditEnabled()) {
             Schema::dropIfExists('audit_logs');
         }
     }

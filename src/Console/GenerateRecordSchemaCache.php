@@ -4,6 +4,7 @@ namespace Sopheak\Core\Console;
 
 use Sopheak\Core\Support\SchemaRegistry;
 use Illuminate\Console\Command;
+use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Interfaces\RecordResourceInterface;
 use Throwable;
@@ -22,7 +23,7 @@ class GenerateRecordSchemaCache extends Command
             $force = (bool) $this->option('force');
 
             // 1. Build mapping from table name => config file(s) under config/records/tables
-            $tablesDirectory = config_path(config('record.table_config_path', 'records/tables'));
+            $tablesDirectory = config_path(RecordConfigService::tableConfigPath());
             $tableFiles = [];
 
             if (is_dir($tablesDirectory)) {
@@ -55,7 +56,7 @@ class GenerateRecordSchemaCache extends Command
                 return self::SUCCESS;
             }
 
-            $tables = config('record.tables', []);
+            $tables = RecordConfigService::getTableConfig();
             $updatedTables = 0;
 
             foreach ($tables as $tableName => $config) {

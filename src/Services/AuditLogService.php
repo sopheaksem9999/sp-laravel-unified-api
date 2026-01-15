@@ -9,6 +9,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Sopheak\Core\Services\RecordConfigService;
 
 class AuditLogService
 {
@@ -132,8 +133,8 @@ class AuditLogService
             'updated_at' => now()->toDateTimeString(),
         ];
 
-        if (config('record.enable_tenant_id', false)) {
-            $tenantColumn = config('record.tenant_column', 'tenant_id');
+        if (RecordConfigService::enableTenantId()) {
+            $tenantColumn = RecordConfigService::tenantColumn();
             $auditData[$tenantColumn] = $data['tenant_id'] ?? null;
         }
 
@@ -205,7 +206,7 @@ class AuditLogService
         }
 
         $userModel = config('auth.providers.users.model', 'App\\Models\\User');
-        $auditLogJobClass = config('audit.audit_log_job', AuditLogJob::class);
+        $auditLogJobClass = RecordConfigService::auditLogJobClass(default: AuditLogJob::class);
 
         $entityName = static::getTableNameFromEntityType($userModel);
 
@@ -249,7 +250,7 @@ class AuditLogService
 
         // Handle audit logging based on queue configuration
         if (static::isAuditQueueEnabled()) {
-            $auditLogJobClass = config('audit.audit_log_job', AuditLogJob::class);
+            $auditLogJobClass = RecordConfigService::auditLogJobClass(default: AuditLogJob::class);
             if (!class_exists($auditLogJobClass) || !method_exists($auditLogJobClass, 'dispatch')) {
                 static::handleAuditDataEntry(
                     event: $auditLogEventEnum,
@@ -591,12 +592,12 @@ class AuditLogService
      */
     public static function isAuditEnabled(): bool
     {
-        return config('audit.enabled', true);
+        return RecordConfigService::auditEnabled(default: true);
     }
 
     public static function isAuditQueueEnabled(): bool
     {
-        return config('audit.queue_enabled', false);
+        return RecordConfigService::auditQueueEnabled();
     }
 
     /**
@@ -604,7 +605,7 @@ class AuditLogService
      */
     public static function isEventExcluded(string $event): bool
     {
-        $excludedEvents = config('audit.excluded_events', []);
+        $excludedEvents = RecordConfigService::auditExcludedEvents();
 
         return in_array($event, $excludedEvents);
     }

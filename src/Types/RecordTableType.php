@@ -121,8 +121,8 @@ class RecordTableType
     public static function __set_state(array $properties): self
     {
         return new self(
-            pms_name: $properties['pms_name'] ?? null,
             table: $properties['table'] ?? null,
+            pms_name: $properties['pms_name'] ?? null,
             has_tenant_id: $properties['has_tenant_id'] ?? false,
             soft_deletes: $properties['soft_deletes'] ?? false,
             disable_auditLog: $properties['disable_auditLog'] ?? false,

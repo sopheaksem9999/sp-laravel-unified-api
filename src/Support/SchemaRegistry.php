@@ -8,6 +8,7 @@ use Exception;
 use Sopheak\Core\Types\RecordTableType;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Sopheak\Core\Services\RecordConfigService;
 
 class SchemaRegistry
 {
@@ -38,7 +39,7 @@ class SchemaRegistry
             return self::$cache;
         }
 
-        $tables = config('record.tables', []);
+        $tables = RecordConfigService::getTableConfig();
         $registry = [];
 
         foreach ($tables as $tableName => $config) {

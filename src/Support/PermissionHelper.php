@@ -3,6 +3,7 @@
 namespace Sopheak\Core\Support;
 
 use Illuminate\Support\Str;
+use Sopheak\Core\Services\RecordConfigService;
 
 class PermissionHelper
 {
@@ -11,7 +12,7 @@ class PermissionHelper
      */
     public static function isPublicAction(string $table, string $action): bool
     {
-        $tables = config('record.tables', []);
+        $tables = RecordConfigService::getTableConfig();
         if (!isset($tables[$table])) {
             return false;
         }
@@ -59,8 +60,8 @@ class PermissionHelper
     public static function mapPermissions(string $table, string $action): array
     {
         // Get resource name from config pms_name or fallback to table name
-        $tables = config('record.tables', []);
-        $permissionPrefix = config('record.permission_separator', ':');
+        $tables = RecordConfigService::getTableConfig();
+        $permissionPrefix = RecordConfigService::permissionSeparator();
         $tableConfig = $tables[$table] ?? [];
         $resources = self::normalizeResources($tableConfig->pms_name ?? null, $table);
 
@@ -68,6 +69,7 @@ class PermissionHelper
         switch ($action) {
             case 'read':
             case 'view':
+            case 'see':
                 $verb = 'view';
 
                 break;
@@ -86,13 +88,14 @@ class PermissionHelper
 
             case 'delete':
             case 'write':
+            case 'destroy':
                 $verb = 'delete';
 
                 break;
 
             default:
                 // Handle special permission types that include the action in the permission name
-                if (str_contains($action, (string) $permissionPrefix)) {
+                if (str_contains($action, $permissionPrefix)) {
                     // For actions like 'viewOnlyCreateBy', 'updateStatus', etc.
                     return array_map(
                         static fn(string $resource): string => $action . $permissionPrefix . $resource,

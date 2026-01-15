@@ -57,8 +57,8 @@ class AuditLogTenantTest extends TestCase
         // Register table in SchemaRegistry
         $schema = [
             'test_products' => new RecordTableType(
-                pms_name: 'test_product',
                 table: 'test_products',
+                pms_name: 'test_product',
                 has_tenant_id: true
             ),
         ];
@@ -79,7 +79,7 @@ class AuditLogTenantTest extends TestCase
         // CoreRecordController or processBulkOperations does.
         // Let's use processPostWriteLogic which we modified.
 
-        $result = $service->createRecord($request, 'test_products', $payload, $tenantId);
+        $result = $service->createRecord(table: 'test_products', payload: $payload, tenantId: $tenantId);
 
         $service->processPostWriteLogic($request, 'test_products', 'create', [
             'id' => $result['id'],
@@ -115,7 +115,7 @@ class AuditLogTenantTest extends TestCase
 
         $payload = ['name' => 'New Name'];
 
-        $result = $service->updateRecord($request, 'test_products', $id, $payload, $tenantId);
+        $result = $service->updateRecord(table: 'test_products', id: $id, payload: $payload, tenantId: $tenantId);
 
         $service->processPostWriteLogic($request, 'test_products', 'update', [
             'id' => $id,

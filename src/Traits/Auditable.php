@@ -7,6 +7,7 @@ use Sopheak\Core\Enums\AuditLogEventEnum;
 use Illuminate\Database\Eloquent\Model;
 use Sopheak\Core\Jobs\AuditLogJob;
 use Sopheak\Core\Services\AuditLogService;
+use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Support\SchemaRegistry;
 
 /**
@@ -81,7 +82,7 @@ trait Auditable
         $entityName = AuditLogService::getTableNameFromEntityType($this::class);
         $entityType = $this::class;
         $queryData = $this->buildAuditPayload($auditLogEventEnum);
-        $tenantColumn = config('record.tenant_column', 'tenant_id');
+        $tenantColumn = RecordConfigService::tenantColumn();
         $tenantId = $queryData[$tenantColumn] ?? $this->getAttribute($tenantColumn) ?? null;
 
         // Handle audit logging based on queue configuration
@@ -110,7 +111,7 @@ trait Auditable
     protected function buildAuditPayload(AuditLogEventEnum $event): array
     {
         $id = method_exists($this, 'getKey') ? $this->getKey() : null;
-        $tenantColumn = config('record.tenant_column', 'tenant_id');
+        $tenantColumn = RecordConfigService::tenantColumn();
         $tenantId = method_exists($this, 'getAttribute') ? $this->getAttribute($tenantColumn) : null;
 
         if ($event === AuditLogEventEnum::CREATED) {
@@ -222,7 +223,7 @@ trait Auditable
         }
 
         $with = array_values(array_filter(array_unique($with), static fn ($value): bool => is_string($value) && '' !== $value));
-        $max = (int) config('audit.performance.max_relationships', 10);
+        $max = RecordConfigService::auditPerformanceMaxRelationships();
 
         return array_slice($with, 0, $max);
     }
@@ -260,7 +261,7 @@ trait Auditable
 
     protected function sanitizeAuditData(array $data): array
     {
-        $excluded = config('audit.excluded_attributes', []);
+        $excluded = RecordConfigService::auditExcludedAttributes();
         if (!is_array($excluded)) {
             $excluded = [];
         }

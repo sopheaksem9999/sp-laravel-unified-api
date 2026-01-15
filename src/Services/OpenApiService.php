@@ -46,9 +46,9 @@ class OpenApiService
     public static function generateInternal(): array
     {
         $tables = SchemaRegistry::get();
-        $apiPrefix = config('record.api_prefix', 'api/v1');
-        $tenantHeader = config('record.tenant_header', 'X-Tenant-ID');
-        $tenantColumn = config('record.tenant_column', 'tenant_id');
+        $apiPrefix = RecordConfigService::apiPrefix();
+        $tenantHeader = RecordConfigService::tenantHeader();
+        $tenantColumn = RecordConfigService::tenantColumn();
 
         $schemas = [];
         foreach ($tables as $recordName => $config) {
@@ -66,7 +66,7 @@ class OpenApiService
         }
 
         $paths = self::paths($tables);
-        if (config('audit.enabled', false)) {
+        if (RecordConfigService::auditEnabled()) {
             $schemas['AuditLog'] = self::auditLogSchema();
             $schemas['AuditStats'] = self::auditStatsSchema();
             $schemas['AuditTimelineEntry'] = self::auditTimelineEntrySchema();
@@ -89,7 +89,7 @@ class OpenApiService
             ],
         ];
 
-        $globalFunctions = config('record.global_functions', []);
+        $globalFunctions = RecordConfigService::globalFunctions();
 
         $spec = [
             'openapi' => '3.0.3',
@@ -446,7 +446,7 @@ Accepts an array of IDs or an array of objects with the primary key.
         }
 
         $tags[] = ['name' => 'RPC', 'description' => 'Global RPC functions'];
-        if (config('audit.enabled', false)) {
+        if (RecordConfigService::auditEnabled()) {
             $tags[] = ['name' => 'Audit', 'description' => 'Audit log operations'];
         }
 
@@ -455,7 +455,7 @@ Accepts an array of IDs or an array of objects with the primary key.
 
     private static function paths(array $tables): array
     {
-        $apiPrefix = config('record.api_prefix', 'api/v1');
+        $apiPrefix = RecordConfigService::apiPrefix();
         $paths = [];
 
         foreach ($tables as $recordName => $config) {
@@ -901,7 +901,7 @@ Accepts an array of IDs or an array of objects with the primary key.
 
     private static function rpcPaths(array $tables, array $globalFunctions): array
     {
-        $apiPrefix = config('record.api_prefix', 'api/v1');
+        $apiPrefix = RecordConfigService::apiPrefix();
         $paths = [];
 
         // Global RPC Functions - Generate individual endpoints
@@ -931,7 +931,7 @@ Accepts an array of IDs or an array of objects with the primary key.
             $payloadSchema = $functionConfig->payload_schema ?? null;
             $responseSchema = $functionConfig->response_schema ?? null;
 
-            $endpoint = '/' . $apiPrefix . '/' . config('record.rpc_prefix', 'rpc') . '/' . $functionName;
+            $endpoint = '/' . $apiPrefix . '/' . RecordConfigService::rpcPrefix() . '/' . $functionName;
             $paths[$endpoint] = [];
 
             foreach ($allowedMethods as $method) {
@@ -1152,7 +1152,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                 $responseSchema = $functionConfig->response_schema ?? null;
 
                 // Handle parameterized endpoints like 'update/{id}'
-                $endpoint = sprintf('/%s/%s/%s/%s', $apiPrefix, $tableName, config('record.rpc_prefix', 'rpc'), $functionName);
+                $endpoint = sprintf('/%s/%s/%s/%s', $apiPrefix, $tableName, RecordConfigService::rpcPrefix(), $functionName);
                 $paths[$endpoint] = [];
 
                 // Check if function name contains parameters
@@ -1402,8 +1402,8 @@ Accepts an array of IDs or an array of objects with the primary key.
             'id' => ['type' => 'integer'],
         ];
 
-        if (config('record.enable_tenant_id', false)) {
-            $tenantColumn = config('record.tenant_column', 'tenant_id');
+        if (RecordConfigService::enableTenantId()) {
+            $tenantColumn = RecordConfigService::tenantColumn();
             $properties[$tenantColumn] = ['type' => 'integer', 'nullable' => true];
         }
 
@@ -1475,8 +1475,8 @@ Accepts an array of IDs or an array of objects with the primary key.
 
     private static function auditPaths(): array
     {
-        $apiPrefix = config('record.api_prefix', 'api/v1');
-        $tenantHeaderParameters = config('record.enable_tenant_id', false) ? [self::tenantHeaderParameter(false)] : [];
+        $apiPrefix = RecordConfigService::apiPrefix();
+        $tenantHeaderParameters = RecordConfigService::enableTenantId() ? [self::tenantHeaderParameter(false)] : [];
         $paths = [];
 
         $auditLogRef = '#/components/schemas/AuditLog';
@@ -1735,8 +1735,8 @@ Accepts an array of IDs or an array of objects with the primary key.
 
     private static function tenantHeaderParameter(bool $required = true): array
     {
-        $tenantHeader = config('record.tenant_header', 'X-Tenant-ID');
-        $tenantColumn = config('record.tenant_column', 'tenant_id');
+        $tenantHeader = RecordConfigService::tenantHeader();
+        $tenantColumn = RecordConfigService::tenantColumn();
 
         return [
             'name' => $tenantHeader,
@@ -1749,7 +1749,7 @@ Accepts an array of IDs or an array of objects with the primary key.
 
     private static function tenantHeaderParametersForTableConfig(mixed $config): array
     {
-        if (!config('record.enable_tenant_id', false)) {
+        if (!RecordConfigService::enableTenantId()) {
             return [];
         }
 

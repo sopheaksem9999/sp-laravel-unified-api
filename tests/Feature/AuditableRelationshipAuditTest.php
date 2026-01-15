@@ -40,8 +40,8 @@ class AuditableRelationshipAuditTest extends TestCase
 
         Config::set('record.tables', [
             'parents' => new RecordTableType(
-                pms_name: 'parents',
                 table: 'parents',
+                pms_name: 'parents',
                 has_tenant_id: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [

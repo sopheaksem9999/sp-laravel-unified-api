@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Config;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Support\PermissionHelper;
 use Sopheak\Core\Tests\TestCase;
+use Sopheak\Core\Types\RecordTableType;
 
 class BasicTest extends TestCase
 {
@@ -126,7 +127,7 @@ class BasicTest extends TestCase
     public function it_allows_public_action_when_public_is_true(): void
     {
         Config::set('record.tables', [
-            'departments' => new \Sopheak\Core\Types\RecordTableType(
+            'departments' => new RecordTableType(
                 table: 'departments',
                 pms_name: 'department',
                 public: true,

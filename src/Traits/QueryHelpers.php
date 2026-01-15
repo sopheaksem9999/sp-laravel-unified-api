@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\LazyCollection;
+use Sopheak\Core\Services\RecordConfigService;
 
 trait QueryHelpers
 {
@@ -65,9 +66,9 @@ trait QueryHelpers
      */
     public function scopeApplyRequestFilters(Builder $builder, Request $request, bool $isArray = false, string $orderBy = 'id')
     {
-        $isTenantEnabled = config('record.enable_tenant_id', false);
-        $tenantColumn = config('record.tenant_column', 'tenant_id');
-        $tenantHeader = config('record.tenant_header', 'X-Tenant-ID');
+        $isTenantEnabled = RecordConfigService::enableTenantId();
+        $tenantColumn = RecordConfigService::tenantColumn();
+        $tenantHeader = RecordConfigService::tenantHeader();
 
         $tableName = $builder->getModel()->getTable();
 
@@ -172,9 +173,9 @@ trait QueryHelpers
         // handle check permission query only own user created record
         $modelClass = class_basename($commonQuery->getModel());
         $modelName = lcfirst($modelClass); // e.g., 'ReceivePayment' => 'receivePayment'
-        $permission = config('record.own_records_permission_prefix', 'viewOwn') . config('record.permission_separator', '_') . $modelName;
+        $permission = RecordConfigService::ownRecordsPermissionPrefix() . RecordConfigService::permissionSeparator() . $modelName;
 
-        if (Auth::check() && Gate::check($permission) && config('record.own_records_permission_prefix', false)) {
+        if (Auth::check() && Gate::check($permission) && RecordConfigService::ownRecordsPermissionPrefix()) {
             $commonQuery = $commonQuery->where($tableName . '.created_by', Auth::id());
         }
 

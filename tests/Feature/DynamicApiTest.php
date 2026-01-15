@@ -46,8 +46,8 @@ class DynamicApiTest extends TestCase
         // Configure a test table for dynamic API
         Config::set('record.tables', [
             'users' => new RecordTableType(
-                pms_name: 'users',
                 table: 'users',
+                pms_name: 'users',
                 has_tenant_id: false,
                 soft_deletes: false,
                 public: new RecordTablePublic(
@@ -65,8 +65,8 @@ class DynamicApiTest extends TestCase
                 ]),
             ),
             'tasks' => new RecordTableType(
-                pms_name: 'tasks',
                 table: 'tasks',
+                pms_name: 'tasks',
                 has_tenant_id: false,
                 soft_deletes: true,
                 public: new RecordTablePublic(

@@ -29,7 +29,7 @@ class RecordService
      *
      * @return array Returns ['id' => mixed, 'payload' => array, 'tenant_id' => mixed]
      */
-    public function createRecord(Request $request, string $table, array $payload, mixed $tenantId): array
+    public function createRecord(string $table, array $payload, mixed $tenantId): array
     {
         $tableSchema = SchemaRegistry::getTable($table);
 
@@ -38,7 +38,7 @@ class RecordService
 
         // Handle tenant ID
         if ($this->shouldApplyTenantId($tableSchema)) {
-            $payloadMain[config('record.tenant_column', 'tenant_id')] = $this->normalizeTenantId($tenantId);
+            $payloadMain[RecordConfigService::tenantColumn()] = $this->normalizeTenantId($tenantId);
         }
 
         // Apply timestamps and audit fields
@@ -71,7 +71,7 @@ class RecordService
      *
      * @return array Returns ['id' => mixed, 'payload' => array, 'tenant_id' => mixed, 'updated' => int]
      */
-    public function updateRecord(Request $request, string $table, mixed $id, array $payload, mixed $tenantId): array
+    public function updateRecord(string $table, mixed $id, array $payload, mixed $tenantId): array
     {
         $tableSchema = SchemaRegistry::getTable($table);
 
@@ -80,7 +80,7 @@ class RecordService
 
         // Remove tenant ID from payload for update (security)
         if ($this->shouldApplyTenantId($tableSchema)) {
-            unset($payloadMain[config('record.tenant_column', 'tenant_id')]);
+            unset($payloadMain[RecordConfigService::tenantColumn()]);
         }
 
         // Apply timestamps and audit fields
@@ -120,7 +120,7 @@ class RecordService
      *
      * @return array Returns ['id' => mixed, 'affected' => int]
      */
-    public function deleteRecord(Request $request, string $table, mixed $id, mixed $tenantId): array
+    public function deleteRecord(string $table, mixed $id, mixed $tenantId): array
     {
         $tableSchema = SchemaRegistry::getTable($table);
 
@@ -142,7 +142,7 @@ class RecordService
      *
      * @return array Returns ['id' => mixed, 'restored' => int]
      */
-    public function restoreRecord(Request $request, string $table, mixed $id, mixed $tenantId): array
+    public function restoreRecord(string $table, mixed $id, mixed $tenantId): array
     {
         $tableSchema = SchemaRegistry::getTable($table);
 
@@ -151,7 +151,7 @@ class RecordService
 
         $query = DB::table($actualTableName)->where($pk, $id);
         $this->applyTenantFilter($query, $table, $tenantId);
-        $query->whereNotNull($actualTableName.'.deleted_at');
+        $query->whereNotNull($actualTableName . '.deleted_at');
 
         $restored = $query->update(['deleted_at' => null]);
 
@@ -199,7 +199,7 @@ class RecordService
         // Sanitize payload
         $item = $this->sanitizePayload($payload, $tableSchema);
         if ($this->shouldApplyTenantId($tableSchema)) {
-            $item[config('record.tenant_column', 'tenant_id')] = $this->normalizeTenantId($tenantId);
+            $item[RecordConfigService::tenantColumn()] = $this->normalizeTenantId($tenantId);
         }
 
         // Apply timestamps and audit fields
@@ -242,7 +242,7 @@ class RecordService
 
         // 2. Insert Audit Log
         if (!($tableSchema->disable_auditLog ?? false)) {
-            $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
+            $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
             $event = match ($operation) {
                 'create' => AuditLogEventEnum::CREATED,
                 'update' => AuditLogEventEnum::UPDATED,
@@ -266,7 +266,7 @@ class RecordService
                 $auditData['id'] = $recordContext['id'];
             }
 
-            $tenantId = $recordContext[config('record.tenant_column', 'tenant_id')] ?? null;
+            $tenantId = $recordContext[RecordConfigService::tenantColumn()] ?? null;
 
             AuditLogService::insertAuditLog($event, $entityClass, $auditData, '', '', $tenantId);
         }
@@ -296,7 +296,7 @@ class RecordService
             foreach ($tableFunctions as $configuredFunctionName => $config) {
                 // Convert function name pattern to regex (e.g., 'role_permission/{id}' -> 'role_permission/(\d+)')
                 $pattern = preg_replace('/\{[^}]+\}/', '(\d+)', (string) $configuredFunctionName);
-                $pattern = '/^'.str_replace('/', '\/', $pattern).'$/';
+                $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/';
 
                 if (preg_match($pattern, $functionName, $matches)) {
                     $functionConfig = $config;
@@ -336,7 +336,7 @@ class RecordService
     public function executeGlobalFunction(Request $request, string $functionName): JsonResponse
     {
         // Check if function exists in table schema
-        $globalFunctions = config('record.global_functions', []);
+        $globalFunctions = RecordConfigService::globalFunctions();
         $functionConfig = null;
         $extractedId = null;
 
@@ -348,7 +348,7 @@ class RecordService
             foreach ($globalFunctions as $configuredFunctionName => $config) {
                 // Convert function name pattern to regex (e.g., 'role_permission/{id}' -> 'role_permission/(\d+)')
                 $pattern = preg_replace('/\{[^}]+\}/', '(\d+)', (string) $configuredFunctionName);
-                $pattern = '/^'.str_replace('/', '\/', $pattern).'$/';
+                $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/';
 
                 if (preg_match($pattern, $functionName, $matches)) {
                     $functionConfig = $config;
@@ -410,9 +410,9 @@ class RecordService
             throw new Exception('Data array required', RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
         }
 
-        $maxBatch = (int) config('record.bulk_max', 100);
+        $maxBatch = RecordConfigService::bulkMax();
         if (count($items) > $maxBatch) {
-            throw new Exception('Batch too large, max '.$maxBatch, 413);
+            throw new Exception('Batch too large, max ' . $maxBatch, 413);
         }
 
         $pk = $tableSchema->primary_key ?? 'id';
@@ -432,7 +432,7 @@ class RecordService
                 if ('create' === $operation) {
                     $this->executeTableTrigger($tableSchema->beforeCreate ?? null, [$request, $table, $item]);
 
-                    $result = $this->createRecord($request, $table, $item, $tenantId);
+                    $result = $this->createRecord(table: $table, payload: $item,  tenantId: $tenantId);
                     $insertId = $result['id'];
                     $recordResult = $this->getRecord($request, $table, $insertId, $tenantId);
                     $createdData[] = $recordResult['data'];
@@ -441,7 +441,7 @@ class RecordService
                     $this->processPostWriteLogic($request, $table, 'create', [
                         'id' => $insertId,
                         'payload' => $result['payload'],
-                        config('record.tenant_column', 'tenant_id') => $result['tenant_id'],
+                        RecordConfigService::tenantColumn() => $result['tenant_id'],
                         'response' => $recordResult['data'],
                     ]);
                 } elseif ('update' === $operation) {
@@ -454,7 +454,7 @@ class RecordService
 
                     $this->executeTableTrigger($tableSchema->beforeUpdate ?? null, [$request, $table, $id, $item]);
 
-                    $result = $this->updateRecord($request, $table, $id, $item, $tenantId);
+                    $result = $this->updateRecord(table: $table, id: $id, payload: $item, tenantId: $tenantId);
                     if ($result['updated'] > 0) {
                         $recordResult = $this->getRecord($request, $table, $id, $tenantId);
                         $updatedData[] = $recordResult['data'];
@@ -463,7 +463,7 @@ class RecordService
                         $this->processPostWriteLogic($request, $table, 'update', [
                             'id' => $id,
                             'payload' => $result['payload'],
-                            config('record.tenant_column', 'tenant_id') => $result['tenant_id'],
+                            RecordConfigService::tenantColumn() => $result['tenant_id'],
                             'updated' => $result['updated'],
                             'response' => $recordResult['data'],
                         ]);
@@ -475,7 +475,7 @@ class RecordService
 
                     $this->executeTableTrigger($tableSchema->beforeDelete ?? null, [$request, $table, $item[$pk]]);
 
-                    $result = $this->deleteRecord($request, $table, $item[$pk], $tenantId);
+                    $result = $this->deleteRecord(table: $table, id: $item[$pk], tenantId: $tenantId);
                     if ($result['affected'] > 0) {
                         $deletedData[] = ['id' => $item[$pk]];
                         $affected += $result['affected'];
@@ -484,7 +484,7 @@ class RecordService
 
                         $this->processPostWriteLogic($request, $table, 'delete', [
                             'id' => $item[$pk],
-                            config('record.tenant_column', 'tenant_id') => $tenantId,
+                            RecordConfigService::tenantColumn() => $tenantId,
                             'affected' => $result['affected'],
                             'soft_deleted' => $tableSchema->soft_deletes ?? false,
                             'response' => $response,
@@ -500,7 +500,7 @@ class RecordService
                         ++$affected;
 
                         if (!($tableSchema->disable_auditLog ?? false)) {
-                            $entityClass = 'App\Models\\'.Str::studly(Str::singular($table));
+                            $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
                             AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, $recordResult['data'], '', '', $tenantId);
                         }
                     }
@@ -605,11 +605,11 @@ class RecordService
 
     public function isCacheableRequest(Request $request, string $table): bool
     {
-        if (!config('record.cache.enabled', true)) {
+        if (!RecordConfigService::cacheEnabled()) {
             return false;
         }
 
-        $perTableCache = config('record.cache.per_table', []);
+        $perTableCache = RecordConfigService::cachePerTable();
         $schema = SchemaRegistry::get();
         $tableSchema = $schema[$table] ?? null;
 
@@ -653,7 +653,7 @@ class RecordService
             'tenant_enabled' => $this->isTenantIdEnabled(),
         ];
 
-        return 'record_index_'.md5(serialize($keyData));
+        return 'record_index_' . md5(serialize($keyData));
     }
 
     public function generateRecordCacheKey(string $table, mixed $id, mixed $tenantId, mixed $select): string
@@ -666,12 +666,12 @@ class RecordService
             'tenant_enabled' => $this->isTenantIdEnabled(),
         ];
 
-        return 'record_show_'.md5(serialize($keyData));
+        return 'record_show_' . md5(serialize($keyData));
     }
 
     public function calculateOptimalCacheTTL(string $table, int $recordCount, bool $hasRelationships): int
     {
-        $baseTTL = config('record.cache.default_ttl', 3600);
+        $baseTTL = RecordConfigService::cacheDefaultTtl();
         if ($recordCount > 100) {
             $baseTTL = (int) ($baseTTL * 0.5);
         }
@@ -680,7 +680,7 @@ class RecordService
             $baseTTL = (int) ($baseTTL * 0.7);
         }
 
-        $perTableTTL = config('record.cache.per_table_ttl', []);
+        $perTableTTL = RecordConfigService::cachePerTableTtl();
         if (isset($perTableTTL[$table])) {
             $baseTTL = $perTableTTL[$table];
         }
@@ -723,21 +723,17 @@ class RecordService
 
     public function shouldApplyTenantId(object $tableSchema): bool
     {
-        return $this->isTenantIdEnabled() && ($tableSchema->has_tenant_id ?? false);
+        return GlobalService::shouldApplyTenantId($tableSchema);
     }
 
     public function normalizeTenantId(mixed $tenantId): mixed
     {
-        if (is_string($tenantId)) {
-            return trim($tenantId);
-        }
-
-        return $tenantId;
+        return GlobalService::normalizeTenantId($tenantId);
     }
 
     public function isTenantIdEnabled(): bool
     {
-        return config('record.enable_tenant_id', false);
+        return GlobalService::isTenantIdEnabled();
     }
 
     public function applyTenantFilter(mixed $query, string $table, mixed $tenantId): void
@@ -745,7 +741,7 @@ class RecordService
         $tenantId = $this->normalizeTenantId($tenantId);
         $schema = SchemaRegistry::get();
         if ($this->isTenantIdEnabled() && null !== $tenantId && '' !== $tenantId && ($schema[$table]->has_tenant_id ?? false)) {
-            $query->where($table.'.'.config('record.tenant_column', 'tenant_id'), $tenantId);
+            $query->where($table . '.' . RecordConfigService::tenantColumn(), $tenantId);
         }
     }
 
@@ -774,7 +770,7 @@ class RecordService
             $table,
             [
                 'type' => 'index',
-                config('record.tenant_column', 'tenant_id') => $tenantId,
+                RecordConfigService::tenantColumn() => $tenantId,
             ],
         ];
         $triggerParams = $this->executeTableTrigger($tableSchema->beforeRead ?? null, $triggerParams);
@@ -791,8 +787,8 @@ class RecordService
         }
 
         $page = max((int) $request->get('page', 1), 1);
-        $perPage = $request->has('per_page') ? max(1, min((int) $request->get('per_page', 25), (int) config('record.per_page_max', 1000))) : null;
-        $limit = $request->has('limit') ? max(1, min((int) $request->get('limit'), (int) config('record.limit_max', 1000))) : config('record.limit_max', 1000);
+        $perPage = $request->has('per_page') ? max(1, min((int) $request->get('per_page', 25), RecordConfigService::perPageMax())) : null;
+        $limit = $request->has('limit') ? max(1, min((int) $request->get('limit'), RecordConfigService::limitMax())) : RecordConfigService::limitMax();
 
         $isCacheable = $this->isCacheableRequest($request, $table);
         $cacheKey = null;
@@ -801,7 +797,7 @@ class RecordService
             $cacheKey = $this->generateOptimizedCacheKey(
                 $table,
                 array_merge($filters, [
-                    config('record.tenant_column', 'tenant_id') => $this->shouldApplyTenantId($tableSchema) ? $tenantId : null,
+                    RecordConfigService::tenantColumn() => $this->shouldApplyTenantId($tableSchema) ? $tenantId : null,
                     'tenant_enabled' => $this->shouldApplyTenantId($tableSchema),
                 ]),
                 $includes,
@@ -821,9 +817,9 @@ class RecordService
 
         if ($tableSchema->soft_deletes) {
             if ($request->boolean('only_trashed')) {
-                $builder->whereNotNull($actualTableName.'.deleted_at');
+                $builder->whereNotNull($actualTableName . '.deleted_at');
             } else {
-                $builder->whereNull($actualTableName.'.deleted_at');
+                $builder->whereNull($actualTableName . '.deleted_at');
             }
         }
 
@@ -846,14 +842,14 @@ class RecordService
             $meta = $aggregateResult['meta'];
             $headers = $aggregateResult['headers'];
         } elseif ($request->has('limit') && !$request->has('per_page')) {
-            $limit = max(1, min((int) $request->get('limit'), (int) config('record.limit_max', 1000)));
+            $limit = max(1, min((int) $request->get('limit'), RecordConfigService::limitMax()));
             $data = $builder->limit($limit)->get()->all();
             $total = count($data);
             $headers['X-Total-Count'] = (string) $total;
             $meta = ['total' => $total];
         } else {
-            $maxPerPage = (int) config('record.per_page_max', 100);
-            $perPage = max(1, min((int) $request->get('per_page', config('record.limit_max', 1000)), $maxPerPage));
+            $maxPerPage = RecordConfigService::perPageMax();
+            $perPage = max(1, min((int) $request->get('per_page', RecordConfigService::limitMax()), $maxPerPage));
 
             $page = max((int) $request->get('page', 1), 1);
             $countQuery = clone $builder;
@@ -877,7 +873,7 @@ class RecordService
         if ($request->has('select')) {
             $selectParam = $request->query('select');
             $includes = RelationshipResolver::parseSelectForIncludes($selectParam);
-            $useSubqueryOptimization = config('record.use_subquery_optimization', true) && count($data) <= 100;
+            $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization() && count($data) <= 100;
 
             // Disable subquery optimization if nested filters or child relationships are detected
             if ($useSubqueryOptimization) {
@@ -919,16 +915,16 @@ class RecordService
                     $optimizedBuilder = DB::table($actualTableName);
                     $mainCols = RelationshipResolver::getMainTableColumns($selectParam);
                     if ([] !== $mainCols) {
-                        $prefixedCols = array_map(fn ($col) => '*' === $col ? $actualTableName.'.*' : (str_contains((string) $col, '.') ? $col : $actualTableName.'.'.$col), $mainCols);
+                        $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $mainCols);
                         $optimizedBuilder->select($prefixedCols);
                     } else {
-                        $optimizedBuilder->select($actualTableName.'.*');
+                        $optimizedBuilder->select($actualTableName . '.*');
                     }
 
                     $this->applyTenantFilter($optimizedBuilder, $actualTableName, $tenantId);
 
                     if ($tableSchema->soft_deletes) {
-                        $optimizedBuilder->whereNull($actualTableName.'.deleted_at');
+                        $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
                     }
 
                     RelationshipResolver::applySubqueryRelationships(
@@ -941,7 +937,7 @@ class RecordService
                     // Re-apply sorting to optimized query to ensure consistent order
                     QueryBuilderFilters::applySort($optimizedBuilder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
 
-                    $optimizedData = $optimizedBuilder->whereIn($actualTableName.'.'.$primaryKey, $recordIds)->get()->all();
+                    $optimizedData = $optimizedBuilder->whereIn($actualTableName . '.' . $primaryKey, $recordIds)->get()->all();
                     $data = RelationshipResolver::processJsonRelationships($optimizedData, $includes, $table);
                 }
             } else {
@@ -1058,8 +1054,8 @@ class RecordService
         }
 
         $page = max((int) $request->get('page', 1), 1);
-        $perPage = $request->has('per_page') ? max(1, min((int) $request->get('per_page', 25), (int) config('record.per_page_max', 1000))) : null;
-        $limit = $request->has('limit') ? max(1, min((int) $request->get('limit'), (int) config('record.limit_max', 1000))) : config('record.limit_max', 1000);
+        $perPage = $request->has('per_page') ? max(1, min((int) $request->get('per_page', 25), RecordConfigService::perPageMax())) : null;
+        $limit = $request->has('limit') ? max(1, min((int) $request->get('limit'), RecordConfigService::limitMax())) : RecordConfigService::limitMax();
 
         // Disable cache if using builder as we can't easily key the builder state
         $isCacheable = !$builder && $service->isCacheableRequest($request, $table);
@@ -1069,7 +1065,7 @@ class RecordService
             $cacheKey = $service->generateOptimizedCacheKey(
                 $table,
                 array_merge($filters, [
-                    config('record.tenant_column', 'tenant_id') => $tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema) ? $tanentColumn : null,
+                    RecordConfigService::tenantColumn() => $tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema) ? $tanentColumn : null,
                     'tenant_enabled' => $tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema),
                 ]),
                 $includes,
@@ -1089,9 +1085,9 @@ class RecordService
 
             if ($tableSchema instanceof RecordTableType && $tableSchema->soft_deletes) {
                 if ($request->boolean('only_trashed')) {
-                    $builder->whereNotNull($actualTableName.'.deleted_at');
+                    $builder->whereNotNull($actualTableName . '.deleted_at');
                 } else {
-                    $builder->whereNull($actualTableName.'.deleted_at');
+                    $builder->whereNull($actualTableName . '.deleted_at');
                 }
             }
         } else {
@@ -1099,9 +1095,9 @@ class RecordService
 
             if ($tableSchema instanceof RecordTableType && $tableSchema->soft_deletes) {
                 if ($request->boolean('only_trashed')) {
-                    $builder->whereNotNull($actualTableName.'.deleted_at');
+                    $builder->whereNotNull($actualTableName . '.deleted_at');
                 } else {
-                    $builder->whereNull($actualTableName.'.deleted_at');
+                    $builder->whereNull($actualTableName . '.deleted_at');
                 }
             }
         }
@@ -1125,14 +1121,14 @@ class RecordService
             $meta = $aggregateResult['meta'];
             $headers = $aggregateResult['headers'];
         } elseif ($request->has('limit') && !$request->has('per_page')) {
-            $limit = max(1, min((int) $request->get('limit'), (int) config('record.limit_max', 1000)));
+            $limit = max(1, min((int) $request->get('limit'), RecordConfigService::limitMax()));
             $data = $builder->limit($limit)->get()->all();
             $total = count($data);
             $headers['X-Total-Count'] = (string) $total;
             $meta = ['total' => $total];
         } else {
-            $maxPerPage = (int) config('record.per_page_max', 100);
-            $perPage = max(1, min((int) $request->get('per_page', config('record.limit_max', 1000)), $maxPerPage));
+            $maxPerPage = RecordConfigService::perPageMax();
+            $perPage = max(1, min((int) $request->get('per_page', RecordConfigService::limitMax()), $maxPerPage));
 
             $page = max((int) $request->get('page', 1), 1);
             $countQuery = clone $builder;
@@ -1155,7 +1151,7 @@ class RecordService
         if ($request->has('select')) {
             $selectParam = $request->query('select');
             $includes = RelationshipResolver::parseSelectForIncludes($selectParam);
-            $useSubqueryOptimization = config('record.use_subquery_optimization', true) && count($data) <= 100;
+            $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization() && count($data) <= 100;
 
             // Disable subquery optimization if nested filters or child relationships are detected
             if ($useSubqueryOptimization) {
@@ -1195,16 +1191,16 @@ class RecordService
                     $optimizedBuilder = DB::table($actualTableName);
                     $mainCols = RelationshipResolver::getMainTableColumns($selectParam);
                     if ([] !== $mainCols) {
-                        $prefixedCols = array_map(fn ($col) => '*' === $col ? $actualTableName.'.*' : (str_contains((string) $col, '.') ? $col : $actualTableName.'.'.$col), $mainCols);
+                        $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $mainCols);
                         $optimizedBuilder->select($prefixedCols);
                     } else {
-                        $optimizedBuilder->select($actualTableName.'.*');
+                        $optimizedBuilder->select($actualTableName . '.*');
                     }
 
                     $service->applyTenantFilter($optimizedBuilder, $actualTableName, $tenantId);
 
                     if ($tableSchema instanceof RecordTableType && $tableSchema->soft_deletes) {
-                        $optimizedBuilder->whereNull($actualTableName.'.deleted_at');
+                        $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
                     }
 
                     RelationshipResolver::applySubqueryRelationships(
@@ -1217,7 +1213,7 @@ class RecordService
                     // Re-apply sorting to optimized query to ensure consistent order
                     QueryBuilderFilters::applySort($optimizedBuilder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
 
-                    $optimizedData = $optimizedBuilder->whereIn($actualTableName.'.'.$primaryKey, $recordIds)->get()->all();
+                    $optimizedData = $optimizedBuilder->whereIn($actualTableName . '.' . $primaryKey, $recordIds)->get()->all();
                     $data = RelationshipResolver::processJsonRelationships($optimizedData, $includes, $table);
                 }
             } else {
@@ -1274,7 +1270,7 @@ class RecordService
             [
                 'type' => 'show',
                 'id' => $id,
-                config('record.tenant_column', 'tenant_id') => $tenantId,
+                RecordConfigService::tenantColumn() => $tenantId,
             ],
         ];
         $triggerParams = $this->executeTableTrigger($tableSchema->beforeRead ?? null, $triggerParams);
@@ -1297,7 +1293,7 @@ class RecordService
         $this->applyTenantFilter($builder, $actualTableName, $tenantId);
 
         if ($tableSchema->soft_deletes) {
-            $builder->whereNull($actualTableName.'.deleted_at');
+            $builder->whereNull($actualTableName . '.deleted_at');
         }
 
         if ($request->has('select')) {
@@ -1315,7 +1311,7 @@ class RecordService
         if ($request->has('select')) {
             $selectParam = $request->query('select');
             $includes = RelationshipResolver::parseSelectForIncludes($selectParam);
-            $useSubqueryOptimization = config('record.use_subquery_optimization', true);
+            $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization();
 
             // Disable subquery optimization if nested filters or child relationships are detected
             if ($useSubqueryOptimization) {
@@ -1350,16 +1346,16 @@ class RecordService
             if ($useSubqueryOptimization && [] !== $includes) {
                 $optimizedBuilder = DB::table($actualTableName);
                 if ([] !== $mainCols) {
-                    $prefixedCols = array_map(fn ($col) => '*' === $col ? $actualTableName.'.*' : (str_contains((string) $col, '.') ? $col : $actualTableName.'.'.$col), $mainCols);
+                    $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $mainCols);
                     $optimizedBuilder->select($prefixedCols);
                 } else {
-                    $optimizedBuilder->select($actualTableName.'.*');
+                    $optimizedBuilder->select($actualTableName . '.*');
                 }
 
                 $this->applyTenantFilter($optimizedBuilder, $actualTableName, $tenantId);
 
                 if ($tableSchema->soft_deletes) {
-                    $optimizedBuilder->whereNull($actualTableName.'.deleted_at');
+                    $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
                 }
 
                 RelationshipResolver::applySubqueryRelationships(
@@ -1410,7 +1406,7 @@ class RecordService
 
         // Check permissions if pms_name is specified
         if (isset($config['pms_name']) && !empty($config['pms_name'])) {
-            $guard = config('sp-laravel-api.auth.guard', 'api');
+            $guard = RecordConfigService::authGuard();
             $user = auth($guard)->user();
             if (!$user) {
                 return RecordApiResponseService::errorWrapped('Authentication required', RecordApiJsonResponseEnum::UNAUTHORIZED->value);
@@ -1514,7 +1510,7 @@ class RecordService
 
             return RecordApiResponseService::successWrapped($result);
         } catch (Exception $exception) {
-            return RecordApiResponseService::errorWrapped('Function execution failed: '.$exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
+            return RecordApiResponseService::errorWrapped('Function execution failed: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 

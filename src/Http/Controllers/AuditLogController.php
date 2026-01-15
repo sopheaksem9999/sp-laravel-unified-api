@@ -11,6 +11,7 @@ use Sopheak\Core\Services\AuditLogService;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 use Illuminate\Support\Facades\Validator;
 use Sopheak\Core\Services\RecordApiResponseService;
+use Sopheak\Core\Services\RecordConfigService;
 
 /**
  * Controller for handling audit log operations.
@@ -172,8 +173,8 @@ class AuditLogController extends Controller
                 $metadata['id'] = $request->input('entity_id');
             }
 
-            $tenantHeader = config('record.tenant_header', 'X-Tenant-ID');
-            $tenantColumn = config('record.tenant_column', 'tenant_id');
+            $tenantHeader = RecordConfigService::tenantHeader();
+            $tenantColumn = RecordConfigService::tenantColumn();
             $tenantId = $request->header($tenantHeader) ?? $request->input($tenantColumn) ?? $request->input('tenant_id');
 
             AuditLogService::handleAuditDataEntry(

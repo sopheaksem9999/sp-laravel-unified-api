@@ -14,6 +14,7 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
+use Sopheak\Core\Services\RecordConfigService;
 
 class RelationshipResolver
 {
@@ -51,7 +52,7 @@ class RelationshipResolver
     public static function applySubqueryRelationships(Builder $builder, string $table, array $includes, mixed $tenantId = null): Builder
     {
         $schema = self::getSchema();
-        config('record.enable_tenant_id', false);
+        RecordConfigService::enableTenantId();
 
         // Get main table columns to detect conflicts
         $mainTableColumns = isset($schema[$table]) ? array_keys($schema[$table]->columns ?? []) : [];
@@ -189,7 +190,7 @@ class RelationshipResolver
 
         // Build nested include AST and process recursively with max depth guard
         $includes = self::parseSelectForIncludes($selectParam);
-        $maxDepth = max(1, (int) config('record.max_depth', 2));
+        $maxDepth = max(1, RecordConfigService::maxDepth());
 
         // Process in chunks to reduce memory usage for large datasets
         $chunkSize = 100; // Process 100 records at a time
@@ -411,7 +412,7 @@ class RelationshipResolver
     public static function processRelatedData(string $table, array $payload, mixed $recordId, $tenantId = null, string $operation = 'create'): array
     {
         $schema = self::getSchema();
-        $hasTenant = isset($schema[$table]->columns[config('record.tenant_column', 'tenant_id')]);
+        $hasTenant = isset($schema[$table]->columns[RecordConfigService::tenantColumn()]);
 
         foreach ($payload as $alias => $relatedData) {
             if (!is_array($relatedData)) {
@@ -484,13 +485,13 @@ class RelationshipResolver
                 $item = array_intersect_key($item, array_flip($allowedCols));
                 unset($item['id'], $item['created_at'], $item['updated_at'], $item['deleted_at']);
                 if ($hasTenant) {
-                    unset($item[config('record.tenant_column', 'tenant_id')]);
+                    unset($item[RecordConfigService::tenantColumn()]);
                 }
 
                 // Ensure FK is set to parent ID (cannot be overridden by input)
                 $item[$foreignKey] = $recordId;
                 if ($tenantId && $hasTenant) {
-                    $item[config('record.tenant_column', 'tenant_id')] = $tenantId;
+                    $item[RecordConfigService::tenantColumn()] = $tenantId;
                 }
 
                 // Permission check per related action
@@ -556,8 +557,8 @@ class RelationshipResolver
                 $relatedFields = array_intersect_key($item, array_flip(array_keys($relatedSchema->columns ?? [])));
                 unset($relatedFields['id'], $relatedFields['created_at'], $relatedFields['updated_at'], $relatedFields['deleted_at']);
 
-                if ($tenantId && isset($relatedSchema->columns[config('record.tenant_column', 'tenant_id')])) {
-                    $relatedFields[config('record.tenant_column', 'tenant_id')] = $tenantId;
+                if ($tenantId && isset($relatedSchema->columns[RecordConfigService::tenantColumn()])) {
+                    $relatedFields[RecordConfigService::tenantColumn()] = $tenantId;
                 }
 
                 if (isset($relatedSchema->columns['created_at'])) {
@@ -644,8 +645,8 @@ class RelationshipResolver
                 $targetFields = array_intersect_key($item, array_flip(array_keys($targetSchema->columns ?? [])));
                 unset($targetFields['id'], $targetFields['created_at'], $targetFields['updated_at'], $targetFields['deleted_at']);
 
-                if ($tenantId && isset($targetSchema->columns[config('record.tenant_column', 'tenant_id')])) {
-                    $targetFields[config('record.tenant_column', 'tenant_id')] = $tenantId;
+                if ($tenantId && isset($targetSchema->columns[RecordConfigService::tenantColumn()])) {
+                    $targetFields[RecordConfigService::tenantColumn()] = $tenantId;
                 }
 
                 if (isset($targetSchema->columns['created_at'])) {
@@ -830,7 +831,7 @@ class RelationshipResolver
         $relatedTable = $config['table'];
         $foreignKey = $config['foreign_key'];
         $ownerKey = $config['owner_key'] ?? 'id';
-        $enableTenantId = config('record.enable_tenant_id', false);
+        $enableTenantId = RecordConfigService::enableTenantId();
 
         // Get actual table names from schema
         $actualMainTableName = $schema[$table]->table ?? $table;
@@ -848,7 +849,7 @@ class RelationshipResolver
             ->whereColumn(sprintf('%s.%s', $subqueryAlias, $ownerKey), sprintf('%s.%s', $actualMainTableName, $foreignKey));
 
         // Apply tenant filtering if enabled
-        $tenantCol = config('record.tenant_column', 'tenant_id');
+        $tenantCol = RecordConfigService::tenantColumn();
         if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
             $subquery->where($subqueryAlias . '.' . $tenantCol, $tenantId);
         }
@@ -873,7 +874,7 @@ class RelationshipResolver
         $relatedTable = $config['table'];
         $foreignKey = $config['foreign_key'];
         $localKey = $config['local_key'] ?? 'id';
-        $enableTenantId = config('record.enable_tenant_id', false);
+        $enableTenantId = RecordConfigService::enableTenantId();
 
         // Get actual table names from schema
         $actualMainTableName = $schema[$table]->table ?? $table;
@@ -890,7 +891,7 @@ class RelationshipResolver
             WHERE {$actualRelatedTableName}.{$foreignKey} = {$actualMainTableName}.{$localKey}";
 
         // Add tenant filtering if enabled
-        $tenantCol = config('record.tenant_column', 'tenant_id');
+        $tenantCol = RecordConfigService::tenantColumn();
         if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
             $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualRelatedTableName, $tenantId);
         }
@@ -922,7 +923,7 @@ class RelationshipResolver
         $relatedKey = $config['related_key'] ?? 'id';
         $relation = $config['relation'] ?? null;
         $wherePivot = $config['where_pivot'] ?? [];
-        $enableTenantId = config('record.enable_tenant_id', false);
+        $enableTenantId = RecordConfigService::enableTenantId();
 
         // Get actual table names from schema
         $actualMainTableName = $schema[$table]->table ?? $table;
@@ -957,7 +958,7 @@ class RelationshipResolver
 
         // Add tenant filtering if enabled
         if ($enableTenantId && $tenantId) {
-            $tenantCol = config('record.tenant_column', 'tenant_id');
+            $tenantCol = RecordConfigService::tenantColumn();
             if (isset($schema[$relatedTable]->columns[$tenantCol])) {
                 $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualRelatedTableName, $tenantId);
             }
@@ -999,7 +1000,7 @@ class RelationshipResolver
         $morphTypeColumn = $config['morph_type'] ?? 'model_type';
         $relation = $config['relation'] ?? null; // expected to be FQCN (e.g., App\\Models\\User)
         $wherePivot = $config['where_pivot'] ?? [];
-        $enableTenantId = config('record.enable_tenant_id', false);
+        $enableTenantId = RecordConfigService::enableTenantId();
 
         // Determine model class fallback if relation is missing or not a FQCN
         if (!$relation || $relation === 'model') {
@@ -1037,7 +1038,7 @@ class RelationshipResolver
 
         // Add tenant filtering if enabled
         if ($enableTenantId && $tenantId) {
-            $tenantCol = config('record.tenant_column', 'tenant_id');
+            $tenantCol = RecordConfigService::tenantColumn();
             if (isset($schema[$relatedTable]->columns[$tenantCol])) {
                 $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualRelatedTableName, $tenantId);
             }
@@ -1075,7 +1076,7 @@ class RelationshipResolver
         $secondKey = $config['second_key'];
         $localKey = $config['local_key'] ?? 'id';
         $secondLocalKey = $config['second_local_key'] ?? 'id';
-        $enableTenantId = config('record.enable_tenant_id', false);
+        $enableTenantId = RecordConfigService::enableTenantId();
 
         // Get actual table names from schema
         $actualMainTableName = $schema[$table]->table ?? $table;
@@ -1095,7 +1096,7 @@ class RelationshipResolver
 
         // Add tenant filtering if enabled
         if ($enableTenantId && $tenantId) {
-            $tenantCol = config('record.tenant_column', 'tenant_id');
+            $tenantCol = RecordConfigService::tenantColumn();
             if (isset($schema[$relatedTable]->columns[$tenantCol])) {
                 $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualRelatedTableName, $tenantId);
             }
@@ -1135,9 +1136,9 @@ class RelationshipResolver
         $validColumns = array_filter($columns, fn($column): bool => isset($schemaColumns[$column]));
 
         // Remove tenant_id if it's not enabled in configuration
-        $enableTenantId = config('record.enable_tenant_id', false);
+        $enableTenantId = RecordConfigService::enableTenantId();
         if (!$enableTenantId) {
-            $tenantCol = config('record.tenant_column', 'tenant_id');
+            $tenantCol = RecordConfigService::tenantColumn();
             $validColumns = array_filter($validColumns, fn($column): bool => $tenantCol !== $column);
         }
 
@@ -1487,12 +1488,12 @@ class RelationshipResolver
         $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
 
         // Check if tenant_id functionality is enabled
-        $enableTenantId = config('record.enable_tenant_id', false);
+        $enableTenantId = RecordConfigService::enableTenantId();
 
         // Step 1: Optimized through table query with chunking for large datasets
         $builder = DB::table($actualThroughTableName);
 
-        $tenantCol = config('record.tenant_column', 'tenant_id');
+        $tenantCol = RecordConfigService::tenantColumn();
         if ($enableTenantId && $tenantId && isset($schema[$throughTable]->columns[$tenantCol])) {
             $builder->where($tenantCol, $tenantId);
         }
@@ -1778,12 +1779,12 @@ class RelationshipResolver
         $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
 
         // Check if tenant_id functionality is enabled
-        $enableTenantId = config('record.enable_tenant_id', false);
+        $enableTenantId = RecordConfigService::enableTenantId();
 
         $builder = DB::table($actualRelatedTableName);
 
         // Apply tenant scoping only if enabled
-        $tenantCol = config('record.tenant_column', 'tenant_id');
+        $tenantCol = RecordConfigService::tenantColumn();
         if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
             $builder->where($tenantCol, $tenantId);
         }
@@ -1822,7 +1823,7 @@ class RelationshipResolver
             $builder = DB::table($relatedTableName);
 
             // Apply tenant scoping only if enabled
-            $tenantCol = config('record.tenant_column', 'tenant_id');
+            $tenantCol = RecordConfigService::tenantColumn();
             if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
                 $builder->where($tenantCol, $tenantId);
             }

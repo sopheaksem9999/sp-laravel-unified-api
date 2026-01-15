@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Support\RelationshipResolver;
 use Sopheak\Core\Support\SchemaRegistry;
 
@@ -148,13 +149,13 @@ class QueryBuilderFilters
         self::applySort($builder, $request, $table, $defaultOrderBy);
 
         // Handle check permission query only own user created record
-        $recordConfig = config('record.tables.' . $table, []);
+        $recordConfig = RecordConfigService::table($table);
         $pmsName = $recordConfig->pms_name ?? null;
 
-        if ($pmsName && Auth::check() && config('record.own_records_permission_prefix', false)) {
+        if ($pmsName && Auth::check() && RecordConfigService::ownRecordsPermissionPrefix()) {
             $pmsNames = is_array($pmsName) ? $pmsName : [$pmsName];
-            $prefix = config('record.own_records_permission_prefix', 'viewOwn');
-            $separator = config('record.permission_separator', '_');
+            $prefix = RecordConfigService::ownRecordsPermissionPrefix();
+            $separator = RecordConfigService::permissionSeparator();
 
             $shouldRestrictToOwn = false;
             foreach ($pmsNames as $candidate) {
@@ -352,7 +353,7 @@ class QueryBuilderFilters
     public static function applyRelationshipFilters(Builder $builder, string $table, array $relationshipFilters, mixed $tenantId = null): void
     {
         $schema = SchemaRegistry::get();
-        config('record.enable_tenant_id', false);
+        RecordConfigService::enableTenantId();
 
         foreach ($relationshipFilters as $relationshipColumn => $filters) {
             // Parse relationship.column format
@@ -402,7 +403,7 @@ class QueryBuilderFilters
     {
         $relatedTable = $config['table'];
         $type = $config['type'];
-        $enableTenantId = config('record.enable_tenant_id', false);
+        $enableTenantId = RecordConfigService::enableTenantId();
 
         $builder->where(function ($query) use ($table, $config, $column, $operator, $value, $tenantId, $schema, $enableTenantId): void {
             $relatedTable = $config['table'];
@@ -423,8 +424,8 @@ class QueryBuilderFilters
                         self::applyOperatorToSubquery($subquery, $relatedTable, $column, $operator, $value);
 
                         // Apply tenant filtering if enabled
-                        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[config('record.tenant_column', 'tenant_id')])) {
-                            $subquery->where($relatedTable . '.' . config('record.tenant_column', 'tenant_id'), $tenantId);
+                        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[RecordConfigService::tenantColumn()])) {
+                            $subquery->where($relatedTable . '.' . RecordConfigService::tenantColumn(), $tenantId);
                         }
 
                         // Apply soft delete filtering
@@ -449,8 +450,8 @@ class QueryBuilderFilters
                         self::applyOperatorToSubquery($subquery, $relatedTable, $column, $operator, $value);
 
                         // Apply tenant filtering if enabled
-                        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[config('record.tenant_column', 'tenant_id')])) {
-                            $subquery->where($relatedTable . '.' . config('record.tenant_column', 'tenant_id'), $tenantId);
+                        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[RecordConfigService::tenantColumn()])) {
+                            $subquery->where($relatedTable . '.' . RecordConfigService::tenantColumn(), $tenantId);
                         }
 
                         // Apply soft delete filtering
@@ -480,12 +481,12 @@ class QueryBuilderFilters
 
                         // Apply tenant filtering if enabled
                         if ($enableTenantId && $tenantId) {
-                            if (isset($schema[$relatedTable]->columns[config('record.tenant_column', 'tenant_id')])) {
-                                $subquery->where($relatedTable . '.' . config('record.tenant_column', 'tenant_id'), $tenantId);
+                            if (isset($schema[$relatedTable]->columns[RecordConfigService::tenantColumn()])) {
+                                $subquery->where($relatedTable . '.' . RecordConfigService::tenantColumn(), $tenantId);
                             }
 
-                            if (isset($schema[$throughTable]->columns[config('record.tenant_column', 'tenant_id')])) {
-                                $subquery->where($throughTable . '.' . config('record.tenant_column', 'tenant_id'), $tenantId);
+                            if (isset($schema[$throughTable]->columns[RecordConfigService::tenantColumn()])) {
+                                $subquery->where($throughTable . '.' . RecordConfigService::tenantColumn(), $tenantId);
                             }
                         }
 
@@ -518,8 +519,8 @@ class QueryBuilderFilters
                         self::applyOperatorToSubquery($subquery, $relatedTable, $column, $operator, $value);
 
                         // Apply tenant filtering if enabled
-                        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[config('record.tenant_column', 'tenant_id')])) {
-                            $subquery->where($relatedTable . '.' . config('record.tenant_column', 'tenant_id'), $tenantId);
+                        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[RecordConfigService::tenantColumn()])) {
+                            $subquery->where($relatedTable . '.' . RecordConfigService::tenantColumn(), $tenantId);
                         }
 
                         // Apply soft delete filtering
@@ -1378,8 +1379,8 @@ class QueryBuilderFilters
     private static function executeOperatorsOptimized(Builder $builder, string $table, array $allowedCols, array $params): void
     {
         // Check if tenant_id functionality is enabled
-        $enableTenantId = config('record.enable_tenant_id', false);
-        $tenantCol = config('record.tenant_column', 'tenant_id');
+        $enableTenantId = RecordConfigService::enableTenantId();
+        $tenantCol = RecordConfigService::tenantColumn();
         $tenantId = $enableTenantId && isset($params[$tenantCol]) ? $params[$tenantCol] : null;
 
         // Separate relationship filters from regular column filters
@@ -1397,7 +1398,7 @@ class QueryBuilderFilters
                 continue;
             }
 
-            if ($enableTenantId && config('record.tenant_column', 'tenant_id') === $key) {
+            if ($enableTenantId && $tenantCol === $key) {
                 continue;
             }
 
@@ -1446,7 +1447,6 @@ class QueryBuilderFilters
         }
 
         // Apply tenant_id filtering if enabled and available
-        $tenantCol = config('record.tenant_column', 'tenant_id');
         if ($enableTenantId && isset($params[$tenantCol])) {
             $schema = SchemaRegistry::get();
             if (isset($schema[$table]->columns[$tenantCol])) {

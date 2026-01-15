@@ -16,7 +16,7 @@ class QueryCacheService
      */
     private static function isCacheEnabled(): bool
     {
-        return config('record.cache.enabled', false);
+        return RecordConfigService::cacheEnabled();
     }
 
     /**
@@ -24,7 +24,12 @@ class QueryCacheService
      */
     private static function getCacheTtl(): int
     {
-        return config('record.cache.ttl', config('record.cache_ttl', self::$defaultTtl));
+        $ttl = RecordConfigService::cacheTtl();
+        if ($ttl > 0) {
+            return $ttl;
+        }
+
+        return RecordConfigService::legacyCacheTtl();
     }
 
     /**
@@ -32,7 +37,7 @@ class QueryCacheService
      */
     private static function getCachePrefix(): string
     {
-        return config('record.cache.prefix', 'records_api') . ':';
+        return RecordConfigService::cachePrefix() . ':';
     }
 
     /**

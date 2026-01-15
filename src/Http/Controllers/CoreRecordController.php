@@ -13,8 +13,10 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
+use Sopheak\Core\Services\GlobalService;
 use Sopheak\Core\Services\QueryCacheService;
 use Sopheak\Core\Services\RecordApiResponseService;
+use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Support\PermissionHelper;
 use Sopheak\Core\Support\SchemaRegistry;
@@ -23,11 +25,6 @@ use Sopheak\Core\Jobs\ProcessBulkOperationJob;
 
 class CoreRecordController extends Controller
 {
-    /**
-     * Cache for tenant configuration to avoid repeated config calls.
-     */
-    private static ?bool $tenantIdEnabled = null;
-
     public function __construct(
         protected RecordService $recordService
     ) {}
@@ -48,7 +45,7 @@ class CoreRecordController extends Controller
 
         $this->authorizeAction($table, 'read');
 
-        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $tenantId = $this->recordService->normalizeTenantId($request->header(RecordConfigService::tenantHeader()));
         if (($response = $this->validateTenantIdRequired($tableSchema, $tenantId)) instanceof JsonResponse) {
             return $response;
         }
@@ -77,7 +74,7 @@ class CoreRecordController extends Controller
                         'filters' => $result['filters'] ?? [],
                         'data' => $data,
                         'meta' => $meta,
-                        config('record.tenant_column', 'tenant_id') => $tenantId,
+                        RecordConfigService::tenantColumn() => $tenantId,
                         'response' => $response,
                     ],
                 ]
@@ -105,7 +102,7 @@ class CoreRecordController extends Controller
 
         $this->authorizeAction($table, 'read');
 
-        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $tenantId = $this->recordService->normalizeTenantId($request->header(RecordConfigService::tenantHeader()));
         if (($response = $this->validateTenantIdRequired($tableSchema, $tenantId)) instanceof JsonResponse) {
             return $response;
         }
@@ -133,7 +130,7 @@ class CoreRecordController extends Controller
                     [
                         'type' => 'show',
                         'id' => $id,
-                        config('record.tenant_column', 'tenant_id') => $tenantId,
+                        RecordConfigService::tenantColumn() => $tenantId,
                         'record' => $record,
                         'response' => $response,
                     ],
@@ -164,7 +161,7 @@ class CoreRecordController extends Controller
 
         // Resolve actual table name from RecordTableType configuration
         $this->resolveActualTableName($table);
-        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $tenantId = $this->recordService->normalizeTenantId($request->header(RecordConfigService::tenantHeader()));
         if (($response = $this->validateTenantIdRequired($tableSchema, $tenantId)) instanceof JsonResponse) {
             return $response;
         }
@@ -173,7 +170,7 @@ class CoreRecordController extends Controller
             $request,
             $table,
             [
-                config('record.tenant_column', 'tenant_id') => $tenantId,
+                RecordConfigService::tenantColumn() => $tenantId,
             ],
         ];
         $triggerParams = $this->recordService->executeTableTrigger($tableSchema->beforeCreate ?? null, $triggerParams);
@@ -200,7 +197,7 @@ class CoreRecordController extends Controller
 
         try {
             // Use RecordService to create the record
-            $result = $this->recordService->createRecord($request, $table, $payload, $tenantId);
+            $result = $this->recordService->createRecord(table: $table, payload: $payload, tenantId: $tenantId);
             $insertedId = $result['id'];
 
             // Commit transaction
@@ -214,7 +211,7 @@ class CoreRecordController extends Controller
             $this->recordService->processPostWriteLogic($request, $table, 'create', [
                 'id' => $insertedId,
                 'payload' => $result['payload'],
-                config('record.tenant_column', 'tenant_id') => $result['tenant_id'],
+                RecordConfigService::tenantColumn() => $result['tenant_id'],
                 'response' => $recordResponse,
             ]);
 
@@ -247,7 +244,7 @@ class CoreRecordController extends Controller
 
         // Resolve actual table name from RecordTableType configuration
         $this->resolveActualTableName($table);
-        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $tenantId = $this->recordService->normalizeTenantId($request->header(RecordConfigService::tenantHeader()));
         if (($response = $this->validateTenantIdRequired($tableSchema, $tenantId)) instanceof JsonResponse) {
             return $response;
         }
@@ -257,7 +254,7 @@ class CoreRecordController extends Controller
             $table,
             [
                 'id' => $id,
-                config('record.tenant_column', 'tenant_id') => $tenantId,
+                RecordConfigService::tenantColumn() => $tenantId,
             ],
         ];
 
@@ -286,7 +283,7 @@ class CoreRecordController extends Controller
 
         try {
             // Use RecordService to update the record
-            $result = $this->recordService->updateRecord($request, $table, $id, $payload, $tenantId);
+            $result = $this->recordService->updateRecord(table: $table, id: $id, payload: $payload, tenantId: $tenantId);
             $updated = $result['updated'];
 
             // Handle not found
@@ -307,7 +304,7 @@ class CoreRecordController extends Controller
             $this->recordService->processPostWriteLogic($request, $table, 'update', [
                 'id' => $id,
                 'payload' => $result['payload'],
-                config('record.tenant_column', 'tenant_id') => $result['tenant_id'],
+                RecordConfigService::tenantColumn() => $result['tenant_id'],
                 'updated' => $updated,
                 'response' => $recordResponse,
             ]);
@@ -341,7 +338,7 @@ class CoreRecordController extends Controller
 
         // Resolve actual table name from RecordTableType configuration
         $this->resolveActualTableName($table);
-        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $tenantId = $this->recordService->normalizeTenantId($request->header(RecordConfigService::tenantHeader()));
         if (($response = $this->validateTenantIdRequired($tableSchema, $tenantId)) instanceof JsonResponse) {
             return $response;
         }
@@ -351,7 +348,7 @@ class CoreRecordController extends Controller
             $table,
             [
                 'id' => $id,
-                config('record.tenant_column', 'tenant_id') => $tenantId,
+                RecordConfigService::tenantColumn() => $tenantId,
             ],
         ];
 
@@ -379,7 +376,7 @@ class CoreRecordController extends Controller
 
         try {
             // Use RecordService to delete the record
-            $result = $this->recordService->deleteRecord($request, $table, $id, $tenantId);
+            $result = $this->recordService->deleteRecord(table: $table, id: $id, tenantId: $tenantId);
             $affected = $result['affected'];
 
             if (0 === $affected) {
@@ -398,7 +395,7 @@ class CoreRecordController extends Controller
             // Execute Post-Write Logic (Triggers and Audit Logs)
             $this->recordService->processPostWriteLogic($request, $table, 'delete', [
                 'id' => $id,
-                config('record.tenant_column', 'tenant_id') => $tenantId,
+                RecordConfigService::tenantColumn() => $tenantId,
                 'affected' => $affected,
                 'soft_deleted' => $tableSchema->soft_deletes,
                 'response' => $response,
@@ -433,7 +430,7 @@ class CoreRecordController extends Controller
         // Resolve actual table name from RecordTableType configuration
         $this->resolveActualTableName($table);
 
-        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $tenantId = $this->recordService->normalizeTenantId($request->header(RecordConfigService::tenantHeader()));
         if (($response = $this->validateTenantIdRequired($tableSchema, $tenantId)) instanceof JsonResponse) {
             return $response;
         }
@@ -445,7 +442,7 @@ class CoreRecordController extends Controller
 
         try {
             // Use RecordService to restore the record
-            $result = $this->recordService->restoreRecord($request, $table, $id, $tenantId);
+            $result = $this->recordService->restoreRecord(table: $table, id: $id, tenantId: $tenantId);
             $affected = $result['restored'];
 
             if (0 === $affected) {
@@ -464,7 +461,7 @@ class CoreRecordController extends Controller
             $this->recordService->processPostWriteLogic($request, $table, 'update', [
                 'id' => $id,
                 'payload' => [], // No payload for restore
-                config('record.tenant_column', 'tenant_id') => $tenantId,
+                RecordConfigService::tenantColumn() => $tenantId,
                 'restored' => $affected,
                 'response' => $response,
             ]);
@@ -497,7 +494,7 @@ class CoreRecordController extends Controller
         // Resolve actual table name from RecordTableType configuration
         $this->resolveActualTableName($table);
 
-        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $tenantId = $this->recordService->normalizeTenantId($request->header(RecordConfigService::tenantHeader()));
         if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
             return $response;
         }
@@ -528,7 +525,7 @@ class CoreRecordController extends Controller
             // Execute Post-Write Logic (Triggers and Audit Logs)
             $this->recordService->processPostWriteLogic($request, $table, 'delete', [
                 'id' => $id,
-                config('record.tenant_column', 'tenant_id') => $tenantId,
+                RecordConfigService::tenantColumn() => $tenantId,
                 'deleted' => $deleted,
                 'force_deleted' => true,
                 'response_data' => ['id' => $id], // Preserve original audit log data
@@ -563,7 +560,7 @@ class CoreRecordController extends Controller
         $this->authorizeAction($table, 'update');
         $this->authorizeAction($table, 'delete');
 
-        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $tenantId = $this->recordService->normalizeTenantId($request->header(RecordConfigService::tenantHeader()));
         if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
             return $response;
         }
@@ -618,13 +615,13 @@ class CoreRecordController extends Controller
         }
 
         $validator = Validator::make(['items' => $items], [
-            'items' => 'required|array|min:1|max:' . config('record.bulk_max', 100),
+            'items' => 'required|array|min:1|max:' . RecordConfigService::bulkMax(),
             'items.*' => 'required|array',
         ], [
             'items.required' => 'Payload must be an array',
             'items.array' => 'Payload must be an array',
             'items.min' => 'At least one item is required',
-            'items.max' => 'Maximum ' . config('record.bulk_max', 100) . ' items allowed',
+            'items.max' => 'Maximum ' . RecordConfigService::bulkMax() . ' items allowed',
             'items.*.required' => 'Each item is required',
             'items.*.array' => 'Each item must be an object',
         ]);
@@ -633,7 +630,7 @@ class CoreRecordController extends Controller
             throw new ValidationException($validator);
         }
 
-        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $tenantId = $this->recordService->normalizeTenantId($request->header(RecordConfigService::tenantHeader()));
         if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
             return $response;
         }
@@ -662,7 +659,7 @@ class CoreRecordController extends Controller
                 // Execute beforeCreate trigger
                 $this->recordService->executeTableTrigger($schema[$table]->beforeCreate ?? null, [$request, $table, $item]);
 
-                $result = $this->recordService->createRecord($request, $table, $item, $tenantId);
+                $result = $this->recordService->createRecord(table: $table, payload: $item, tenantId: $tenantId);
                 $insertId = $result['id'];
 
                 $createdRecordData = $this->fetchRecordData($request, $table, $insertId, $tenantId);
@@ -675,7 +672,7 @@ class CoreRecordController extends Controller
                 $this->recordService->processPostWriteLogic($request, $table, 'create', [
                     'id' => $insertId,
                     'payload' => $result['payload'],
-                    config('record.tenant_column', 'tenant_id') => $result['tenant_id'],
+                    RecordConfigService::tenantColumn() => $result['tenant_id'],
                     'response' => $createdRecordResponse,
                 ]);
             }
@@ -732,14 +729,14 @@ class CoreRecordController extends Controller
         }
 
         $validator = Validator::make(['items' => $items], [
-            'items' => 'required|array|min:1|max:' . config('record.bulk_max', 100),
+            'items' => 'required|array|min:1|max:' . RecordConfigService::bulkMax(),
             'items.*' => 'required|array',
             'items.*.' . $pk => 'required',
         ], [
             'items.required' => 'Payload must be an array',
             'items.array' => 'Payload must be an array',
             'items.min' => 'At least one item is required',
-            'items.max' => 'Maximum ' . config('record.bulk_max', 100) . ' items allowed',
+            'items.max' => 'Maximum ' . RecordConfigService::bulkMax() . ' items allowed',
             'items.*.required' => 'Each item is required',
             'items.*.array' => 'Each item must be an object',
             sprintf('items.*.%s.required', $pk) => sprintf('Primary key (%s) is required for update operation', $pk),
@@ -749,7 +746,7 @@ class CoreRecordController extends Controller
             throw new ValidationException($validator);
         }
 
-        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $tenantId = $this->recordService->normalizeTenantId($request->header(RecordConfigService::tenantHeader()));
         if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
             return $response;
         }
@@ -787,7 +784,7 @@ class CoreRecordController extends Controller
                 // Execute beforeUpdate trigger
                 $this->recordService->executeTableTrigger($schema[$table]->beforeUpdate ?? null, [$request, $table, $id, $item]);
 
-                $result = $this->recordService->updateRecord($request, $table, $id, $item, $tenantId);
+                $result = $this->recordService->updateRecord(table: $table, id: $id, payload: $item, tenantId: $tenantId);
                 $updateCount = $result['updated'];
 
                 if ($updateCount > 0) {
@@ -801,7 +798,7 @@ class CoreRecordController extends Controller
                     $this->recordService->processPostWriteLogic($request, $table, 'update', [
                         'id' => $id,
                         'payload' => $result['payload'],
-                        config('record.tenant_column', 'tenant_id') => $result['tenant_id'],
+                        RecordConfigService::tenantColumn() => $result['tenant_id'],
                         'updated' => $updateCount,
                         'response' => $updatedRecordResponse,
                     ]);
@@ -865,19 +862,19 @@ class CoreRecordController extends Controller
         }
 
         $validator = Validator::make(['items' => $items], [
-            'items' => 'required|array|min:1|max:' . config('record.bulk_max', 100),
+            'items' => 'required|array|min:1|max:' . RecordConfigService::bulkMax(),
         ], [
             'items.required' => 'Payload must be an array',
             'items.array' => 'Payload must be an array',
             'items.min' => 'At least one item is required',
-            'items.max' => 'Maximum ' . config('record.bulk_max', 100) . ' items allowed',
+            'items.max' => 'Maximum ' . RecordConfigService::bulkMax() . ' items allowed',
         ]);
 
         if ($validator->fails()) {
             throw new ValidationException($validator);
         }
 
-        $tenantId = $this->recordService->normalizeTenantId($request->header(config('record.tenant_header', 'X-Tenant-ID')));
+        $tenantId = $this->recordService->normalizeTenantId($request->header(RecordConfigService::tenantHeader()));
         if (($response = $this->validateTenantIdRequired($schema[$table], $tenantId)) instanceof JsonResponse) {
             return $response;
         }
@@ -925,7 +922,7 @@ class CoreRecordController extends Controller
                 // Execute beforeDelete trigger
                 $this->recordService->executeTableTrigger($schema[$table]->beforeDelete ?? null, [$request, $table, $idToDelete]);
 
-                $result = $this->recordService->deleteRecord($request, $table, $idToDelete, $tenantId);
+                $result = $this->recordService->deleteRecord(table: $table, id: $idToDelete, tenantId: $tenantId);
                 $deleteCount = $result['affected'];
 
                 if ($deleteCount > 0) {
@@ -938,7 +935,7 @@ class CoreRecordController extends Controller
                     $this->recordService->processPostWriteLogic($request, $table, 'delete', [
                         'id' => $idToDelete,
                         'payload' => ['id' => $idToDelete],
-                        config('record.tenant_column', 'tenant_id') => $tenantId,
+                        RecordConfigService::tenantColumn() => $tenantId,
                         'affected' => $deleteCount,
                         'soft_deleted' => $schema[$table]->soft_deletes ?? false,
                         'response' => $response,
@@ -1021,51 +1018,15 @@ class CoreRecordController extends Controller
         return $table;
     }
 
-    /**
-     * Check if tenant_id functionality is enabled.
-     */
-    private function isTenantIdEnabled(): bool
-    {
-        if (null === self::$tenantIdEnabled) {
-            self::$tenantIdEnabled = config('record.enable_tenant_id', false);
-        }
-
-        return self::$tenantIdEnabled;
-    }
-
-    /**
-     * Normalize tenant ID.
-     */
-    private function normalizeTenantId(mixed $tenantId): mixed
-    {
-        if (is_string($tenantId)) {
-            return trim($tenantId);
-        }
-
-        return $tenantId;
-    }
-
-    private function isTenantIdMissing(mixed $tenantId): bool
-    {
-        $tenantId = $this->normalizeTenantId($tenantId);
-
-        return null === $tenantId || '' === $tenantId;
-    }
-
-    private function shouldApplyTenantId(object $tableSchema): bool
-    {
-        return $this->isTenantIdEnabled() && ($tableSchema->has_tenant_id ?? false);
-    }
-
     private function validateTenantIdRequired(object $tableSchema, mixed $tenantId): ?JsonResponse
     {
-        if (!$this->shouldApplyTenantId($tableSchema)) {
+        if (!GlobalService::shouldApplyTenantId($tableSchema)) {
             return null;
         }
 
-        if ($this->isTenantIdMissing($tenantId)) {
+        if (GlobalService::isTenantIdMissing($tenantId)) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, [
-                config('record.tenant_header', 'X-Tenant-ID') => ['header ' . config('record.tenant_header', 'X-Tenant-ID') . ' cannot be empty'],
+                RecordConfigService::tenantHeader() => ['header ' . RecordConfigService::tenantHeader() . ' cannot be empty'],
             ]);
         }
 
@@ -1118,7 +1079,7 @@ class CoreRecordController extends Controller
             return;
         }
 
-        $guard = config('sp-laravel-api.auth.guard', 'api');
+        $guard = RecordConfigService::authGuard();
         $user = auth($guard)->user();
         if (!$user) {
             throw new HttpResponseException(
@@ -1165,13 +1126,14 @@ class CoreRecordController extends Controller
      */
     private function dispatchAsyncBulk(Request $request, string $table, string $operation, array $items, mixed $tenantId): JsonResponse
     {
-        $user = auth(config('sp-laravel-api.auth.guard', 'api'))->user();
+        $guard = RecordConfigService::authGuard();
+        $user = auth($guard)->user();
 
         $context = [
             'headers' => $request->headers->all(),
             'server' => $request->server->all(),
             'user_id' => $user?->id,
-            'guard' => config('sp-laravel-api.auth.guard', 'api'),
+            'guard' => $guard,
         ];
 
         ProcessBulkOperationJob::dispatch($operation, $table, $items, $tenantId, $context);

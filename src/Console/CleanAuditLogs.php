@@ -5,6 +5,7 @@ namespace Sopheak\Core\Console;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use Sopheak\Core\Services\RecordConfigService;
 
 class CleanAuditLogs extends Command
 {
@@ -22,12 +23,12 @@ class CleanAuditLogs extends Command
      */
     protected $description = 'Clean old audit logs based on retention configuration';
 
-    /**
+    /*
      * Execute the console command.
      */
     public function handle(): int
     {
-        $retentionDays = $this->option('days') ?? config('audit.retention_days');
+        $retentionDays = $this->option('days') ?? RecordConfigService::auditRetentionDays();
         $batchSize = (int) $this->option('batch-size');
         $isDryRun = $this->option('dry-run');
         $isForced = $this->option('force');

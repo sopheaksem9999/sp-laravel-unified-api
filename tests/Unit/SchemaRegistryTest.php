@@ -44,8 +44,8 @@ class SchemaRegistryTest extends TestCase
     {
         Config::set('record.tables', [
             'users' => new RecordTableType(
-                pms_name: 'users',
                 table: 'users',
+                pms_name: 'users',
                 has_tenant_id: false,
                 soft_deletes: false,
                 public: new RecordTablePublic(read: true, write: true),
@@ -65,8 +65,8 @@ class SchemaRegistryTest extends TestCase
     {
         Config::set('record.tables', [
             'users' => new RecordTableType(
-                pms_name: 'users',
                 table: 'users',
+                pms_name: 'users',
                 has_tenant_id: false,
                 soft_deletes: false,
                 public: new RecordTablePublic(read: true, write: true),
@@ -86,8 +86,8 @@ class SchemaRegistryTest extends TestCase
     {
         Config::set('record.tables', [
             'users' => new RecordTableType(
-                pms_name: 'users',
                 table: 'users',
+                pms_name: 'users',
                 has_tenant_id: false,
                 soft_deletes: false,
                 public: new RecordTablePublic(read: true, write: true),
@@ -107,8 +107,8 @@ class SchemaRegistryTest extends TestCase
     {
         Config::set('record.tables', [
             'users' => new RecordTableType(
-                pms_name: 'users',
                 table: 'users',
+                pms_name: 'users',
                 has_tenant_id: false,
                 soft_deletes: false,
                 public: new RecordTablePublic(read: true, write: true),
@@ -138,8 +138,8 @@ class SchemaRegistryTest extends TestCase
     {
         Config::set('record.tables', [
             'users' => new RecordTableType(
-                pms_name: 'users',
                 table: 'users',
+                pms_name: 'users',
                 has_tenant_id: false,
                 soft_deletes: false,
                 public: new RecordTablePublic(read: true, write: true),
@@ -161,8 +161,8 @@ class SchemaRegistryTest extends TestCase
         Config::set('record.cache.per_table', ['users' => false]);
         Config::set('record.tables', [
             'users' => new RecordTableType(
-                pms_name: 'users',
                 table: 'users',
+                pms_name: 'users',
                 has_tenant_id: false,
                 soft_deletes: false,
                 disable_cache: false,
@@ -184,8 +184,8 @@ class SchemaRegistryTest extends TestCase
         Config::set('record.cache.per_table', []);
         Config::set('record.tables', [
             'users' => new RecordTableType(
-                pms_name: 'users',
                 table: 'users',
+                pms_name: 'users',
                 has_tenant_id: false,
                 soft_deletes: false,
                 disable_cache: true,
@@ -207,8 +207,8 @@ class SchemaRegistryTest extends TestCase
         Config::set('record.cache.per_table', []);
         Config::set('record.tables', [
             'users' => new RecordTableType(
-                pms_name: 'users',
                 table: 'users',
+                pms_name: 'users',
                 has_tenant_id: false,
                 soft_deletes: false,
                 disable_cache: false,

@@ -10,6 +10,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Services\RecordService;
 use Throwable;
 
@@ -57,7 +58,7 @@ class ProcessBulkOperationJob implements ShouldQueue
 
             // Restore Authentication Context
             if (isset($this->requestContext['user_id'])) {
-                $guard = $this->requestContext['guard'] ?? config('sp-laravel-api.auth.guard', 'api');
+                $guard = $this->requestContext['guard'] ?? RecordConfigService::authGuard();
                 try {
                     $guardInstance = Auth::guard($guard);
                     $user = null;
@@ -66,14 +67,8 @@ class ProcessBulkOperationJob implements ShouldQueue
                         $user = $guardInstance->loginUsingId($this->requestContext['user_id']);
                     } else {
                         // Handle stateless guards (e.g., Sanctum, API)
-                        $provider = method_exists($guardInstance, 'getProvider') ? $guardInstance->getProvider() : null;
-
-                        if (!$provider) {
-                            $providerName = config(sprintf('auth.guards.%s.provider', $guard));
-                            if ($providerName) {
-                                $provider = Auth::createUserProvider($providerName);
-                            }
-                        }
+                        $providerName = config(sprintf('auth.guards.%s.provider', $guard));
+                        $provider = $providerName ? Auth::createUserProvider($providerName) : null;
 
                         if ($provider) {
                             $user = $provider->retrieveById($this->requestContext['user_id']);
