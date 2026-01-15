@@ -4,6 +4,7 @@ namespace Sopheak\Core\Http\Controllers;
 
 use Exception;
 use RuntimeException;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -22,11 +23,6 @@ use Sopheak\Core\Jobs\ProcessBulkOperationJob;
 
 class CoreRecordController extends Controller
 {
-    /**
-     * Cache for schema lookups to reduce repeated calls.
-     */
-    private static array $schemaCache = [];
-
     /**
      * Cache for tenant configuration to avoid repeated config calls.
      */
@@ -1125,7 +1121,12 @@ class CoreRecordController extends Controller
         $guard = config('sp-laravel-api.auth.guard', 'api');
         $user = auth($guard)->user();
         if (!$user) {
-            abort(RecordApiJsonResponseEnum::UNAUTHORIZED->value, 'Unauthenticated');
+            throw new HttpResponseException(
+                RecordApiResponseService::errorWrapped(
+                    'Unauthenticated',
+                    RecordApiJsonResponseEnum::UNAUTHORIZED->value
+                )
+            );
         }
 
         $tableSchema = SchemaRegistry::getTable($table);
@@ -1150,7 +1151,12 @@ class CoreRecordController extends Controller
         }
 
         if (!$allowed) {
-            abort(RecordApiJsonResponseEnum::FORBIDDEN->value, 'Forbidden');
+            throw new HttpResponseException(
+                RecordApiResponseService::errorWrapped(
+                    'Forbidden',
+                    RecordApiJsonResponseEnum::FORBIDDEN->value
+                )
+            );
         }
     }
 
