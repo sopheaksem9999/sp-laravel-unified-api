@@ -115,7 +115,26 @@ Example:
 - `POST /api/v1/rpc/system/status`
 
 
-### Authentication
+### Table Configuration Files
+
+Record behavior is driven by `RecordTableType` configurations defined in `config/record.php` and (optionally) in per-table files under `config/records/tables`.
+
+- `config/record.php` contains global options and can inline smaller schemas.
+- `config/records/tables/{name}.php` can return a single `RecordTableType` or an array of `[table_name => RecordTableType]` for large schemas.
+
+You can scaffold a new per-table configuration file via Artisan:
+
+```bash
+php artisan sp-laravel-api:record customers
+```
+
+This creates `config/records/tables/customers.php` with a basic `RecordTableType` definition for the `customers` table. After creating the file and the corresponding database table, you can populate the `columns` metadata from the database schema:
+
+```bash
+php artisan sp-laravel-api:sync-record-columns --force
+```
+
+
 Record endpoints use table-level access rules from `config/record.php`:
 
 - If a table/action is configured as public (`RecordTablePublic`), the endpoint is accessible without authentication.

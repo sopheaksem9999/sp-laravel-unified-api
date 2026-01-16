@@ -17,7 +17,7 @@ php artisan migrate
 
 # 4. Define rate limiters in your AppServiceProvider (see below)
 
-# 5. Configure at least 1 table in config/record.php (see below)
+# 5. Configure at least 1 table in config/record.php (see below) or scaffold a table config via the record command
 
 # 6. Test a public read endpoint
 curl -X GET http://your-app.test/api/v1/users
@@ -256,6 +256,18 @@ return [
 
 The package routes are loaded automatically by `Sopheak\Core\CoreServiceProvider` using this prefix. Record endpoints authorize per-table using `RecordTablePublic` and permissions; audit endpoints include read endpoints (and additional authenticated endpoints) under the same prefix.
 
+Alternatively, you can keep `config/record.php` focused on global options and define per-table configurations under `config/records/tables` using the Artisan helper:
+
+```bash
+php artisan sp-laravel-api:record customers
+```
+
+This generates `config/records/tables/customers.php` returning a `RecordTableType` for the `customers` table. After creating the file and the underlying database table, you can sync its `columns` definition from the DB schema:
+
+```bash
+php artisan sp-laravel-api:sync-record-columns --force
+```
+
 ### Step 8: Test Your Installation
 
 Test the dynamic API endpoints:
@@ -369,7 +381,7 @@ $tables = [
     // Core tables defined inline
 ];
 
-$tablesDirectory = __DIR__ . '/record/tables';
+$tablesDirectory = __DIR__ . '/records/tables';
 
 if (is_dir($tablesDirectory)) {
     foreach (glob($tablesDirectory . '/*.php') as $path) {
@@ -400,7 +412,7 @@ return [
 ];
 ```
 
-Each file under `config/record/tables` can return a single `RecordTableType` or an array of `[table_name => RecordTableType]`.
+Each file under `config/records/tables` can return a single `RecordTableType` or an array of `[table_name => RecordTableType]`.
 
 ### Authentication Setup
 
@@ -650,14 +662,16 @@ php artisan route:clear
 ```bash
   # Clean old audit logs based on retention configuration
   php artisan sp-laravel-api:clean-audit-logs
-  #  Generate OpenAPI 3 specification based on record configuration.
-  php artisan sp-laravel-api:openapi             
-  # Setup SP Laravel API package: publish configs and create record/audit configurations using config/record.php + config/records/tables/*.php.
-  php artisansp-laravel-api:setup         
-   # Populate RecordTableType columns in config/records/tables PHP files based on DB schema       
-  php artisansp-laravel-api:sync-record-columns  
+  # Generate OpenAPI 3 specification based on record configuration
+  php artisan sp-laravel-api:openapi
+  # Setup SP Laravel API package: publish configs and create record/audit configurations using config/record.php + config/records/tables/*.php
+  php artisan sp-laravel-api:setup
+  # Create a RecordTableType config file under config/records/tables
+  php artisan sp-laravel-api:record customers
+  # Populate RecordTableType columns in config/records/tables PHP files based on DB schema
+  php artisan sp-laravel-api:sync-record-columns
   # Validate SP Laravel API package setup and configuration
-  php artisan sp-laravel-api:validate             
+  php artisan sp-laravel-api:validate
 ```
 
 ### Debug Mode
@@ -1062,12 +1076,15 @@ Publishes default configurations for:
 - `config/audit.php` - Audit logging settings  
 - `config/sp-laravel-api.php` - Package settings (auth guard, OpenAPI output)
 
-### Record Cache Management
+### Record Table & Cache Management
 ```bash
+# Create a new per-table RecordTableType config (config/records/tables/{name}.php)
+php artisan sp-laravel-api:record customers
+
 # Clear record cache
 php artisan sp-laravel-api:cache-clear
 
-# Sync RecordTableType columns in config/record/tables from DB schema
+# Sync RecordTableType columns in config/records/tables from DB schema
 php artisan sp-laravel-api:sync-record-columns
 
 # Clean old audit logs based on retention policy

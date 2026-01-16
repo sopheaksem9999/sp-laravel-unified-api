@@ -2,19 +2,20 @@
 
 namespace Sopheak\Core;
 
-use Illuminate\Support\ServiceProvider;
-use Illuminate\Routing\Router;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
-use Sopheak\Core\Http\Middleware\RequestId;
+use Illuminate\Routing\Router;
+use Illuminate\Support\ServiceProvider;
+use Sopheak\Core\Console\CleanAuditLogsCommand;
 use Sopheak\Core\Console\GenerateOpenApiSpecCommand;
+use Sopheak\Core\Console\GenerateRecordSchemaCacheCommand;
+use Sopheak\Core\Console\MakeRecordTableCommand;
 use Sopheak\Core\Console\SetupPackageCommand;
 use Sopheak\Core\Console\ValidateSetupCommand;
-use Sopheak\Core\Console\GenerateRecordSchemaCacheCommand;
-use Sopheak\Core\Console\CleanAuditLogsCommand;
-use Sopheak\Core\Services\RecordApiResponseService;
+use Sopheak\Core\Http\Middleware\RequestId;
 use Sopheak\Core\Services\AuditLogService;
 use Sopheak\Core\Services\QueryCacheService;
+use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\RecordService;
 
 class CoreSpLaravelApiProvider extends ServiceProvider
@@ -54,6 +55,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
                 ValidateSetupCommand::class,
                 GenerateRecordSchemaCacheCommand::class,
                 CleanAuditLogsCommand::class,
+                MakeRecordTableCommand::class,
             ];
 
             $commands = array_values(array_filter($commands, class_exists(...)));
@@ -70,3 +72,4 @@ class CoreSpLaravelApiProvider extends ServiceProvider
         });
     }
 }
+
