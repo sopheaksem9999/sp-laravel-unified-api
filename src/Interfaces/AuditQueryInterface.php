@@ -21,7 +21,7 @@ interface AuditQueryInterface
      */
     public static function getAuditQuery(int|string $id): array;
 
-    // Optional methods - implemented automatically by HasAuditQuery trait if missing
+    // Optional methods - implemented automatically by HasAuditQueryTrait trait if missing
     // /**
     //  * Get the entity name for audit logging.
     //  * 

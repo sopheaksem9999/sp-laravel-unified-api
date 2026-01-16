@@ -9,8 +9,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Services\RecordService;
-use Sopheak\Core\Support\RelationshipResolver;
-use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Utilities\RelationshipResolverUtils;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Tests\Fixtures\LegacyFunction;
@@ -52,9 +52,9 @@ class LegacyConfigTest extends TestCase
             ],
         ]);
 
-        SchemaRegistry::refresh();
+        SchemaRegistryUtils::refresh();
 
-        $schema = SchemaRegistry::get();
+        $schema = SchemaRegistryUtils::get();
         $tableConfig = $schema['legacy_items'];
 
         // Assert it was converted to RecordTableType
@@ -133,11 +133,11 @@ class LegacyConfigTest extends TestCase
             ]
         ]);
         
-        SchemaRegistry::refresh();
-        RelationshipResolver::clearSchemaCache();
+        SchemaRegistryUtils::refresh();
+        RelationshipResolverUtils::clearSchemaCache();
         
         // Resolve relationship
-        $rel = RelationshipResolver::resolveRelationship('legacy_parent', 'children');
+        $rel = RelationshipResolverUtils::resolveRelationship('legacy_parent', 'children');
         
         $this->assertIsArray($rel);
         $this->assertEquals('hasMany', $rel['type']);

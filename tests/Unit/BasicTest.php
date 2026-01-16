@@ -6,7 +6,7 @@ use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Sopheak\Core\Services\RecordService;
-use Sopheak\Core\Support\PermissionHelper;
+use Sopheak\Core\Utilities\PermissionUtils;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordTableType;
 
@@ -103,10 +103,10 @@ class BasicTest extends TestCase
             'departments' => (object) ['pms_name' => 'department'],
         ]);
 
-        $perms = PermissionHelper::mapPermissions('departments', 'read');
+        $perms = PermissionUtils::mapPermissions('departments', 'read');
 
         $this->assertSame(['view:department'], $perms);
-        $this->assertSame('view:department', PermissionHelper::mapPermission('departments', 'read'));
+        $this->assertSame('view:department', PermissionUtils::mapPermission('departments', 'read'));
     }
 
     /** @test */
@@ -117,10 +117,10 @@ class BasicTest extends TestCase
             'departments' => (object) ['pms_name' => ['department', 'dept']],
         ]);
 
-        $perms = PermissionHelper::mapPermissions('departments', 'read');
+        $perms = PermissionUtils::mapPermissions('departments', 'read');
 
         $this->assertSame(['view:department', 'view:dept'], $perms);
-        $this->assertSame('view:department', PermissionHelper::mapPermission('departments', 'read'));
+        $this->assertSame('view:department', PermissionUtils::mapPermission('departments', 'read'));
     }
 
     /** @test */
@@ -134,8 +134,8 @@ class BasicTest extends TestCase
             ),
         ]);
 
-        $this->assertTrue(PermissionHelper::isPublicAction('departments', 'read'));
-        $this->assertTrue(PermissionHelper::isPublicAction('departments', 'create'));
+        $this->assertTrue(PermissionUtils::isPublicAction('departments', 'read'));
+        $this->assertTrue(PermissionUtils::isPublicAction('departments', 'create'));
     }
 }
 

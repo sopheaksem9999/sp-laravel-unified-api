@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Sopheak\Core\Services\RecordConfigService;
 
-class CleanAuditLogs extends Command
+class CleanAuditLogsCommand extends Command
 {
     /**
      * The name and signature of the console command.

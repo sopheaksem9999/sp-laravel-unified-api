@@ -6,7 +6,7 @@ use Orchestra\Testbench\TestCase as BaseTestCase;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Cache\RateLimiting\Limit;
-use Sopheak\Core\CoreServiceProvider;
+use Sopheak\Core\CoreSpLaravelApiProvider;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Schema\Blueprint;
 
@@ -15,7 +15,7 @@ class TestCase extends BaseTestCase
     protected function getPackageProviders($app)
     {
         return [
-            CoreServiceProvider::class,
+            CoreSpLaravelApiProvider::class,
         ];
     }
 

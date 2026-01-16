@@ -8,7 +8,7 @@ use Illuminate\Foundation\Testing\WithFaker;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordHasManyThroughType;
 use Sopheak\Core\Types\RecordMetaBelongsToManyType;
@@ -105,7 +105,7 @@ class RelationshipPermissionsTest extends TestCase
             )
         ]);
 
-        SchemaRegistry::refresh();
+        SchemaRegistryUtils::refresh();
     }
 
     /** @test */

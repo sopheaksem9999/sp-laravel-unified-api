@@ -5,7 +5,7 @@ namespace Sopheak\Core\Services;
 use Sopheak\Core\Interfaces\RecordFunctionInterface;
 use Sopheak\Core\Types\RecordFunctionType;
 use Exception;
-use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 
@@ -45,7 +45,7 @@ class OpenApiService
      */
     public static function generateInternal(): array
     {
-        $tables = SchemaRegistry::get();
+        $tables = SchemaRegistryUtils::get();
         $apiPrefix = RecordConfigService::apiPrefix();
         $tenantHeader = RecordConfigService::tenantHeader();
         $tenantColumn = RecordConfigService::tenantColumn();

@@ -9,7 +9,7 @@ use Throwable;
 use RuntimeException;
 use Illuminate\Console\Command;
 
-class SetupPackage extends Command
+class SetupPackageCommand extends Command
 {
     protected $signature = 'sp-laravel-api:setup {--force : Overwrite existing configs}';
 

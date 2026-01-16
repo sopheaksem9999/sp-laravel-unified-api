@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Route;
 use Sopheak\Core\Interfaces\AuditQueryInterface;
 use Sopheak\Core\Services\AuditLogService;
 use Sopheak\Core\Tests\TestCase;
-use Sopheak\Core\Traits\HasAuditQuery;
+use Sopheak\Core\Traits\HasAuditQueryTrait;
 
 class AuditQueryOptionalTest extends TestCase
 {
@@ -42,12 +42,12 @@ class AuditQueryOptionalTest extends TestCase
 
         // We need to bind the mock to the facade or service container if it's used statically
         // But AuditLogService methods are static. Mocking static methods is hard with Mockery unless we use alias.
-        // However, HasAuditQuery calls AuditLogService::getAuditStats.
+        // However, HasAuditQueryTrait calls AuditLogService::getAuditStats.
 
         // Since AuditLogService methods are static, we might need to rely on the actual implementation
         // or refactor to allow mocking. 
         // For this test, let's assume we can't easily mock static methods without extensive setup.
-        // So we'll rely on the fact that HasAuditQuery calls resolveAuditEntityClass.
+        // So we'll rely on the fact that HasAuditQueryTrait calls resolveAuditEntityClass.
 
         // To verify resolveAuditEntityClass is working, we can inspect the controller instance directly
         // or check if the method runs without throwing "BadMethodCallException".
@@ -97,7 +97,7 @@ class TestModel
 
 class TestAuditController extends Controller implements AuditQueryInterface
 {
-    use HasAuditQuery;
+    use HasAuditQueryTrait;
 
     // Define the property to be picked up by fallback logic
     protected $modelClass = TestModel::class;

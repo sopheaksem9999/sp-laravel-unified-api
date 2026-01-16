@@ -8,24 +8,27 @@ namespace Sopheak\Core\Types;
  * Represents a table configuration for record management.
  * This class defines the structure and behavior of a database table.
  *
- * @property string|array|null            $pms_name         The name of the table in the PMS system
+ * @property null|string       $table            The database table name (defaults to resource name)
+ * @property string|array|null $pms_name         The name of the table in the PMS system
+ * @property bool              $has_tenant_id    Whether the table has tenant ID column
+ * @property bool              $soft_deletes     Whether soft deletes are enabled for this table
  * @property bool              $disable_auditLog Whether audit logging is disabled for this table
  * @property bool              $disable_cache    Whether query caching is disabled for this table
- * @property bool              $soft_deletes     Whether soft deletes are enabled for this table
- * @property bool              $has_tenant_id    Whether the table has tenant ID column
  * @property RecordTablePublic $public           Public configuration settings for the table
  * @property null|array        $relationships    Array of relationships with other tables
  * @property null|array        $functions        Array of function configurations
  * @property null|string       $primary_key      The primary key column name (defaults to 'id')
- * @property bool              $has_tenant_id    Whether the table has tenant ID column
  * @property null|array        $columns          Array of column definitions
+ * @property null|array        $column_hiddens   Columns to hide from responses
  * @property null|array        $fulltext_indexes Array of full-text index configurations for optimized search
  * @property null|string       $auditLogFn       The function name for audit logging (optional)
  *
  * Example usage:
  * ```php
  * $table = new RecordTableType(
+ *     table: 'users',
  *     pms_name: 'users',
+ *     has_tenant_id: false,
  *     soft_deletes: true,
  *     disable_auditLog: false,
  *     disable_cache: false,
@@ -68,22 +71,22 @@ namespace Sopheak\Core\Types;
  *         ),
  *     ],
  *     primary_key: 'id',
- *     has_tenant_id: false,
  *     columns: [
- * 'name' => ['type' => 'string', 'nullable' => false],
- * 'email' => ['type' => 'string', 'unique' => true],
+ *         'name' => ['type' => 'string', 'nullable' => false],
+ *         'email' => ['type' => 'string', 'unique' => true],
  * ],
- * fulltext_indexes: [
- * ['name', 'description'],  // Multi-column full-text index
- * ['content'],              // Single-column full-text index
- * ],
+ *     column_hiddens: ['password', 'remember_token'],
+ *     fulltext_indexes: [
+ *         ['name', 'description'],
+ *         ['content'],
+ *     ],
  * );
  * ```
  */
 class RecordTableType
 {
     public function __construct(
-        public string $table,
+        public ?string $table = null,
         public string|array|null $pms_name = null,
         public bool $has_tenant_id = false,
         public bool $soft_deletes = false,

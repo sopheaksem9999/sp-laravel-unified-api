@@ -1,11 +1,12 @@
 <?php
 
-namespace Sopheak\Core\Support;
+namespace Sopheak\Core\Utilities;
 
 use Illuminate\Support\Str;
+use Sopheak\Core\Constants\RecordConstants;
 use Sopheak\Core\Services\RecordConfigService;
 
-class PermissionHelper
+class PermissionUtils
 {
     /**
      * Determine if an action on a table is public (no auth required) based on config.
@@ -25,13 +26,13 @@ class PermissionHelper
         }
 
         // If public is not a RecordTablePublic object, deny access
-        if (!is_object($public) || !property_exists($public, 'read') || !property_exists($public, 'write')) {
+        if (!is_object($public) || !property_exists($public, RecordConstants::READ) || !property_exists($public, RecordConstants::WRITE)) {
             return false;
         }
 
         // Grouped semantics: 'read' and 'write'
-        $readActions = ['read', 'view'];
-        $writeActions = ['create', 'update', 'delete', 'restore'];
+        $readActions = [RecordConstants::READ, RecordConstants::WRITE];
+        $writeActions = [RecordConstants::ACTION_CREATE, RecordConstants::ACTION_UPDATE, RecordConstants::ACTION_DELETE, RecordConstants::ACTION_RESTORE];
 
         if (in_array($action, $readActions, true)) {
             return (bool) ($public->read ?? false);
@@ -67,29 +68,28 @@ class PermissionHelper
 
         // Map standard CRUD actions to permission verbs first
         switch ($action) {
-            case 'read':
-            case 'view':
-            case 'see':
-                $verb = 'view';
+            case RecordConstants::READ:
+            case RecordConstants::VIEW:
+            case RecordConstants::SEE:
+                $verb = RecordConstants::ACTION_VIEW;
 
                 break;
 
-            case 'create':
-                $verb = 'create';
+            case RecordConstants::CREATE:
+                $verb = RecordConstants::ACTION_CREATE;
 
                 break;
 
-            case 'update':
-            case 'edit':
-            case 'write':
-                $verb = 'update';
+            case RecordConstants::UPDATE:
+            case RecordConstants::EDIT:
+            case RecordConstants::WRITE:
+                $verb = RecordConstants::ACTION_UPDATE;
 
                 break;
 
-            case 'delete':
-            case 'write':
-            case 'destroy':
-                $verb = 'delete';
+            case RecordConstants::DELETE:
+            case RecordConstants::DESTROY:
+                $verb = RecordConstants::ACTION_DELETE;
 
                 break;
 

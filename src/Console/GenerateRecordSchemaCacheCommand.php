@@ -2,14 +2,14 @@
 
 namespace Sopheak\Core\Console;
 
-use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Illuminate\Console\Command;
 use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Interfaces\RecordResourceInterface;
 use Throwable;
 
-class GenerateRecordSchemaCache extends Command
+class GenerateRecordSchemaCacheCommand extends Command
 {
     protected $signature = 'sp-laravel-api:sync-record-columns {--force : Force regeneration even if columns already exist}';
 
@@ -87,7 +87,7 @@ class GenerateRecordSchemaCache extends Command
                 $this->line(sprintf('Processing table: %s (%s)', $actualTableName, $tableName));
 
                 // 3. Get columns from DB schema
-                $columns = SchemaRegistry::getTableColumns($actualTableName);
+                $columns = SchemaRegistryUtils::getTableColumns($actualTableName);
 
                 if (empty($columns)) {
                     $this->warn("  - No columns found or table does not exist in DB.");

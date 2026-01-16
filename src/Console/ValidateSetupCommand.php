@@ -7,9 +7,9 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Sopheak\Core\Services\RecordConfigService;
-use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
-class ValidateSetup extends Command
+class ValidateSetupCommand extends Command
 {
     /**
      * The name and signature of the console command.
@@ -46,7 +46,7 @@ class ValidateSetup extends Command
         $this->validateMigrations();
         $this->validateEnvironmentVariables();
         $this->validatePermissions();
-        $this->validateSchemaRegistry();
+        $this->validateSchemaRegistryUtils();
         $this->validateRoutes();
         $this->validateRateLimiters();
 
@@ -118,7 +118,7 @@ class ValidateSetup extends Command
     }
 
     /**
-     * Validate database compatibility with SchemaRegistry.
+     * Validate database compatibility with SchemaRegistryUtils.
      */
     private function validateDatabaseCompatibility(): void
     {
@@ -130,7 +130,7 @@ class ValidateSetup extends Command
             if (in_array($driver, ['mysql', 'sqlite', 'pgsql'])) {
                 $this->addResult('✅', sprintf("Database driver '%s' is supported", $driver), 'success');
 
-                // Test SchemaRegistry with a simple table
+                // Test SchemaRegistryUtils with a simple table
                 $tables = DB::select($this->getTableListQuery($driver));
 
                 if (!empty($tables)) {
@@ -140,9 +140,9 @@ class ValidateSetup extends Command
                     $columns = $this->testColumnRetrieval($tableName);
 
                     if (!empty($columns)) {
-                        $this->addResult('✅', sprintf("SchemaRegistry can read table columns for '%s'", $tableName), 'success');
+                        $this->addResult('✅', sprintf("SchemaRegistryUtils can read table columns for '%s'", $tableName), 'success');
                     } else {
-                        $this->addResult('⚠️', sprintf("SchemaRegistry returned empty columns for '%s'", $tableName), 'warning');
+                        $this->addResult('⚠️', sprintf("SchemaRegistryUtils returned empty columns for '%s'", $tableName), 'warning');
                     }
                 } else {
                     $this->addResult('⚠️', 'No tables found in database', 'warning');
@@ -243,22 +243,22 @@ class ValidateSetup extends Command
     }
 
     /**
-     * Validate SchemaRegistry functionality.
+     * Validate SchemaRegistryUtils functionality.
      */
-    private function validateSchemaRegistry(): void
+    private function validateSchemaRegistryUtils(): void
     {
-        $this->info('🏗️ Checking SchemaRegistry...');
+        $this->info('🏗️ Checking SchemaRegistryUtils...');
 
         try {
-            // Test SchemaRegistry::get()
-            $schema = SchemaRegistry::get();
+            // Test SchemaRegistryUtils::get()
+            $schema = SchemaRegistryUtils::get();
 
             if (is_array($schema)) {
-                $this->addResult('✅', 'SchemaRegistry::get() returns array', 'success');
+                $this->addResult('✅', 'SchemaRegistryUtils::get() returns array', 'success');
 
                 if (!empty($schema)) {
                     $tableCount = count($schema);
-                    $this->addResult('✅', sprintf('SchemaRegistry loaded %d table(s)', $tableCount), 'success');
+                    $this->addResult('✅', sprintf('SchemaRegistryUtils loaded %d table(s)', $tableCount), 'success');
 
                     if ($this->option('verbose')) {
                         foreach (array_keys($schema) as $tableName) {
@@ -266,13 +266,13 @@ class ValidateSetup extends Command
                         }
                     }
                 } else {
-                    $this->addResult('⚠️', 'SchemaRegistry returned empty schema - check config/record.php', 'warning');
+                    $this->addResult('⚠️', 'SchemaRegistryUtils returned empty schema - check config/record.php', 'warning');
                 }
             } else {
-                $this->addResult('❌', 'SchemaRegistry::get() did not return array', 'error');
+                $this->addResult('❌', 'SchemaRegistryUtils::get() did not return array', 'error');
             }
         } catch (Exception $exception) {
-            $this->addResult('❌', 'SchemaRegistry check failed: ' . $exception->getMessage(), 'error');
+            $this->addResult('❌', 'SchemaRegistryUtils check failed: ' . $exception->getMessage(), 'error');
         }
     }
 

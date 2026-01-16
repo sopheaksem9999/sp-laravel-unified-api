@@ -14,7 +14,7 @@ class OpenApiTest extends TestCase
         // Set configuration to match the reported issue
         Config::set('app.url', 'http://mylekha_task_management_back.test');
         Config::set('record.api_prefix', 'api/v1');
-        // Clear tables to avoid SchemaRegistry errors due to array vs object mismatch in TestCase defaults
+        // Clear tables to avoid SchemaRegistryUtils errors due to array vs object mismatch in TestCase defaults
         Config::set('record.tables', []);
 
         $service = new OpenApiService();

@@ -13,13 +13,13 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
-use Sopheak\Core\Services\GlobalService;
+use Sopheak\Core\Services\UtilityService;
 use Sopheak\Core\Services\QueryCacheService;
 use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Services\RecordService;
-use Sopheak\Core\Support\PermissionHelper;
-use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Utilities\PermissionUtils;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Jobs\ProcessBulkOperationJob;
 
@@ -34,7 +34,7 @@ class CoreRecordController extends Controller
      */
     public function listRecords(Request $request, string $table): JsonResponse
     {
-        $tableSchema = SchemaRegistry::getTable($table);
+        $tableSchema = SchemaRegistryUtils::getTable($table);
         if (!$tableSchema instanceof RecordTableType) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
@@ -91,7 +91,7 @@ class CoreRecordController extends Controller
      */
     public function getRecordById(Request $request, string $table, mixed $id): JsonResponse
     {
-        $tableSchema = SchemaRegistry::getTable($table);
+        $tableSchema = SchemaRegistryUtils::getTable($table);
         if (!$tableSchema instanceof RecordTableType) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
@@ -148,7 +148,7 @@ class CoreRecordController extends Controller
      */
     public function createRecord(Request $request, string $table): JsonResponse
     {
-        $tableSchema = SchemaRegistry::getTable($table);
+        $tableSchema = SchemaRegistryUtils::getTable($table);
         if (!$tableSchema instanceof RecordTableType) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
@@ -231,7 +231,7 @@ class CoreRecordController extends Controller
      */
     public function updateRecord(Request $request, string $table, string $id): JsonResponse
     {
-        $tableSchema = SchemaRegistry::getTable($table);
+        $tableSchema = SchemaRegistryUtils::getTable($table);
         if (!$tableSchema instanceof RecordTableType) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
@@ -325,7 +325,7 @@ class CoreRecordController extends Controller
      */
     public function destroyRecord(Request $request, string $table, string $id): JsonResponse
     {
-        $tableSchema = SchemaRegistry::getTable($table);
+        $tableSchema = SchemaRegistryUtils::getTable($table);
         if (!$tableSchema instanceof RecordTableType) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
@@ -416,7 +416,7 @@ class CoreRecordController extends Controller
      */
     public function restoreRecord(Request $request, string $table, string $id): JsonResponse
     {
-        $tableSchema = SchemaRegistry::getTable($table);
+        $tableSchema = SchemaRegistryUtils::getTable($table);
         if (!$tableSchema instanceof RecordTableType || !$tableSchema->soft_deletes) {
             return RecordApiResponseService::errorWrapped('Resource not restorable', RecordApiJsonResponseEnum::ERROR->value);
         }
@@ -480,7 +480,7 @@ class CoreRecordController extends Controller
      */
     public function forceDeleteRecord(Request $request, string $table, string $id): JsonResponse
     {
-        $schema = SchemaRegistry::get();
+        $schema = SchemaRegistryUtils::get();
         if (!isset($schema[$table])) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
@@ -547,7 +547,7 @@ class CoreRecordController extends Controller
     public function bulkRecord(Request $request, string $table, ?string $legacyAction = null): JsonResponse
     {
         // Check all permissions for mixed operations
-        $schema = SchemaRegistry::get();
+        $schema = SchemaRegistryUtils::get();
         if (!isset($schema[$table])) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
@@ -588,7 +588,7 @@ class CoreRecordController extends Controller
      */
     public function bulkRecordCreate(Request $request, string $table): JsonResponse
     {
-        $schema = SchemaRegistry::get();
+        $schema = SchemaRegistryUtils::get();
         if (!isset($schema[$table])) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
@@ -701,7 +701,7 @@ class CoreRecordController extends Controller
      */
     public function bulkRecordUpdate(Request $request, string $table): JsonResponse
     {
-        $schema = SchemaRegistry::get();
+        $schema = SchemaRegistryUtils::get();
         if (!isset($schema[$table])) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
@@ -834,7 +834,7 @@ class CoreRecordController extends Controller
      */
     public function bulkRecordDelete(Request $request, string $table): JsonResponse
     {
-        $schema = SchemaRegistry::get();
+        $schema = SchemaRegistryUtils::get();
         if (!isset($schema[$table])) {
             return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
@@ -1008,7 +1008,7 @@ class CoreRecordController extends Controller
      */
     private function resolveActualTableName(string $table): string
     {
-        $schema = SchemaRegistry::get();
+        $schema = SchemaRegistryUtils::get();
         $config = $schema[$table] ?? null;
 
         if ($config instanceof RecordTableType) {
@@ -1020,11 +1020,11 @@ class CoreRecordController extends Controller
 
     private function validateTenantIdRequired(object $tableSchema, mixed $tenantId): ?JsonResponse
     {
-        if (!GlobalService::shouldApplyTenantId($tableSchema)) {
+        if (!UtilityService::shouldApplyTenantId($tableSchema)) {
             return null;
         }
 
-        if (GlobalService::isTenantIdMissing($tenantId)) {
+        if (UtilityService::isTenantIdMissing($tenantId)) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, [
                 RecordConfigService::tenantHeader() => ['header ' . RecordConfigService::tenantHeader() . ' cannot be empty'],
             ]);
@@ -1075,7 +1075,7 @@ class CoreRecordController extends Controller
     private function authorizeAction(string $table, string $action): void
     {
         // Allow unauthenticated access for configured tables/actions (per-table config)
-        if (PermissionHelper::isPublicAction($table, $action)) {
+        if (PermissionUtils::isPublicAction($table, $action)) {
             return;
         }
 
@@ -1090,7 +1090,7 @@ class CoreRecordController extends Controller
             );
         }
 
-        $tableSchema = SchemaRegistry::getTable($table);
+        $tableSchema = SchemaRegistryUtils::getTable($table);
         if ($tableSchema instanceof RecordTableType) {
             if (is_null($tableSchema->pms_name)) {
                 return;
@@ -1101,7 +1101,7 @@ class CoreRecordController extends Controller
             }
         }
 
-        $perms = PermissionHelper::mapPermissions($table, $action);
+        $perms = PermissionUtils::mapPermissions($table, $action);
 
         $allowed = false;
         foreach ($perms as $perm) {

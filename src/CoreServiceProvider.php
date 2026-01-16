@@ -7,17 +7,17 @@ use Illuminate\Routing\Router;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Sopheak\Core\Http\Middleware\RequestId;
-use Sopheak\Core\Console\GenerateOpenApiSpec;
-use Sopheak\Core\Console\SetupPackage;
-use Sopheak\Core\Console\ValidateSetup;
-use Sopheak\Core\Console\GenerateRecordSchemaCache;
-use Sopheak\Core\Console\CleanAuditLogs;
+use Sopheak\Core\Console\GenerateOpenApiSpecCommand;
+use Sopheak\Core\Console\SetupPackageCommand;
+use Sopheak\Core\Console\ValidateSetupCommand;
+use Sopheak\Core\Console\GenerateRecordSchemaCacheCommand;
+use Sopheak\Core\Console\CleanAuditLogsCommand;
 use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\AuditLogService;
 use Sopheak\Core\Services\QueryCacheService;
 use Sopheak\Core\Services\RecordService;
 
-class CoreServiceProvider extends ServiceProvider
+class CoreSpLaravelApiProvider extends ServiceProvider
 {
     public function register(): void
     {
@@ -49,11 +49,11 @@ class CoreServiceProvider extends ServiceProvider
 
         if ($this->app->runningInConsole()) {
             $commands = [
-                GenerateOpenApiSpec::class,
-                SetupPackage::class,
-                ValidateSetup::class,
-                GenerateRecordSchemaCache::class,
-                CleanAuditLogs::class,
+                GenerateOpenApiSpecCommand::class,
+                SetupPackageCommand::class,
+                ValidateSetupCommand::class,
+                GenerateRecordSchemaCacheCommand::class,
+                CleanAuditLogsCommand::class,
             ];
 
             $commands = array_values(array_filter($commands, class_exists(...)));

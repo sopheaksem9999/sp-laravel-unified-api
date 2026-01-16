@@ -1,6 +1,6 @@
 <?php
 
-namespace Sopheak\Core\Support;
+namespace Sopheak\Core\Utilities;
 
 use Sopheak\Core\Interfaces\RecordResourceInterface;
 use stdClass;
@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Sopheak\Core\Services\RecordConfigService;
 
-class SchemaRegistry
+class SchemaRegistryUtils
 {
     private static array $cache = [];
 

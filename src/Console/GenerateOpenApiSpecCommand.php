@@ -6,9 +6,9 @@ use Throwable;
 use Illuminate\Console\Command;
 use Sopheak\Core\Services\OpenApiService;
 use Sopheak\Core\Services\RecordConfigService;
-use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
-class GenerateOpenApiSpec extends Command
+class GenerateOpenApiSpecCommand extends Command
 {
     protected $signature = 'sp-laravel-api:openapi {--out= : Output file path}';
 
@@ -27,7 +27,7 @@ class GenerateOpenApiSpec extends Command
         $this->info('Generating OpenAPI specification from record configuration...');
 
         $tables = RecordConfigService::getTableConfig();
-        SchemaRegistry::refresh();
+        SchemaRegistryUtils::refresh();
         $spec = $this->openApiService->generateInternal();
 
         try {

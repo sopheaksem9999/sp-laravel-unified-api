@@ -8,18 +8,18 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Services\RecordService;
-use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordTableType;
 
-class SchemaRegistryTest extends TestCase
+class SchemaRegistryUtilsTest extends TestCase
 {
     protected function setUp(): void
     {
         parent::setUp();
 
-        SchemaRegistry::clearAllCache();
+        SchemaRegistryUtils::clearAllCache();
         Cache::flush();
 
         if (!Schema::hasTable('users')) {
@@ -34,7 +34,7 @@ class SchemaRegistryTest extends TestCase
 
     protected function tearDown(): void
     {
-        SchemaRegistry::clearAllCache();
+        SchemaRegistryUtils::clearAllCache();
         Cache::flush();
 
         parent::tearDown();
@@ -53,7 +53,7 @@ class SchemaRegistryTest extends TestCase
             ),
         ]);
 
-        $schema = SchemaRegistry::get();
+        $schema = SchemaRegistryUtils::get();
 
         $this->assertArrayHasKey('users', $schema);
         $this->assertArrayHasKey('id', $schema['users']->columns);
@@ -74,9 +74,9 @@ class SchemaRegistryTest extends TestCase
             ),
         ]);
 
-        $schema1 = SchemaRegistry::get();
-        SchemaRegistry::refresh();
-        $schema2 = SchemaRegistry::get();
+        $schema1 = SchemaRegistryUtils::get();
+        SchemaRegistryUtils::refresh();
+        $schema2 = SchemaRegistryUtils::get();
 
         $this->assertArrayHasKey('users', $schema1);
         $this->assertArrayHasKey('users', $schema2);
@@ -95,9 +95,9 @@ class SchemaRegistryTest extends TestCase
             ),
         ]);
 
-        $schema1 = SchemaRegistry::get();
-        SchemaRegistry::clearAllCache();
-        $schema2 = SchemaRegistry::get();
+        $schema1 = SchemaRegistryUtils::get();
+        SchemaRegistryUtils::clearAllCache();
+        $schema2 = SchemaRegistryUtils::get();
 
         $this->assertArrayHasKey('users', $schema1);
         $this->assertArrayHasKey('users', $schema2);
@@ -116,9 +116,9 @@ class SchemaRegistryTest extends TestCase
             ),
         ]);
 
-        $schema1 = SchemaRegistry::get();
-        SchemaRegistry::clearTableCache('users');
-        $schema2 = SchemaRegistry::get();
+        $schema1 = SchemaRegistryUtils::get();
+        SchemaRegistryUtils::clearTableCache('users');
+        $schema2 = SchemaRegistryUtils::get();
 
         $this->assertArrayHasKey('users', $schema1);
         $this->assertArrayHasKey('users', $schema2);
@@ -128,7 +128,7 @@ class SchemaRegistryTest extends TestCase
     {
         Config::set('record.tables', []);
 
-        $schema = SchemaRegistry::get();
+        $schema = SchemaRegistryUtils::get();
 
         $this->assertIsArray($schema);
         $this->assertEmpty($schema);
@@ -147,9 +147,9 @@ class SchemaRegistryTest extends TestCase
             ),
         ]);
 
-        $schema1 = SchemaRegistry::get();
+        $schema1 = SchemaRegistryUtils::get();
         Config::set('record.tables', []);
-        $schema2 = SchemaRegistry::get();
+        $schema2 = SchemaRegistryUtils::get();
 
         $this->assertArrayHasKey('users', $schema1);
         $this->assertArrayHasKey('users', $schema2);
@@ -171,7 +171,7 @@ class SchemaRegistryTest extends TestCase
             ),
         ]);
 
-        SchemaRegistry::refresh();
+        SchemaRegistryUtils::refresh();
         $service = new RecordService();
         $request = Request::create('/api/users', 'GET');
 
@@ -194,7 +194,7 @@ class SchemaRegistryTest extends TestCase
             ),
         ]);
 
-        SchemaRegistry::refresh();
+        SchemaRegistryUtils::refresh();
         $service = new RecordService();
         $request = Request::create('/api/users', 'GET');
 
@@ -217,7 +217,7 @@ class SchemaRegistryTest extends TestCase
             ),
         ]);
 
-        SchemaRegistry::refresh();
+        SchemaRegistryUtils::refresh();
         $service = new RecordService();
         $request = Request::create('/api/users', 'GET');
 

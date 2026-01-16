@@ -26,8 +26,8 @@
  * - Relationship types: belongsTo, hasMany, hasManyThrough, belongsToMany
  *
  * @see CoreRecordController
- * @see RelationshipResolver
- * @see SchemaRegistry
+ * @see RelationshipResolverUtils
+ * @see SchemaRegistryUtils
  */
 return [
     /*

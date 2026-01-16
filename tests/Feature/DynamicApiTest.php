@@ -11,8 +11,8 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Http\Request;
 use Illuminate\Contracts\Validation\Validator as ValidatorContract;
 use Illuminate\Support\Facades\Validator;
-use Sopheak\Core\Support\QueryBuilderFilters;
-use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Utilities\QueryBuilderFiltersUtils;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordTablePublic;
@@ -77,8 +77,8 @@ class DynamicApiTest extends TestCase
             ),
         ]);
 
-        // Refresh SchemaRegistry to pick up the new config
-        SchemaRegistry::refresh();
+        // Refresh SchemaRegistryUtils to pick up the new config
+        SchemaRegistryUtils::refresh();
     }
 
     /** @test */
@@ -384,11 +384,11 @@ class DynamicApiTest extends TestCase
 
         $builder = DB::table('tasks');
 
-        QueryBuilderFilters::apply($builder, $request, 'tasks', 'id');
+        QueryBuilderFiltersUtils::apply($builder, $request, 'tasks', 'id');
 
         $this->assertStringContainsStringIgnoringCase('order by', $builder->toSql());
 
-        QueryBuilderFilters::applyAggregateAndGroupBy($builder, $request, 'tasks');
+        QueryBuilderFiltersUtils::applyAggregateAndGroupBy($builder, $request, 'tasks');
 
         $this->assertStringNotContainsStringIgnoringCase('order by', $builder->toSql());
     }
@@ -410,9 +410,9 @@ class DynamicApiTest extends TestCase
 
         $builder = DB::table('tasks');
 
-        QueryBuilderFilters::apply($builder, $request, 'tasks', 'id');
+        QueryBuilderFiltersUtils::apply($builder, $request, 'tasks', 'id');
 
-        QueryBuilderFilters::applyAggregateAndGroupBy($builder, $request, 'tasks');
+        QueryBuilderFiltersUtils::applyAggregateAndGroupBy($builder, $request, 'tasks');
 
         $sql = $builder->toSql();
 

@@ -1,6 +1,6 @@
 <?php
 
-namespace Sopheak\Core\Support;
+namespace Sopheak\Core\Utilities;
 
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
@@ -8,10 +8,10 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Sopheak\Core\Services\RecordConfigService;
-use Sopheak\Core\Support\RelationshipResolver;
-use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Utilities\RelationshipResolverUtils;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
-class QueryBuilderFilters
+class QueryBuilderFiltersUtils
 {
     private static array $columnCache = [];
 
@@ -352,7 +352,7 @@ class QueryBuilderFilters
      */
     public static function applyRelationshipFilters(Builder $builder, string $table, array $relationshipFilters, mixed $tenantId = null): void
     {
-        $schema = SchemaRegistry::get();
+        $schema = SchemaRegistryUtils::get();
         RecordConfigService::enableTenantId();
 
         foreach ($relationshipFilters as $relationshipColumn => $filters) {
@@ -364,7 +364,7 @@ class QueryBuilderFilters
             [$relationshipAlias, $column] = explode('.', (string) $relationshipColumn, 2);
 
             // Resolve relationship configuration
-            $config = RelationshipResolver::resolveRelationship($table, $relationshipAlias);
+            $config = RelationshipResolverUtils::resolveRelationship($table, $relationshipAlias);
 
             if (!$config) {
                 continue;
@@ -375,7 +375,7 @@ class QueryBuilderFilters
 
             // Validate related table exists in schema
             if (!isset($schema[$relatedTable])) {
-                $resolved = SchemaRegistry::resolveTableSchema($relatedTable);
+                $resolved = SchemaRegistryUtils::resolveTableSchema($relatedTable);
                 if ($resolved !== null) {
                     $schema[$relatedTable] = $resolved;
                 } else {
@@ -1023,7 +1023,7 @@ class QueryBuilderFilters
     private static function parseSelectColumns(string $selectParam, string $table, array $allowedCols): array
     {
         // Only include main table columns; ignore relationship segments like alias:table(col,...)
-        $mainCols = RelationshipResolver::getMainTableColumns($selectParam);
+        $mainCols = RelationshipResolverUtils::getMainTableColumns($selectParam);
         $prefixed = [];
         foreach ($mainCols as $mainCol) {
             $mainCol = trim((string) $mainCol);
@@ -1092,14 +1092,14 @@ class QueryBuilderFilters
     {
         // Cache allowed columns to avoid repeated schema lookups
         if (!isset(self::$columnCache[$table])) {
-            $schema = SchemaRegistry::get();
+            $schema = SchemaRegistryUtils::get();
             self::$columnCache[$table] = array_keys($schema[$table]->columns ?? []);
         }
 
         // If cache is set but empty, try fetching again if schema has columns
         // This handles race conditions where cache was set before columns were populated
         if (empty(self::$columnCache[$table])) {
-            $schema = SchemaRegistry::get();
+            $schema = SchemaRegistryUtils::get();
             if (isset($schema[$table]) && !empty($schema[$table]->columns)) {
                 self::$columnCache[$table] = array_keys($schema[$table]->columns);
             }
@@ -1119,7 +1119,7 @@ class QueryBuilderFilters
         $builder->columns = null;
 
         $groupByParam = $request->query('group_by');
-        $allowedCols = QueryBuilderFilters::getAllowedColumns($table);
+        $allowedCols = QueryBuilderFiltersUtils::getAllowedColumns($table);
 
         $groupByCols = [];
         if ($groupByParam) {
@@ -1240,7 +1240,7 @@ class QueryBuilderFilters
         $cacheKey = $table . '_searchable';
         if (!isset(self::$columnCache[$cacheKey])) {
             $searchableCols = [];
-            $schema = SchemaRegistry::get();
+            $schema = SchemaRegistryUtils::get();
 
             if (!isset($schema[$table]) || $schema[$table]->columns === null || empty($schema[$table]->columns)) {
                 self::$columnCache[$cacheKey] = [];
@@ -1295,7 +1295,7 @@ class QueryBuilderFilters
         if (!isset(self::$searchableCache[$cacheKey])) {
             // Check if full-text index exists for these columns
             // This is a simplified check - in production, you'd query INFORMATION_SCHEMA
-            $schema = SchemaRegistry::get();
+            $schema = SchemaRegistryUtils::get();
             $tableConfig = $schema[$table] ?? [];
             $hasFullText = isset($tableConfig['fulltext_indexes'])
                 && in_array($columns, $tableConfig['fulltext_indexes']);
@@ -1448,7 +1448,7 @@ class QueryBuilderFilters
 
         // Apply tenant_id filtering if enabled and available
         if ($enableTenantId && isset($params[$tenantCol])) {
-            $schema = SchemaRegistry::get();
+            $schema = SchemaRegistryUtils::get();
             if (isset($schema[$table]->columns[$tenantCol])) {
                 $builder->where($table . '.' . $tenantCol, $params[$tenantCol]);
             }

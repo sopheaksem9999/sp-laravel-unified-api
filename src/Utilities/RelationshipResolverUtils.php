@@ -1,6 +1,6 @@
 <?php
 
-namespace Sopheak\Core\Support;
+namespace Sopheak\Core\Utilities;
 
 use Illuminate\Foundation\Auth\User;
 use Spatie\Permission\PermissionServiceProvider;
@@ -16,7 +16,7 @@ use Illuminate\Support\Str;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 use Sopheak\Core\Services\RecordConfigService;
 
-class RelationshipResolver
+class RelationshipResolverUtils
 {
     // Dynamic inference has been removed - all relationships must be statically defined
     // Cache resolved relationship configs per request to avoid expensive recomputation
@@ -496,13 +496,13 @@ class RelationshipResolver
 
                 // Permission check per related action
                 // $action = ($hasPk && $allowUpdate) ? 'update' : 'create';
-                // if (!PermissionHelper::isPublicAction($relatedTable, $action)) {
+                // if (!PermissionUtils::isPublicAction($relatedTable, $action)) {
                 //     $user = auth('api')->user();
                 //     if (!$user) {
                 //         abort(401, 'Unauthenticated');
                 //     }
 
-                //     $perm = PermissionHelper::mapPermission($relatedTable, $action);
+                //     $perm = PermissionUtils::mapPermission($relatedTable, $action);
                 //     if (!$user->can($perm)) {
                 //         abort(RecordApiJsonResponseEnum::FORBIDDEN->value, 'Forbidden');
                 //     }
@@ -1187,14 +1187,14 @@ class RelationshipResolver
     }
 
     /**
-     * Get cached schema registry to avoid multiple SchemaRegistry::get() calls.
+     * Get cached schema registry to avoid multiple SchemaRegistryUtils::get() calls.
      *
      * @return array The schema registry data
      */
     private static function getSchema(): array
     {
         if (null === self::$schemaCache) {
-            self::$schemaCache = SchemaRegistry::get();
+            self::$schemaCache = SchemaRegistryUtils::get();
         }
 
         return self::$schemaCache;
@@ -1258,7 +1258,7 @@ class RelationshipResolver
         // Early validation and security check
         if (!isset($schema[$relatedTable])) {
             // Try to resolve schema dynamically if not found (e.g. for implicit relationships)
-            $resolved = SchemaRegistry::resolveTableSchema($relatedTable);
+            $resolved = SchemaRegistryUtils::resolveTableSchema($relatedTable);
             if ($resolved !== null) {
                 $schema[$relatedTable] = $resolved;
             } else {
@@ -1585,7 +1585,7 @@ class RelationshipResolver
                     continue;
                 }
 
-                QueryBuilderFilters::applyOperatorToSubquery($builder, $actualThroughTableName, $filterCol, $operator, $value);
+                QueryBuilderFiltersUtils::applyOperatorToSubquery($builder, $actualThroughTableName, $filterCol, $operator, $value);
             } else {
                 if (!in_array($filterCol, $relatedColumns, true)) {
                     continue;
@@ -1641,7 +1641,7 @@ class RelationshipResolver
         }
 
         foreach ($relatedFilters as $filter) {
-            QueryBuilderFilters::applyOperatorToSubquery(
+            QueryBuilderFiltersUtils::applyOperatorToSubquery(
                 $relatedBuilder,
                 $actualRelatedTableName,
                 $filter['column'],
@@ -1796,7 +1796,7 @@ class RelationshipResolver
 
         // Apply nested filters
         foreach ($nestedFilters as $filter) {
-            QueryBuilderFilters::applyOperatorToSubquery(
+            QueryBuilderFiltersUtils::applyOperatorToSubquery(
                 $builder,
                 $actualRelatedTableName,
                 $filter['column'],
@@ -1835,7 +1835,7 @@ class RelationshipResolver
 
             // Apply nested filters
             foreach ($nestedFilters as $filter) {
-                QueryBuilderFilters::applyOperatorToSubquery(
+                QueryBuilderFiltersUtils::applyOperatorToSubquery(
                     $builder,
                     $relatedTableName,
                     $filter['column'],

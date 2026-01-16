@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\LazyCollection;
 use Sopheak\Core\Services\RecordConfigService;
 
-trait QueryHelpers
+trait QueryHelpersTrait
 {
     /**
      * Apply common queries to a Laravel Eloquent query builder.

@@ -8,15 +8,15 @@ use Illuminate\Database\Eloquent\Model;
 use Sopheak\Core\Jobs\AuditLogJob;
 use Sopheak\Core\Services\AuditLogService;
 use Sopheak\Core\Services\RecordConfigService;
-use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
 /**
- * Trait Auditable.
+ * Trait AuditableTrait.
  *
  * Provides automatic audit logging functionality for Eloquent models.
  * This trait automatically logs create, update, and delete operations.
  */
-trait Auditable
+trait AuditableTrait
 {
     protected ?array $auditOldData = null;
 
@@ -35,11 +35,11 @@ trait Auditable
     }
 
     /**
-     * Boot the auditable trait for a model.
+     * Boot the AuditableTrait trait for a model.
      *
      * Registers model event listeners for created, updated, and deleted events.
      */
-    protected static function bootAuditable(): void
+    protected static function bootAuditableTrait(): void
     {
         static::created(function ($model): void {
             $model->auditLog(AuditLogEventEnum::CREATED);
@@ -239,7 +239,7 @@ trait Auditable
             return [];
         }
 
-        $schema = SchemaRegistry::get();
+        $schema = SchemaRegistryUtils::get();
         foreach ($schema as $resourceName => $tableConfig) {
             if (!($tableConfig instanceof RecordTableType)) {
                 continue;

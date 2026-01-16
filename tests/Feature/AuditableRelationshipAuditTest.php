@@ -8,14 +8,14 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Tests\TestCase;
-use Sopheak\Core\Traits\Auditable;
+use Sopheak\Core\Traits\AuditableTrait;
 use Sopheak\Core\Types\RecordHasManyType;
 use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordTableType;
 
-class AuditableRelationshipAuditTest extends TestCase
+class AuditableTraitRelationshipAuditTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -52,7 +52,7 @@ class AuditableRelationshipAuditTest extends TestCase
                 ],
             ),
         ]);
-        SchemaRegistry::refresh();
+        SchemaRegistryUtils::refresh();
     }
 
     public function test_update_audit_stores_old_new_and_relationships_from_record_config(): void
@@ -92,7 +92,7 @@ class AuditableRelationshipAuditTest extends TestCase
 
 class ParentAuditModel extends Model
 {
-    use Auditable;
+    use AuditableTrait;
 
     protected $table = 'parents';
 

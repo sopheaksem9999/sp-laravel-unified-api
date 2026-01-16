@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Services\RecordService;
-use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordHasManyThroughType;
 use Sopheak\Core\Types\RecordTablePublic;
@@ -79,7 +79,7 @@ class RelationshipFilterMissingTableTest extends TestCase
             ),
         ]);
 
-        SchemaRegistry::refresh();
+        SchemaRegistryUtils::refresh();
 
         // Filter by assignees.name = User 1
         // Expectation: Only Task 1 should be returned.
@@ -89,7 +89,7 @@ class RelationshipFilterMissingTableTest extends TestCase
         ]);
 
         // We need to resolve the config manually since we are calling RecordService directly
-        $schema = SchemaRegistry::get();
+        $schema = SchemaRegistryUtils::get();
         $config = $schema['tasks'];
 
         $result = RecordService::applyRequestFilters($request, $config);

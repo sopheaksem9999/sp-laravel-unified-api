@@ -12,7 +12,7 @@ use Sopheak\Core\Services\AuditLogService;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordTableType;
-use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 
 class AuditLogTenantTest extends TestCase
@@ -54,7 +54,7 @@ class AuditLogTenantTest extends TestCase
         Config::set('record.tenant_column', 'tenant_id');
         Config::set('audit.enabled', true);
 
-        // Register table in SchemaRegistry
+        // Register table in SchemaRegistryUtils
         $schema = [
             'test_products' => new RecordTableType(
                 table: 'test_products',
@@ -63,7 +63,7 @@ class AuditLogTenantTest extends TestCase
             ),
         ];
         Config::set('record.tables', $schema);
-        SchemaRegistry::refresh();
+        SchemaRegistryUtils::refresh();
     }
 
     public function test_audit_log_stores_tenant_id_on_create(): void

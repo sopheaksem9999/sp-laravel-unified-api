@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Services\RecordService;
-use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordHasManyThroughType;
 use Sopheak\Core\Types\RecordTablePublic;
@@ -85,7 +85,7 @@ class RelationshipNestedFilterTest extends TestCase
             ),
         ]);
 
-        SchemaRegistry::refresh();
+        SchemaRegistryUtils::refresh();
     }
 
     public function test_nested_filter_filters_loaded_relationships(): void
@@ -98,7 +98,7 @@ class RelationshipNestedFilterTest extends TestCase
             'select' => '*,assignees(*,name=eq.User 1)'
         ]);
 
-        $schema = SchemaRegistry::get();
+        $schema = SchemaRegistryUtils::get();
         $config = $schema['tasks'];
 
         $result = RecordService::applyRequestFilters($request, $config);
@@ -130,7 +130,7 @@ class RelationshipNestedFilterTest extends TestCase
             'assignees.name' => 'eq.User 1'
         ]);
 
-        $schema = SchemaRegistry::get();
+        $schema = SchemaRegistryUtils::get();
         $config = $schema['tasks'];
 
         $result = RecordService::applyRequestFilters($request, $config);
@@ -151,7 +151,7 @@ class RelationshipNestedFilterTest extends TestCase
             'assignees.name' => 'eq.NonExistingUser'
         ]);
 
-        $schema = SchemaRegistry::get();
+        $schema = SchemaRegistryUtils::get();
         $config = $schema['tasks'];
 
         $result = RecordService::applyRequestFilters($request, $config);

@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Sopheak\Core\Services\RecordService;
-use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordTablePublic;
@@ -91,7 +91,7 @@ class OrderByWithRelationshipTest extends TestCase
         ];
 
         Config::set('record.tables', $config);
-        SchemaRegistry::refresh();
+        SchemaRegistryUtils::refresh();
 
         // Request with explicit sort and relationship (triggers subquery optimization)
         // Sort by created_at DESC -> Expected: Post 2, Post 3, Post 1
@@ -162,7 +162,7 @@ class OrderByWithRelationshipTest extends TestCase
         ];
 
         Config::set('record.tables', $config);
-        SchemaRegistry::refresh();
+        SchemaRegistryUtils::refresh();
 
         // No sort parameters
         $request = Request::create('/api/v1/posts?select=*,user(*)', 'GET');

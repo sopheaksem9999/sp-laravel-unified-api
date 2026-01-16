@@ -8,8 +8,8 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\MessageBag;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
-use Sopheak\Core\Support\SchemaRegistry;
-use Sopheak\Core\Support\RelationshipResolver;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
+use Sopheak\Core\Utilities\RelationshipResolverUtils;
 
 class RecordApiResponseService
 {
@@ -91,7 +91,7 @@ class RecordApiResponseService
             return $data;
         }
 
-        $schema = SchemaRegistry::resolveTableSchema($table);
+        $schema = SchemaRegistryUtils::resolveTableSchema($table);
         $hiddenColumns = $schema->column_hiddens ?? [];
 
         $isObject = is_object($data);
@@ -114,8 +114,8 @@ class RecordApiResponseService
 
         foreach ($keys as $key) {
             // Check if this key corresponds to a relationship
-            // We use RelationshipResolver to find if 'key' is a valid alias for 'table'
-            $relationConfig = RelationshipResolver::resolveRelationship($table, $key);
+            // We use RelationshipResolverUtils to find if 'key' is a valid alias for 'table'
+            $relationConfig = RelationshipResolverUtils::resolveRelationship($table, $key);
 
             if ($relationConfig) {
                 $relatedTable = $relationConfig['table'];

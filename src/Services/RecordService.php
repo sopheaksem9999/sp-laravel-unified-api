@@ -15,9 +15,9 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
-use Sopheak\Core\Support\QueryBuilderFilters;
-use Sopheak\Core\Support\RelationshipResolver;
-use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Utilities\QueryBuilderFiltersUtils;
+use Sopheak\Core\Utilities\RelationshipResolverUtils;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Types\RecordTableTriggerType;
 use Sopheak\Core\Types\RecordTableType;
@@ -31,7 +31,7 @@ class RecordService
      */
     public function createRecord(string $table, array $payload, mixed $tenantId): array
     {
-        $tableSchema = SchemaRegistry::getTable($table);
+        $tableSchema = SchemaRegistryUtils::getTable($table);
 
         // Sanitize payload
         $payloadMain = $this->sanitizePayload($payload, $tableSchema);
@@ -57,7 +57,7 @@ class RecordService
         }
 
         // Process nested relationships
-        RelationshipResolver::processRelatedData($table, $payload, $insertedId, $tenantId, 'create');
+        RelationshipResolverUtils::processRelatedData($table, $payload, $insertedId, $tenantId, 'create');
 
         return [
             'id' => $insertedId,
@@ -73,7 +73,7 @@ class RecordService
      */
     public function updateRecord(string $table, mixed $id, array $payload, mixed $tenantId): array
     {
-        $tableSchema = SchemaRegistry::getTable($table);
+        $tableSchema = SchemaRegistryUtils::getTable($table);
 
         // Sanitize payload
         $payloadMain = $this->sanitizePayload($payload, $tableSchema);
@@ -103,7 +103,7 @@ class RecordService
 
         // Process nested relationships
         if ($exists) {
-            RelationshipResolver::processRelatedData($table, $payload, $id, $tenantId, 'update');
+            RelationshipResolverUtils::processRelatedData($table, $payload, $id, $tenantId, 'update');
         }
 
         return [
@@ -122,7 +122,7 @@ class RecordService
      */
     public function deleteRecord(string $table, mixed $id, mixed $tenantId): array
     {
-        $tableSchema = SchemaRegistry::getTable($table);
+        $tableSchema = SchemaRegistryUtils::getTable($table);
 
         $actualTableName = $tableSchema->table ?? $table;
         $pk = $tableSchema->primary_key ?? 'id';
@@ -144,7 +144,7 @@ class RecordService
      */
     public function restoreRecord(string $table, mixed $id, mixed $tenantId): array
     {
-        $tableSchema = SchemaRegistry::getTable($table);
+        $tableSchema = SchemaRegistryUtils::getTable($table);
 
         $actualTableName = $tableSchema->table ?? $table;
         $pk = $tableSchema->primary_key ?? 'id';
@@ -168,7 +168,7 @@ class RecordService
      */
     public function forceDeleteRecord(Request $request, string $table, mixed $id, mixed $tenantId): array
     {
-        $tableSchema = SchemaRegistry::getTable($table);
+        $tableSchema = SchemaRegistryUtils::getTable($table);
 
         $actualTableName = $tableSchema->table ?? $table;
         $pk = $tableSchema->primary_key ?? 'id';
@@ -191,7 +191,7 @@ class RecordService
      */
     public function upsertRecord(Request $request, string $table, array $payload, mixed $tenantId): array
     {
-        $tableSchema = SchemaRegistry::getTable($table);
+        $tableSchema = SchemaRegistryUtils::getTable($table);
 
         $actualTableName = $tableSchema->table ?? $table;
         $pk = $tableSchema->primary_key ?? 'id';
@@ -222,7 +222,7 @@ class RecordService
      */
     public function processPostWriteLogic(Request $request, string $table, string $operation, array $recordContext): void
     {
-        $tableSchema = SchemaRegistry::getTable($table);
+        $tableSchema = SchemaRegistryUtils::getTable($table);
 
         // 1. Execute Table Trigger
         $triggerConfig = match ($operation) {
@@ -278,7 +278,7 @@ class RecordService
     public function executeTableFunction(Request $request, string $table, string $functionName): JsonResponse
     {
         // Get schema and validate table exists
-        $tableSchema = SchemaRegistry::getTable($table);
+        $tableSchema = SchemaRegistryUtils::getTable($table);
         if (!$tableSchema instanceof RecordTableType) {
             throw new Exception(sprintf("Table '%s' does not exist", $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
@@ -386,7 +386,7 @@ class RecordService
      */
     public function bulkRecord(Request $request, string $table, mixed $tenantId, ?string $legacyAction = null): array
     {
-        $tableSchema = SchemaRegistry::getTable($table);
+        $tableSchema = SchemaRegistryUtils::getTable($table);
         if (!$tableSchema instanceof RecordTableType) {
             throw new Exception('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
@@ -610,7 +610,7 @@ class RecordService
         }
 
         $perTableCache = RecordConfigService::cachePerTable();
-        $schema = SchemaRegistry::get();
+        $schema = SchemaRegistryUtils::get();
         $tableSchema = $schema[$table] ?? null;
 
         $schemaTableName = null;
@@ -723,23 +723,23 @@ class RecordService
 
     public function shouldApplyTenantId(object $tableSchema): bool
     {
-        return GlobalService::shouldApplyTenantId($tableSchema);
+        return UtilityService::shouldApplyTenantId($tableSchema);
     }
 
     public function normalizeTenantId(mixed $tenantId): mixed
     {
-        return GlobalService::normalizeTenantId($tenantId);
+        return UtilityService::normalizeTenantId($tenantId);
     }
 
     public function isTenantIdEnabled(): bool
     {
-        return GlobalService::isTenantIdEnabled();
+        return UtilityService::isTenantIdEnabled();
     }
 
     public function applyTenantFilter(mixed $query, string $table, mixed $tenantId): void
     {
         $tenantId = $this->normalizeTenantId($tenantId);
-        $schema = SchemaRegistry::get();
+        $schema = SchemaRegistryUtils::get();
         if ($this->isTenantIdEnabled() && null !== $tenantId && '' !== $tenantId && ($schema[$table]->has_tenant_id ?? false)) {
             $query->where($table . '.' . RecordConfigService::tenantColumn(), $tenantId);
         }
@@ -762,7 +762,7 @@ class RecordService
      */
     public function listRecords(Request $request, string $table, mixed $tenantId): array
     {
-        $schema = SchemaRegistry::get();
+        $schema = SchemaRegistryUtils::get();
         $tableSchema = $schema[$table];
 
         $triggerParams = [
@@ -827,7 +827,7 @@ class RecordService
             $builder->distinct();
         }
 
-        QueryBuilderFilters::apply($builder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
+        QueryBuilderFiltersUtils::apply($builder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
 
         $headers = [];
         $meta = [];
@@ -835,7 +835,7 @@ class RecordService
         $data = [];
         $total = 0;
 
-        $aggregateResult = QueryBuilderFilters::applyAggregateAndGroupBy($builder, $request, $actualTableName);
+        $aggregateResult = QueryBuilderFiltersUtils::applyAggregateAndGroupBy($builder, $request, $actualTableName);
 
         if (null !== $aggregateResult) {
             $data = $aggregateResult['data'];
@@ -872,7 +872,7 @@ class RecordService
 
         if ($request->has('select')) {
             $selectParam = $request->query('select');
-            $includes = RelationshipResolver::parseSelectForIncludes($selectParam);
+            $includes = RelationshipResolverUtils::parseSelectForIncludes($selectParam);
             $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization() && count($data) <= 100;
 
             // Disable subquery optimization if nested filters or child relationships are detected
@@ -887,7 +887,7 @@ class RecordService
 
                     // Check relationship type to avoid Postgres limit on json_build_object arguments
                     // and to follow "N+1" pattern for complex relationships as requested
-                    $relConfig = RelationshipResolver::resolveRelationship($table, $alias);
+                    $relConfig = RelationshipResolverUtils::resolveRelationship($table, $alias);
                     if ($relConfig && in_array($relConfig['type'], ['belongsToMany', 'morphToMany', 'hasManyThrough'])) {
                         $useSubqueryOptimization = false;
 
@@ -913,7 +913,7 @@ class RecordService
 
                 if ([] !== $recordIds) {
                     $optimizedBuilder = DB::table($actualTableName);
-                    $mainCols = RelationshipResolver::getMainTableColumns($selectParam);
+                    $mainCols = RelationshipResolverUtils::getMainTableColumns($selectParam);
                     if ([] !== $mainCols) {
                         $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $mainCols);
                         $optimizedBuilder->select($prefixedCols);
@@ -927,7 +927,7 @@ class RecordService
                         $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
                     }
 
-                    RelationshipResolver::applySubqueryRelationships(
+                    RelationshipResolverUtils::applySubqueryRelationships(
                         $optimizedBuilder,
                         $table,
                         $includes,
@@ -935,13 +935,13 @@ class RecordService
                     );
 
                     // Re-apply sorting to optimized query to ensure consistent order
-                    QueryBuilderFilters::applySort($optimizedBuilder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
+                    QueryBuilderFiltersUtils::applySort($optimizedBuilder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
 
                     $optimizedData = $optimizedBuilder->whereIn($actualTableName . '.' . $primaryKey, $recordIds)->get()->all();
-                    $data = RelationshipResolver::processJsonRelationships($optimizedData, $includes, $table);
+                    $data = RelationshipResolverUtils::processJsonRelationships($optimizedData, $includes, $table);
                 }
             } else {
-                $data = RelationshipResolver::includeRelationships(
+                $data = RelationshipResolverUtils::includeRelationships(
                     $data,
                     $table,
                     $selectParam,
@@ -966,7 +966,7 @@ class RecordService
         }
 
         if ($this->shouldIncludeDebug($request)) {
-            $meta['debug']['lazy_stats'] = QueryBuilderFilters::getLazyStats();
+            $meta['debug']['lazy_stats'] = QueryBuilderFiltersUtils::getLazyStats();
         }
 
         return [
@@ -1011,10 +1011,10 @@ class RecordService
                 $table = '';
             }
 
-            // Register custom schema to make it available for QueryBuilderFilters
-            // Ensure we register under the actual table name as that's what QueryBuilderFilters looks up
+            // Register custom schema to make it available for QueryBuilderFiltersUtils
+            // Ensure we register under the actual table name as that's what QueryBuilderFiltersUtils looks up
             $registerKey = $customSchema->table ?? $table;
-            SchemaRegistry::register($registerKey, $customSchema);
+            SchemaRegistryUtils::register($registerKey, $customSchema);
 
             $aliases = [];
             if (is_string($customSchema->pms_name) && '' !== trim($customSchema->pms_name)) {
@@ -1036,14 +1036,14 @@ class RecordService
 
             foreach (array_values(array_unique($aliases)) as $alias) {
                 if ($alias !== $registerKey) {
-                    SchemaRegistry::register($alias, $customSchema);
+                    SchemaRegistryUtils::register($alias, $customSchema);
                 }
             }
         } else {
             $table = $tableOrBuilder;
         }
 
-        $tableSchema = $customSchema ?? SchemaRegistry::getTable($table);
+        $tableSchema = $customSchema ?? SchemaRegistryUtils::getTable($table);
         $actualTableName = $tableSchema->table ?? $table;
         $tenantId = $tanentColumn;
 
@@ -1106,7 +1106,7 @@ class RecordService
             $builder->distinct();
         }
 
-        QueryBuilderFilters::apply($builder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
+        QueryBuilderFiltersUtils::apply($builder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
 
         $headers = [];
         $meta = [];
@@ -1114,7 +1114,7 @@ class RecordService
         $data = [];
         $total = 0;
 
-        $aggregateResult = QueryBuilderFilters::applyAggregateAndGroupBy($builder, $request, $actualTableName);
+        $aggregateResult = QueryBuilderFiltersUtils::applyAggregateAndGroupBy($builder, $request, $actualTableName);
 
         if (null !== $aggregateResult) {
             $data = $aggregateResult['data'];
@@ -1150,7 +1150,7 @@ class RecordService
 
         if ($request->has('select')) {
             $selectParam = $request->query('select');
-            $includes = RelationshipResolver::parseSelectForIncludes($selectParam);
+            $includes = RelationshipResolverUtils::parseSelectForIncludes($selectParam);
             $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization() && count($data) <= 100;
 
             // Disable subquery optimization if nested filters or child relationships are detected
@@ -1164,7 +1164,7 @@ class RecordService
 
                     // Check relationship type to avoid Postgres limit on json_build_object arguments
                     // and to follow "N+1" pattern for complex relationships as requested
-                    $relConfig = RelationshipResolver::resolveRelationship($table, $alias);
+                    $relConfig = RelationshipResolverUtils::resolveRelationship($table, $alias);
                     if ($relConfig && in_array($relConfig['type'], ['belongsToMany', 'morphToMany', 'hasManyThrough'])) {
                         $useSubqueryOptimization = false;
 
@@ -1189,7 +1189,7 @@ class RecordService
 
                 if ([] !== $recordIds) {
                     $optimizedBuilder = DB::table($actualTableName);
-                    $mainCols = RelationshipResolver::getMainTableColumns($selectParam);
+                    $mainCols = RelationshipResolverUtils::getMainTableColumns($selectParam);
                     if ([] !== $mainCols) {
                         $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $mainCols);
                         $optimizedBuilder->select($prefixedCols);
@@ -1203,7 +1203,7 @@ class RecordService
                         $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
                     }
 
-                    RelationshipResolver::applySubqueryRelationships(
+                    RelationshipResolverUtils::applySubqueryRelationships(
                         $optimizedBuilder,
                         $table,
                         $includes,
@@ -1211,13 +1211,13 @@ class RecordService
                     );
 
                     // Re-apply sorting to optimized query to ensure consistent order
-                    QueryBuilderFilters::applySort($optimizedBuilder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
+                    QueryBuilderFiltersUtils::applySort($optimizedBuilder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
 
                     $optimizedData = $optimizedBuilder->whereIn($actualTableName . '.' . $primaryKey, $recordIds)->get()->all();
-                    $data = RelationshipResolver::processJsonRelationships($optimizedData, $includes, $table);
+                    $data = RelationshipResolverUtils::processJsonRelationships($optimizedData, $includes, $table);
                 }
             } else {
-                $data = RelationshipResolver::includeRelationships(
+                $data = RelationshipResolverUtils::includeRelationships(
                     $data,
                     $table,
                     $selectParam,
@@ -1242,7 +1242,7 @@ class RecordService
         }
 
         if ($service->shouldIncludeDebug($request)) {
-            $meta['debug']['lazy_stats'] = QueryBuilderFilters::getLazyStats();
+            $meta['debug']['lazy_stats'] = QueryBuilderFiltersUtils::getLazyStats();
         }
 
         return [
@@ -1261,7 +1261,7 @@ class RecordService
      */
     public function getRecord(Request $request, string $table, mixed $id, mixed $tenantId): array
     {
-        $schema = SchemaRegistry::get();
+        $schema = SchemaRegistryUtils::get();
         $tableSchema = $schema[$table];
 
         $triggerParams = [
@@ -1297,7 +1297,7 @@ class RecordService
         }
 
         if ($request->has('select')) {
-            $mainCols = RelationshipResolver::getMainTableColumns($request->query('select'));
+            $mainCols = RelationshipResolverUtils::getMainTableColumns($request->query('select'));
             if ([] !== $mainCols) {
                 $builder->addSelect($mainCols);
             }
@@ -1310,7 +1310,7 @@ class RecordService
 
         if ($request->has('select')) {
             $selectParam = $request->query('select');
-            $includes = RelationshipResolver::parseSelectForIncludes($selectParam);
+            $includes = RelationshipResolverUtils::parseSelectForIncludes($selectParam);
             $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization();
 
             // Disable subquery optimization if nested filters or child relationships are detected
@@ -1324,7 +1324,7 @@ class RecordService
 
                     // Check relationship type to avoid Postgres limit on json_build_object arguments
                     // and to follow "N+1" pattern for complex relationships as requested
-                    $relConfig = RelationshipResolver::resolveRelationship($table, $alias);
+                    $relConfig = RelationshipResolverUtils::resolveRelationship($table, $alias);
                     if ($relConfig && in_array($relConfig['type'], ['belongsToMany', 'morphToMany', 'hasManyThrough'])) {
                         $useSubqueryOptimization = false;
 
@@ -1358,7 +1358,7 @@ class RecordService
                     $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
                 }
 
-                RelationshipResolver::applySubqueryRelationships(
+                RelationshipResolverUtils::applySubqueryRelationships(
                     $optimizedBuilder,
                     $table,
                     $includes,
@@ -1368,11 +1368,11 @@ class RecordService
                 $optimizedRecord = $optimizedBuilder->where($pk, $id)->first();
 
                 if ($optimizedRecord) {
-                    $processedData = RelationshipResolver::processJsonRelationships([$optimizedRecord], $includes, $table);
+                    $processedData = RelationshipResolverUtils::processJsonRelationships([$optimizedRecord], $includes, $table);
                     $record = $processedData[0] ?? $record;
                 }
             } else {
-                $data = RelationshipResolver::includeRelationships(
+                $data = RelationshipResolverUtils::includeRelationships(
                     [$record],
                     $table,
                     $selectParam,

@@ -2,8 +2,8 @@
 
 namespace Sopheak\Core\Tests\Feature;
 
-use Sopheak\Core\Support\SchemaRegistry;
-use Sopheak\Core\Support\QueryBuilderFilters;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
+use Sopheak\Core\Utilities\QueryBuilderFiltersUtils;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
@@ -50,7 +50,7 @@ class ApplyRequestFiltersConfigTest extends TestCase
         );
 
         // Pass config object directly
-        // Ensure the config has columns defined to simulate what SchemaRegistry does
+        // Ensure the config has columns defined to simulate what SchemaRegistryUtils does
         // Because we're in a test environment, getTableColumns might fail or behave unexpectedly if not mocked
         $config->columns = [
             'id' => ['type' => 'integer'],
@@ -60,16 +60,16 @@ class ApplyRequestFiltersConfigTest extends TestCase
             'updated_at' => ['type' => 'datetime']
         ];
 
-        // Ensure SchemaRegistry is fresh
-        SchemaRegistry::refresh();
-        QueryBuilderFilters::clearColumnCache();
+        // Ensure SchemaRegistryUtils is fresh
+        SchemaRegistryUtils::refresh();
+        QueryBuilderFiltersUtils::clearColumnCache();
 
         $result = RecordService::applyRequestFilters($request, $config);
 
         // Debugging failure: 
         // If result count is 3, it means filtering failed.
-        // Likely allowedColumns returned empty because SchemaRegistry::register 
-        // didn't populate columns correctly or QueryBuilderFilters didn't see them.
+        // Likely allowedColumns returned empty because SchemaRegistryUtils::register 
+        // didn't populate columns correctly or QueryBuilderFiltersUtils didn't see them.
 
         $this->assertIsArray($result);
         $this->assertArrayHasKey('data', $result);

@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Schema\Blueprint;
 use Sopheak\Core\Services\RecordService;
-use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordHasManyType;
 use Sopheak\Core\Types\RecordBelongsToType;
@@ -111,9 +111,9 @@ class HiddenColumnTest extends TestCase
             ]
         );
 
-        SchemaRegistry::register('users', $userConfig);
-        SchemaRegistry::register('posts', $postConfig);
-        SchemaRegistry::register('tasks', $taskConfig);
+        SchemaRegistryUtils::register('users', $userConfig);
+        SchemaRegistryUtils::register('posts', $postConfig);
+        SchemaRegistryUtils::register('tasks', $taskConfig);
     }
 
     public function test_hidden_columns_are_removed_from_main_resource(): void

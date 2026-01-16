@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Schema\Blueprint;
 use Sopheak\Core\Services\RecordService;
-use Sopheak\Core\Support\SchemaRegistry;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordHasManyType;
 use Sopheak\Core\Types\RecordMetaBelongsToManyType;
@@ -94,14 +94,14 @@ class RelationshipMixedFilterTest extends TestCase
                 relatedPivotKey: 'role_id'
             )
         ];
-        // Must update config because RelationshipResolver reads from config('record.tables')
+        // Must update config because RelationshipResolverUtils reads from config('record.tables')
         config(['record.tables.users' => $config]);
 
-        SchemaRegistry::register('users', $config);
+        SchemaRegistryUtils::register('users', $config);
 
         // Also register related tables
-        SchemaRegistry::register('posts', new RecordTableType('posts'));
-        SchemaRegistry::register('roles', new RecordTableType('roles'));
+        SchemaRegistryUtils::register('posts', new RecordTableType('posts'));
+        SchemaRegistryUtils::register('roles', new RecordTableType('roles'));
     }
 
     public function test_mixed_nested_and_top_level_filtering(): void

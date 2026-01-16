@@ -16,7 +16,7 @@ use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
  * This trait provides common methods for handling audit queries and logging
  * with custom data formatting and relationship handling.
  */
-trait HasAuditQuery
+trait HasAuditQueryTrait
 {
     protected function resolveAuditEntityClass(): string
     {

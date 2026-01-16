@@ -1,7 +1,7 @@
 <?php
 namespace Sopheak\Core\Services;
 
-class GlobalService
+class UtilityService
 {
     public static function isTenantIdEnabled(): bool
     {
