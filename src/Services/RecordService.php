@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
+use Sopheak\Core\Utilities\TimeUtils;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 use Sopheak\Core\Utilities\QueryBuilderFiltersUtils;
@@ -129,7 +130,7 @@ class RecordService
 
         $query = DB::table($actualTableName)->where($pk, $id);
         $this->applyTenantFilter($query, $table, $tenantId);
-        $affected = $tableSchema->soft_deletes ?? false ? $query->update(['deleted_at' => now()]) : $query->delete();
+        $affected = $tableSchema->soft_deletes ?? false ? $query->update(['deleted_at' => TimeUtils::now()]) : $query->delete();
 
         return [
             'id' => $id,
@@ -700,9 +701,10 @@ class RecordService
     public function applyTimestampsAndAuditFields(array $payload, object $tableSchema, bool $isUpdate = false): array
     {
         $user = auth('api')->user();
+        $now = TimeUtils::now();
 
         if ($isUpdate) {
-            $payload['updated_at'] = now();
+            $payload['updated_at'] = $now;
             if ($user) {
                 if (isset($tableSchema->columns['updated_by'])) {
                     $payload['updated_by'] = $user->id;
@@ -711,8 +713,8 @@ class RecordService
                 }
             }
         } else {
-            $payload['created_at'] = now();
-            $payload['updated_at'] = now();
+            $payload['created_at'] = $now;
+            $payload['updated_at'] = $now;
             if ($user && isset($tableSchema->columns['created_by'])) {
                 $payload['created_by'] = $user->id;
             }
@@ -958,7 +960,7 @@ class RecordService
                 'data' => $data,
                 'meta' => $meta,
                 'headers' => $headers,
-                'cached_at' => now()->toISOString(),
+                'cached_at' => TimeUtils::now()->toISOString(),
                 'tenant_enabled' => $this->shouldApplyTenantId($tableSchema),
             ];
             $ttl = $this->calculateOptimalCacheTTL($table, count($data), $request->has('select'));
@@ -1234,7 +1236,7 @@ class RecordService
                 'data' => $data,
                 'meta' => $meta,
                 'headers' => $headers,
-                'cached_at' => now()->toISOString(),
+                'cached_at' => TimeUtils::now()->toISOString(),
                 'tenant_enabled' => $tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema),
             ];
             $ttl = $service->calculateOptimalCacheTTL($table, count($data), $request->has('select'));

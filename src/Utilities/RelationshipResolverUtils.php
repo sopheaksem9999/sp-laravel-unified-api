@@ -13,6 +13,7 @@ use Sopheak\Core\Types\RecordSpatiePermissionType;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Sopheak\Core\Utilities\TimeUtils;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 use Sopheak\Core\Services\RecordConfigService;
 
@@ -472,7 +473,7 @@ class RelationshipResolverUtils
                         if ($relatedSchema->soft_deletes ?? false) {
                             DB::table($actualRelatedTableName)
                                 ->where($relatedPk, $idVal)
-                                ->update(['deleted_at' => now()]);
+                                ->update(['deleted_at' => TimeUtils::now()]);
                         } else {
                             DB::table($actualRelatedTableName)->where($relatedPk, $idVal)->delete();
                         }
@@ -562,11 +563,11 @@ class RelationshipResolverUtils
                 }
 
                 if (isset($relatedSchema->columns['created_at'])) {
-                    $relatedFields['created_at'] = now();
+                    $relatedFields['created_at'] = TimeUtils::now();
                 }
 
                 if (isset($relatedSchema->columns['updated_at'])) {
-                    $relatedFields['updated_at'] = now();
+                    $relatedFields['updated_at'] = TimeUtils::now();
                 }
 
                 $relatedId = DB::table($actualRelatedTableName)->insertGetId($relatedFields);
@@ -590,7 +591,7 @@ class RelationshipResolverUtils
                 if ($exists) {
                     if ($allowUpdate && !empty($pivotData)) {
                         if (($config['with_timestamps'] ?? false)) {
-                            $pivotData['updated_at'] = now();
+                            $pivotData['updated_at'] = TimeUtils::now();
                         }
 
                         DB::table($pivotTable)
@@ -602,8 +603,8 @@ class RelationshipResolverUtils
                     $pivotData[$foreignPivotKey] = $mainId;
                     $pivotData[$relatedPivotKey] = $relatedId;
                     if (($config['with_timestamps'] ?? false)) {
-                        $pivotData['created_at'] = now();
-                        $pivotData['updated_at'] = now();
+                        $pivotData['created_at'] = TimeUtils::now();
+                        $pivotData['updated_at'] = TimeUtils::now();
                     }
 
                     DB::table($pivotTable)->insert($pivotData);
@@ -650,11 +651,11 @@ class RelationshipResolverUtils
                 }
 
                 if (isset($targetSchema->columns['created_at'])) {
-                    $targetFields['created_at'] = now();
+                    $targetFields['created_at'] = TimeUtils::now();
                 }
 
                 if (isset($targetSchema->columns['updated_at'])) {
-                    $targetFields['updated_at'] = now();
+                    $targetFields['updated_at'] = TimeUtils::now();
                 }
 
                 $targetId = DB::table($actualTargetTableName)->insertGetId($targetFields);
