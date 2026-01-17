@@ -964,7 +964,7 @@ class CoreRecordController extends Controller
     public function executeTableFunction(Request $request, string $table, string $functionName): JsonResponse
     {
         try {
-            $schema = $this->getCachedSchema();
+            $schema = SchemaRegistryUtils::get();
             if (!isset($schema[$table])) {
                 return RecordApiResponseService::errorWrapped(sprintf("Table '%s' does not exist", $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
             }
