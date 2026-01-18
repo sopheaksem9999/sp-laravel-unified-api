@@ -1424,12 +1424,12 @@ class RelationshipResolverUtils
 
                 self::includeRelationshipsRecursive($flat, $config['table'], $children, $tenantId, $depth + 1, $maxDepth);
                 // Map enriched children back to records when hasMany/through with memory cleanup
-                if ('hasMany' === $config['type'] || 'hasManyThrough' === $config['type']) {
+                if ('hasMany' === $config['type']) {
                     // Rebuild grouped map
                     $grouped = [];
                     foreach ($flat as $fr) {
                         $fa = (array) $fr;
-                        $key = 'hasManyThrough' === $config['type'] ? ($fa[$config['second_key']] ?? null) : ($fa[$config['foreign_key']] ?? null);
+                        $key = $fa[$config['foreign_key']] ?? null;
                         if (null !== $key) {
                             $grouped[$key][] = $fr;
                         }
