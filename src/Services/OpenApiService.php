@@ -1141,7 +1141,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                     }
                 }
 
-                $allowedMethods = $functionConfig->method ?? ['GET'];
+                $allowedMethods = gettype($functionConfig->method) === 'string' ? [$functionConfig->method] : $functionConfig->method ?? ['GET'];
                 $methodName = empty($functionConfig->description) ? self::schemaName($functionName) : $functionConfig->description;
                 $summary = sprintf('RPC - %s', $methodName);
                 $description = sprintf('%s', $methodName);
