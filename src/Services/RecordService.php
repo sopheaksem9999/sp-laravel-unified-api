@@ -833,7 +833,6 @@ class RecordService
 
         $headers = [];
         $meta = [];
-        $cursorMeta = null;
         $data = [];
         $total = 0;
 
@@ -1010,7 +1009,6 @@ class RecordService
             'headers' => $headers,
             'filters' => $filters,
             'request' => $request,
-            'cursor_meta' => $cursorMeta,
         ];
     }
 
@@ -1159,7 +1157,6 @@ class RecordService
 
         $headers = [];
         $meta = [];
-        $cursorMeta = null;
         $data = [];
         $total = 0;
 
@@ -1326,6 +1323,10 @@ class RecordService
         if ($service->shouldIncludeDebug($request)) {
             $meta['debug']['lazy_stats'] = QueryBuilderFiltersUtils::getLazyStats();
         }
+        
+        if($isArray === false) {
+            $data = $data[0] ?? [];
+        }
 
         return [
             'data' => $data,
@@ -1333,7 +1334,6 @@ class RecordService
             'headers' => $headers,
             'filters' => $filters,
             'request' => $request,
-            'cursor_meta' => $cursorMeta,
         ];
     }
 
