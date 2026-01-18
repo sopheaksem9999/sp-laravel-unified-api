@@ -877,7 +877,8 @@ class RecordService
             $includes = RelationshipResolverUtils::parseSelectForIncludes($selectParam);
             $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization() && count($data) <= 100;
 
-            // Disable subquery optimization if nested filters or child relationships are detected
+            // Disable subquery optimization if nested filters, child relationships,
+            // or database-specific limitations (e.g. PostgreSQL json_build_object argument limit) are detected
             if ($useSubqueryOptimization) {
                 foreach ($includes as $alias => $include) {
                     // Check for child relationships (recursion)
@@ -894,6 +895,38 @@ class RecordService
                         $useSubqueryOptimization = false;
 
                         break;
+                    }
+
+                    // For PostgreSQL, avoid json_build_object with more than 50 columns
+                    // (100 arguments limit: key + value per column). Fallback to includeRelationships
+                    if ($relConfig && 'pgsql' === DB::getDriverName()) {
+                        $schema = SchemaRegistryUtils::get();
+                        $relatedTable = $relConfig['table'] ?? null;
+                        $relatedSchema = $relatedTable && isset($schema[$relatedTable]) ? $schema[$relatedTable] : null;
+
+                        if ($relatedSchema && is_array($relatedSchema->columns ?? null)) {
+                            $requestedCols = $include['columns'] ?? ['*'];
+                            if ($requestedCols === ['*'] || [] === $requestedCols) {
+                                $columnCount = count($relatedSchema->columns ?? []);
+                            } else {
+                                $columnCount = 0;
+                                foreach ($requestedCols as $col) {
+                                    if (!is_string($col) || str_contains($col, '=')) {
+                                        continue;
+                                    }
+
+                                    if (isset($relatedSchema->columns[$col])) {
+                                        ++$columnCount;
+                                    }
+                                }
+                            }
+
+                            if ($columnCount > 50) {
+                                $useSubqueryOptimization = false;
+
+                                break;
+                            }
+                        }
                     }
 
                     // Check for filters in columns
@@ -1155,7 +1188,8 @@ class RecordService
             $includes = RelationshipResolverUtils::parseSelectForIncludes($selectParam);
             $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization() && count($data) <= 100;
 
-            // Disable subquery optimization if nested filters or child relationships are detected
+            // Disable subquery optimization if nested filters, child relationships,
+            // or database-specific limitations (e.g. PostgreSQL json_build_object argument limit) are detected
             if ($useSubqueryOptimization) {
                 foreach ($includes as $alias => $include) {
                     if (!empty($include['children'])) {
@@ -1171,6 +1205,38 @@ class RecordService
                         $useSubqueryOptimization = false;
 
                         break;
+                    }
+
+                    // For PostgreSQL, avoid json_build_object with more than 50 columns
+                    // (100 arguments limit: key + value per column). Fallback to includeRelationships
+                    if ($relConfig && 'pgsql' === DB::getDriverName()) {
+                        $schema = SchemaRegistryUtils::get();
+                        $relatedTable = $relConfig['table'] ?? null;
+                        $relatedSchema = $relatedTable && isset($schema[$relatedTable]) ? $schema[$relatedTable] : null;
+
+                        if ($relatedSchema && is_array($relatedSchema->columns ?? null)) {
+                            $requestedCols = $include['columns'] ?? ['*'];
+                            if ($requestedCols === ['*'] || [] === $requestedCols) {
+                                $columnCount = count($relatedSchema->columns ?? []);
+                            } else {
+                                $columnCount = 0;
+                                foreach ($requestedCols as $col) {
+                                    if (!is_string($col) || str_contains($col, '=')) {
+                                        continue;
+                                    }
+
+                                    if (isset($relatedSchema->columns[$col])) {
+                                        ++$columnCount;
+                                    }
+                                }
+                            }
+
+                            if ($columnCount > 50) {
+                                $useSubqueryOptimization = false;
+
+                                break;
+                            }
+                        }
                     }
 
                     if (isset($include['columns']) && is_array($include['columns'])) {
