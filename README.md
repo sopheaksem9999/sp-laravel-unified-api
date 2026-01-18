@@ -1253,6 +1253,16 @@ public function index(Request $request)
 }
 ```
 
+You can also use named arguments when calling the scope (PHP 8+):
+
+```php
+$results = YourModel::query()->applyRequestFilters(
+    request: $request,
+    isArray: true,
+    orderBy: 'created_at',
+);
+```
+
 ## Audit Log Cleanup
 
 The package includes a powerful CLI command for cleaning old audit logs based on your retention policy.

@@ -135,4 +135,22 @@ class RelationshipMixedFilterTest extends TestCase
         $this->assertContains('admin', $roleNames);
         $this->assertContains('user', $roleNames);
     }
+
+    public function test_builder_macro_only_select_and_object_flags(): void
+    {
+        $request = Request::create('/api/v1/users', 'GET', [
+            'select' => '*,posts(*),roles(*)',
+            'name' => 'eq.User 2',
+        ]);
+
+        $result = DB::table('users')
+            ->where('id', 1)
+            ->applyRequestFilters($request, true);
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('data', $result);
+        $this->assertCount(1, $result['data']);
+        $this->assertIsObject($result['data'][0]);
+        $this->assertEquals('User 1', $result['data'][0]->name);
+    }
 }

@@ -1017,13 +1017,22 @@ class RecordService
     /**
      * Helper method to handle common record query logic.
      *
-     * @param Request                        $request        The HTTP request object
-     * @param Builder|RecordTableType|string $tableOrBuilder The table name, query builder, or table config
-     * @param null|string                    $tanentColumn   The tenant column name (optional)
+     * @param Request                        $request        The HTTP request object.
+     * @param Builder|RecordTableType|string $tableOrBuilder The table name, query builder, or table config.
+     * @param null|string                    $tanentColumn   The tenant column name (optional).
+     * @param bool                           $isArray        Whether to return the result as a flat array of rows.
+     * @param string                         $orderBy        Default column to use for ordering when no sortby is provided.
      *
-     * @return array The query result array
+     * @return array{
+     *     data: mixed,
+     *     meta: array,
+     *     headers: array,
+     *     filters: array,
+     *     request: Request,
+     *     cursor_meta: mixed
+     * }
      */
-    public static function applyRequestFilters(Request $request, Builder|RecordTableType|string $tableOrBuilder, ?string $tanentColumn = ''): array
+    public static function applyRequestFilters(Request $request, Builder|RecordTableType|string $tableOrBuilder, ?string $tanentColumn = '', bool $isArray = false, string $orderBy = 'id'): array
     {
         $service = app(self::class);
         $builder = null;
@@ -1040,8 +1049,8 @@ class RecordService
             } elseif (is_string($customSchema->pms_name) && '' !== trim($customSchema->pms_name)) {
                 $table = trim($customSchema->pms_name);
             } elseif (is_array($customSchema->pms_name) && [] !== $customSchema->pms_name) {
-                $first = $customSchema->pms_name[0] ?? null;
-                $table = is_string($first) ? trim($first) : '';
+                $firstAlias = $customSchema->pms_name[0] ?? null;
+                $table = is_string($firstAlias) ? trim($firstAlias) : '';
             } else {
                 $table = '';
             }
@@ -1141,7 +1150,12 @@ class RecordService
             $builder->distinct();
         }
 
-        QueryBuilderFiltersUtils::apply($builder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
+        $defaultOrderBy = $tableSchema->primary_key ?? 'id';
+        if ('' !== $orderBy && 'id' !== $orderBy) {
+            $defaultOrderBy = $orderBy;
+        }
+
+        QueryBuilderFiltersUtils::apply($builder, $request, $actualTableName, $defaultOrderBy);
 
         $headers = [];
         $meta = [];

@@ -25,7 +25,6 @@ class CoreSpLaravelApiProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__ . '/../config/sp-laravel-api.php', 'sp-laravel-api');
 
         $this->app->singleton('api.response', fn(): RecordApiResponseService => new RecordApiResponseService());
-
         $this->app->singleton(AuditLogService::class);
         $this->app->singleton(QueryCacheService::class);
     }
@@ -66,10 +65,24 @@ class CoreSpLaravelApiProvider extends ServiceProvider
         $router = $this->app['router'];
         $router->aliasMiddleware('request.id', RequestId::class);
 
-        Builder::macro('applyRequestFilters', function (Request $request, ?string $tenantColumn = ''): array {
+        /**
+         * @param Request     $request       HTTP request carrying query parameters.
+         * @param bool        $isArray       When true, shape results as an array on the client side.
+         * @param string      $orderBy       Default column to sort by when sortby is not provided.
+         * @param string|null $tenantColumn  Optional tenant column value for multi-tenant scoping.
+         *
+         * @return array{
+         *     data: mixed,
+         *     meta: array,
+         *     headers: array,
+         *     filters: array,
+         *     request: Request,
+         *     cursor_meta: mixed
+         * }
+         */
+        Builder::macro('applyRequestFilters', function (Request $request, bool $isArray = false, string $orderBy = 'id', ?string $tenantColumn = ''): array {
             /** @var Builder $this */
-            return RecordService::applyRequestFilters($request, $this, $tenantColumn);
+            return RecordService::applyRequestFilters($request, $this, $tenantColumn, $isArray, $orderBy);
         });
     }
 }
-

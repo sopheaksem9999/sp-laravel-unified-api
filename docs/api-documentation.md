@@ -33,6 +33,28 @@ The `applyRequestFilters` method returns an array containing:
 - `request`: Original request object
 - `cursor_meta`: Cursor pagination metadata (if applicable)
 
+**Builder macro signature:**
+
+```php
+public function applyRequestFilters(
+    \Illuminate\Http\Request $request,
+    bool $isArray = false,
+    string $orderBy = 'id',
+    ?string $tenantColumn = ''
+): array
+```
+
+Because the macro has named parameters, you can also call it using named arguments (PHP 8+):
+
+```php
+$result = DB::table('invoices')->applyRequestFilters(
+    request: $request,
+    isArray: true,
+    orderBy: 'created_at',
+    tenantColumn: 'company_id',
+);
+```
+
 ### Relationship Selection & Filtering
 
 Relationship loading uses the `select` query parameter (not `with`). This supports nested relationships and filtering within those relationships.
@@ -1636,6 +1658,16 @@ Return behavior:
 - Returns `array{data: mixed, total: int}` when `total_record=true`.
 - Returns a `Collection` when `$isArray=true`.
 - Otherwise returns the modified `Eloquent\Builder`.
+
+You can also use named arguments when calling the scope (PHP 8+):
+
+```php
+$result = Invoice::query()->applyRequestFilters(
+    request: $request,
+    isArray: true,
+    orderBy: 'created_at',
+);
+```
 
 ### Supported Query Parameters
 
