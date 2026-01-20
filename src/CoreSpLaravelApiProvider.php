@@ -9,6 +9,7 @@ use Illuminate\Support\ServiceProvider;
 use Sopheak\Core\Console\CleanAuditLogsCommand;
 use Sopheak\Core\Console\GenerateOpenApiSpecCommand;
 use Sopheak\Core\Console\GenerateRecordSchemaCacheCommand;
+use Sopheak\Core\Console\GenerateRecordTablesFromDatabaseCommand;
 use Sopheak\Core\Console\MakeRecordTableCommand;
 use Sopheak\Core\Console\SetupPackageCommand;
 use Sopheak\Core\Console\ValidateSetupCommand;
@@ -55,6 +56,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
                 GenerateRecordSchemaCacheCommand::class,
                 CleanAuditLogsCommand::class,
                 MakeRecordTableCommand::class,
+                GenerateRecordTablesFromDatabaseCommand::class,
             ];
 
             $commands = array_values(array_filter($commands, class_exists(...)));
