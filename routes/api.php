@@ -77,9 +77,9 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
         | Audit Log Operations
         |--------------------------------------------------------------------------
         */
-        Route::get('audit/logs', [AuditLogController::class, 'getLogs'])->middleware('throttle:api-reads');
-        Route::get('audit/stats', [AuditLogController::class, 'getStats'])->middleware('throttle:api-reads');
-        Route::get('audit/timeline', [AuditLogController::class, 'getFieldTimeline'])->middleware('throttle:api-reads');
+        // Route::get('audit/logs', [AuditLogController::class, 'getLogs'])->middleware('throttle:api-reads');
+        // Route::get('audit/stats', [AuditLogController::class, 'getStats'])->middleware('throttle:api-reads');
+        // Route::get('audit/timeline', [AuditLogController::class, 'getFieldTimeline'])->middleware('throttle:api-reads');
     }
 
     /*
