@@ -9,6 +9,7 @@ use Sopheak\Core\Types\RecordBelongsToType;
 use Sopheak\Core\Types\RecordHasManyThroughType;
 use Sopheak\Core\Types\RecordHasManyType;
 use Sopheak\Core\Types\RecordMetaBelongsToManyType;
+use Sopheak\Core\Types\RecordMetaHasManyThroughType;
 use Sopheak\Core\Types\RecordSpatiePermissionType;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -366,6 +367,30 @@ class RelationshipResolverUtils
                     return $result;
                 }
 
+                // Handle RecordMetaHasManyThroughType (global meta table pivot)
+                if ($rel instanceof RecordMetaHasManyThroughType) {
+                    $result = [
+                        'type' => 'hasManyThrough',
+                        'table' => $rel->table,
+                        'through_table' => $rel->through,
+                        'first_key' => $rel->firstKey ?? (Str::singular($mainTable) . '_id'),
+                        'second_key' => $rel->secondKey ?? 'id',
+                        'second_local_key' => $rel->secondLocalKey ?? 'target_id',
+                        'local_key' => $rel->localKey ?? $localPk,
+                        'order_by' => $rel->orderBy ?? null,
+                        'owner_column' => $rel->ownerColumn ?? 'owner',
+                        'owner_value' => $rel->owner,
+                        'selectable' => ['*'],
+                        'allow_create' => $rel->allowCreate,
+                        'allow_update' => $rel->allowUpdate,
+                        'allow_delete' => $rel->allowDelete,
+                    ];
+
+                    self::$resolveCache[$cacheKey] = $result;
+
+                    return $result;
+                }
+
                 // Handle RecordHasManyThroughType
                 if ($rel instanceof RecordHasManyThroughType) {
                     $result = [
@@ -618,6 +643,8 @@ class RelationshipResolverUtils
         $throughTable = $config['through_table'];
         $firstKey = $config['first_key'];
         $secondLocalKey = $config['second_local_key'];
+        $ownerColumn = $config['owner_column'] ?? null;
+        $ownerValue = $config['owner_value'] ?? null;
         $targetTable = $config['table'];
         $targetSchema = $schema[$targetTable] ?? null;
         $targetPk = $targetSchema->primary_key ?? 'id';
@@ -633,10 +660,15 @@ class RelationshipResolverUtils
 
             if ($isDelete) {
                 if ($allowDelete && $targetId) {
-                    DB::table($throughTable)
+                    $deleteQuery = DB::table($throughTable)
                         ->where($firstKey, $mainId)
-                        ->where($secondLocalKey, $targetId)
-                        ->delete();
+                        ->where($secondLocalKey, $targetId);
+
+                    if ($ownerColumn && null !== $ownerValue) {
+                        $deleteQuery->where($ownerColumn, $ownerValue);
+                    }
+
+                    $deleteQuery->delete();
                 }
 
                 continue;
@@ -662,16 +694,25 @@ class RelationshipResolverUtils
             }
 
             if ($targetId && ($allowCreate || $allowUpdate)) {
-                $exists = DB::table($throughTable)
+                $existsQuery = DB::table($throughTable)
                     ->where($firstKey, $mainId)
-                    ->where($secondLocalKey, $targetId)
-                    ->exists();
+                    ->where($secondLocalKey, $targetId);
+
+                if ($ownerColumn && null !== $ownerValue) {
+                    $existsQuery->where($ownerColumn, $ownerValue);
+                }
+
+                $exists = $existsQuery->exists();
 
                 if (!$exists && $allowCreate) {
                     $insertData = [
                         $firstKey => $mainId,
                         $secondLocalKey => $targetId,
                     ];
+
+                    if ($ownerColumn && null !== $ownerValue) {
+                        $insertData[$ownerColumn] = $ownerValue;
+                    }
 
                     DB::table($throughTable)->insert($insertData);
                 }
@@ -1493,6 +1534,10 @@ class RelationshipResolverUtils
 
         // Step 1: Optimized through table query with chunking for large datasets
         $builder = DB::table($actualThroughTableName);
+
+        if (isset($config['owner_column'], $config['owner_value'])) {
+            $builder->where($config['owner_column'], $config['owner_value']);
+        }
 
         $tenantCol = RecordConfigService::tenantColumn();
         if ($enableTenantId && $tenantId && isset($schema[$throughTable]->columns[$tenantCol])) {

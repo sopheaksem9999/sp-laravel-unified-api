@@ -111,6 +111,272 @@ Relationship loading uses the `select` query parameter (not `with`). This suppor
    `GET /api/v1/posts?author.name=eq.John`
    Fetches posts where the author's name is 'John'.
 
+### Supported Relationship Types
+
+The dynamic API understands all relationship types declared in `RecordRelationshipsEnum`. These relationships are configured per table via the `relationships` array on `RecordTableType` and are available to `select` and filter expressions.
+
+#### Belongs To (`belongsTo`)
+
+Use `RecordBelongsToType` when the current table has a foreign key pointing to a parent table.
+
+Example configuration:
+
+```php
+use Sopheak\Core\Enums\RecordRelationshipsEnum;
+use Sopheak\Core\Types\RecordBelongsToType;
+
+'invoices' => new RecordTableType(
+    table: 'invoices',
+    relationships: [
+        'customer' => new RecordBelongsToType(
+            table: 'customers',
+            type: RecordRelationshipsEnum::BELONGS_TO,
+            foreignKey: 'customer_id',
+            ownerKey: 'id',
+        ),
+    ],
+),
+```
+
+Example usage:
+
+- `GET /api/v1/invoices?select=*,customer(*)`
+- `GET /api/v1/invoices?customer.name=like.%Acme%`
+
+#### Has Many (`hasMany`)
+
+Use `RecordHasManyType` when the current table is the parent and the related table has the foreign key.
+
+Example configuration:
+
+```php
+use Sopheak\Core\Enums\RecordRelationshipsEnum;
+use Sopheak\Core\Types\RecordHasManyType;
+
+'customers' => new RecordTableType(
+    table: 'customers',
+    relationships: [
+        'invoices' => new RecordHasManyType(
+            table: 'invoices',
+            type: RecordRelationshipsEnum::HAS_MANY,
+            foreignKey: 'customer_id',
+            localKey: 'id',
+        ),
+    ],
+),
+```
+
+Example usage:
+
+- `GET /api/v1/customers?select=*,invoices(*)`
+- `GET /api/v1/customers?invoices.status=eq.paid`
+
+#### Has One (`hasOne`)
+
+Use `RecordHasManyType` with `RecordRelationshipsEnum::HAS_ONE` when the related table has a unique row per parent (semantically has-one, loaded via the same optimized path as has-many).
+
+Example configuration:
+
+```php
+'users' => new RecordTableType(
+    table: 'users',
+    relationships: [
+        'profile' => new RecordHasManyType(
+            table: 'user_profiles',
+            type: RecordRelationshipsEnum::HAS_ONE,
+            foreignKey: 'user_id',
+            localKey: 'id',
+        ),
+    ],
+),
+```
+
+Example usage:
+
+- `GET /api/v1/users?select=*,profile(*)`
+
+#### Belongs To Many (`belongsToMany`)
+
+Use `RecordMetaBelongsToManyType` for many-to-many relationships backed by a pivot table.
+
+Example configuration:
+
+```php
+use Sopheak\Core\Types\RecordMetaBelongsToManyType;
+
+'users' => new RecordTableType(
+    table: 'users',
+    relationships: [
+        'roles' => new RecordMetaBelongsToManyType(
+            related: 'roles',
+            type: RecordRelationshipsEnum::BELONGS_TO_MANY,
+            table: 'role_user',
+            foreignPivotKey: 'user_id',
+            relatedPivotKey: 'role_id',
+        ),
+    ],
+),
+```
+
+Example usage:
+
+- `GET /api/v1/users?select=*,roles(*)`
+- `GET /api/v1/users?roles.name=eq.admin`
+
+#### Has Many Through (`hasManyThrough`)
+
+Two variants are supported:
+
+1. **Standard has-many-through** using `RecordHasManyThroughType`.
+2. **Global meta-table has-many-through** using `RecordMetaHasManyThroughType`.
+
+Standard example:
+
+```php
+use Sopheak\Core\Types\RecordHasManyThroughType;
+
+'projects' => new RecordTableType(
+    table: 'projects',
+    relationships: [
+        'tasks' => new RecordHasManyThroughType(
+            table: 'tasks',
+            through: 'project_tasks',
+            firstKey: 'project_id',
+            secondKey: 'id',
+            localKey: 'id',
+            secondLocalKey: 'task_id',
+        ),
+    ],
+),
+```
+
+Global meta-table example:
+
+```php
+use Sopheak\Core\Types\RecordMetaHasManyThroughType;
+
+'packages' => new RecordTableType(
+    table: 'packages',
+    relationships: [
+        'modules' => new RecordMetaHasManyThroughType(
+            table: 'modules',
+            through: 'meta',
+            firstKey: 'owner_id',
+            secondKey: 'id',
+            localKey: 'id',
+            secondLocalKey: 'target_id',
+            ownerColumn: 'owner',
+            owner: 'package',
+        ),
+    ],
+),
+```
+
+Example usage:
+
+- `GET /api/v1/projects?select=*,tasks(*)`
+- `GET /api/v1/packages?select=*,modules(*)`
+
+#### Has One Through (`hasOneThrough`)
+
+`RecordHasManyThroughType` also supports the `HAS_ONE_THROUGH` semantic. In most cases, you configure it the same way as has-many-through but use the enum to indicate the expected cardinality.
+
+Example configuration:
+
+```php
+'users' => new RecordTableType(
+    table: 'users',
+    relationships: [
+        'latestInvoice' => new RecordHasManyThroughType(
+            table: 'invoices',
+            through: 'invoice_logs',
+            firstKey: 'user_id',
+            secondKey: 'id',
+            localKey: 'id',
+            secondLocalKey: 'invoice_id',
+            orderBy: ['created_at' => 'desc'],
+            type: RecordRelationshipsEnum::HAS_ONE_THROUGH,
+        ),
+    ],
+),
+```
+
+Example usage:
+
+- `GET /api/v1/users?select=*,latestInvoice(*)`
+
+#### Morph Relationships
+
+Morph relationships are detected via `RecordRelationshipsEnum::isMorphRelationship()` and are supported anywhere relationship selection is supported.
+
+##### morphTo / morphOne / morphMany
+
+These are typically configured via specialized resource classes or custom loaders. The enum types are:
+
+- `MORPH_TO`
+- `MORPH_ONE`
+- `MORPH_MANY`
+
+Example conceptual usage (comments only):
+
+- A `comments` table with `commentable_type` and `commentable_id` can be exposed as a morphTo relationship from `comments` to multiple parent tables (e.g. posts, invoices).
+- In the API, you can select nested comments using `?select=*,comments(*)` regardless of the underlying parent model.
+
+##### morphToMany / morphByMany
+
+Many-to-many morph relationships use a pivot table and are treated as pivot-supporting morph types.
+
+Example using `RecordMetaBelongsToManyType` with a morph relation:
+
+```php
+'models' => new RecordTableType(
+    table: 'models',
+    relationships: [
+        'roles' => new RecordMetaBelongsToManyType(
+            related: config('permission.models.role'),
+            type: RecordRelationshipsEnum::MORPH_TO_MANY,
+            table: config('permission.table_names.model_has_roles'),
+            foreignPivotKey: config('permission.column_names.model_morph_key'),
+            relatedPivotKey: 'role_id',
+            relation: 'model',
+        ),
+    ],
+),
+```
+
+Example usage:
+
+- `GET /api/v1/models?select=*,roles(*)`
+
+##### Spatie Permission (`spatiePermission`)
+
+The package includes a dedicated `RecordSpatiePermissionType` to integrate with `spatie/laravel-permission` using a morphToMany pattern.
+
+Example configuration:
+
+```php
+use Sopheak\Core\Types\RecordSpatiePermissionType;
+
+'users' => new RecordTableType(
+    table: 'users',
+    relationships: [
+        'roles' => new RecordSpatiePermissionType(
+            related: config('permission.models.role'),
+            relation: 'model',
+            recordRelationshipsEnum: RecordRelationshipsEnum::SPATIE_PERMISSION,
+            table: config('permission.table_names.model_has_roles'),
+            foreignPivotKey: config('permission.column_names.model_morph_key'),
+            relatedPivotKey: 'role_id',
+        ),
+    ],
+),
+```
+
+Example usage:
+
+- `GET /api/v1/users?select=*,roles(*)`
+- `GET /api/v1/users?roles.name=eq.admin`
+
 ### Base Configuration
 
 ### API Prefix
