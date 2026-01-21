@@ -38,7 +38,7 @@ class GenerateRecordTablesFromDatabaseCommand extends Command
         $created = 0;
 
         foreach ($allTables as $tableName) {
-            if (str_contains($tableName, '_has')) {
+            if (str_contains((string) $tableName, '_has')) {
                 continue;
             }
 
@@ -125,8 +125,8 @@ class GenerateRecordTablesFromDatabaseCommand extends Command
     {
         $relationships = [];
 
-        foreach ($columns as $columnName => $info) {
-            if (!str_ends_with($columnName, '_id')) {
+        foreach (array_keys($columns) as $columnName) {
+            if (!str_ends_with((string) $columnName, '_id')) {
                 continue;
             }
 
@@ -134,7 +134,7 @@ class GenerateRecordTablesFromDatabaseCommand extends Command
                 continue;
             }
 
-            $base = substr($columnName, 0, -3);
+            $base = substr((string) $columnName, 0, -3);
             if ($base === '') {
                 continue;
             }
