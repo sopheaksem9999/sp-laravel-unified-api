@@ -340,7 +340,10 @@ class RelationshipResolverUtils
 
                     $result = [
                         'type' => 'morphToMany',
-                        'table' => $rel->related,
+                        // Use the relationship alias as the logical table key so it matches SchemaRegistry
+                        // and RecordTableType configuration (e.g. 'roles'). The actual Eloquent model
+                        // class is provided separately via the 'relation' key.
+                        'table' => $alias,
                         'pivot_table' => $rel->table,
                         'foreign_pivot_key' => $rel->foreignPivotKey ?? config('permission.column_names.model_morph_key'),
                         'related_pivot_key' => $rel->relatedPivotKey ?? config('permission.column_names.role_pivot_key', 'role_id'),
@@ -1890,8 +1893,26 @@ class RelationshipResolverUtils
                 );
             }
 
-            // Apply column selection with validation
-            self::applyColumnSelection($builder, $columns, $schema[$relatedTable]->columns ?? []);
+            // Compute effective related columns based on requested columns and schema
+            $relatedColumnsMeta = $schema[$relatedTable]->columns ?? [];
+            if ($columns === ['*'] || [] === $columns) {
+                $effectiveColumns = ['*'];
+            } else {
+                $effectiveColumns = [];
+                foreach ($columns as $col) {
+                    if (!is_string($col) || str_contains($col, '=')) {
+                        continue;
+                    }
+
+                    if (isset($relatedColumnsMeta[$col])) {
+                        $effectiveColumns[] = $col;
+                    }
+                }
+
+                if ([] === $effectiveColumns) {
+                    $effectiveColumns = ['*'];
+                }
+            }
 
             $relatedRecords = collect();
             $chunkSize = 1000;
@@ -1901,9 +1922,16 @@ class RelationshipResolverUtils
 
                 $chunkQuery->join($pivotTable, $relatedTableName . '.id', '=', $pivotTable . '.' . $relatedKey)
                     ->whereIn($pivotTable . '.' . $parentKey, $chunk)
-                    ->addSelect($relatedTableName . '.*')
-                    ->addSelect($pivotTable . '.' . $parentKey . ' as pivot_parent_key')
-                ;
+                    ->addSelect($pivotTable . '.' . $parentKey . ' as pivot_parent_key');
+
+                // Apply column selection for related table respecting requested columns
+                if (in_array('*', $effectiveColumns, true)) {
+                    $chunkQuery->addSelect($relatedTableName . '.*');
+                } else {
+                    foreach ($effectiveColumns as $col) {
+                        $chunkQuery->addSelect($relatedTableName . '.' . $col . ' as ' . $col);
+                    }
+                }
 
                 // Add model_type condition and pivot columns for morphToMany relationships (like Spatie permission system)
                 if ('morphToMany' === $type && isset($relationshipConfig['morph_type'])) {
