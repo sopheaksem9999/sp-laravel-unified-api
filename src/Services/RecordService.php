@@ -693,6 +693,14 @@ class RecordService
     {
         $columns = array_keys($meta->columns ?? []);
         $payload = array_intersect_key($input, array_flip($columns));
+
+        $writeDisabled = is_array($meta->column_write_disabled ?? null) ? $meta->column_write_disabled : [];
+        if ([] !== $writeDisabled) {
+            foreach ($writeDisabled as $column) {
+                unset($payload[$column]);
+            }
+        }
+
         unset($payload['id'], $payload['deleted_at'], $payload['created_at'], $payload['updated_at']);
 
         return $payload;

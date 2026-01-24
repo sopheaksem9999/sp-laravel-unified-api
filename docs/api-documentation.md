@@ -574,6 +574,7 @@ new RecordTableType(
     primary_key: 'id',
     columns: [],
     column_hiddens: [],
+    column_writes: [],
     fulltext_indexes: [],
     auditLogFn: null,
     createValidator: null,
@@ -618,6 +619,7 @@ new RecordTableType(
 #### Schema & Search Metadata
 - `columns` (?array, default: `[]`): Column metadata map. In normal usage this is populated at runtime from the database schema; leaving it empty is expected. It is used to whitelist payload fields and to detect audit columns like `created_by` / `updated_by`.
 - `column_hiddens` (?array, default: `[]`): List of column names to always hide from API responses. This is applied recursively to nested relationships as well. Hidden columns are removed even if their value is `null`.
+- `column_writes` (?array, default: `[]`): List of column names that are not writable via API payloads (create, update, upsert, and nested relationship writes). These columns are stripped from incoming payloads even if provided by the client.
 - `fulltext_indexes` (?array, default: `[]`): Declares full-text index column sets for search optimization. Format: a list of column name arrays, e.g. `[['name', 'description'], ['content']]`.
 
 #### Relationships & Table RPC Functions

@@ -486,6 +486,11 @@ class RelationshipResolverUtils
             // Allowed columns
             $allowedCols = array_keys($schema[$relatedTable]->columns ?? []);
 
+            $writeDisabled = is_array($relatedSchema->column_write_disabled ?? null) ? $relatedSchema->column_write_disabled : [];
+            if ([] !== $writeDisabled) {
+                $allowedCols = array_values(array_diff($allowedCols, $writeDisabled));
+            }
+
             foreach ($relatedData as $item) {
                 if (!is_array($item)) {
                     continue;
@@ -562,6 +567,12 @@ class RelationshipResolverUtils
         $relatedPk = $relatedSchema->primary_key ?? 'id';
         $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
 
+        $allowedRelatedCols = array_keys($relatedSchema->columns ?? []);
+        $writeDisabled = is_array($relatedSchema->column_write_disabled ?? null) ? $relatedSchema->column_write_disabled : [];
+        if ([] !== $writeDisabled) {
+            $allowedRelatedCols = array_values(array_diff($allowedRelatedCols, $writeDisabled));
+        }
+
         foreach ($data as $item) {
             if (!is_array($item)) {
                 continue;
@@ -583,7 +594,7 @@ class RelationshipResolverUtils
 
             if (!$relatedId && $allowCreate) {
                 // Create new related record
-                $relatedFields = array_intersect_key($item, array_flip(array_keys($relatedSchema->columns ?? [])));
+                $relatedFields = array_intersect_key($item, array_flip($allowedRelatedCols));
                 unset($relatedFields['id'], $relatedFields['created_at'], $relatedFields['updated_at'], $relatedFields['deleted_at']);
 
                 if ($tenantId && isset($relatedSchema->columns[RecordConfigService::tenantColumn()])) {
@@ -679,6 +690,10 @@ class RelationshipResolverUtils
 
             if (!$targetId && $allowCreate) {
                 $targetFields = array_intersect_key($item, array_flip(array_keys($targetSchema->columns ?? [])));
+                $writeDisabled = is_array($targetSchema->column_write_disabled ?? null) ? $targetSchema->column_write_disabled : [];
+                if ([] !== $writeDisabled) {
+                    $targetFields = array_diff_key($targetFields, array_flip($writeDisabled));
+                }
                 unset($targetFields['id'], $targetFields['created_at'], $targetFields['updated_at'], $targetFields['deleted_at']);
 
                 if ($tenantId && isset($targetSchema->columns[RecordConfigService::tenantColumn()])) {

@@ -18,6 +18,8 @@ use Sopheak\Core\Tests\TestCase;
 
 class HiddenColumnTest extends TestCase
 {
+    protected int $userId;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -54,7 +56,7 @@ class HiddenColumnTest extends TestCase
         });
 
         // Seed data
-        $u1 = DB::table('users')->insertGetId([
+        $this->userId = DB::table('users')->insertGetId([
             'name' => 'User 1',
             'password' => 'secret_password',
             'email' => 'user1@example.com',
@@ -63,25 +65,26 @@ class HiddenColumnTest extends TestCase
         ]);
 
         DB::table('posts')->insert([
-            ['user_id' => $u1, 'title' => 'Post A', 'secret' => 'post_secret_1'],
-            ['user_id' => $u1, 'title' => 'Post B', 'secret' => 'post_secret_2']
+            ['user_id' => $this->userId, 'title' => 'Post A', 'secret' => 'post_secret_1'],
+            ['user_id' => $this->userId, 'title' => 'Post B', 'secret' => 'post_secret_2']
         ]);
 
         $t1 = DB::table('tasks')->insertGetId([
             'title' => 'Task 1',
-            'reporter_id' => $u1,
+            'reporter_id' => $this->userId,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
         DB::table('task_assignees')->insert([
-            ['task_id' => $t1, 'user_id' => $u1]
+            ['task_id' => $t1, 'user_id' => $this->userId]
         ]);
 
         // Register Schema for Users
         $userConfig = new RecordTableType('users');
         $userConfig->disable_cache = true;
         $userConfig->column_hiddens = ['password', 'remember_token', 'email_verified_at']; // Hide multiple columns
+        $userConfig->column_write_disabled = ['email'];
         $userConfig->relationships = [
             'posts' => new RecordHasManyType('posts', 'user_id'),
         ];
@@ -90,6 +93,7 @@ class HiddenColumnTest extends TestCase
         $postConfig = new RecordTableType('posts');
         $postConfig->disable_cache = true;
         $postConfig->column_hiddens = ['secret']; // Hide secret
+        $postConfig->column_write_disabled = ['secret'];
         $postConfig->relationships = [
             'user' => new RecordBelongsToType(table: 'users', foreignKey: 'user_id'),
         ];
@@ -215,5 +219,55 @@ class HiddenColumnTest extends TestCase
         $this->assertArrayNotHasKey('password', $reporter);
         $this->assertArrayNotHasKey('remember_token', $reporter);
         $this->assertArrayNotHasKey('email_verified_at', $reporter);
+    }
+
+    public function test_column_writes_are_filtered_on_create(): void
+    {
+        $service = new RecordService();
+
+        $result = $service->createRecord('users', [
+            'name' => 'Created User',
+            'password' => 'plain_password',
+            'email' => 'should_be_ignored@example.com',
+        ], null);
+
+        $id = $result['id'];
+        $row = (array) DB::table('users')->where('id', $id)->first();
+
+        $this->assertSame('Created User', $row['name']);
+        $this->assertSame('plain_password', $row['password']);
+        $this->assertNull($row['email']);
+    }
+
+    public function test_column_writes_are_filtered_on_update(): void
+    {
+        $service = new RecordService();
+
+        $service->updateRecord('users', $this->userId, [
+            'email' => 'updated_should_be_ignored@example.com',
+        ], null);
+
+        $row = (array) DB::table('users')->where('id', $this->userId)->first();
+        $this->assertSame('user1@example.com', $row['email']);
+    }
+
+    public function test_column_writes_are_respected_for_nested_has_many_create(): void
+    {
+        $service = new RecordService();
+
+        $result = $service->createRecord('users', [
+            'name' => 'Nested User',
+            'password' => 'nested_password',
+            'email' => 'nested@example.com',
+            'posts' => [
+                ['title' => 'Nested Post', 'secret' => 'should_be_ignored'],
+            ],
+        ], null);
+
+        $userId = $result['id'];
+        $post = (array) DB::table('posts')->where('user_id', $userId)->first();
+
+        $this->assertSame('Nested Post', $post['title']);
+        $this->assertNull($post['secret']);
     }
 }

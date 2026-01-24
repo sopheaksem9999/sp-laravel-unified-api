@@ -20,6 +20,7 @@ namespace Sopheak\Core\Types;
  * @property null|string       $primary_key      The primary key column name (defaults to 'id')
  * @property null|array        $columns          Array of column definitions
  * @property null|array        $column_hiddens   Columns to hide from responses
+ * @property null|array        $column_write_disabled    Columns that cannot be written via API payloads
  * @property null|array        $fulltext_indexes Array of full-text index configurations for optimized search
  * @property null|string       $auditLogFn       The function name for audit logging (optional)
  *
@@ -102,6 +103,7 @@ class RecordTableType
         public ?string $primary_key = 'id',
         public ?array $columns = [],
         public ?array $column_hiddens = [],
+        public ?array $column_write_disabled = [],
         public ?array $fulltext_indexes = [],
         public ?string $auditLogFn = null,
         public $createValidator = null,
@@ -115,6 +117,7 @@ class RecordTableType
         public RecordTableTriggerType|array|null $afterUpdate = null,
         public RecordTableTriggerType|array|null $beforeDelete = null,
         public RecordTableTriggerType|array|null $afterDelete = null,
+
     ) {}
 
     /**
@@ -140,6 +143,7 @@ class RecordTableType
             primary_key: $properties['primary_key'] ?? 'id',
             columns: $properties['columns'] ?? [],
             column_hiddens: $properties['column_hiddens'] ?? [],
+            column_write_disabled: $properties['column_write_disabled'] ?? [],
             fulltext_indexes: $properties['fulltext_indexes'] ?? [],
             auditLogFn: $properties['auditLogFn'] ?? null,
             createValidator: $properties['createValidator'] ?? null,
@@ -153,6 +157,7 @@ class RecordTableType
             afterUpdate: $properties['afterUpdate'] ?? null,
             beforeDelete: $properties['beforeDelete'] ?? null,
             afterDelete: $properties['afterDelete'] ?? null,
+
         );
     }
 }
