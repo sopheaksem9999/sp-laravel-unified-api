@@ -47,7 +47,7 @@ class RecordService
 
         // Resolve actual table name
         $actualTableName = $tableSchema->table ?? $table;
-        $pk = $tableSchema->primary_key ?? 'id';
+        $pk = $tableSchema->primaryKey ?? 'id';
 
         // Insert record
         if (array_key_exists($pk, $payloadMain) && null !== $payloadMain[$pk]) {
@@ -89,7 +89,7 @@ class RecordService
 
         // Resolve actual table name
         $actualTableName = $tableSchema->table ?? $table;
-        $pk = $tableSchema->primary_key ?? 'id';
+        $pk = $tableSchema->primaryKey ?? 'id';
 
         $query = DB::table($actualTableName)->where($pk, $id);
         $this->applyTenantFilter($query, $table, $tenantId);
@@ -126,11 +126,11 @@ class RecordService
         $tableSchema = SchemaRegistryUtils::getTable($table);
 
         $actualTableName = $tableSchema->table ?? $table;
-        $pk = $tableSchema->primary_key ?? 'id';
+        $pk = $tableSchema->primaryKey ?? 'id';
 
         $query = DB::table($actualTableName)->where($pk, $id);
         $this->applyTenantFilter($query, $table, $tenantId);
-        $affected = $tableSchema->soft_deletes ?? false ? $query->update(['deleted_at' => TimeUtils::now()]) : $query->delete();
+        $affected = $tableSchema->softDeletes ?? false ? $query->update(['deleted_at' => TimeUtils::now()]) : $query->delete();
 
         return [
             'id' => $id,
@@ -148,7 +148,7 @@ class RecordService
         $tableSchema = SchemaRegistryUtils::getTable($table);
 
         $actualTableName = $tableSchema->table ?? $table;
-        $pk = $tableSchema->primary_key ?? 'id';
+        $pk = $tableSchema->primaryKey ?? 'id';
 
         $query = DB::table($actualTableName)->where($pk, $id);
         $this->applyTenantFilter($query, $table, $tenantId);
@@ -172,7 +172,7 @@ class RecordService
         $tableSchema = SchemaRegistryUtils::getTable($table);
 
         $actualTableName = $tableSchema->table ?? $table;
-        $pk = $tableSchema->primary_key ?? 'id';
+        $pk = $tableSchema->primaryKey ?? 'id';
 
         $query = DB::table($actualTableName)->where($pk, $id);
         $this->applyTenantFilter($query, $table, $tenantId);
@@ -195,7 +195,7 @@ class RecordService
         $tableSchema = SchemaRegistryUtils::getTable($table);
 
         $actualTableName = $tableSchema->table ?? $table;
-        $pk = $tableSchema->primary_key ?? 'id';
+        $pk = $tableSchema->primaryKey ?? 'id';
 
         // Sanitize payload
         $item = $this->sanitizePayload($payload, $tableSchema);
@@ -242,7 +242,7 @@ class RecordService
         }
 
         // 2. Insert Audit Log
-        if (!($tableSchema->disable_auditLog ?? false)) {
+        if (!($tableSchema->disableAuditLog ?? false)) {
             $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
             $event = match ($operation) {
                 'create' => AuditLogEventEnum::CREATED,
@@ -269,7 +269,34 @@ class RecordService
 
             $tenantId = $recordContext[RecordConfigService::tenantColumn()] ?? null;
 
-            AuditLogService::insertAuditLog($event, $entityClass, $auditData, '', '', $tenantId);
+            $context = [
+                'request' => $request,
+                'table' => $table,
+                'operation' => $operation,
+                'record_context' => $recordContext,
+            ];
+
+            if (!empty($tableSchema->customAuditLog) &&
+                $this->callCustomAuditLogger(
+                    callback: $tableSchema->customAuditLog,
+                    event: $event,
+                    entityClass: $entityClass,
+                    auditData: $auditData,
+                    tenantId: $tenantId,
+                    context: $context,
+                )
+            ) {
+                return;
+            }
+
+            AuditLogService::insertAuditLog(
+                auditLogEventEnum: $event,
+                entityClass: $entityClass,
+                queryData: $auditData,
+                subject: '',
+                recap: '',
+                tenantId: $tenantId
+            );
         }
     }
 
@@ -416,7 +443,7 @@ class RecordService
             throw new Exception('Batch too large, max ' . $maxBatch, 413);
         }
 
-        $pk = $tableSchema->primary_key ?? 'id';
+        $pk = $tableSchema->primaryKey ?? 'id';
         $affected = 0;
         $createdData = [];
         $updatedData = [];
@@ -487,7 +514,7 @@ class RecordService
                             'id' => $item[$pk],
                             RecordConfigService::tenantColumn() => $tenantId,
                             'affected' => $result['affected'],
-                            'soft_deleted' => $tableSchema->soft_deletes ?? false,
+                            'soft_deleted' => $tableSchema->softDeletes ?? false,
                             'response' => $response,
                         ]);
                     }
@@ -500,9 +527,39 @@ class RecordService
                         $upsertedData[] = $recordResult['data'];
                         ++$affected;
 
-                        if (!($tableSchema->disable_auditLog ?? false)) {
-                            $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
-                            AuditLogService::insertAuditLog(AuditLogEventEnum::UPDATED, $entityClass, $recordResult['data'], '', '', $tenantId);
+                        if (!($tableSchema->disableAuditLog ?? false)) {
+                            $entityClass = 'App\\Models\\' . Str::studly(Str::singular($table));
+
+                            $context = [
+                                'request' => $request,
+                                'table' => $table,
+                                'operation' => 'upsert',
+                                'record_context' => [
+                                    'id' => $upsertedId,
+                                    'response' => $recordResult['data'],
+                                ],
+                            ];
+
+                            if (!empty($tableSchema->customAuditLog) &&
+                                $this->callCustomAuditLogger(
+                                    callback: $tableSchema->customAuditLog,
+                                    event: AuditLogEventEnum::UPDATED,
+                                    entityClass: $entityClass,
+                                    auditData: $recordResult['data'],
+                                    tenantId: $tenantId,
+                                    context: $context,
+                                )
+                            ) {
+                            } else {
+                                AuditLogService::insertAuditLog(
+                                    auditLogEventEnum: AuditLogEventEnum::UPDATED,
+                                    entityClass: $entityClass,
+                                    queryData: $recordResult['data'],
+                                    subject: '',
+                                    recap: '',
+                                    tenantId: $tenantId
+                                );
+                            }
                         }
                     }
                 }
@@ -524,6 +581,66 @@ class RecordService
         }
     }
 
+    protected function callCustomAuditLogger(
+        string|array $callback,
+        AuditLogEventEnum $event,
+        string $entityClass,
+        array $auditData,
+        mixed $tenantId,
+        array $context
+    ): bool {
+        $callable = null;
+
+        if (is_array($callback)) {
+            if (count($callback) === 2) {
+                [$target, $method] = $callback;
+
+                if (is_string($target) && class_exists($target)) {
+                    $instance = app($target);
+
+                    if (method_exists($instance, $method)) {
+                        $callable = [$instance, $method];
+                    } elseif (method_exists($target, $method)) {
+                        $callable = [$target, $method];
+                    }
+                } elseif (is_object($target) && method_exists($target, $method)) {
+                    $callable = [$target, $method];
+                }
+            }
+        } elseif (is_string($callback)) {
+            if (function_exists($callback)) {
+                $callable = $callback;
+            } elseif (str_contains($callback, '@')) {
+                [$class, $method] = explode('@', $callback, 2);
+                if (class_exists($class)) {
+                    $instance = app($class);
+                    if (method_exists($instance, $method)) {
+                        $callable = [$instance, $method];
+                    }
+                }
+            } elseif (str_contains($callback, '::') && is_callable($callback)) {
+                $callable = $callback;
+            } elseif (class_exists($callback)) {
+                $instance = app($callback);
+                if (is_callable($instance)) {
+                    $callable = $instance;
+                } elseif (method_exists($instance, 'handle')) {
+                    $callable = [$instance, 'handle'];
+                }
+            }
+        } elseif (is_callable($callback)) {
+            $callable = $callback;
+        }
+
+        if (null === $callable) {
+            return false;
+        }
+
+        $callable($event, $entityClass, $auditData, $tenantId, $context);
+
+        return true;
+    }
+
     public function executeTableTrigger(mixed $trigger, array $params): array
     {
         if (null === $trigger) {
@@ -533,7 +650,7 @@ class RecordService
         if ($trigger instanceof RecordTableTriggerType) {
             $triggers = [$trigger];
         } elseif (is_array($trigger)) {
-            $isSingleTriggerConfig = isset($trigger['class']) || isset($trigger['function_method']);
+            $isSingleTriggerConfig = isset($trigger['class']) || isset($trigger['functionName']);
             $triggers = $isSingleTriggerConfig ? [$trigger] : $trigger;
         } else {
             throw new Exception(sprintf(
@@ -573,7 +690,7 @@ class RecordService
             }
 
             $className = $item->class;
-            $method = $item->function_method;
+            $method = $item->functionName;
             if (!class_exists($className)) {
                 throw new Exception(sprintf("Table trigger class '%s' does not exist", $className));
             }
@@ -627,9 +744,9 @@ class RecordService
 
         $disableCache = false;
         if (is_object($tableSchema)) {
-            $disableCache = (bool) ($tableSchema->disable_cache ?? false);
+            $disableCache = (bool) ($tableSchema->disableCache ?? false);
         } elseif (is_array($tableSchema)) {
-            $disableCache = (bool) ($tableSchema['disable_cache'] ?? false);
+            $disableCache = (bool) ($tableSchema['disableCache'] ?? false);
         }
 
         if ($disableCache) {
@@ -694,7 +811,7 @@ class RecordService
         $columns = array_keys($meta->columns ?? []);
         $payload = array_intersect_key($input, array_flip($columns));
 
-        $writeDisabled = is_array($meta->column_write_disabled ?? null) ? $meta->column_write_disabled : [];
+        $writeDisabled = is_array($meta->columnWriteDisabled ?? null) ? $meta->columnWriteDisabled : [];
         if ([] !== $writeDisabled) {
             foreach ($writeDisabled as $column) {
                 unset($payload[$column]);
@@ -750,7 +867,7 @@ class RecordService
     {
         $tenantId = $this->normalizeTenantId($tenantId);
         $schema = SchemaRegistryUtils::get();
-        if ($this->isTenantIdEnabled() && null !== $tenantId && '' !== $tenantId && ($schema[$table]->has_tenant_id ?? false)) {
+        if ($this->isTenantIdEnabled() && null !== $tenantId && '' !== $tenantId && ($schema[$table]->hasTenantId ?? false)) {
             $query->where($table . '.' . RecordConfigService::tenantColumn(), $tenantId);
         }
     }
@@ -825,7 +942,7 @@ class RecordService
 
         $this->applyTenantFilter($builder, $actualTableName, $tenantId);
 
-        if ($tableSchema->soft_deletes) {
+        if ($tableSchema->softDeletes) {
             if ($request->boolean('only_trashed')) {
                 $builder->whereNotNull($actualTableName . '.deleted_at');
             } else {
@@ -837,7 +954,7 @@ class RecordService
             $builder->distinct();
         }
 
-        QueryBuilderFiltersUtils::apply($builder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
+        QueryBuilderFiltersUtils::apply($builder, $request, $actualTableName, $tableSchema->primaryKey ?? 'id');
 
         $headers = [];
         $meta = [];
@@ -950,7 +1067,7 @@ class RecordService
             }
 
             if ($useSubqueryOptimization && [] !== $includes) {
-                $primaryKey = $tableSchema->primary_key ?? 'id';
+                $primaryKey = $tableSchema->primaryKey ?? 'id';
                 $recordIds = array_column($data, $primaryKey);
 
                 if ([] !== $recordIds) {
@@ -965,7 +1082,7 @@ class RecordService
 
                     $this->applyTenantFilter($optimizedBuilder, $actualTableName, $tenantId);
 
-                    if ($tableSchema->soft_deletes) {
+                    if ($tableSchema->softDeletes) {
                         $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
                     }
 
@@ -977,7 +1094,7 @@ class RecordService
                     );
 
                     // Re-apply sorting to optimized query to ensure consistent order
-                    QueryBuilderFiltersUtils::applySort($optimizedBuilder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
+                    QueryBuilderFiltersUtils::applySort($optimizedBuilder, $request, $actualTableName, $tableSchema->primaryKey ?? 'id');
 
                     $optimizedData = $optimizedBuilder->whereIn($actualTableName . '.' . $primaryKey, $recordIds)->get()->all();
                     $data = RelationshipResolverUtils::processJsonRelationships($optimizedData, $includes, $table);
@@ -1052,10 +1169,10 @@ class RecordService
             $customSchema = $tableOrBuilder;
             if (is_string($customSchema->table) && '' !== trim($customSchema->table)) {
                 $table = $customSchema->table;
-            } elseif (is_string($customSchema->pms_name) && '' !== trim($customSchema->pms_name)) {
-                $table = trim($customSchema->pms_name);
-            } elseif (is_array($customSchema->pms_name) && [] !== $customSchema->pms_name) {
-                $firstAlias = $customSchema->pms_name[0] ?? null;
+            } elseif (is_string($customSchema->pmsName) && '' !== trim($customSchema->pmsName)) {
+                $table = trim($customSchema->pmsName);
+            } elseif (is_array($customSchema->pmsName) && [] !== $customSchema->pmsName) {
+                $firstAlias = $customSchema->pmsName[0] ?? null;
                 $table = is_string($firstAlias) ? trim($firstAlias) : '';
             } else {
                 $table = '';
@@ -1067,10 +1184,10 @@ class RecordService
             SchemaRegistryUtils::register($registerKey, $customSchema);
 
             $aliases = [];
-            if (is_string($customSchema->pms_name) && '' !== trim($customSchema->pms_name)) {
-                $aliases[] = trim($customSchema->pms_name);
-            } elseif (is_array($customSchema->pms_name)) {
-                foreach ($customSchema->pms_name as $candidate) {
+            if (is_string($customSchema->pmsName) && '' !== trim($customSchema->pmsName)) {
+                $aliases[] = trim($customSchema->pmsName);
+            } elseif (is_array($customSchema->pmsName)) {
+                foreach ($customSchema->pmsName as $candidate) {
                     if (!is_string($candidate)) {
                         continue;
                     }
@@ -1133,7 +1250,7 @@ class RecordService
             $builder = DB::table($actualTableName);
             $service->applyTenantFilter($builder, $actualTableName, $tenantId);
 
-            if ($tableSchema instanceof RecordTableType && $tableSchema->soft_deletes) {
+            if ($tableSchema instanceof RecordTableType && $tableSchema->softDeletes) {
                 if ($request->boolean('only_trashed')) {
                     $builder->whereNotNull($actualTableName . '.deleted_at');
                 } else {
@@ -1143,7 +1260,7 @@ class RecordService
         } else {
             $service->applyTenantFilter($builder, $actualTableName, $tenantId);
 
-            if ($tableSchema instanceof RecordTableType && $tableSchema->soft_deletes) {
+            if ($tableSchema instanceof RecordTableType && $tableSchema->softDeletes) {
                 if ($request->boolean('only_trashed')) {
                     $builder->whereNotNull($actualTableName . '.deleted_at');
                 } else {
@@ -1156,7 +1273,7 @@ class RecordService
             $builder->distinct();
         }
 
-        $defaultOrderBy = $tableSchema->primary_key ?? 'id';
+        $defaultOrderBy = $tableSchema->primaryKey ?? 'id';
         if ('' !== $orderBy && 'id' !== $orderBy) {
             $defaultOrderBy = $orderBy;
         }
@@ -1271,7 +1388,7 @@ class RecordService
             }
 
             if ($useSubqueryOptimization && [] !== $includes) {
-                $primaryKey = $tableSchema->primary_key ?? 'id';
+                $primaryKey = $tableSchema->primaryKey ?? 'id';
                 $recordIds = array_column($data, $primaryKey);
 
                 if ([] !== $recordIds) {
@@ -1286,7 +1403,7 @@ class RecordService
 
                     $service->applyTenantFilter($optimizedBuilder, $actualTableName, $tenantId);
 
-                    if ($tableSchema instanceof RecordTableType && $tableSchema->soft_deletes) {
+                    if ($tableSchema instanceof RecordTableType && $tableSchema->softDeletes) {
                         $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
                     }
 
@@ -1298,7 +1415,7 @@ class RecordService
                     );
 
                     // Re-apply sorting to optimized query to ensure consistent order
-                    QueryBuilderFiltersUtils::applySort($optimizedBuilder, $request, $actualTableName, $tableSchema->primary_key ?? 'id');
+                    QueryBuilderFiltersUtils::applySort($optimizedBuilder, $request, $actualTableName, $tableSchema->primaryKey ?? 'id');
 
                     $optimizedData = $optimizedBuilder->whereIn($actualTableName . '.' . $primaryKey, $recordIds)->get()->all();
                     $data = RelationshipResolverUtils::processJsonRelationships($optimizedData, $includes, $table);
@@ -1331,8 +1448,8 @@ class RecordService
         if ($service->shouldIncludeDebug($request)) {
             $meta['debug']['lazy_stats'] = QueryBuilderFiltersUtils::getLazyStats();
         }
-        
-        if($isArray === false) {
+
+        if ($isArray === false) {
             $data = $data[0] ?? [];
         }
 
@@ -1369,7 +1486,7 @@ class RecordService
         }
 
         $actualTableName = $tableSchema->table ?? $table;
-        $pk = $tableSchema->primary_key ?? 'id';
+        $pk = $tableSchema->primaryKey ?? 'id';
 
         $recordCacheKey = $this->generateRecordCacheKey($table, $id, $tenantId, $request->query('select'));
         if ($this->isCacheableRequest($request, $table)) {
@@ -1382,7 +1499,7 @@ class RecordService
         $builder = DB::table($actualTableName);
         $this->applyTenantFilter($builder, $actualTableName, $tenantId);
 
-        if ($tableSchema->soft_deletes) {
+        if ($tableSchema->softDeletes) {
             $builder->whereNull($actualTableName . '.deleted_at');
         }
 
@@ -1444,7 +1561,7 @@ class RecordService
 
                 $this->applyTenantFilter($optimizedBuilder, $actualTableName, $tenantId);
 
-                if ($tableSchema->soft_deletes) {
+                if ($tableSchema->softDeletes) {
                     $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
                 }
 
@@ -1494,8 +1611,8 @@ class RecordService
             $config = $functionConfig;
         }
 
-        // Check permissions if pms_name is specified
-        if (isset($config['pms_name']) && !empty($config['pms_name'])) {
+        // Check permissions if pmsName is specified
+        if (isset($config['pmsName']) && !empty($config['pmsName'])) {
             $guard = RecordConfigService::authGuard();
             $user = auth($guard)->user();
             if (!$user) {
@@ -1503,7 +1620,7 @@ class RecordService
             }
 
             // Handle both single permission (string) and multiple permissions (array)
-            $permissions = is_array($config['pms_name']) ? $config['pms_name'] : [$config['pms_name']];
+            $permissions = is_array($config['pmsName']) ? $config['pmsName'] : [$config['pmsName']];
             $hasPermission = false;
 
             // Check if user has at least one of the required permissions
@@ -1521,8 +1638,8 @@ class RecordService
         }
 
         // Validate HTTP method if specified
-        if (isset($config['method'])) {
-            $allowedMethods = is_array($config['method']) ? $config['method'] : [$config['method']];
+        if (isset($config['httpMethod'])) {
+            $allowedMethods = is_array($config['httpMethod']) ? $config['httpMethod'] : [$config['httpMethod']];
             $allowedMethods = array_map(function (mixed $method): string {
                 if ($method instanceof BackedEnum) {
                     $method = $method->value;
@@ -1562,7 +1679,7 @@ class RecordService
     {
         try {
             $className = $functionConfig['class'] ?? null;
-            $method = $functionConfig['function_method'] ?? 'handle';
+            $method = $functionConfig['functionName'] ?? 'handle';
 
             if (!$className || !class_exists($className)) {
                 return RecordApiResponseService::errorWrapped(sprintf("Class '%s' does not exist", $className), RecordApiJsonResponseEnum::SERVER_ERROR->value);

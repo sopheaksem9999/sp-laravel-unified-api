@@ -35,17 +35,17 @@ class LegacyConfigTest extends TestCase
         // Define a table using a legacy array configuration
         Config::set('record.tables', [
             'legacy_items' => [
-                'pms_name' => 'legacy_items',
+                'pmsName' => 'legacy_items',
                 'table' => 'legacy_items',
-                'soft_deletes' => false,
+                'softDeletes' => false,
                 'public' => ['read' => true, 'write' => true], // Array for public
                 'can_write' => false, // Legacy permission
-                'can_create' => true, // Granular permission override
+                'canCreate' => true, // Granular permission override
                 'functions' => [
                     'legacy_func' => [
                         'method' => ['GET'],
                         'class' => LegacyFunction::class,
-                        'function_method' => 'handle',
+                        'functionName' => 'handle',
                         'description' => 'Legacy function',
                     ]
                 ]
@@ -66,12 +66,12 @@ class LegacyConfigTest extends TestCase
         $this->assertTrue($tableConfig->public->write);
 
         // Assert granular permission override worked
-        $this->assertTrue($tableConfig->can_create);
+        $this->assertTrue($tableConfig->canCreate);
         
         // Assert fallback worked (if not overridden)
-        // can_write was false, so can_update and can_delete should be false (since they fallback to can_write if null)
-        $this->assertFalse($tableConfig->can_update);
-        $this->assertFalse($tableConfig->can_delete);
+        // can_write was false, so canUpdate and canDelete should be false (since they fallback to can_write if null)
+        $this->assertFalse($tableConfig->canUpdate);
+        $this->assertFalse($tableConfig->canDelete);
         
         // Check functions
         $this->assertIsArray($tableConfig->functions);
@@ -94,7 +94,7 @@ class LegacyConfigTest extends TestCase
             'legacy_global' => [
                 'method' => ['GET'],
                 'class' => LegacyFunction::class,
-                'function_method' => 'handle',
+                'functionName' => 'handle',
                 'description' => 'Legacy global function',
             ]
         ]);
@@ -113,7 +113,7 @@ class LegacyConfigTest extends TestCase
         // Mock schema with legacy relationship array
         Config::set('record.tables', [
             'legacy_parent' => [
-                'pms_name' => 'legacy_parent',
+                'pmsName' => 'legacy_parent',
                 'table' => 'legacy_parent',
                 'relationships' => [
                     'children' => [
@@ -128,7 +128,7 @@ class LegacyConfigTest extends TestCase
                 ]
             ],
             'legacy_child' => [
-                'pms_name' => 'legacy_child',
+                'pmsName' => 'legacy_child',
                 'table' => 'legacy_child',
             ]
         ]);

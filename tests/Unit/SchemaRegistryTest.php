@@ -45,9 +45,9 @@ class SchemaRegistryUtilsTest extends TestCase
         Config::set('record.tables', [
             'users' => new RecordTableType(
                 table: 'users',
-                pms_name: 'users',
-                has_tenant_id: false,
-                soft_deletes: false,
+                pmsName: 'users',
+                hasTenantId: false,
+                softDeletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
             ),
@@ -66,9 +66,9 @@ class SchemaRegistryUtilsTest extends TestCase
         Config::set('record.tables', [
             'users' => new RecordTableType(
                 table: 'users',
-                pms_name: 'users',
-                has_tenant_id: false,
-                soft_deletes: false,
+                pmsName: 'users',
+                hasTenantId: false,
+                softDeletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
             ),
@@ -87,9 +87,9 @@ class SchemaRegistryUtilsTest extends TestCase
         Config::set('record.tables', [
             'users' => new RecordTableType(
                 table: 'users',
-                pms_name: 'users',
-                has_tenant_id: false,
-                soft_deletes: false,
+                pmsName: 'users',
+                hasTenantId: false,
+                softDeletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
             ),
@@ -108,9 +108,9 @@ class SchemaRegistryUtilsTest extends TestCase
         Config::set('record.tables', [
             'users' => new RecordTableType(
                 table: 'users',
-                pms_name: 'users',
-                has_tenant_id: false,
-                soft_deletes: false,
+                pmsName: 'users',
+                hasTenantId: false,
+                softDeletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
             ),
@@ -139,9 +139,9 @@ class SchemaRegistryUtilsTest extends TestCase
         Config::set('record.tables', [
             'users' => new RecordTableType(
                 table: 'users',
-                pms_name: 'users',
-                has_tenant_id: false,
-                soft_deletes: false,
+                pmsName: 'users',
+                hasTenantId: false,
+                softDeletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
             ),
@@ -162,10 +162,10 @@ class SchemaRegistryUtilsTest extends TestCase
         Config::set('record.tables', [
             'users' => new RecordTableType(
                 table: 'users',
-                pms_name: 'users',
-                has_tenant_id: false,
-                soft_deletes: false,
-                disable_cache: false,
+                pmsName: 'users',
+                hasTenantId: false,
+                softDeletes: false,
+                disableCache: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
             ),
@@ -185,10 +185,10 @@ class SchemaRegistryUtilsTest extends TestCase
         Config::set('record.tables', [
             'users' => new RecordTableType(
                 table: 'users',
-                pms_name: 'users',
-                has_tenant_id: false,
-                soft_deletes: false,
-                disable_cache: true,
+                pmsName: 'users',
+                hasTenantId: false,
+                softDeletes: false,
+                disableCache: true,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
             ),
@@ -208,10 +208,10 @@ class SchemaRegistryUtilsTest extends TestCase
         Config::set('record.tables', [
             'users' => new RecordTableType(
                 table: 'users',
-                pms_name: 'users',
-                has_tenant_id: false,
-                soft_deletes: false,
-                disable_cache: false,
+                pmsName: 'users',
+                hasTenantId: false,
+                softDeletes: false,
+                disableCache: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
             ),

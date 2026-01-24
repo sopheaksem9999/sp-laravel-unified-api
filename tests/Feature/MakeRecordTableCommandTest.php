@@ -31,9 +31,9 @@ class MakeRecordTableCommandTest extends TestCase
         $config = require $file;
         $this->assertInstanceOf(RecordTableType::class, $config);
         $this->assertSame('customers', $config->table);
-        $this->assertSame('customer', $config->pms_name);
-        $this->assertFalse($config->has_tenant_id);
-        $this->assertFalse($config->soft_deletes);
+        $this->assertSame('customer', $config->pmsName);
+        $this->assertFalse($config->hasTenantId);
+        $this->assertFalse($config->softDeletes);
 
         unlink($file);
     }

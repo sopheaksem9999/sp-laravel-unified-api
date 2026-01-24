@@ -47,9 +47,9 @@ class DynamicApiTest extends TestCase
         Config::set('record.tables', [
             'users' => new RecordTableType(
                 table: 'users',
-                pms_name: 'users',
-                has_tenant_id: false,
-                soft_deletes: false,
+                pmsName: 'users',
+                hasTenantId: false,
+                softDeletes: false,
                 public: new RecordTablePublic(
                     read: true,
                     write: true
@@ -66,9 +66,9 @@ class DynamicApiTest extends TestCase
             ),
             'tasks' => new RecordTableType(
                 table: 'tasks',
-                pms_name: 'tasks',
-                has_tenant_id: false,
-                soft_deletes: true,
+                pmsName: 'tasks',
+                hasTenantId: false,
+                softDeletes: true,
                 public: new RecordTablePublic(
                     read: true,
                     write: true

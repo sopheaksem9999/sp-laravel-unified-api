@@ -70,18 +70,6 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
     Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/'.RecordConfigService::rpcPrefix().'/{functionName}', [CoreRecordController::class, 'executeTableFunction'])
         ->where(['table' => '[a-zA-Z0-9_\-]*', 'functionName' => '.*'])
         ->middleware('throttle:api-functions');
-
-    if (RecordConfigService::auditEnabled()) {
-        /*
-        |--------------------------------------------------------------------------
-        | Audit Log Operations
-        |--------------------------------------------------------------------------
-        */
-        // Route::get('audit/logs', [AuditLogController::class, 'getLogs'])->middleware('throttle:api-reads');
-        // Route::get('audit/stats', [AuditLogController::class, 'getStats'])->middleware('throttle:api-reads');
-        // Route::get('audit/timeline', [AuditLogController::class, 'getFieldTimeline'])->middleware('throttle:api-reads');
-    }
-
     /*
     |--------------------------------------------------------------------------
     | Standard CRUD Operations

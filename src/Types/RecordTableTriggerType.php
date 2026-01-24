@@ -8,15 +8,15 @@ class RecordTableTriggerType
 {
     public function __construct(
         public string $class,
-        public string $function_method,
+        public string $functionName,
         public ?string $description = null,
     ) {
         if (empty($class)) {
             throw new InvalidArgumentException('class cannot be empty');
         }
 
-        if (empty($function_method)) {
-            throw new InvalidArgumentException('function_method cannot be empty');
+        if (empty($functionName)) {
+            throw new InvalidArgumentException('functionName cannot be empty');
         }
     }
 
@@ -24,7 +24,7 @@ class RecordTableTriggerType
     {
         return new self(
             class: $properties['class'] ?? throw new InvalidArgumentException('class is required'),
-            function_method: $properties['function_method'] ?? throw new InvalidArgumentException('function_method is required'),
+            functionName: $properties['functionName'] ?? throw new InvalidArgumentException('functionName is required'),
             description: $properties['description'] ?? null,
         );
     }
@@ -33,7 +33,7 @@ class RecordTableTriggerType
     {
         $config = [
             'class' => $this->class,
-            'function_method' => $this->function_method,
+            'functionName' => $this->functionName,
         ];
 
         if (null !== $this->description) {
@@ -47,7 +47,7 @@ class RecordTableTriggerType
     {
         return new self(
             class: $config['class'] ?? throw new InvalidArgumentException('class is required in config array'),
-            function_method: $config['function_method'] ?? throw new InvalidArgumentException('function_method is required in config array'),
+            functionName: $config['functionName'] ?? throw new InvalidArgumentException('functionName is required in config array'),
             description: $config['description'] ?? null,
         );
     }

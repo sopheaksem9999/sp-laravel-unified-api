@@ -58,8 +58,8 @@ class AuditLogTenantTest extends TestCase
         $schema = [
             'test_products' => new RecordTableType(
                 table: 'test_products',
-                pms_name: 'test_product',
-                has_tenant_id: true
+                pmsName: 'test_product',
+                hasTenantId: true
             ),
         ];
         Config::set('record.tables', $schema);

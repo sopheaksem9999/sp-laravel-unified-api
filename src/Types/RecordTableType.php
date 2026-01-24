@@ -9,34 +9,34 @@ namespace Sopheak\Core\Types;
  * This class defines the structure and behavior of a database table.
  *
  * @property null|string       $table            The database table name (defaults to resource name)
- * @property string|array|null $pms_name         The name of the table in the PMS system
- * @property bool              $has_tenant_id    Whether the table has tenant ID column
- * @property bool              $soft_deletes     Whether soft deletes are enabled for this table
- * @property bool              $disable_auditLog Whether audit logging is disabled for this table
- * @property bool              $disable_cache    Whether query caching is disabled for this table
+ * @property string|array|null $pmsName         The name of the table in the PMS system
+ * @property bool              $hasTenantId    Whether the table has tenant ID column
+ * @property bool              $softDeletes     Whether soft deletes are enabled for this table
+ * @property bool              $disableAuditLog Whether audit logging is disabled for this table
+ * @property bool              $disableCache    Whether query caching is disabled for this table
  * @property RecordTablePublic $public           Public configuration settings for the table
  * @property null|array        $relationships    Array of relationships with other tables
  * @property null|array        $functions        Array of function configurations
- * @property null|string       $primary_key      The primary key column name (defaults to 'id')
+ * @property null|string       $primaryKey      The primary key column name (defaults to 'id')
  * @property null|array        $columns          Array of column definitions
- * @property null|array        $column_hiddens   Columns to hide from responses
- * @property null|array        $column_write_disabled    Columns that cannot be written via API payloads
- * @property null|array        $fulltext_indexes Array of full-text index configurations for optimized search
- * @property null|string       $auditLogFn       The function name for audit logging (optional)
+ * @property null|array        $columnHiddens   Columns to hide from responses
+ * @property null|array        $columnWriteDisabled    Columns that cannot be written via API payloads
+ * @property null|array        $columnIndexes  Array of full-text index configurations for optimized search
+ * @property string|array|null $customAuditLog Custom audit logger callback (callable string or [class, method])
  *
  * Example usage:
  * ```php
  * $table = new RecordTableType(
  *     table: 'users',
- *     pms_name: 'users',
- *     has_tenant_id: false,
- *     soft_deletes: true,
- *     disable_auditLog: false,
- *     disable_cache: false,
- *     can_read: true,
- *     can_create: true,
- *     can_update: true,
- *     can_delete: true,
+ *     pmsName: 'users',
+ *     hasTenantId: false,
+ *     softDeletes: true,
+ *     disableAuditLog: false,
+ *     disableCache: false,
+ *     canRead: true,
+ *     canCreate: true,
+ *     canUpdate: true,
+ *     canDelete: true,
  *     public: new RecordTablePublic(),
  *     relationships: [
  *         'roles' => new RecordMetaBelongsToManyType(...),
@@ -47,8 +47,8 @@ namespace Sopheak\Core\Types;
  *         'getFullName' => new RecordFunctionType(
  *             type: 'class',
  *             class: 'App\\Services\\UserService',
- *             function_method: 'getFullName',
- *             method: ['GET'],
+ *             functionName: 'getFullName',
+ *             httpMethod: ['GET'],
  *             description: 'Get the full name of the user'
  *         ),
  *
@@ -56,7 +56,7 @@ namespace Sopheak\Core\Types;
  *         'calculateStats' => [
  *             'type' => 'class',
  *             'class' => 'App\\Services\\UserStatsService',
- *             'function_method' => 'calculate',
+ *             'functionName' => 'calculate',
  *             'method' => ['POST'],
  *             'required_params' => ['period'],
  *             'description' => 'Calculate user statistics'
@@ -66,18 +66,18 @@ namespace Sopheak\Core\Types;
  *         'getActiveUsers' => new RecordFunctionType(
  *             type: 'query',
  *             query: 'SELECT * FROM users WHERE active = 1 AND created_at >= ::since',
- *             method: ['GET'],
+ *             httpMethod: ['GET'],
  *             required_params: ['since'],
  *             description: 'Get active users since a specific date'
  *         ),
  *     ],
- *     primary_key: 'id',
+ *     primaryKey: 'id',
  *     columns: [
  *         'name' => ['type' => 'string', 'nullable' => false],
  *         'email' => ['type' => 'string', 'unique' => true],
  * ],
- *     column_hiddens: ['password', 'remember_token'],
- *     fulltext_indexes: [
+ *     columnHiddens: ['password', 'remember_token'],
+ *     columnIndexes: [
  *         ['name', 'description'],
  *         ['content'],
  *     ],
@@ -88,24 +88,24 @@ class RecordTableType
 {
     public function __construct(
         public ?string $table = null,
-        public string|array|null $pms_name = null,
-        public bool $has_tenant_id = false,
-        public bool $soft_deletes = false,
-        public bool $disable_auditLog = false,
-        public bool $disable_cache = false,
-        public bool $can_read = true,
-        public bool $can_create = true,
-        public bool $can_update = true,
-        public bool $can_delete = true,
+        public string|array|null $pmsName = null,
+        public bool $hasTenantId = false,
+        public bool $softDeletes = false,
+        public bool $disableAuditLog = false,
+        public bool $disableCache = false,
+        public bool $canRead = true,
+        public bool $canCreate = true,
+        public bool $canUpdate = true,
+        public bool $canDelete = true,
         public RecordTablePublic|bool $public = new RecordTablePublic(),
+        public ?string $primaryKey = 'id',
+        public ?array $columns = [],
+        public ?array $columnHiddens = [],
+        public ?array $columnWriteDisabled = [],
+        public ?array $columnIndexes = [],
         public ?array $relationships = [],
         public ?array $functions = [],
-        public ?string $primary_key = 'id',
-        public ?array $columns = [],
-        public ?array $column_hiddens = [],
-        public ?array $column_write_disabled = [],
-        public ?array $fulltext_indexes = [],
-        public ?string $auditLogFn = null,
+        public string|array|null $customAuditLog = null,
         public $createValidator = null,
         public $updateValidator = null,
         public $deleteValidator = null,
@@ -128,24 +128,24 @@ class RecordTableType
     {
         return new self(
             table: $properties['table'] ?? null,
-            pms_name: $properties['pms_name'] ?? null,
-            has_tenant_id: $properties['has_tenant_id'] ?? false,
-            soft_deletes: $properties['soft_deletes'] ?? false,
-            disable_auditLog: $properties['disable_auditLog'] ?? false,
-            disable_cache: $properties['disable_cache'] ?? false,
-            can_read: $properties['can_read'] ?? true,
-            can_create: $properties['can_create'] ?? true,
-            can_update: $properties['can_update'] ?? true,
-            can_delete: $properties['can_delete'] ?? true,
+            pmsName: $properties['pmsName'] ?? null,
+            hasTenantId: $properties['hasTenantId'] ?? false,
+            softDeletes: $properties['softDeletes'] ?? false,
+            disableAuditLog: $properties['disableAuditLog'] ?? false,
+            disableCache: $properties['disableCache'] ?? false,
+            canRead: $properties['canRead'] ?? true,
+            canCreate: $properties['canCreate'] ?? true,
+            canUpdate: $properties['canUpdate'] ?? true,
+            canDelete: $properties['canDelete'] ?? true,
             public: is_array($properties['public'] ?? null) ? RecordTablePublic::__set_state($properties['public']) : ($properties['public'] ?? new RecordTablePublic()),
             relationships: $properties['relationships'] ?? [],
             functions: $properties['functions'] ?? [],
-            primary_key: $properties['primary_key'] ?? 'id',
+            primaryKey: $properties['primaryKey'] ?? 'id',
             columns: $properties['columns'] ?? [],
-            column_hiddens: $properties['column_hiddens'] ?? [],
-            column_write_disabled: $properties['column_write_disabled'] ?? [],
-            fulltext_indexes: $properties['fulltext_indexes'] ?? [],
-            auditLogFn: $properties['auditLogFn'] ?? null,
+            columnHiddens: $properties['columnHiddens'] ?? [],
+            columnWriteDisabled: $properties['columnWriteDisabled'] ?? [],
+            columnIndexes: $properties['columnIndexes'] ?? [],
+            customAuditLog: $properties['customAuditLog'] ?? null,
             createValidator: $properties['createValidator'] ?? null,
             updateValidator: $properties['updateValidator'] ?? null,
             deleteValidator: $properties['deleteValidator'] ?? null,

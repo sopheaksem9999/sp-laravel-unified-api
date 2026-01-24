@@ -65,8 +65,8 @@ class SchemaRegistryUtils
                 $config->columns = self::getTableColumns($actualTableName);
             }
 
-            $config->primary_key ??= 'id';
-            $config->has_tenant_id ??= true;
+            $config->primaryKey ??= 'id';
+            $config->hasTenantId ??= true;
 
             $registry[$tableName] = $config;
         }
@@ -93,7 +93,7 @@ class SchemaRegistryUtils
         $schema = new stdClass();
         $schema->table = $tableName;
         $schema->columns = $columns;
-        $schema->soft_deletes = isset($columns['deleted_at']);
+        $schema->softDeletes = isset($columns['deleted_at']);
 
         return $schema;
     }
@@ -130,8 +130,8 @@ class SchemaRegistryUtils
             $config->columns = self::getTableColumns($actualTableName);
         }
 
-        $config->primary_key ??= 'id';
-        $config->has_tenant_id ??= true;
+        $config->primaryKey ??= 'id';
+        $config->hasTenantId ??= true;
 
         self::$cache[$tableName] = $config;
     }

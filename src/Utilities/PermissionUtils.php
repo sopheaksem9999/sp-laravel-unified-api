@@ -48,8 +48,8 @@ class PermissionUtils
 
     /**
      * Map controller action to permission string following existing naming convention.
-     * Uses pms_name from config when available, falls back to table name.
-     * Example: invoices + read => view_invoice; estimates (pms_name: estimateSo) + read => view_estimateSo.
+     * Uses pmsName from config when available, falls back to table name.
+     * Example: invoices + read => view_invoice; estimates (pmsName: estimateSo) + read => view_estimateSo.
      */
     public static function mapPermission(string $table, string $action): string
     {
@@ -60,11 +60,11 @@ class PermissionUtils
 
     public static function mapPermissions(string $table, string $action): array
     {
-        // Get resource name from config pms_name or fallback to table name
+        // Get resource name from config pmsName or fallback to table name
         $tables = RecordConfigService::getTableConfig();
         $permissionPrefix = RecordConfigService::permissionSeparator();
         $tableConfig = $tables[$table] ?? [];
-        $resources = self::normalizeResources($tableConfig->pms_name ?? null, $table);
+        $resources = self::normalizeResources($tableConfig->pmsName ?? null, $table);
 
         // Map standard CRUD actions to permission verbs first
         switch ($action) {

@@ -26,6 +26,6 @@ class UtilityService
 
     public static function shouldApplyTenantId(object $tableSchema): bool
     {
-        return self::isTenantIdEnabled() && (bool) ($tableSchema->has_tenant_id ?? false);
+        return self::isTenantIdEnabled() && (bool) ($tableSchema->hasTenantId ?? false);
     }
 }

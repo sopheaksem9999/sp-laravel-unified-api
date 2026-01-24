@@ -222,7 +222,7 @@ trait QueryHelpersTrait
 
         // Handle lazy loading for large datasets
         if ($request->has('lazy') && $request->boolean('lazy')) {
-            // Preferred method: Memory-efficient lazy loading with generators
+            // Preferred httpMethod: Memory-efficient lazy loading with generators
             return $commonQuery->lazy();
         }
 

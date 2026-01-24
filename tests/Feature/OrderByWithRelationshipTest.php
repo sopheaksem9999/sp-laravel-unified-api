@@ -72,8 +72,8 @@ class OrderByWithRelationshipTest extends TestCase
         $config = [
             'posts' => new RecordTableType(
                 table: 'posts',
-                pms_name: 'post',
-                has_tenant_id: false,
+                pmsName: 'post',
+                hasTenantId: false,
                 public: new RecordTablePublic(read: true),
                 relationships: [
                     'user' => new RecordBelongsToType(
@@ -84,8 +84,8 @@ class OrderByWithRelationshipTest extends TestCase
             ),
             'users' => new RecordTableType(
                 table: 'users',
-                pms_name: 'user',
-                has_tenant_id: false,
+                pmsName: 'user',
+                hasTenantId: false,
                 public: new RecordTablePublic(read: true)
             )
         ];
@@ -143,8 +143,8 @@ class OrderByWithRelationshipTest extends TestCase
         $config = [
             'posts' => new RecordTableType(
                 table: 'posts',
-                pms_name: 'post',
-                has_tenant_id: false,
+                pmsName: 'post',
+                hasTenantId: false,
                 public: new RecordTablePublic(read: true),
                 relationships: [
                     'user' => new RecordBelongsToType(
@@ -155,8 +155,8 @@ class OrderByWithRelationshipTest extends TestCase
             ),
             'users' => new RecordTableType(
                 table: 'users',
-                pms_name: 'user',
-                has_tenant_id: false,
+                pmsName: 'user',
+                hasTenantId: false,
                 public: new RecordTablePublic(read: true)
             )
         ];

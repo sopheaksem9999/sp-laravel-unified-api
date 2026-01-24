@@ -68,7 +68,7 @@ class BasicTest extends TestCase
             [
                 [
                     'class' => 'App\\DoesNotExist\\Trigger',
-                    'function_method' => 'handle',
+                    'functionName' => 'handle',
                 ],
             ],
             [$request, 'users', []]
@@ -85,7 +85,7 @@ class BasicTest extends TestCase
             [
                 [
                     'class' => TestTriggerHandler::class,
-                    'function_method' => 'handle',
+                    'functionName' => 'handle',
                 ],
             ],
             [$request, 'users', []]
@@ -96,11 +96,11 @@ class BasicTest extends TestCase
     }
 
     /** @test */
-    public function it_maps_permission_for_string_pms_name(): void
+    public function it_maps_permission_for_string_pmsName(): void
     {
         Config::set('record.permission_separator', ':');
         Config::set('record.tables', [
-            'departments' => (object) ['pms_name' => 'department'],
+            'departments' => (object) ['pmsName' => 'department'],
         ]);
 
         $perms = PermissionUtils::mapPermissions('departments', 'read');
@@ -110,11 +110,11 @@ class BasicTest extends TestCase
     }
 
     /** @test */
-    public function it_maps_permissions_for_array_pms_name(): void
+    public function it_maps_permissions_for_array_pmsName(): void
     {
         Config::set('record.permission_separator', ':');
         Config::set('record.tables', [
-            'departments' => (object) ['pms_name' => ['department', 'dept']],
+            'departments' => (object) ['pmsName' => ['department', 'dept']],
         ]);
 
         $perms = PermissionUtils::mapPermissions('departments', 'read');
@@ -129,7 +129,7 @@ class BasicTest extends TestCase
         Config::set('record.tables', [
             'departments' => new RecordTableType(
                 table: 'departments',
-                pms_name: 'department',
+                pmsName: 'department',
                 public: true,
             ),
         ]);

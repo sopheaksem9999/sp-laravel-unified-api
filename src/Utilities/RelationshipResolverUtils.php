@@ -267,7 +267,7 @@ class RelationshipResolverUtils
 
             if ($rel) {
                 $schema = self::getSchema();
-                $localPk = $schema[$mainTable]->primary_key ?? 'id';
+                $localPk = $schema[$mainTable]->primaryKey ?? 'id';
 
                 // Handle RecordBelongsToType
                 if ($rel instanceof RecordBelongsToType) {
@@ -455,7 +455,7 @@ class RelationshipResolverUtils
 
             $relatedTable = $config['table'];
             $relatedSchema = $schema[$relatedTable] ?? null;
-            $relatedPk = $relatedSchema->primary_key ?? 'id';
+            $relatedPk = $relatedSchema->primaryKey ?? 'id';
 
             $type = $config['type'] ?? 'hasMany';
             $allowCreate = $config['allow_create'] ?? true;
@@ -486,7 +486,7 @@ class RelationshipResolverUtils
             // Allowed columns
             $allowedCols = array_keys($schema[$relatedTable]->columns ?? []);
 
-            $writeDisabled = is_array($relatedSchema->column_write_disabled ?? null) ? $relatedSchema->column_write_disabled : [];
+            $writeDisabled = is_array($relatedSchema->columnWriteDisabled ?? null) ? $relatedSchema->columnWriteDisabled : [];
             if ([] !== $writeDisabled) {
                 $allowedCols = array_values(array_diff($allowedCols, $writeDisabled));
             }
@@ -503,7 +503,7 @@ class RelationshipResolverUtils
                 // Handle deletion
                 if (($item['_delete'] ?? false) || ($item['_destroy'] ?? false)) {
                     if ($hasPk && $allowDelete) {
-                        if ($relatedSchema->soft_deletes ?? false) {
+                        if ($relatedSchema->softDeletes ?? false) {
                             DB::table($actualRelatedTableName)
                                 ->where($relatedPk, $idVal)
                                 ->update(['deleted_at' => TimeUtils::now()]);
@@ -564,11 +564,11 @@ class RelationshipResolverUtils
         $relatedPivotKey = $config['related_pivot_key'];
         $relatedTable = $config['table'];
         $relatedSchema = $schema[$relatedTable] ?? null;
-        $relatedPk = $relatedSchema->primary_key ?? 'id';
+        $relatedPk = $relatedSchema->primaryKey ?? 'id';
         $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
 
         $allowedRelatedCols = array_keys($relatedSchema->columns ?? []);
-        $writeDisabled = is_array($relatedSchema->column_write_disabled ?? null) ? $relatedSchema->column_write_disabled : [];
+        $writeDisabled = is_array($relatedSchema->columnWriteDisabled ?? null) ? $relatedSchema->columnWriteDisabled : [];
         if ([] !== $writeDisabled) {
             $allowedRelatedCols = array_values(array_diff($allowedRelatedCols, $writeDisabled));
         }
@@ -661,7 +661,7 @@ class RelationshipResolverUtils
         $ownerValue = $config['owner_value'] ?? null;
         $targetTable = $config['table'];
         $targetSchema = $schema[$targetTable] ?? null;
-        $targetPk = $targetSchema->primary_key ?? 'id';
+        $targetPk = $targetSchema->primaryKey ?? 'id';
         $actualTargetTableName = $schema[$targetTable]->table ?? $targetTable;
 
         foreach ($data as $item) {
@@ -690,7 +690,7 @@ class RelationshipResolverUtils
 
             if (!$targetId && $allowCreate) {
                 $targetFields = array_intersect_key($item, array_flip(array_keys($targetSchema->columns ?? [])));
-                $writeDisabled = is_array($targetSchema->column_write_disabled ?? null) ? $targetSchema->column_write_disabled : [];
+                $writeDisabled = is_array($targetSchema->columnWriteDisabled ?? null) ? $targetSchema->columnWriteDisabled : [];
                 if ([] !== $writeDisabled) {
                     $targetFields = array_diff_key($targetFields, array_flip($writeDisabled));
                 }
@@ -915,7 +915,7 @@ class RelationshipResolverUtils
         }
 
         // Apply soft delete filtering
-        if ($schema[$relatedTable]->soft_deletes ?? false) {
+        if ($schema[$relatedTable]->softDeletes ?? false) {
             $subquery->whereNull($subqueryAlias . '.deleted_at');
         }
 
@@ -957,7 +957,7 @@ class RelationshipResolverUtils
         }
 
         // Add soft delete filtering
-        if ($schema[$relatedTable]->soft_deletes ?? false) {
+        if ($schema[$relatedTable]->softDeletes ?? false) {
             $subqueryRaw .= sprintf(' AND %s.deleted_at IS NULL', $actualRelatedTableName);
         }
 
@@ -1029,11 +1029,11 @@ class RelationshipResolverUtils
         }
 
         // Add soft delete filtering
-        if ($schema[$relatedTable]->soft_deletes ?? false) {
+        if ($schema[$relatedTable]->softDeletes ?? false) {
             $subqueryRaw .= sprintf(' AND %s.deleted_at IS NULL', $actualRelatedTableName);
         }
 
-        if ($schema[$pivotTable]->soft_deletes ?? false) {
+        if ($schema[$pivotTable]->softDeletes ?? false) {
             $subqueryRaw .= sprintf(' AND %s.deleted_at IS NULL', $actualPivotTableName);
         }
 
@@ -1109,11 +1109,11 @@ class RelationshipResolverUtils
         }
 
         // Add soft delete filtering
-        if ($schema[$relatedTable]->soft_deletes ?? false) {
+        if ($schema[$relatedTable]->softDeletes ?? false) {
             $subqueryRaw .= sprintf(' AND %s.deleted_at IS NULL', $actualRelatedTableName);
         }
 
-        if ($schema[$pivotTable]->soft_deletes ?? false) {
+        if ($schema[$pivotTable]->softDeletes ?? false) {
             $subqueryRaw .= sprintf(' AND %s.deleted_at IS NULL', $actualPivotTableName);
         }
 
@@ -1167,11 +1167,11 @@ class RelationshipResolverUtils
         }
 
         // Add soft delete filtering
-        if ($schema[$relatedTable]->soft_deletes ?? false) {
+        if ($schema[$relatedTable]->softDeletes ?? false) {
             $subqueryRaw .= sprintf(' AND %s.deleted_at IS NULL', $actualRelatedTableName);
         }
 
-        if ($schema[$throughTable]->soft_deletes ?? false) {
+        if ($schema[$throughTable]->softDeletes ?? false) {
             $subqueryRaw .= sprintf(' AND %s.deleted_at IS NULL', $actualThroughTableName);
         }
 
@@ -1562,7 +1562,7 @@ class RelationshipResolverUtils
             $builder->where($tenantCol, $tenantId);
         }
 
-        if ($schema[$throughTable]->soft_deletes ?? false) {
+        if ($schema[$throughTable]->softDeletes ?? false) {
             $builder->whereNull('deleted_at');
         }
 
@@ -1700,7 +1700,7 @@ class RelationshipResolverUtils
         }
 
         // Apply soft delete filtering
-        if ($schema[$relatedTable]->soft_deletes ?? false) {
+        if ($schema[$relatedTable]->softDeletes ?? false) {
             $relatedBuilder->whereNull('deleted_at');
         }
 
@@ -1854,7 +1854,7 @@ class RelationshipResolverUtils
         }
 
         // Apply soft delete filtering
-        if ($schema[$relatedTable]->soft_deletes ?? false) {
+        if ($schema[$relatedTable]->softDeletes ?? false) {
             $builder->whereNull('deleted_at');
         }
 
@@ -1893,7 +1893,7 @@ class RelationshipResolverUtils
             }
 
             // Apply soft delete filtering
-            if ($schema[$relatedTable]->soft_deletes ?? false) {
+            if ($schema[$relatedTable]->softDeletes ?? false) {
                 $builder->whereNull('deleted_at');
             }
 

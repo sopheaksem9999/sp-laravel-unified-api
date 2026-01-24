@@ -134,7 +134,7 @@ GET /' . $apiPrefix . '/users?select=id,name,roles(id,name)
 
 ## 🏢 Multi-Tenant Header
 
-If multi-tenant mode is enabled (`record.enable_tenant_id=true`) and the table is configured with `has_tenant_id=true`, include the tenant header on requests:
+If multi-tenant mode is enabled (`record.enable_tenant_id=true`) and the table is configured with `hasTenantId=true`, include the tenant header on requests:
 ```bash
 ' . $tenantHeader . ': <tenant-id>
 ```
@@ -466,10 +466,10 @@ Accepts an array of IDs or an array of objects with the primary key.
             $schemaRefRead = '#/components/schemas/' . self::schemaName($recordName) . 'Read';
             $schemaRefWrite = '#/components/schemas/' . self::schemaName($recordName) . 'Write';
             $tenantHeaderParameters = self::tenantHeaderParametersForTableConfig($config);
-            $canRead = (bool) ($config->can_read ?? true);
-            $canCreate = (bool) ($config->can_create ?? true);
-            $canUpdate = (bool) ($config->can_update ?? true);
-            $canDelete = (bool) ($config->can_delete ?? true);
+            $canRead = (bool) ($config->canRead ?? true);
+            $canCreate = (bool) ($config->canCreate ?? true);
+            $canUpdate = (bool) ($config->canUpdate ?? true);
+            $canDelete = (bool) ($config->canDelete ?? true);
 
             // Generate relationship description
             $relationshipDescription = self::generateRelationshipDescription($config);
@@ -794,7 +794,7 @@ Accepts an array of IDs or an array of objects with the primary key.
             }
 
             // Restore
-            if ($canUpdate && (bool) ($config->soft_deletes ?? false)) {
+            if ($canUpdate && (bool) ($config->softDeletes ?? false)) {
                 $paths[$basePath . '/{id}/restore'] = [
                     'parameters' => [self::pathIdParameter()],
                     'post' => [
@@ -927,9 +927,9 @@ Accepts an array of IDs or an array of objects with the primary key.
             $description = sprintf('%s', $methodName);
 
             // Get schemas from config
-            $querySchema = $functionConfig->query_schema ?? null;
-            $payloadSchema = $functionConfig->payload_schema ?? null;
-            $responseSchema = $functionConfig->response_schema ?? null;
+            $querySchema = $functionConfig->querySchema ?? null;
+            $payloadSchema = $functionConfig->payloadSchema ?? null;
+            $responseSchema = $functionConfig->responseSchema ?? null;
 
             $endpoint = '/' . $apiPrefix . '/' . RecordConfigService::rpcPrefix() . '/' . $functionName;
             $paths[$endpoint] = [];
@@ -1147,9 +1147,9 @@ Accepts an array of IDs or an array of objects with the primary key.
                 $description = sprintf('%s', $methodName);
 
                 // Get schemas from config
-                $querySchema = $functionConfig->query_schema ?? null;
-                $payloadSchema = $functionConfig->payload_schema ?? null;
-                $responseSchema = $functionConfig->response_schema ?? null;
+                $querySchema = $functionConfig->querySchema ?? null;
+                $payloadSchema = $functionConfig->payloadSchema ?? null;
+                $responseSchema = $functionConfig->responseSchema ?? null;
 
                 // Handle parameterized endpoints like 'update/{id}'
                 $endpoint = sprintf('/%s/%s/%s/%s', $apiPrefix, $tableName, RecordConfigService::rpcPrefix(), $functionName);
@@ -1753,7 +1753,7 @@ Accepts an array of IDs or an array of objects with the primary key.
             return [];
         }
 
-        if (!($config->has_tenant_id ?? false)) {
+        if (!($config->hasTenantId ?? false)) {
             return [];
         }
 

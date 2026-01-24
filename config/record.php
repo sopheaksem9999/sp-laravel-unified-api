@@ -11,7 +11,7 @@
  * Key Features:
  * - Table-level read/write permissions
  * - Static relationship definitions (no auto-detection)
- * - Static table metadata (primary_key, soft_deletes, has_tenant_id)
+ * - Static table metadata (primaryKey, softDeletes, hasTenantId)
  * - Pagination and bulk operation limits
  * - Caching configuration for performance
  * - Nested relationship depth control
@@ -133,10 +133,10 @@ return [
     |
     | Each function can be configured with:
     | - type: 'class', 'closure', or 'query'
-    | - method: allowed HTTP methods (optional)
+    | - httpMethod: allowed HTTP methods (optional)
     | - required_params: array of required parameters (optional)
     | - class: class name for 'class' type functions
-    | - method: method name for 'class' type functions (default: 'handle')
+    | - httpMethod: method name for 'class' type functions (default: 'handle')
     | - closure: callable for 'closure' type functions
     | - query: SQL query for 'query' type functions
     |
@@ -164,19 +164,19 @@ return [
     | Define table-specific configurations including permissions, metadata,
     | and relationships. Each table configuration should include:
     |
-    | - pms_name: Permission system resource name
-    | - primary_key: Primary key column (default: 'id')
-    | - soft_deletes: Has deleted_at column (default: true)
-    | - has_tenant_id: Has tenant_id column (default: true)
+    | - pmsName: Permission system resource name
+    | - primaryKey: Primary key column (default: 'id')
+    | - softDeletes: Has deleted_at column (default: true)
+    | - hasTenantId: Has tenant_id column (default: true)
     | - public: Read/write permissions for public access
     | - relationships: Static relationship definitions
     |
     | Example:
     | 'users' => [
-    |     'pms_name' => 'user',
-    |     'primary_key' => 'id',
-    |     'soft_deletes' => true,
-    |     'has_tenant_id' => true,
+    |     'pmsName' => 'user',
+    |     'primaryKey' => 'id',
+    |     'softDeletes' => true,
+    |     'hasTenantId' => true,
     |     'public' => [
     |         'read' => false,
     |         'write' => false,

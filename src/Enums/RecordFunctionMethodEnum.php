@@ -2,7 +2,7 @@
 
 namespace Sopheak\Core\Enums;
 
-enum RecordFunctionMethodEnum: string
+enum RecordfunctionNameEnum: string
 {
     case GET = 'GET';
     case POST = 'POST';

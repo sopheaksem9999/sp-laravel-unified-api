@@ -397,7 +397,7 @@ class CoreRecordController extends Controller
                 'id' => $id,
                 RecordConfigService::tenantColumn() => $tenantId,
                 'affected' => $affected,
-                'soft_deleted' => $tableSchema->soft_deletes,
+                'soft_deleted' => $tableSchema->softDeletes,
                 'response' => $response,
             ]);
 
@@ -417,7 +417,7 @@ class CoreRecordController extends Controller
     public function restoreRecord(Request $request, string $table, string $id): JsonResponse
     {
         $tableSchema = SchemaRegistryUtils::getTable($table);
-        if (!$tableSchema instanceof RecordTableType || !$tableSchema->soft_deletes) {
+        if (!$tableSchema instanceof RecordTableType || !$tableSchema->softDeletes) {
             return RecordApiResponseService::errorWrapped('Resource not restorable', RecordApiJsonResponseEnum::ERROR->value);
         }
 
@@ -640,7 +640,7 @@ class CoreRecordController extends Controller
             return $this->dispatchAsyncBulk($request, $table, 'create', $items, $tenantId);
         }
 
-        $pk = $schema[$table]->primary_key ?? 'id';
+        $pk = $schema[$table]->primaryKey ?? 'id';
 
         $createdData = [];
         $affected = 0;
@@ -714,7 +714,7 @@ class CoreRecordController extends Controller
 
         // Resolve actual table name from RecordTableType configuration
         $this->resolveActualTableName($table);
-        $pk = $schema[$table]->primary_key ?? 'id';
+        $pk = $schema[$table]->primaryKey ?? 'id';
 
         // Validate request structure - expect direct array payload
         $payload = $request->all();
@@ -847,7 +847,7 @@ class CoreRecordController extends Controller
 
         // Resolve actual table name from RecordTableType configuration
         $this->resolveActualTableName($table);
-        $pk = $schema[$table]->primary_key ?? 'id';
+        $pk = $schema[$table]->primaryKey ?? 'id';
 
         // Validate request structure - expect direct array payload
         $payload = $request->all();
@@ -937,7 +937,7 @@ class CoreRecordController extends Controller
                         'payload' => ['id' => $idToDelete],
                         RecordConfigService::tenantColumn() => $tenantId,
                         'affected' => $deleteCount,
-                        'soft_deleted' => $schema[$table]->soft_deletes ?? false,
+                        'soft_deleted' => $schema[$table]->softDeletes ?? false,
                         'response' => $response,
                     ]);
                 }
@@ -1040,22 +1040,22 @@ class CoreRecordController extends Controller
 
     private function isReadEndpointEnabled(object $tableSchema): bool
     {
-        return (bool) ($tableSchema->can_read ?? true);
+        return (bool) ($tableSchema->canRead ?? true);
     }
 
     private function isCreateEndpointEnabled(object $tableSchema): bool
     {
-        return (bool) ($tableSchema->can_create ?? true);
+        return (bool) ($tableSchema->canCreate ?? true);
     }
 
     private function isUpdateEndpointEnabled(object $tableSchema): bool
     {
-        return (bool) ($tableSchema->can_update ?? true);
+        return (bool) ($tableSchema->canUpdate ?? true);
     }
 
     private function isDeleteEndpointEnabled(object $tableSchema): bool
     {
-        return (bool) ($tableSchema->can_delete ?? true);
+        return (bool) ($tableSchema->canDelete ?? true);
     }
 
     private function fetchRecordData(Request $request, string $table, mixed $id, mixed $tenantId): mixed
@@ -1092,11 +1092,11 @@ class CoreRecordController extends Controller
 
         $tableSchema = SchemaRegistryUtils::getTable($table);
         if ($tableSchema instanceof RecordTableType) {
-            if (is_null($tableSchema->pms_name)) {
+            if (is_null($tableSchema->pmsName)) {
                 return;
             }
 
-            if (is_array($tableSchema->pms_name) && [] === $tableSchema->pms_name) {
+            if (is_array($tableSchema->pmsName) && [] === $tableSchema->pmsName) {
                 return;
             }
         }

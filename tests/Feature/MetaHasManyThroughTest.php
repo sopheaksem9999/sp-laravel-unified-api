@@ -70,9 +70,9 @@ class MetaHasManyThroughTest extends TestCase
         Config::set('record.tables', [
             'packages' => new RecordTableType(
                 table: 'packages',
-                pms_name: 'packages',
-                has_tenant_id: false,
-                soft_deletes: false,
+                pmsName: 'packages',
+                hasTenantId: false,
+                softDeletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [
                     'modules' => new RecordMetaHasManyThroughType(
@@ -87,9 +87,9 @@ class MetaHasManyThroughTest extends TestCase
             ),
             'modules' => new RecordTableType(
                 table: 'modules',
-                pms_name: 'modules',
-                has_tenant_id: false,
-                soft_deletes: false,
+                pmsName: 'modules',
+                hasTenantId: false,
+                softDeletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
             ),

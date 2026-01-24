@@ -92,7 +92,7 @@ class RecordApiResponseService
         }
 
         $schema = SchemaRegistryUtils::resolveTableSchema($table);
-        $hiddenColumns = $schema->column_hiddens ?? [];
+        $hiddenColumns = $schema->columnHiddens ?? [];
 
         $isObject = is_object($data);
 

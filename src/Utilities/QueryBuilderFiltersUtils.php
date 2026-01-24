@@ -150,7 +150,7 @@ class QueryBuilderFiltersUtils
 
         // Handle check permission query only own user created record
         $recordConfig = RecordConfigService::table($table);
-        $pmsName = $recordConfig->pms_name ?? null;
+        $pmsName = $recordConfig->pmsName ?? null;
 
         if ($pmsName && Auth::check() && RecordConfigService::ownRecordsPermissionPrefix()) {
             $pmsNames = is_array($pmsName) ? $pmsName : [$pmsName];
@@ -429,7 +429,7 @@ class QueryBuilderFiltersUtils
                         }
 
                         // Apply soft delete filtering
-                        if ($schema[$relatedTable]->soft_deletes ?? false) {
+                        if ($schema[$relatedTable]->softDeletes ?? false) {
                             $subquery->whereNull($relatedTable . '.deleted_at');
                         }
                     });
@@ -455,7 +455,7 @@ class QueryBuilderFiltersUtils
                         }
 
                         // Apply soft delete filtering
-                        if ($schema[$relatedTable]->soft_deletes ?? false) {
+                        if ($schema[$relatedTable]->softDeletes ?? false) {
                             $subquery->whereNull($relatedTable . '.deleted_at');
                         }
                     });
@@ -491,11 +491,11 @@ class QueryBuilderFiltersUtils
                         }
 
                         // Apply soft delete filtering
-                        if ($schema[$relatedTable]->soft_deletes ?? false) {
+                        if ($schema[$relatedTable]->softDeletes ?? false) {
                             $subquery->whereNull($relatedTable . '.deleted_at');
                         }
 
-                        if ($schema[$throughTable]->soft_deletes ?? false) {
+                        if ($schema[$throughTable]->softDeletes ?? false) {
                             $subquery->whereNull($throughTable . '.deleted_at');
                         }
                     });
@@ -524,7 +524,7 @@ class QueryBuilderFiltersUtils
                         }
 
                         // Apply soft delete filtering
-                        if ($schema[$relatedTable]->soft_deletes ?? false) {
+                        if ($schema[$relatedTable]->softDeletes ?? false) {
                             $subquery->whereNull($relatedTable . '.deleted_at');
                         }
                     });
@@ -1297,8 +1297,8 @@ class QueryBuilderFiltersUtils
             // This is a simplified check - in production, you'd query INFORMATION_SCHEMA
             $schema = SchemaRegistryUtils::get();
             $tableConfig = $schema[$table] ?? [];
-            $hasFullText = isset($tableConfig['fulltext_indexes'])
-                && in_array($columns, $tableConfig['fulltext_indexes']);
+            $hasFullText = isset($tableConfig['columnIndexes'])
+                && in_array($columns, $tableConfig['columnIndexes']);
 
             self::$searchableCache[$cacheKey] = $hasFullText;
         }

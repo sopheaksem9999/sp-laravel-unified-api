@@ -82,18 +82,18 @@ class HiddenColumnTest extends TestCase
 
         // Register Schema for Users
         $userConfig = new RecordTableType('users');
-        $userConfig->disable_cache = true;
-        $userConfig->column_hiddens = ['password', 'remember_token', 'email_verified_at']; // Hide multiple columns
-        $userConfig->column_write_disabled = ['email'];
+        $userConfig->disableCache = true;
+        $userConfig->columnHiddens = ['password', 'remember_token', 'email_verified_at']; // Hide multiple columns
+        $userConfig->columnWriteDisabled = ['email'];
         $userConfig->relationships = [
             'posts' => new RecordHasManyType('posts', 'user_id'),
         ];
 
         // Register Schema for Posts
         $postConfig = new RecordTableType('posts');
-        $postConfig->disable_cache = true;
-        $postConfig->column_hiddens = ['secret']; // Hide secret
-        $postConfig->column_write_disabled = ['secret'];
+        $postConfig->disableCache = true;
+        $postConfig->columnHiddens = ['secret']; // Hide secret
+        $postConfig->columnWriteDisabled = ['secret'];
         $postConfig->relationships = [
             'user' => new RecordBelongsToType(table: 'users', foreignKey: 'user_id'),
         ];
@@ -101,7 +101,7 @@ class HiddenColumnTest extends TestCase
         // Register Schema for Tasks
         $taskConfig = new RecordTableType(
             table: 'tasks',
-            pms_name: 'task',
+            pmsName: 'task',
             public: new RecordTablePublic(read: true, write: false),
             relationships: [
                 'assignees' => new RecordHasManyThroughType(

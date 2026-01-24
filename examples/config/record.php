@@ -27,10 +27,10 @@ $tables = [
     |--------------------------------------------------------------------------
     */
     'users' => new RecordTableType(
-        pms_name: 'user',
+        pmsName: 'user',
         table: 'users',
-        has_tenant_id: false,
-        soft_deletes: false,
+        hasTenantId: false,
+        softDeletes: false,
         public: new RecordTablePublic(
             read: false,
             write: false
@@ -57,12 +57,12 @@ $tables = [
         ],
         functions: [
             'getFullName' => new RecordFunctionType(
-                method: ['GET'],
+                httpMethod: ['GET'],
                 class: 'App\\Services\\UserService',
-                function_method: 'getFullName',
-                pms_name: 'view_user',
+                functionName: 'getFullName',
+                pmsName: 'view_user',
                 description: 'Get the full name of a user by ID',
-                query_schema: [
+                querySchema: [
                     'type' => 'object',
                     'properties' => [
                         'id' => [
@@ -73,7 +73,7 @@ $tables = [
                     ],
                     'required' => ['id'],
                 ],
-                response_schema: [
+                responseSchema: [
                     'type' => 'object',
                     'properties' => [
                         'data' => [
@@ -103,35 +103,35 @@ $tables = [
         ]),
         beforeRead: new RecordTableTriggerType(
             class: 'App\\Record\\Triggers\\UserTriggers',
-            function_method: 'beforeRead'
+            functionName: 'beforeRead'
         ),
         afterRead: new RecordTableTriggerType(
             class: 'App\\Record\\Triggers\\UserTriggers',
-            function_method: 'afterRead'
+            functionName: 'afterRead'
         ),
         beforeCreate: new RecordTableTriggerType(
             class: 'App\\Record\\Triggers\\UserTriggers',
-            function_method: 'beforeCreate'
+            functionName: 'beforeCreate'
         ),
         afterCreate: new RecordTableTriggerType(
             class: 'App\\Record\\Triggers\\UserTriggers',
-            function_method: 'afterCreate'
+            functionName: 'afterCreate'
         ),
         beforeUpdate: new RecordTableTriggerType(
             class: 'App\\Record\\Triggers\\UserTriggers',
-            function_method: 'beforeUpdate'
+            functionName: 'beforeUpdate'
         ),
         afterUpdate: new RecordTableTriggerType(
             class: 'App\\Record\\Triggers\\UserTriggers',
-            function_method: 'afterUpdate'
+            functionName: 'afterUpdate'
         ),
         beforeDelete: new RecordTableTriggerType(
             class: 'App\\Record\\Triggers\\UserTriggers',
-            function_method: 'beforeDelete'
+            functionName: 'beforeDelete'
         ),
         afterDelete: new RecordTableTriggerType(
             class: 'App\\Record\\Triggers\\UserTriggers',
-            function_method: 'afterDelete'
+            functionName: 'afterDelete'
         )
     ),
 
@@ -141,9 +141,9 @@ $tables = [
     |--------------------------------------------------------------------------
     */
     'posts' => new RecordTableType(
-        pms_name: 'post',
-        has_tenant_id: false,
-        soft_deletes: true, // The PMS name for permissions (e.g., view_post, create_post)
+        pmsName: 'post',
+        hasTenantId: false,
+        softDeletes: true, // The PMS name for permissions (e.g., view_post, create_post)
         public: new RecordTablePublic(
             read: false, // Requires authentication for read operations
             write: false // Requires authentication for write operations
@@ -181,9 +181,9 @@ $tables = [
     |--------------------------------------------------------------------------
     */
     'comments' => new RecordTableType(
-        pms_name: 'comment',
-        has_tenant_id: false,
-        soft_deletes: true, // The PMS name for permissions (e.g., view_comment, create_comment)
+        pmsName: 'comment',
+        hasTenantId: false,
+        softDeletes: true, // The PMS name for permissions (e.g., view_comment, create_comment)
         public: new RecordTablePublic(
             read: false, // Requires authentication for read operations
             write: false // Requires authentication for write operations
@@ -211,9 +211,9 @@ $tables = [
     |--------------------------------------------------------------------------
     */
     'orders' => new RecordTableType(
-        pms_name: 'order',
-        has_tenant_id: true,
-        soft_deletes: true, // The PMS name for permissions (e.g., view_order, create_order)
+        pmsName: 'order',
+        hasTenantId: true,
+        softDeletes: true, // The PMS name for permissions (e.g., view_order, create_order)
         public: new RecordTablePublic(
             read: false, // Requires authentication for read operations
             write: false // Requires authentication for write operations
@@ -251,9 +251,9 @@ $tables = [
     |--------------------------------------------------------------------------
     */
     'products' => new RecordTableType(
-        pms_name: 'product',
-        has_tenant_id: true,
-        soft_deletes: true, // The PMS name for permissions (e.g., view_product, create_product)
+        pmsName: 'product',
+        hasTenantId: true,
+        softDeletes: true, // The PMS name for permissions (e.g., view_product, create_product)
         public: new RecordTablePublic(
             read: false, // Requires authentication for read operations
             write: false // Requires authentication for write operations
@@ -281,9 +281,9 @@ $tables = [
     |--------------------------------------------------------------------------
     */
     'categories' => new RecordTableType(
-        pms_name: 'category',
-        has_tenant_id: false,
-        soft_deletes: false, // The PMS name for permissions (e.g., view_category, create_category)
+        pmsName: 'category',
+        hasTenantId: false,
+        softDeletes: false, // The PMS name for permissions (e.g., view_category, create_category)
         public: new RecordTablePublic(
             read: false, // Requires authentication for read operations
             write: false // Requires authentication for write operations
@@ -366,8 +366,8 @@ return [
     | - table: The actual database table name (if different from key)
     | - permissions: Required permissions for CRUD operations
     | - relationships: Define relationships with other tables
-    | - soft_deletes: Whether the table uses soft deletes
-    | - has_tenant_id: Whether the table has tenant_id column
+    | - softDeletes: Whether the table uses soft deletes
+    | - hasTenantId: Whether the table has tenant_id column
     |
     */
     'tables' => $tables,
@@ -382,12 +382,12 @@ return [
     */
     'global_functions' => [
         'searchAll' => new RecordFunctionType(
-            method: ['POST'],
+            httpMethod: ['POST'],
             class: 'App\\Services\\GlobalSearchService',
-            function_method: 'searchAll',
-            pms_name: 'search_all',
+            functionName: 'searchAll',
+            pmsName: 'search_all',
             description: 'Search across multiple resources',
-            query_schema: [
+            querySchema: [
                 'type' => 'object',
                 'properties' => [
                     'limit' => [
@@ -399,7 +399,7 @@ return [
                     ],
                 ],
             ],
-            payload_schema: [
+            payloadSchema: [
                 'type' => 'object',
                 'properties' => [
                     'q' => [
@@ -417,7 +417,7 @@ return [
                 ],
                 'required' => ['q'],
             ],
-            response_schema: [
+            responseSchema: [
                 'type' => 'object',
                 'properties' => [
                     'data' => [

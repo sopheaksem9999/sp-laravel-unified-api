@@ -42,9 +42,9 @@ class ApplyRequestFiltersConfigTest extends TestCase
 
         $config = new RecordTableType(
             table: 'custom_items',
-            pms_name: 'custom_items_endpoint',
-            has_tenant_id: false,
-            soft_deletes: false,
+            pmsName: 'custom_items_endpoint',
+            hasTenantId: false,
+            softDeletes: false,
             public: new RecordTablePublic(true, true),
             relationships: []
         );

@@ -22,8 +22,8 @@ class MakeRecordTableCommand extends Command
                             {name : Table key / config filename (e.g. customers)}
                             {--table= : Database table name (defaults to name)}
                             {--pms-name= : Permission resource name (defaults to name)}
-                            {--tenant : Mark table as tenant-aware (has_tenant_id=true)}
-                            {--soft-deletes : Enable soft deletes (soft_deletes=true)}
+                            {--tenant : Mark table as tenant-aware (hasTenantId=true)}
+                            {--soft-deletes : Enable soft deletes (softDeletes=true)}
                             {--force : Overwrite the config file if it already exists}';
 
     /**
@@ -70,9 +70,9 @@ class MakeRecordTableCommand extends Command
 
         $this->info('✅ Created RecordTableType config: ' . $this->relativePath($filePath));
         $this->line('   - table: ' . $table);
-        $this->line('   - pms_name: ' . $pmsName);
-        $this->line('   - has_tenant_id: ' . ($hasTenant ? 'true' : 'false'));
-        $this->line('   - soft_deletes: ' . ($softDeletes ? 'true' : 'false'));
+        $this->line('   - pmsName: ' . $pmsName);
+        $this->line('   - hasTenantId: ' . ($hasTenant ? 'true' : 'false'));
+        $this->line('   - softDeletes: ' . ($softDeletes ? 'true' : 'false'));
 
         $this->newLine();
         $this->line('Next steps:');
@@ -96,7 +96,7 @@ use Sopheak\\Core\\Types\\RecordTablePublic;
 use Sopheak\\Core\\Types\\RecordTableType;
 
 return new RecordTableType(
-    pms_name: {$pmsLiteral},
+    pmsName: {$pmsLiteral},
     table: {$tableLiteral},
     public: new RecordTablePublic(
         read: false,
@@ -104,8 +104,8 @@ return new RecordTableType(
     ),
     relationships: [],
     functions: [],
-    soft_deletes: {$softDeletesLiteral},
-    has_tenant_id: {$hasTenantLiteral},
+    softDeletes: {$softDeletesLiteral},
+    hasTenantId: {$hasTenantLiteral},
 );
 PHP;
     }

@@ -84,7 +84,7 @@ class RelationshipMixedFilterTest extends TestCase
 
         // Register Schema
         $config = new RecordTableType('users');
-        $config->disable_cache = true;
+        $config->disableCache = true;
         $config->relationships = [
             'posts' => new RecordHasManyType('posts', 'user_id'),
             'roles' => new RecordMetaBelongsToManyType(

@@ -557,6 +557,10 @@ class AuditLogService
      */
     public static function getTableNameFromEntityType(string $entityType): string
     {
+        if (!str_contains($entityType, '\\')) {
+            return $entityType;
+        }
+
         if (class_exists($entityType)) {
             $model = new $entityType();
             if (method_exists($model, 'getTable')) {

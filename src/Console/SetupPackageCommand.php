@@ -301,15 +301,15 @@ use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordTableType;
 
 return new RecordTableType(
-    pms_name: 'customer',
+    pmsName: 'customer',
     table: 'customers',
     public: new RecordTablePublic(
         read: false,
         write: false,
     ),
     relationships: [],
-    soft_deletes: true,
-    has_tenant_id: false,
+    softDeletes: true,
+    hasTenantId: false,
     createValidator: function (Request $request, ?int $id = null): ValidatorContract {
         return Validator::make($request->all(), [
             'name' => 'required|string|max:255',
@@ -330,12 +330,12 @@ use Sopheak\Core\Types\RecordTableType;
 
 return [
     'invoices' => new RecordTableType(
-        pms_name: 'invoice',
+        pmsName: 'invoice',
         table: 'invoices',
         public: new RecordTablePublic(read: false, write: false),
         relationships: [],
-        soft_deletes: true,
-        has_tenant_id: false,
+        softDeletes: true,
+        hasTenantId: false,
     ),
 ];
 ```
@@ -361,7 +361,7 @@ use Sopheak\Core\Types\RecordTableTriggerType;
 
 $tables = [
     'users' => new RecordTableType(
-        pms_name: 'user',
+        pmsName: 'user',
         table: 'users',
         public: new RecordTablePublic(
             read: false,
@@ -369,8 +369,8 @@ $tables = [
         ),
         relationships: [],
         functions: [],
-        soft_deletes: false,
-        has_tenant_id: false,
+        softDeletes: false,
+        hasTenantId: false,
         createValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'email' => 'required|email',

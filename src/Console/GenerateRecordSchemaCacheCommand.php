@@ -157,10 +157,10 @@ class GenerateRecordSchemaCacheCommand extends Command
 
         $constructor = substr($content, $start, $end + 2 - $start);
 
-        $usesNamedArguments = str_contains($constructor, 'pms_name:')
+        $usesNamedArguments = str_contains($constructor, 'pmsName:')
             || str_contains($constructor, 'table:')
-            || str_contains($constructor, 'has_tenant_id:')
-            || str_contains($constructor, 'soft_deletes:')
+            || str_contains($constructor, 'hasTenantId:')
+            || str_contains($constructor, 'softDeletes:')
             || str_contains($constructor, 'public:')
             || str_contains($constructor, 'relationships:')
             || str_contains($constructor, 'columns:');
@@ -183,9 +183,9 @@ class GenerateRecordSchemaCacheCommand extends Command
         $arguments = $this->removeExistingColumnsArgument($arguments);
 
         $laterParams = [
-            'column_hiddens',
-            'fulltext_indexes',
-            'auditLogFn',
+            'columnHiddens',
+            'columnIndexes',
+            'customAuditLog',
             'createValidator',
             'updateValidator',
             'deleteValidator',

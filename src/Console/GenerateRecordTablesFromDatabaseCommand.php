@@ -193,7 +193,7 @@ use Sopheak\\Core\\Types\\RecordTablePublic;
 use Sopheak\\Core\\Types\\RecordTableType;
 
 return new RecordTableType(
-    pms_name: {$pmsLiteral},
+    pmsName: {$pmsLiteral},
     table: {$tableLiteral},
     public: new RecordTablePublic(
         read: false,
@@ -201,8 +201,8 @@ return new RecordTableType(
     ),
     relationships: {$relationshipsCode},
     functions: [],
-    soft_deletes: {$softDeletesLiteral},
-    has_tenant_id: {$hasTenantLiteral},
+    softDeletes: {$softDeletesLiteral},
+    hasTenantId: {$hasTenantLiteral},
 );
 PHP;
     }

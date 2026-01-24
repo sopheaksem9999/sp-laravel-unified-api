@@ -62,7 +62,7 @@ class RelationshipPermissionsTest extends TestCase
         Config::set('record.tables', [
             'projects' => new RecordTableType(
                 table: 'projects',
-                pms_name: 'projects',
+                pmsName: 'projects',
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [
                     // BelongsToMany: Tags
@@ -93,13 +93,13 @@ class RelationshipPermissionsTest extends TestCase
             ),
             'tags' => new RecordTableType(
                 table: 'tags',
-                pms_name: 'tags',
+                pmsName: 'tags',
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: []
             ),
             'tasks' => new RecordTableType(
                 table: 'tasks',
-                pms_name: 'tasks',
+                pmsName: 'tasks',
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: []
             )

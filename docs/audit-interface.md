@@ -221,6 +221,101 @@ class InvoiceController extends Controller implements AuditQueryInterface
 }
 ```
 
+## Table-Level Custom Audit Logger
+
+In addition to controller-level audit queries and model-level auditing, you can override the default audit logging behavior on a per-table basis using the `customAuditLog` option on `RecordTableType`.
+
+When `customAuditLog` is set, the package calls the provided callback instead of the default `AuditLogService::insertAuditLog` calls for that table. This applies to:
+
+- Single record operations (`create`, `update`, `delete`) via the dynamic API.
+- Bulk `upsert` operations handled by `RecordService::bulkRecord`.
+
+### Configuration Example
+
+```php
+use Sopheak\Core\Types\RecordTableType;
+use Sopheak\Core\Types\RecordTablePublic;
+
+return [
+    'tables' => [
+        'invoices' => new RecordTableType(
+            table: 'invoices',
+            pmsName: 'invoice',
+            public: new RecordTablePublic(
+                read: true,
+                write: true,
+            ),
+            // String callback formats are supported...
+            // customAuditLog: \App\Http\Controllers\InvoiceAuditLogger::class . '@handle',
+
+            // ...and so is native PHP callable array syntax
+            customAuditLog: [\App\Http\Controllers\InvoiceAuditLogger::class, 'handle'],
+        ),
+    ],
+];
+```
+
+### Callback Signature
+
+The configured callback is invoked with the following signature:
+
+```php
+use Sopheak\Core\Enums\AuditLogEventEnum;
+
+function handle(
+    AuditLogEventEnum $event,
+    string $entityClass,
+    array $auditData,
+    mixed $tenantId,
+    array $context
+): void
+```
+
+Where:
+
+- `$event` – The audit event (`CREATED`, `UPDATED`, `DELETED`).
+- `$entityClass` – The fully qualified entity class name (e.g. `App\Models\Invoice`).
+- `$auditData` – The payload that would normally be sent to the core audit logger.
+- `$tenantId` – The resolved tenant identifier (if tenant support is enabled).
+- `$context` – Additional runtime data:
+  - `request` – The current `Request` instance.
+  - `table` – The logical table name used by the dynamic API.
+  - `operation` – One of `create`, `update`, `delete`, or `upsert`.
+  - `record_context` – Operation-specific context (includes `id`, `payload`, `response`, etc.).
+
+### Example Custom Audit Handler
+
+```php
+namespace App\Http\Controllers;
+
+use Sopheak\Core\Enums\AuditLogEventEnum;
+use Sopheak\Core\Services\AuditLogService;
+
+class InvoiceAuditLogger
+{
+    public function handle(
+        AuditLogEventEnum $event,
+        string $entityClass,
+        array $auditData,
+        mixed $tenantId,
+        array $context
+    ): void {
+        // Example: enrich audit data with extra context
+        $auditData['__request_ip'] = $context['request']->ip();
+
+        AuditLogService::handleAuditDataEntry(
+            event: $event,
+            entityName: AuditLogService::getTableNameFromEntityType($entityClass),
+            entityType: AuditLogService::getTableNameFromEntityType($entityClass),
+            queryData: $auditData,
+            tenantId: $tenantId,
+        );
+    }
+}
+```
+
+If the callback cannot be resolved (for example, wrong class or method name), the package falls back to the default audit logging implementation to avoid breaking API calls.
+
 ## Auditable Trait (Model-Level)
 
 The `Auditable` trait can be applied directly to Eloquent models to automatically capture **old/new data** and **relationships** around `created`, `updated`, and `deleted` events.

@@ -186,7 +186,7 @@ return [
 
     'tables' => [
         'users' => new RecordTableType(
-            pms_name: 'user',
+            pmsName: 'user',
             table: 'users',
             public: new RecordTablePublic(
                 read: false,
@@ -199,8 +199,8 @@ return [
                     localKey: 'id',
                 ),
             ],
-            soft_deletes: false,
-            has_tenant_id: false,
+            softDeletes: false,
+            hasTenantId: false,
             createValidator: function (\Illuminate\Http\Request $request, ?int $id = null): \Illuminate\Contracts\Validation\Validator {
                 return \Illuminate\Support\Facades\Validator::make($request->all(), [
                     'name' => 'required|string|max:255',
@@ -257,6 +257,69 @@ return [
 The package routes are loaded automatically by `Sopheak\Core\CoreServiceProvider` using this prefix. Record endpoints authorize per-table using `RecordTablePublic` and permissions; audit endpoints include read endpoints (and additional authenticated endpoints) under the same prefix.
 
 Alternatively, you can keep `config/record.php` focused on global options and define per-table configurations under `config/records/tables` using the Artisan helper:
+
+### Table-Level Custom Audit Logger
+
+You can override the default audit logging behavior for a specific table by providing a `customAuditLog` callback on the `RecordTableType` configuration. When set, this callback is invoked instead of the built-in `AuditLogService::insertAuditLog` calls for that table.
+
+**Example table config (config/records/tables/invoices.php):**
+
+```php
+use Sopheak\Core\Types\RecordTableType;
+use Sopheak\Core\Types\RecordTablePublic;
+
+return new RecordTableType(
+    table: 'invoices',
+    pmsName: 'invoice',
+    public: new RecordTablePublic(
+        read: true,
+        write: true,
+    ),
+    // String callback formats are supported...
+    // customAuditLog: \App\Http\Controllers\InvoiceAuditLogger::class . '@handle',
+
+    // ...and so is native PHP callable array syntax
+    customAuditLog: [\App\Http\Controllers\InvoiceAuditLogger::class, 'handle'],
+);
+```
+
+**Example custom audit handler:**
+
+```php
+namespace App\Http\Controllers;
+
+use Sopheak\Core\Enums\AuditLogEventEnum;
+use Sopheak\Core\Services\AuditLogService;
+
+class InvoiceAuditLogger
+{
+    public function handle(
+        AuditLogEventEnum $event,
+        string $entityClass,
+        array $auditData,
+        mixed $tenantId,
+        array $context
+    ): void {
+        // Optionally transform or enrich $auditData here
+
+        // Delegate to the core audit logic with your customized payload
+        AuditLogService::handleAuditDataEntry(
+            event: $event,
+            entityName: AuditLogService::getTableNameFromEntityType($entityClass),
+            entityType: AuditLogService::getTableNameFromEntityType($entityClass),
+            queryData: $auditData,
+            tenantId: $tenantId,
+        );
+    }
+}
+```
+
+The `$context` parameter contains useful runtime information you can use for more advanced scenarios:
+
+- `request` – The current `Illuminate\Http\Request` instance.
+- `table` – The logical table name used in the API (e.g. `invoices`).
+- `operation` – One of `create`, `update`, `delete`, or `upsert`.
+- `record_context` – The internal record context used by `RecordService` (includes `id`, `payload`, `response`, etc. depending on the operation).
 
 ```bash
 php artisan sp-laravel-api:record customers

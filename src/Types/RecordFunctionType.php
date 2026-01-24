@@ -3,7 +3,7 @@
 namespace Sopheak\Core\Types;
 
 use InvalidArgumentException;
-use Sopheak\Core\Enums\RecordFunctionMethodEnum;
+use Sopheak\Core\Enums\RecordfunctionNameEnum;
 
 /**
  * Class RecordFunctionType.
@@ -12,10 +12,10 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  * This class defines the structure and behavior of custom API endpoints that can be
  * dynamically registered and executed within the ERP system.
  *
- * @property array|string|null $pms_name        The PMS name identifier(s) for this function (optional, null for public)
- * @property array|string       $method          Allowed HTTP methods (GET, POST, PUT, DELETE, etc.)
+ * @property array|string|null $pmsName        The PMS name identifier(s) for this function (optional, null for public)
+ * @property array|string       $httpMethod      Allowed HTTP methods (GET, POST, PUT, DELETE, etc.)
  * @property string             $class           Class name for class-based functions (required)
- * @property string             $function_method Method name for class-based functions (required)
+ * @property string             $functionName Method name for class-based functions (required)
  * @property null|string        $description     Function description for documentation purposes
  *
  * @since 1.0.0
@@ -24,48 +24,48 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  *
  * Example usage:
  * ```php
- * // Public function (no pms_name)
+ * // Public function (no pmsName)
  * $publicFunction = new RecordFunctionType(
- *     pms_name: null,
- *     method: 'POST',
+ *     pmsName: null,
+ *     httpMethod: 'POST',
  *     class: 'App\\Services\\AuthService',
- *     function_method: 'login',
+ *     functionName: 'login',
  *     description: 'User login'
  * );
  *
  * // Class-based function for business logic
  * $classFunction = new RecordFunctionType(
- *     pms_name: 'calculate_total',
- *     method: ['POST'],
+ *     pmsName: 'calculate_total',
+ *     httpMethod: ['POST'],
  *     class: 'App\\Services\\CalculationService',
- *     function_method: 'calculateTotal',
+ *     functionName: 'calculateTotal',
  *     description: 'Calculate total for given items'
  * );
  *
  * // Simple GET endpoint
  * $getFunction = new RecordFunctionType(
- *     pms_name: 'get_status',
- *     method: 'GET',
+ *     pmsName: 'get_status',
+ *     httpMethod: 'GET',
  *     class: 'App\\Services\\StatusService',
- *     function_method: 'getStatus',
+ *     functionName: 'getStatus',
  *     description: 'Get system status information'
  * );
  *
  * // Multiple HTTP methods supported
  * $crudFunction = new RecordFunctionType(
- *     pms_name: 'manage_records',
- *     method: ['GET', 'POST', 'PUT', 'DELETE'],
+ *     pmsName: 'manage_records',
+ *     httpMethod: ['GET', 'POST', 'PUT', 'DELETE'],
  *     class: 'App\\Services\\RecordManagementService',
- *     function_method: 'handleRequest',
+ *     functionName: 'handleRequest',
  *     description: 'Full CRUD operations for records'
  * );
  *
  * // Multiple permissions (user needs at least one)
  * $multiPermissionFunction = new RecordFunctionType(
- *     pms_name: ['create_employeeRoster', 'update_employeeRoster'],
- *     method: ['POST'],
+ *     pmsName: ['create_employeeRoster', 'update_employeeRoster'],
+ *     httpMethod: ['POST'],
  *     class: 'App\\Http\\Controllers\\EmployeeRosterController',
- *     function_method: 'upsertEmployeeRosters',
+ *     functionName: 'upsertEmployeeRosters',
  *     description: 'Create or update employee rosters'
  * );
  * ```
@@ -75,34 +75,34 @@ class RecordFunctionType
     /**
      * Create a new RecordFunctionType instance.
      *
-     * @param array|string|null $pms_name   The PMS name identifier(s) for this function (optional, null for public)
-     * @param array|string $method          Allowed HTTP methods (e.g., 'GET', ['GET', 'POST'])
+     * @param array|string|null $pmsName   The PMS name identifier(s) for this function (optional, null for public)
+     * @param array|string $httpMethod      Allowed HTTP methods (e.g., 'GET', ['GET', 'POST'])
      * @param string       $class           Class name for class-based functions (required)
-     * @param string       $function_method Method name for class-based functions (required)
+     * @param string       $functionName Method name for class-based functions (required)
      * @param null|string  $description     Function description for documentation purposes
      *
-     * @throws InvalidArgumentException When class or function_method is empty
+     * @throws InvalidArgumentException When class or functionName is empty
      */
     public function __construct(
-        public array|string|RecordFunctionMethodEnum $method,
+        public array|string|RecordfunctionNameEnum $httpMethod,
         public string $class,
-        public string $function_method,
-        public array|string|null $pms_name = null,
+        public string $functionName,
+        public array|string|null $pmsName = null,
         public ?string $description = null,
-        public ?array $query_schema = null,
-        public ?array $payload_schema = null,
-        public ?array $response_schema = null,
+        public ?array $querySchema = null,
+        public ?array $payloadSchema = null,
+        public ?array $responseSchema = null,
     ) {
-        if (null !== $pms_name && (empty($pms_name) || (is_array($pms_name) && [] === $pms_name))) {
-            throw new InvalidArgumentException('pms_name cannot be empty if provided');
+        if (null !== $pmsName && (empty($pmsName) || (is_array($pmsName) && [] === $pmsName))) {
+            throw new InvalidArgumentException('pmsName cannot be empty if provided');
         }
 
         if (empty($class)) {
             throw new InvalidArgumentException('class cannot be empty');
         }
 
-        if (empty($function_method)) {
-            throw new InvalidArgumentException('function_method cannot be empty');
+        if (empty($functionName)) {
+            throw new InvalidArgumentException('functionName cannot be empty');
         }
     }
 
@@ -121,14 +121,14 @@ class RecordFunctionType
     public static function __set_state(array $properties): self
     {
         return new self(
-            method: $properties['method'] ?? throw new InvalidArgumentException('method is required'),
+            httpMethod: $properties['httpMethod'] ?? throw new InvalidArgumentException('httpMethod is required'),
             class: $properties['class'] ?? throw new InvalidArgumentException('class is required'),
-            function_method: $properties['function_method'] ?? throw new InvalidArgumentException('function_method is required'),
-            pms_name: $properties['pms_name'] ?? null,
+            functionName: $properties['functionName'] ?? throw new InvalidArgumentException('functionName is required'),
+            pmsName: $properties['pmsName'] ?? null,
             description: $properties['description'] ?? null,
-            query_schema: $properties['query_schema'] ?? null,
-            payload_schema: $properties['payload_schema'] ?? null,
-            response_schema: $properties['response_schema'] ?? null,
+            querySchema: $properties['querySchema'] ?? null,
+            payloadSchema: $properties['payloadSchema'] ?? null,
+            responseSchema: $properties['responseSchema'] ?? null,
         );
     }
 
@@ -141,26 +141,26 @@ class RecordFunctionType
     public function toArray(): array
     {
         $config = [
-            'pms_name' => $this->pms_name,
-            'method' => $this->method,
+            'pmsName' => $this->pmsName,
+            'method' => $this->httpMethod,
             'class' => $this->class,
-            'function_method' => $this->function_method,
+            'functionName' => $this->functionName,
         ];
 
         if (null !== $this->description) {
             $config['description'] = $this->description;
         }
 
-        if (null !== $this->query_schema) {
-            $config['query_schema'] = $this->query_schema;
+        if (null !== $this->querySchema) {
+            $config['querySchema'] = $this->querySchema;
         }
 
-        if (null !== $this->payload_schema) {
-            $config['payload_schema'] = $this->payload_schema;
+        if (null !== $this->payloadSchema) {
+            $config['payloadSchema'] = $this->payloadSchema;
         }
 
-        if (null !== $this->response_schema) {
-            $config['response_schema'] = $this->response_schema;
+        if (null !== $this->responseSchema) {
+            $config['responseSchema'] = $this->responseSchema;
         }
 
         return $config;
@@ -181,10 +181,10 @@ class RecordFunctionType
      * @example
      * ```php
      * $config = [
-     *     'pms_name' => 'user_report',
+     *     'pmsName' => 'user_report',
      *     'method' => ['GET', 'POST'],
      *     'class' => 'App\\Services\\UserReportService',
-     *     'function_method' => 'generateReport',
+     *     'functionName' => 'generateReport',
      *     'description' => 'Generate user reports'
      * ];
      * $function = RecordFunctionType::fromArray($config);
@@ -193,14 +193,14 @@ class RecordFunctionType
     public static function fromArray(array $config): self
     {
         return new self(
-            method: $config['method'] ?? throw new InvalidArgumentException('method is required in config array'),
+            httpMethod: $config['method'] ?? throw new InvalidArgumentException('method is required in config array'),
             class: $config['class'] ?? throw new InvalidArgumentException('class is required in config array'),
-            function_method: $config['function_method'] ?? throw new InvalidArgumentException('function_method is required in config array'),
-            pms_name: $config['pms_name'] ?? null,
+            functionName: $config['functionName'] ?? throw new InvalidArgumentException('functionName is required in config array'),
+            pmsName: $config['pmsName'] ?? null,
             description: $config['description'] ?? null,
-            query_schema: $config['query_schema'] ?? null,
-            payload_schema: $config['payload_schema'] ?? null,
-            response_schema: $config['response_schema'] ?? null,
+            querySchema: $config['querySchema'] ?? null,
+            payloadSchema: $config['payloadSchema'] ?? null,
+            responseSchema: $config['responseSchema'] ?? null,
         );
     }
 }

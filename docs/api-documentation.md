@@ -685,10 +685,10 @@ class LoginFunction extends GlobalFunction
     public function configure(): RecordFunctionType
     {
         return new RecordFunctionType(
-            method: 'POST',
+            httpMethod: 'POST',
             class: \App\Services\AuthService::class,
-            function_method: 'login',
-            payload_schema: [ ... ]
+            functionName: 'login',
+            payloadSchema: [ ... ]
         );
     }
 }
@@ -756,10 +756,10 @@ Defines a callable RPC endpoint config (table RPC or global RPC).
 use Sopheak\Core\Types\RecordFunctionType;
 
 $function = new RecordFunctionType(
-    method: ['POST'],
+    httpMethod: ['POST'],
     class: \App\Services\ReportService::class,
-    function_method: 'generate',
-    pms_name: 'view_report',
+    functionName: 'generate',
+    pmsName: 'view_report',
     description: 'Generate a report',
 );
 ```

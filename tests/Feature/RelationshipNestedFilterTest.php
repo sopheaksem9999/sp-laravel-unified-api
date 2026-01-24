@@ -60,9 +60,9 @@ class RelationshipNestedFilterTest extends TestCase
         Config::set('record.tables', [
             'tasks' => new RecordTableType(
                 table: 'tasks',
-                pms_name: 'tasks',
-                has_tenant_id: false,
-                soft_deletes: false,
+                pmsName: 'tasks',
+                hasTenantId: false,
+                softDeletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [
                     'assignees' => new RecordHasManyThroughType(
@@ -77,9 +77,9 @@ class RelationshipNestedFilterTest extends TestCase
             ),
             'users' => new RecordTableType(
                 table: 'users',
-                pms_name: 'users',
-                has_tenant_id: false,
-                soft_deletes: false,
+                pmsName: 'users',
+                hasTenantId: false,
+                softDeletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
             ),
