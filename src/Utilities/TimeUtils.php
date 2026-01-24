@@ -22,14 +22,14 @@ class TimeUtils
         if ($timestamp && $timezone) {
             try {
                 return Carbon::parse($timestamp, $timezone)->setTimezone(config('app.timezone'));
-            } catch (Exception $exception) {
+            } catch (Exception) {
             }
         }
 
         if ($timezone) {
             try {
                 return Carbon::now($timezone)->setTimezone(config('app.timezone'));
-            } catch (Exception $exception) {
+            } catch (Exception) {
             }
         }
 

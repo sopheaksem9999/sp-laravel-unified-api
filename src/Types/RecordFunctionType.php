@@ -3,7 +3,7 @@
 namespace Sopheak\Core\Types;
 
 use InvalidArgumentException;
-use Sopheak\Core\Enums\RecordfunctionNameEnum;
+use Sopheak\Core\Enums\RecordFunctionMethodEnum;
 
 /**
  * Class RecordFunctionType.
@@ -76,7 +76,7 @@ class RecordFunctionType
      * Create a new RecordFunctionType instance.
      *
      * @param array|string|null $pmsName   The PMS name identifier(s) for this function (optional, null for public)
-     * @param array|string $httpMethod      Allowed HTTP methods (e.g., 'GET', ['GET', 'POST'])
+     * @param array|string|RecordFunctionMethodEnum $httpMethod      Allowed HTTP methods (e.g., 'GET', ['GET', 'POST'])
      * @param string       $class           Class name for class-based functions (required)
      * @param string       $functionName Method name for class-based functions (required)
      * @param null|string  $description     Function description for documentation purposes
@@ -84,7 +84,7 @@ class RecordFunctionType
      * @throws InvalidArgumentException When class or functionName is empty
      */
     public function __construct(
-        public array|string|RecordfunctionNameEnum $httpMethod,
+        public array|string|RecordFunctionMethodEnum $httpMethod,
         public string $class,
         public string $functionName,
         public array|string|null $pmsName = null,

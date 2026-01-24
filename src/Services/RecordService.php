@@ -540,17 +540,14 @@ class RecordService
                                 ],
                             ];
 
-                            if (!empty($tableSchema->customAuditLog) &&
-                                $this->callCustomAuditLogger(
-                                    callback: $tableSchema->customAuditLog,
-                                    event: AuditLogEventEnum::UPDATED,
-                                    entityClass: $entityClass,
-                                    auditData: $recordResult['data'],
-                                    tenantId: $tenantId,
-                                    context: $context,
-                                )
-                            ) {
-                            } else {
+                            if (!(!empty($tableSchema->customAuditLog) && $this->callCustomAuditLogger(
+                                callback: $tableSchema->customAuditLog,
+                                event: AuditLogEventEnum::UPDATED,
+                                entityClass: $entityClass,
+                                auditData: $recordResult['data'],
+                                tenantId: $tenantId,
+                                context: $context,
+                            ))) {
                                 AuditLogService::insertAuditLog(
                                     auditLogEventEnum: AuditLogEventEnum::UPDATED,
                                     entityClass: $entityClass,
@@ -812,10 +809,8 @@ class RecordService
         $payload = array_intersect_key($input, array_flip($columns));
 
         $writeDisabled = is_array($meta->columnWriteDisabled ?? null) ? $meta->columnWriteDisabled : [];
-        if ([] !== $writeDisabled) {
-            foreach ($writeDisabled as $column) {
-                unset($payload[$column]);
-            }
+        foreach ($writeDisabled as $column) {
+            unset($payload[$column]);
         }
 
         unset($payload['id'], $payload['deleted_at'], $payload['created_at'], $payload['updated_at']);
@@ -1035,10 +1030,12 @@ class RecordService
                             } else {
                                 $columnCount = 0;
                                 foreach ($requestedCols as $col) {
-                                    if (!is_string($col) || str_contains($col, '=')) {
+                                    if (!is_string($col)) {
                                         continue;
                                     }
-
+                                    if (str_contains((string) $col, '=')) {
+                                        continue;
+                                    }
                                     if (isset($relatedSchema->columns[$col])) {
                                         ++$columnCount;
                                     }
@@ -1357,10 +1354,12 @@ class RecordService
                             } else {
                                 $columnCount = 0;
                                 foreach ($requestedCols as $col) {
-                                    if (!is_string($col) || str_contains($col, '=')) {
+                                    if (!is_string($col)) {
                                         continue;
                                     }
-
+                                    if (str_contains((string) $col, '=')) {
+                                        continue;
+                                    }
                                     if (isset($relatedSchema->columns[$col])) {
                                         ++$columnCount;
                                     }

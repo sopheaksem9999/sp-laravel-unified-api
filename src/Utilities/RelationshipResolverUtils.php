@@ -694,6 +694,7 @@ class RelationshipResolverUtils
                 if ([] !== $writeDisabled) {
                     $targetFields = array_diff_key($targetFields, array_flip($writeDisabled));
                 }
+
                 unset($targetFields['id'], $targetFields['created_at'], $targetFields['updated_at'], $targetFields['deleted_at']);
 
                 if ($tenantId && isset($targetSchema->columns[RecordConfigService::tenantColumn()])) {
@@ -1915,10 +1916,12 @@ class RelationshipResolverUtils
             } else {
                 $effectiveColumns = [];
                 foreach ($columns as $col) {
-                    if (!is_string($col) || str_contains($col, '=')) {
+                    if (!is_string($col)) {
                         continue;
                     }
-
+                    if (str_contains((string) $col, '=')) {
+                        continue;
+                    }
                     if (isset($relatedColumnsMeta[$col])) {
                         $effectiveColumns[] = $col;
                     }
