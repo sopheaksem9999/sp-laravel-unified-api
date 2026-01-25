@@ -119,7 +119,7 @@ Authorization: Bearer <your-api-token>
 
 ## Error Code
 
-Every API response includes an integer `errorCode` that provides a stable, machine-readable error identifier.
+Every API response includes an integer `error_code` that provides a stable, machine-readable error identifier.
 
 Common values:
 - `0` (**SUCCESS**) – Request processed successfully.
@@ -139,7 +139,7 @@ Common values:
 - `10013` (**TENANT_DISABLED**) – Tenant is disabled.
 - `10014` (**NO_TENANT_PMS_ACCESS**) – Tenant has no PMS access for this operation.
 
-Clients should always branch on `errorCode` instead of parsing the human-readable `message`.
+Clients should always branch on `error_code` instead of parsing the human-readable `message`.
 
 ## 🔒 Error Handling
 
@@ -147,7 +147,7 @@ All API responses follow this structure:
 ```json
 {
     "success": true,
-    "errorCode": 0,
+    "error_code": 0,
     "data": {},
     "meta": {
         "request_id": "f9c4d1e2-9b0c-4f8a-9b8a-123456789abc"
@@ -159,7 +159,7 @@ On error, the structure is:
 ```json
 {
     "success": false,
-    "errorCode": 10009,
+    "error_code": 10009,
     "message": "Resource not found",
     "errors": [],
     "meta": {
@@ -550,7 +550,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                         'type' => 'object',
                                         'properties' => [
                                             'success' => ['type' => 'boolean', 'example' => true],
-                                            'errorCode' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::SUCCESS],
+                                            'error_code' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::SUCCESS],
                                             'data' => [
                                                 'type' => 'array',
                                                 'items' => ['$ref' => $schemaRefRead],
@@ -568,7 +568,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                                 ],
                                             ],
                                         ],
-                                        'required' => ['success', 'errorCode', 'data', 'meta'],
+                                        'required' => ['success', 'error_code', 'data', 'meta'],
                                     ],
                                 ],
                             ],
@@ -597,7 +597,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                         'type' => 'object',
                                         'properties' => [
                                             'success' => ['type' => 'boolean', 'example' => true],
-                                            'errorCode' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::SUCCESS],
+                                            'error_code' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::SUCCESS],
                                             'data' => ['$ref' => $schemaRef],
                                             'meta' => [
                                                 'type' => 'object',
@@ -606,7 +606,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                                 ],
                                             ],
                                         ],
-                                        'required' => ['success', 'errorCode', 'data', 'meta'],
+                                        'required' => ['success', 'error_code', 'data', 'meta'],
                                     ],
                                 ],
                             ],
@@ -636,7 +636,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                         'type' => 'object',
                                         'properties' => [
                                             'success' => ['type' => 'boolean', 'example' => true],
-                                            'errorCode' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::SUCCESS],
+                                            'error_code' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::SUCCESS],
                                             'data' => ['$ref' => $schemaRefRead],
                                             'meta' => [
                                                 'type' => 'object',
@@ -645,7 +645,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                                 ],
                                             ],
                                         ],
-                                        'required' => ['success', 'errorCode', 'data', 'meta'],
+                                        'required' => ['success', 'error_code', 'data', 'meta'],
                                     ],
                                 ],
                             ],
@@ -658,7 +658,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                         'type' => 'object',
                                         'properties' => [
                                             'success' => ['type' => 'boolean', 'example' => false],
-                                            'errorCode' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::RESOURCE_NOT_FOUND],
+                                            'error_code' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::RESOURCE_NOT_FOUND],
                                             'message' => ['type' => 'string', 'example' => 'Record not found'],
                                             'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
                                             'meta' => [
@@ -668,7 +668,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                                 ],
                                             ],
                                         ],
-                                        'required' => ['success', 'errorCode', 'message', 'errors', 'meta'],
+                                        'required' => ['success', 'error_code', 'message', 'errors', 'meta'],
                                     ],
                                 ],
                             ],

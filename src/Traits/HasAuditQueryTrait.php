@@ -114,14 +114,14 @@ trait HasAuditQueryTrait
 
             return response()->json([
                 'success' => true,
-                'errorCode' => HttpErrorCodeConstant::SUCCESS,
+                'error_code' => HttpErrorCodeConstant::SUCCESS,
                 'data' => $logs,
                 'message' => 'Audit logs retrieved successfully'
             ]);
         } catch (Exception $exception) {
             return response()->json([
                 'success' => false,
-                'errorCode' => HttpErrorCodeConstant::INTERNAL_SERVER_ERROR,
+                'error_code' => HttpErrorCodeConstant::INTERNAL_SERVER_ERROR,
                 'message' => 'Failed to retrieve audit logs: ' . $exception->getMessage()
             ], RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
@@ -145,14 +145,14 @@ trait HasAuditQueryTrait
 
             return response()->json([
                 'success' => true,
-                'errorCode' => HttpErrorCodeConstant::SUCCESS,
+                'error_code' => HttpErrorCodeConstant::SUCCESS,
                 'data' => $stats,
                 'message' => 'Audit statistics retrieved successfully'
             ]);
         } catch (Exception $exception) {
             return response()->json([
                 'success' => false,
-                'errorCode' => HttpErrorCodeConstant::INTERNAL_SERVER_ERROR,
+                'error_code' => HttpErrorCodeConstant::INTERNAL_SERVER_ERROR,
                 'message' => 'Failed to retrieve audit statistics: ' . $exception->getMessage()
             ], RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
@@ -175,14 +175,14 @@ trait HasAuditQueryTrait
 
             return response()->json([
                 'success' => true,
-                'errorCode' => HttpErrorCodeConstant::SUCCESS,
+                'error_code' => HttpErrorCodeConstant::SUCCESS,
                 'data' => $timeline,
                 'message' => 'Field timeline retrieved successfully'
             ]);
         } catch (Exception $exception) {
             return response()->json([
                 'success' => false,
-                'errorCode' => HttpErrorCodeConstant::INTERNAL_SERVER_ERROR,
+                'error_code' => HttpErrorCodeConstant::INTERNAL_SERVER_ERROR,
                 'message' => 'Failed to retrieve field timeline: ' . $exception->getMessage()
             ], RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
@@ -204,14 +204,14 @@ trait HasAuditQueryTrait
 
             return response()->json([
                 'success' => true,
-                'errorCode' => HttpErrorCodeConstant::SUCCESS,
+                'error_code' => HttpErrorCodeConstant::SUCCESS,
                 'data' => $stats,
                 'message' => 'Field statistics retrieved successfully'
             ]);
         } catch (Exception $exception) {
             return response()->json([
                 'success' => false,
-                'errorCode' => HttpErrorCodeConstant::INTERNAL_SERVER_ERROR,
+                'error_code' => HttpErrorCodeConstant::INTERNAL_SERVER_ERROR,
                 'message' => 'Failed to retrieve field statistics: ' . $exception->getMessage()
             ], RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }

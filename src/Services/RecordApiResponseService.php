@@ -142,17 +142,17 @@ class RecordApiResponseService
 
         return response()->json([
             'success' => true,
-            'errorCode' => HttpErrorCodeConstant::SUCCESS,
+            'error_code' => HttpErrorCodeConstant::SUCCESS,
             'data' => $data,
             'meta' => $meta,
         ], $status, $headers);
     }
 
-    public static function errorWrapped(string $message, int $status = RecordApiJsonResponseEnum::ERROR->value, array $errors = [], ?int $errorCode = null): JsonResponse
+    public static function errorWrapped(string $message, int $status = RecordApiJsonResponseEnum::ERROR->value, array $errors = [], ?int $error_code = null): JsonResponse
     {
         $requestId = request()->attributes->get('request_id');
 
-        $resolvedErrorCode = $errorCode ?? match ($status) {
+        $resolvedErrorCode = $error_code ?? match ($status) {
             RecordApiJsonResponseEnum::UNAUTHORIZED->value => HttpErrorCodeConstant::INVALID_ACCESS,
             RecordApiJsonResponseEnum::FORBIDDEN->value => HttpErrorCodeConstant::PERMISSION_DENIED,
             RecordApiJsonResponseEnum::NOT_FOUND->value => HttpErrorCodeConstant::RESOURCE_NOT_FOUND,
@@ -163,7 +163,7 @@ class RecordApiResponseService
 
         return response()->json([
             'success' => false,
-            'errorCode' => $resolvedErrorCode,
+            'error_code' => $resolvedErrorCode,
             'message' => $message,
             'errors' => $errors,
             'meta' => [
