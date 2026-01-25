@@ -8,6 +8,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\MessageBag;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
+use Sopheak\Core\Constants\HttpErrorCodeConstant;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Utilities\RelationshipResolverUtils;
 
@@ -141,17 +142,28 @@ class RecordApiResponseService
 
         return response()->json([
             'success' => true,
+            'errorCode' => HttpErrorCodeConstant::SUCCESS,
             'data' => $data,
             'meta' => $meta,
         ], $status, $headers);
     }
 
-    public static function errorWrapped(string $message, int $status = RecordApiJsonResponseEnum::ERROR->value, array $errors = []): JsonResponse
+    public static function errorWrapped(string $message, int $status = RecordApiJsonResponseEnum::ERROR->value, array $errors = [], ?int $errorCode = null): JsonResponse
     {
         $requestId = request()->attributes->get('request_id');
 
+        $resolvedErrorCode = $errorCode ?? match ($status) {
+            RecordApiJsonResponseEnum::UNAUTHORIZED->value => HttpErrorCodeConstant::INVALID_ACCESS,
+            RecordApiJsonResponseEnum::FORBIDDEN->value => HttpErrorCodeConstant::PERMISSION_DENIED,
+            RecordApiJsonResponseEnum::NOT_FOUND->value => HttpErrorCodeConstant::RESOURCE_NOT_FOUND,
+            RecordApiJsonResponseEnum::VALIDATION_ERROR->value => HttpErrorCodeConstant::INVALID_REQUEST,
+            RecordApiJsonResponseEnum::SERVER_ERROR->value => HttpErrorCodeConstant::INTERNAL_SERVER_ERROR,
+            default => HttpErrorCodeConstant::GENERAL_ERROR,
+        };
+
         return response()->json([
             'success' => false,
+            'errorCode' => $resolvedErrorCode,
             'message' => $message,
             'errors' => $errors,
             'meta' => [

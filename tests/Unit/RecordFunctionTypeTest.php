@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Tests\Unit;
 
+use Sopheak\Core\Enums\RecordFunctionMethodEnum;
 use Sopheak\Core\Enums\RecordfunctionNameEnum;
 use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Tests\TestCase;
@@ -26,14 +27,14 @@ class RecordFunctionTypeTest extends TestCase
     public function it_accepts_enum_as_http_method_and_preserves_value(): void
     {
         $type = new RecordFunctionType(
-            httpMethod: RecordfunctionNameEnum::GET,
+            httpMethod: RecordFunctionMethodEnum::GET,
             class: 'App\\Services\\DummyService',
             functionName: 'handle',
         );
 
         $array = $type->toArray();
 
-        $this->assertSame(RecordfunctionNameEnum::GET, $array['method']);
+        $this->assertSame(RecordFunctionMethodEnum::GET, $array['method']);
     }
 
     /** @test */

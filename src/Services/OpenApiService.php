@@ -6,6 +6,7 @@ use Sopheak\Core\Interfaces\RecordFunctionInterface;
 use Sopheak\Core\Types\RecordFunctionType;
 use Exception;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
+use Sopheak\Core\Constants\HttpErrorCodeConstant;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 
@@ -108,6 +109,64 @@ This API provides **unified access** to all tables through a single endpoint pat
 - **Relationship Embedding**: Load related data in a single request
 - **Bulk Operations**: Process multiple records efficiently
 - **Custom Functions**: Execute business logic via RPC endpoints
+
+## 🔑 Authentication
+
+All endpoints require a valid API token in the `Authorization` header:
+```
+Authorization: Bearer <your-api-token>
+```
+
+## Error Code
+
+Every API response includes an integer `errorCode` that provides a stable, machine-readable error identifier.
+
+Common values:
+- `0` (**SUCCESS**) – Request processed successfully.
+- `10000` (**GENERAL_ERROR**) – Unclassified error when no more specific code applies.
+- `10001` (**INVALID_TENANT_ID**) – Tenant header is missing or invalid.
+- `10002` (**INVALID_ACCESS**) – Authentication failed or access token is invalid.
+- `10003` (**INVALID_TOKEN**) – Token is malformed, expired, or not accepted.
+- `10004` (**INVALID_REQUEST**) – Request payload or parameters are invalid (validation errors).
+- `10005` (**INVALID_RESOURCE**) – The requested resource identifier is invalid.
+- `10006` (**INVALID_PERMISSION**) – User lacks the required permission scope.
+- `10007` (**INVALID_CREDENTIAL**) – Provided credentials are incorrect.
+- `10008` (**PERMISSION_DENIED**) – Authenticated but not allowed to perform this operation.
+- `10009` (**RESOURCE_NOT_FOUND**) – Entity or endpoint not found.
+- `10010` (**INTERNAL_SERVER_ERROR**) – Unexpected server-side error.
+- `10011` (**UNKNOWN_ERROR**) – Error cause cannot be determined.
+- `10012` (**TENANT_NOT_FOUND**) – Tenant does not exist.
+- `10013` (**TENANT_DISABLED**) – Tenant is disabled.
+- `10014` (**NO_TENANT_PMS_ACCESS**) – Tenant has no PMS access for this operation.
+
+Clients should always branch on `errorCode` instead of parsing the human-readable `message`.
+
+## 🔒 Error Handling
+
+All API responses follow this structure:
+```json
+{
+    "success": true,
+    "errorCode": 0,
+    "data": {},
+    "meta": {
+        "request_id": "f9c4d1e2-9b0c-4f8a-9b8a-123456789abc"
+    }
+}
+```
+
+On error, the structure is:
+```json
+{
+    "success": false,
+    "errorCode": 10009,
+    "message": "Resource not found",
+    "errors": [],
+    "meta": {
+        "request_id": "f9c4d1e2-9b0c-4f8a-9b8a-123456789abc"
+    }
+}
+```
 
 ## 🚀 Getting Started
 
@@ -491,6 +550,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                         'type' => 'object',
                                         'properties' => [
                                             'success' => ['type' => 'boolean', 'example' => true],
+                                            'errorCode' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::SUCCESS],
                                             'data' => [
                                                 'type' => 'array',
                                                 'items' => ['$ref' => $schemaRefRead],
@@ -508,7 +568,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                                 ],
                                             ],
                                         ],
-                                        'required' => ['success', 'data', 'meta'],
+                                        'required' => ['success', 'errorCode', 'data', 'meta'],
                                     ],
                                 ],
                             ],
@@ -537,6 +597,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                         'type' => 'object',
                                         'properties' => [
                                             'success' => ['type' => 'boolean', 'example' => true],
+                                            'errorCode' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::SUCCESS],
                                             'data' => ['$ref' => $schemaRef],
                                             'meta' => [
                                                 'type' => 'object',
@@ -545,7 +606,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                                 ],
                                             ],
                                         ],
-                                        'required' => ['success', 'data', 'meta'],
+                                        'required' => ['success', 'errorCode', 'data', 'meta'],
                                     ],
                                 ],
                             ],
@@ -575,6 +636,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                         'type' => 'object',
                                         'properties' => [
                                             'success' => ['type' => 'boolean', 'example' => true],
+                                            'errorCode' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::SUCCESS],
                                             'data' => ['$ref' => $schemaRefRead],
                                             'meta' => [
                                                 'type' => 'object',
@@ -583,7 +645,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                                 ],
                                             ],
                                         ],
-                                        'required' => ['success', 'data', 'meta'],
+                                        'required' => ['success', 'errorCode', 'data', 'meta'],
                                     ],
                                 ],
                             ],
@@ -596,6 +658,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                         'type' => 'object',
                                         'properties' => [
                                             'success' => ['type' => 'boolean', 'example' => false],
+                                            'errorCode' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::RESOURCE_NOT_FOUND],
                                             'message' => ['type' => 'string', 'example' => 'Record not found'],
                                             'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
                                             'meta' => [
@@ -605,7 +668,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                                 ],
                                             ],
                                         ],
-                                        'required' => ['success', 'message', 'errors', 'meta'],
+                                        'required' => ['success', 'errorCode', 'message', 'errors', 'meta'],
                                     ],
                                 ],
                             ],
