@@ -11,7 +11,7 @@ use Throwable;
 
 class GenerateRecordSchemaCacheCommand extends Command
 {
-    protected $signature = 'sp-laravel-api:sync-record-columns {--force : Force regeneration even if columns already exist}';
+    protected $signature = 'sp-laravel-api:sync-record-columns {--force : Force regeneration even if columns already exist} {--table= : Sync columns only for the specified table}';
 
     protected $description = 'Populate RecordTableType columns in config/records/tables PHP files based on DB schema';
 
@@ -21,6 +21,7 @@ class GenerateRecordSchemaCacheCommand extends Command
             $this->info('Scanning RecordTableType configuration and database schema...');
 
             $force = (bool) $this->option('force');
+            $tableFilter = (string) ($this->option('table') ?? '');
 
             // 1. Build mapping from table name => config file(s) under config/records/tables
             $tablesDirectory = config_path(RecordConfigService::tableConfigPath());
@@ -57,6 +58,17 @@ class GenerateRecordSchemaCacheCommand extends Command
             }
 
             $tables = RecordConfigService::getTableConfig();
+
+            if ($tableFilter !== '') {
+                if (!array_key_exists($tableFilter, $tables)) {
+                    $this->warn(sprintf('Table "%s" not found in configured tables. Nothing to update.', $tableFilter));
+
+                    return self::SUCCESS;
+                }
+
+                $tables = [$tableFilter => $tables[$tableFilter]];
+                $this->info(sprintf('Filtering to table: %s', $tableFilter));
+            }
             $updatedTables = 0;
 
             foreach ($tables as $tableName => $config) {
@@ -252,7 +264,7 @@ class GenerateRecordSchemaCacheCommand extends Command
         }
 
         // $insert = "\n" . $indent . 'columns: ' . $columnsCode . ',';
-        $insert = $indent . 'columns: ' . $columnsCode . ','. "\n";
+        $insert = $indent . 'columns: ' . $columnsCode . ',' . "\n" . '  ' ;
 
         $newArguments = substr($arguments, 0, $insertOffset) . $insert . substr($arguments, $insertOffset);
 
