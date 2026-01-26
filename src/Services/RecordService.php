@@ -1692,8 +1692,6 @@ class RecordService
 
             $result = $id ? $instance->{$method}($request, $id) : $instance->{$method}($request);
 
-            // If the result is already a Response instance, normalize it into the standard wrapper
-            // @var JsonResponse
             if ($result instanceof JsonResponse) {
                 $responseData = $result->getData();
                 $statusCode = $result->getStatusCode();
@@ -1717,10 +1715,26 @@ class RecordService
                 }
 
                 if ($statusCode > 204) {
-                    return RecordApiResponseService::errorWrapped(message: 'string' === gettype($records) ? $records : '', status: $statusCode, errors: 'object' === gettype($responseData) ? (array) $responseData : [], error_code: $errorCode);
+                    $wrapped = RecordApiResponseService::errorWrapped(message: 'string' === gettype($records) ? $records : '', status: $statusCode, errors: 'object' === gettype($responseData) ? (array) $responseData : [], error_code: $errorCode);
+                } else {
+                    $wrapped = RecordApiResponseService::successWrapped($records, $meta, $result->getStatusCode());
                 }
 
-                return RecordApiResponseService::successWrapped($records, $meta, $result->getStatusCode());
+                $originalHeaders = $result->headers;
+
+                if (method_exists($originalHeaders, 'allPreserveCaseWithoutCookies')) {
+                    $wrapped->headers->add($originalHeaders->allPreserveCaseWithoutCookies());
+                } else {
+                    $wrapped->headers->add($originalHeaders->all());
+                }
+
+                if (method_exists($originalHeaders, 'getCookies')) {
+                    foreach ($originalHeaders->getCookies() as $cookie) {
+                        $wrapped->headers->setCookie($cookie);
+                    }
+                }
+
+                return $wrapped;
             }
 
             return RecordApiResponseService::successWrapped($result);
