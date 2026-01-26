@@ -975,6 +975,7 @@ Authorization: Bearer {access_token}
 ```json
 {
   "success": true,
+  "error_code": 0,
   "data": [
     {
       "id": 1,
@@ -1034,6 +1035,7 @@ Authorization: Bearer {access_token}
 ```json
 {
   "success": true,
+  "error_code": 0,
   "data": {
     "id": 123,
     "invoice_number": "INV-123",
@@ -1108,6 +1110,7 @@ JSON object with field values:
 ```json
 {
   "success": true,
+  "error_code": 0,
   "data": {
     "id": 124,
     "invoice_number": "INV-124",
@@ -1153,6 +1156,7 @@ If an `updateValidator` is defined for the target table, the request is validate
 ```json
 {
   "success": true,
+  "error_code": 0,
   "data": {
     "id": 124,
     "invoice_number": "INV-124",
@@ -1187,6 +1191,7 @@ If a `deleteValidator` is defined for the target table, the request is validated
 ```json
 {
   "success": true,
+  "error_code": 0,
   "data": {
     "deleted": 1
   },
@@ -1215,6 +1220,7 @@ Restore a soft-deleted record (only available for tables with soft deletes enabl
 ```json
 {
   "success": true,
+  "error_code": 0,
   "data": {
     "restored": 1
   },
@@ -1242,6 +1248,7 @@ Permanently delete a record (bypasses soft delete).
 ```json
 {
   "success": true,
+  "error_code": 0,
   "data": {
     "deleted": 1
   },
@@ -1471,6 +1478,7 @@ Create multiple records in a single request.
 ```json
 {
   "success": true,
+  "error_code": 0,
   "data": {
     "created": 2,
     "failed": 0,
@@ -1553,6 +1561,7 @@ Authorization: Bearer {access_token}
 ```json
 {
   "success": true,
+  "error_code": 0,
   "data": [
     {
       "id": 1001,
@@ -1592,6 +1601,7 @@ Get audit statistics and metrics.
 ```json
 {
   "success": true,
+  "error_code": 0,
   "data": {
     "total_logs": 45,
     "actions_breakdown": {
@@ -1628,6 +1638,7 @@ Get timeline of changes for a specific field.
 ```json
 {
   "success": true,
+  "error_code": 0,
   "data": [
     {
       "id": 1001,
@@ -1669,6 +1680,7 @@ Get statistics for a specific field across entities.
 ```json
 {
   "success": true,
+  "error_code": 0,
   "data": {
     "total_changes": 150,
     "first_changed_at": "2024-01-01T08:00:00Z",
@@ -1776,6 +1788,7 @@ Content-Type: application/json
 ```json
 {
   "success": true,
+  "error_code": 0,
   "data": {},
   "meta": {
     "request_id": "req_abc123def456"
@@ -1787,6 +1800,7 @@ Content-Type: application/json
 ```json
 {
   "success": false,
+  "error_code": 1000,
   "message": "Validation failed",
   "errors": {
     "email": ["The email field is required."],
@@ -1797,6 +1811,32 @@ Content-Type: application/json
   }
 }
 ```
+
+`error_code` is a stable, machine-friendly code that complements the HTTP status:
+- On success responses it is always the success code.
+- On error responses it is derived from the HTTP status (unauthorized, forbidden, not found, validation, server error, etc.), unless a downstream handler explicitly sets `error_code` in its JSON body, in which case that value is preserved.
+
+#### Error Codes
+
+The package uses a fixed set of numeric `error_code` values to make client-side handling and analytics easier. These codes are stable across versions and map to logical error categories:
+
+- `0` – **SUCCESS**: Request completed successfully.
+- `10000` – **GENERAL_ERROR**: Generic error when no more specific category applies.
+- `10001` – **INVALID_TENANT_ID**: Tenant identifier is missing, malformed, or does not match the current context.
+- `10002` – **INVALID_ACCESS**: Unauthorized access (typically HTTP 401) – missing or invalid authentication for the requested resource.
+- `10003` – **INVALID_TOKEN**: Authentication token is invalid (bad signature, malformed, or otherwise unusable).
+- `10004` – **INVALID_REQUEST**: Request payload or query parameters are invalid (commonly used for validation errors / HTTP 422).
+- `10005` – **INVALID_RESOURCE**: Reference to an invalid resource (e.g. invalid foreign key or unsupported table/endpoint).
+- `10006` – **INVALID_PERMISSION**: Permission configuration is invalid or inconsistent.
+- `10007` – **INVALID_CREDENTIAL**: User credentials are incorrect (login/auth failures).
+- `10008` – **PERMISSION_DENIED**: Authenticated user is forbidden from performing this action (typically HTTP 403).
+- `10009` – **RESOURCE_NOT_FOUND**: Requested resource cannot be found (table, record, or function – typically HTTP 404).
+- `10010` – **INTERNAL_SERVER_ERROR**: Unhandled server-side error (HTTP 500).
+- `10011` – **UNKNOWN_ERROR**: Error that cannot be mapped to a known category.
+- `10012` – **TENANT_NOT_FOUND**: Tenant does not exist or is not registered.
+- `10013` – **TENANT_DISABLED**: Tenant exists but is disabled / suspended.
+- `10014` – **NO_TENANT_PMS_ACCESS**: Current user/application has no PMS access for this tenant.
+- `10015` – **TOKEN_EXPIRED**: Authentication token is valid but expired.
 
 #### HTTP Status Codes
 - `200` - Success

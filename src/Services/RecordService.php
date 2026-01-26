@@ -276,7 +276,8 @@ class RecordService
                 'record_context' => $recordContext,
             ];
 
-            if (!empty($tableSchema->customAuditLog) &&
+            if (
+                !empty($tableSchema->customAuditLog) &&
                 $this->callCustomAuditLogger(
                     callback: $tableSchema->customAuditLog,
                     event: $event,
@@ -1615,7 +1616,7 @@ class RecordService
             $guard = RecordConfigService::authGuard();
             $user = auth($guard)->user();
             if (!$user) {
-                return RecordApiResponseService::errorWrapped('Authentication required', RecordApiJsonResponseEnum::UNAUTHORIZED->value);
+                return RecordApiResponseService::errorWrapped(message: 'Authentication required', status: RecordApiJsonResponseEnum::UNAUTHORIZED->value);
             }
 
             // Handle both single permission (string) and multiple permissions (array)
@@ -1632,7 +1633,7 @@ class RecordService
             }
 
             if (!$hasPermission) {
-                return RecordApiResponseService::errorWrapped('Insufficient permissions', RecordApiJsonResponseEnum::FORBIDDEN->value);
+                return RecordApiResponseService::errorWrapped(message: 'Insufficient permissions', status: RecordApiJsonResponseEnum::FORBIDDEN->value);
             }
         }
 
@@ -1650,7 +1651,7 @@ class RecordService
             }, $allowedMethods);
 
             if (!in_array(strtoupper($request->method()), $allowedMethods, true)) {
-                return RecordApiResponseService::errorWrapped(sprintf("Method '%s' not allowed for this function", $request->method()), 405);
+                return RecordApiResponseService::errorWrapped(message: sprintf("Method '%s' not allowed for this function", $request->method()), status: RecordApiJsonResponseEnum::METHOD_NOT_ALLOWED->value);
             }
         }
 
@@ -1664,11 +1665,11 @@ class RecordService
             }
 
             if ([] !== $missingParams) {
-                return RecordApiResponseService::errorWrapped('Missing required parameters', RecordApiJsonResponseEnum::ERROR->value, ['missing' => $missingParams]);
+                return RecordApiResponseService::errorWrapped(message: 'Missing required parameters', status: RecordApiJsonResponseEnum::ERROR->value, errors: ['missing' => $missingParams]);
             }
         }
 
-        return $this->executeClassFunction($request, $config, $id);
+        return $this->executeClassFunction(request: $request, functionConfig: $config, id: $id);
     }
 
     /**
@@ -1681,17 +1682,17 @@ class RecordService
             $method = $functionConfig['functionName'] ?? 'handle';
 
             if (!$className || !class_exists($className)) {
-                return RecordApiResponseService::errorWrapped(sprintf("Class '%s' does not exist", $className), RecordApiJsonResponseEnum::SERVER_ERROR->value);
+                return RecordApiResponseService::errorWrapped(message: sprintf("Class '%s' does not exist", $className), status: RecordApiJsonResponseEnum::SERVER_ERROR->value);
             }
 
             $instance = new $className();
             if (!method_exists($instance, $method)) {
-                return RecordApiResponseService::errorWrapped(sprintf("Method '%s' does not exist in class '%s'", $method, $className), RecordApiJsonResponseEnum::SERVER_ERROR->value);
+                return RecordApiResponseService::errorWrapped(message: sprintf("Method '%s' does not exist in class '%s'", $method, $className), status: RecordApiJsonResponseEnum::SERVER_ERROR->value);
             }
 
             $result = $id ? $instance->{$method}($request, $id) : $instance->{$method}($request);
 
-            // If the result is already a Response instance, return it directly
+            // If the result is already a Response instance, normalize it into the standard wrapper
             // @var JsonResponse
             if ($result instanceof JsonResponse) {
                 $responseData = $result->getData();
@@ -1707,8 +1708,16 @@ class RecordService
                     $meta = json_decode(json_encode($meta), true);
                 }
 
+                $errorCode = null;
+
+                if (is_object($responseData) && property_exists($responseData, 'error_code')) {
+                    $errorCode = (int) $responseData->error_code;
+                } elseif (is_array($responseData) && array_key_exists('error_code', $responseData)) {
+                    $errorCode = (int) $responseData['error_code'];
+                }
+
                 if ($statusCode > 204) {
-                    return RecordApiResponseService::errorWrapped('string' === gettype($records) ? $records : '', $statusCode, 'object' === gettype($responseData) ? (array) $responseData : []);
+                    return RecordApiResponseService::errorWrapped(message: 'string' === gettype($records) ? $records : '', status: $statusCode, errors: 'object' === gettype($responseData) ? (array) $responseData : [], error_code: $errorCode);
                 }
 
                 return RecordApiResponseService::successWrapped($records, $meta, $result->getStatusCode());
@@ -1716,7 +1725,7 @@ class RecordService
 
             return RecordApiResponseService::successWrapped($result);
         } catch (Exception $exception) {
-            return RecordApiResponseService::errorWrapped('Function execution failed: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
+            return RecordApiResponseService::errorWrapped(message: 'Function execution failed: ' . $exception->getMessage(), status: RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
