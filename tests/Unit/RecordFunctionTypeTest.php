@@ -3,7 +3,6 @@
 namespace Sopheak\Core\Tests\Unit;
 
 use Sopheak\Core\Enums\RecordFunctionMethodEnum;
-use Sopheak\Core\Enums\RecordfunctionNameEnum;
 use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Tests\TestCase;
 

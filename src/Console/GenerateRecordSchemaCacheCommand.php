@@ -69,6 +69,7 @@ class GenerateRecordSchemaCacheCommand extends Command
                 $tables = [$tableFilter => $tables[$tableFilter]];
                 $this->info(sprintf('Filtering to table: %s', $tableFilter));
             }
+
             $updatedTables = 0;
 
             foreach ($tables as $tableName => $config) {

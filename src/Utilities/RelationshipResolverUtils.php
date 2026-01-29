@@ -1919,9 +1919,11 @@ class RelationshipResolverUtils
                     if (!is_string($col)) {
                         continue;
                     }
-                    if (str_contains((string) $col, '=')) {
+
+                    if (str_contains($col, '=')) {
                         continue;
                     }
+
                     if (isset($relatedColumnsMeta[$col])) {
                         $effectiveColumns[] = $col;
                     }

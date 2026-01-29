@@ -22,6 +22,7 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Types\RecordTableTriggerType;
 use Sopheak\Core\Types\RecordTableType;
+use Sopheak\Core\Utilities\RecordUtils;
 
 class RecordService
 {
@@ -846,17 +847,17 @@ class RecordService
 
     public function shouldApplyTenantId(object $tableSchema): bool
     {
-        return UtilityService::shouldApplyTenantId($tableSchema);
+        return RecordUtils::shouldApplyTenantId($tableSchema);
     }
 
     public function normalizeTenantId(mixed $tenantId): mixed
     {
-        return UtilityService::normalizeTenantId($tenantId);
+        return RecordUtils::normalizeTenantId($tenantId);
     }
 
     public function isTenantIdEnabled(): bool
     {
-        return UtilityService::isTenantIdEnabled();
+        return RecordUtils::isTenantIdEnabled();
     }
 
     public function applyTenantFilter(mixed $query, string $table, mixed $tenantId): void
@@ -1034,9 +1035,11 @@ class RecordService
                                     if (!is_string($col)) {
                                         continue;
                                     }
-                                    if (str_contains((string) $col, '=')) {
+
+                                    if (str_contains($col, '=')) {
                                         continue;
                                     }
+
                                     if (isset($relatedSchema->columns[$col])) {
                                         ++$columnCount;
                                     }
@@ -1358,9 +1361,11 @@ class RecordService
                                     if (!is_string($col)) {
                                         continue;
                                     }
-                                    if (str_contains((string) $col, '=')) {
+
+                                    if (str_contains($col, '=')) {
                                         continue;
                                     }
+
                                     if (isset($relatedSchema->columns[$col])) {
                                         ++$columnCount;
                                     }

@@ -1,38 +1,12 @@
 <?php
-namespace Sopheak\Core\Services;
 
+namespace Sopheak\Core\Utilities;
+
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Sopheak\Core\Utilities\TimeUtils;
 
-class UtilityService
+final class RecordPayloadExtractor
 {
-    public static function isTenantIdEnabled(): bool
-    {
-        return RecordConfigService::enableTenantId();
-    }
-
-    public static function normalizeTenantId(mixed $tenantId): mixed
-    {
-        if (is_string($tenantId)) {
-            return trim($tenantId);
-        }
-
-        return $tenantId;
-    }
-
-    public static function isTenantIdMissing(mixed $tenantId): bool
-    {
-        $tenantId = self::normalizeTenantId($tenantId);
-
-        return null === $tenantId || '' === $tenantId;
-    }
-
-    public static function shouldApplyTenantId(object $tableSchema): bool
-    {
-        return self::isTenantIdEnabled() && (bool) ($tableSchema->hasTenantId ?? false);
-    }
-
-
     /**
      * Extract structured data from a Request or array source.
      *
@@ -57,7 +31,7 @@ class UtilityService
      *
      * @return array The array of extracted and transformed field data
      */
-    public static function extractRequestFormData(
+    private static function extract(
         Request|array $request,
         array $fields = [],
         array $baseData = [],
@@ -134,5 +108,109 @@ class UtilityService
         }
 
         return $data;
+    }
+
+    public static function fromRequest(
+        Request $request,
+        array $fields = [],
+        array $baseData = [],
+        bool $isUpdate = false,
+        string $recordTable = '',
+        mixed $classModel = null,
+        ?callable $transform = null,
+    ): array {
+        return self::extract(
+            request: $request,
+            fields: $fields,
+            baseData: $baseData,
+            isUpdate: $isUpdate,
+            recordTable: $recordTable,
+            classModel: $classModel,
+            transform: $transform,
+        );
+    }
+
+    public static function fromArray(
+        array $data,
+        array $fields = [],
+        array $baseData = [],
+        bool $isUpdate = false,
+        string $recordTable = '',
+        mixed $classModel = null,
+        ?callable $transform = null,
+    ): array {
+        return self::extract(
+            request: $data,
+            fields: $fields,
+            baseData: $baseData,
+            isUpdate: $isUpdate,
+            recordTable: $recordTable,
+            classModel: $classModel,
+            transform: $transform,
+        );
+    }
+
+    public static function fromModel(
+        object $model,
+        array $fields = [],
+        array $baseData = [],
+        bool $isUpdate = true,
+        string $recordTable = '',
+        ?callable $transform = null,
+    ): array {
+        $source = method_exists($model, 'toArray') ? $model->toArray() : get_object_vars($model);
+
+        return self::extract(
+            request: $source,
+            fields: $fields,
+            baseData: $baseData,
+            isUpdate: $isUpdate,
+            recordTable: $recordTable,
+            classModel: $model,
+            transform: $transform,
+        );
+    }
+
+    public static function fromDatabaseRow(
+        array $row,
+        array $fields = [],
+        array $baseData = [],
+        bool $isUpdate = true,
+        string $recordTable = '',
+        mixed $classModel = null,
+        ?callable $transform = null,
+    ): array {
+        return self::extract(
+            request: $row,
+            fields: $fields,
+            baseData: $baseData,
+            isUpdate: $isUpdate,
+            recordTable: $recordTable,
+            classModel: $classModel,
+            transform: $transform,
+        );
+    }
+
+    public static function fromResponse(
+        JsonResponse $response,
+        array $fields = [],
+        array $baseData = [],
+        bool $isUpdate = false,
+        string $recordTable = '',
+        mixed $classModel = null,
+        ?callable $transform = null,
+    ): array {
+        $body = $response->getData(true);
+        $source = is_array($body) && array_key_exists('data', $body) ? $body['data'] : $body;
+
+        return self::extract(
+            request: is_array($source) ? $source : [],
+            fields: $fields,
+            baseData: $baseData,
+            isUpdate: $isUpdate,
+            recordTable: $recordTable,
+            classModel: $classModel,
+            transform: $transform,
+        );
     }
 }

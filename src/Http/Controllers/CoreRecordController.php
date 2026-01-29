@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
-use Sopheak\Core\Services\UtilityService;
+use Sopheak\Core\Utilities\RecordUtils;
 use Sopheak\Core\Services\QueryCacheService;
 use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\RecordConfigService;
@@ -1020,11 +1020,11 @@ class CoreRecordController extends Controller
 
     private function validateTenantIdRequired(object $tableSchema, mixed $tenantId): ?JsonResponse
     {
-        if (!UtilityService::shouldApplyTenantId($tableSchema)) {
+        if (!RecordUtils::shouldApplyTenantId($tableSchema)) {
             return null;
         }
 
-        if (UtilityService::isTenantIdMissing($tenantId)) {
+        if (RecordUtils::isTenantIdMissing($tenantId)) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, [
                 RecordConfigService::tenantHeader() => ['header ' . RecordConfigService::tenantHeader() . ' cannot be empty'],
             ]);
