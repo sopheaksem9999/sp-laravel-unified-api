@@ -1609,36 +1609,39 @@ class RecordService
      */
     private function executeCustomFunction(Request $request, array|RecordFunctionType $functionConfig, mixed $id = null): JsonResponse
     {
-        // Convert RecordFunctionType to array if needed
         if ($functionConfig instanceof RecordFunctionType) {
             $config = $functionConfig->toArray();
         } else {
             $config = $functionConfig;
         }
 
-        // Check permissions if pmsName is specified
-        if (isset($config['pmsName']) && !empty($config['pmsName'])) {
+        $isPublic = (bool)($config['isPublic'] ?? false);
+        $pmsName = $config['pmsName'] ?? null;
+
+        $requiresAuth = !$isPublic || (null !== $pmsName && '' !== $pmsName && [] !== $pmsName);
+
+        if ($requiresAuth) {
             $guard = RecordConfigService::authGuard();
             $user = auth($guard)->user();
             if (!$user) {
                 return RecordApiResponseService::errorWrapped(message: 'Authentication required', status: RecordApiJsonResponseEnum::UNAUTHORIZED->value);
             }
 
-            // Handle both single permission (string) and multiple permissions (array)
-            $permissions = is_array($config['pmsName']) ? $config['pmsName'] : [$config['pmsName']];
-            $hasPermission = false;
+            if (null !== $pmsName && '' !== $pmsName && [] !== $pmsName) {
+                $permissions = is_array($pmsName) ? $pmsName : [$pmsName];
+                $hasPermission = false;
 
-            // Check if user has at least one of the required permissions
-            foreach ($permissions as $permission) {
-                if (Gate::forUser($user)->allows($permission)) {
-                    $hasPermission = true;
+                foreach ($permissions as $permission) {
+                    if (Gate::forUser($user)->allows($permission)) {
+                        $hasPermission = true;
 
-                    break;
+                        break;
+                    }
                 }
-            }
 
-            if (!$hasPermission) {
-                return RecordApiResponseService::errorWrapped(message: 'Insufficient permissions', status: RecordApiJsonResponseEnum::FORBIDDEN->value);
+                if (!$hasPermission) {
+                    return RecordApiResponseService::errorWrapped(message: 'Insufficient permissions', status: RecordApiJsonResponseEnum::FORBIDDEN->value);
+                }
             }
         }
 

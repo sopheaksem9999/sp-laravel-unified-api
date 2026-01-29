@@ -87,6 +87,7 @@ class RecordFunctionType
         public array|string|RecordFunctionMethodEnum $httpMethod,
         public string $class,
         public string $functionName,
+        public bool $isPublic = false,
         public array|string|null $pmsName = null,
         public ?string $description = null,
         public ?array $querySchema = null,
@@ -124,6 +125,7 @@ class RecordFunctionType
             httpMethod: $properties['httpMethod'] ?? throw new InvalidArgumentException('httpMethod is required'),
             class: $properties['class'] ?? throw new InvalidArgumentException('class is required'),
             functionName: $properties['functionName'] ?? throw new InvalidArgumentException('functionName is required'),
+            isPublic: $properties['isPublic'] ?? false,
             pmsName: $properties['pmsName'] ?? null,
             description: $properties['description'] ?? null,
             querySchema: $properties['querySchema'] ?? null,
@@ -142,6 +144,7 @@ class RecordFunctionType
     {
         $config = [
             'pmsName' => $this->pmsName,
+            'isPublic' => $this->isPublic,
             'method' => $this->httpMethod,
             'class' => $this->class,
             'functionName' => $this->functionName,
@@ -196,6 +199,7 @@ class RecordFunctionType
             httpMethod: $config['method'] ?? throw new InvalidArgumentException('method is required in config array'),
             class: $config['class'] ?? throw new InvalidArgumentException('class is required in config array'),
             functionName: $config['functionName'] ?? throw new InvalidArgumentException('functionName is required in config array'),
+            isPublic: $config['isPublic'] ?? false,
             pmsName: $config['pmsName'] ?? null,
             description: $config['description'] ?? null,
             querySchema: $config['querySchema'] ?? null,
