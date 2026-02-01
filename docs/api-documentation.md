@@ -950,14 +950,16 @@ Retrieve a paginated list of records with filtering, sorting, and relationship l
     - `cache_efficiency`
 
 **Filter Operators**
-Filters are passed as `{column}={operator}.{value}` (operators validated against the table schema):
-- `is.null`, `is_not.null`
+Filters are usually passed as `{column}={operator}.{value}` (operators validated against the table schema). Some operators support a value-less shorthand form for `null`:
+- `is.null`, `is_not.null` or simply `is`, `is_not` (equivalent to `IS NULL` / `IS NOT NULL`)
 - `eq.{value}`, `neq.{value}`, `in.{a,b,c}`, `not_in.{a,b,c}`
 - `like.{value}`, `contains.{value}`, `not_like.{value}`, `starts_with.{value}`, `ends_with.{value}`, `regex.{pattern}`
 - `gt.{value}`, `gte.{value}`, `lt.{value}`, `lte.{value}`
 - `between.{start,end}`, `not_between.{start,end}`
 - `date_eq.{YYYY-MM-DD}`, `date_gt.{YYYY-MM-DD}`, `date_gte.{YYYY-MM-DD}`, `date_lt.{YYYY-MM-DD}`, `date_lte.{YYYY-MM-DD}`
-- `empty.null`, `not_empty.null`
+- `empty.null`, `not_empty.null` or simply `empty`, `not_empty`:
+  - On text columns, `empty` ⇔ `IS NULL OR = ''`, `not_empty` ⇔ `IS NOT NULL AND != ''`.
+  - On non-text columns (e.g. integers), `empty` ⇔ `IS NULL`, `not_empty` ⇔ `IS NOT NULL`.
 
 When `aggregate` is present and valid, the list endpoint returns aggregated rows instead of paginated records. The response still follows the standard shape, with:
 - `data`: Aggregated rows (including `group_by` columns and aggregate aliases like `count_id`).

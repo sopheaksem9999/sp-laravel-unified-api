@@ -661,7 +661,7 @@ class QueryBuilderFiltersUtils
         }
     }
 
-    private static function applyOperator(Builder $builder, string $table, array $allowedCols, string $key, string $operator, string $value): void
+    private static function applyOperator(Builder $builder, string $table, array $allowedCols, string $key, string $operator, ?string $value): void
     {
         $isMultiple = str_contains($key, ',');
         $columns = $isMultiple ? array_map(trim(...), explode(',', $key)) : [$key];
@@ -674,6 +674,13 @@ class QueryBuilderFiltersUtils
             return in_array($c, $allowedCols, true) ? $c : null;
         }, $columns)));
         if ([] === $columns) {
+            return;
+        }
+
+        // For most operators we require a non-null value. Operators that are
+        // intrinsically value-less (null/empty checks) are handled explicitly
+        // below and are allowed to receive a null value.
+        if (null === $value && !in_array($operator, ['is', 'is_not', 'empty', 'not_empty'], true)) {
             return;
         }
 
@@ -705,8 +712,8 @@ class QueryBuilderFiltersUtils
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $value, $table): void {
                         foreach ($columns as $column) {
-                            if (str_contains($value, ',')) {
-                                $q->orWhereIn($table . '.' . $column, array_map(trim(...), explode(',', $value)));
+                            if (str_contains((string) $value, ',')) {
+                                $q->orWhereIn($table . '.' . $column, array_map(trim(...), explode(',', (string) $value)));
                             } else {
                                 $q->orWhere($table . '.' . $column, '=', $value);
                             }
@@ -714,8 +721,8 @@ class QueryBuilderFiltersUtils
                     });
                 } else {
                     $keyCol = $columns[0];
-                    if (str_contains($value, ',')) {
-                        $builder->whereIn($table . '.' . $keyCol, array_map(trim(...), explode(',', $value)));
+                    if (str_contains((string) $value, ',')) {
+                        $builder->whereIn($table . '.' . $keyCol, array_map(trim(...), explode(',', (string) $value)));
                     } else {
                         $builder->where($table . '.' . $keyCol, '=', $value);
                     }
@@ -727,8 +734,8 @@ class QueryBuilderFiltersUtils
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $value, $table): void {
                         foreach ($columns as $column) {
-                            if (str_contains($value, ',')) {
-                                $q->orWhereNotIn($table . '.' . $column, array_map(trim(...), explode(',', $value)));
+                            if (str_contains((string) $value, ',')) {
+                                $q->orWhereNotIn($table . '.' . $column, array_map(trim(...), explode(',', (string) $value)));
                             } else {
                                 $q->orWhere($table . '.' . $column, '!=', $value);
                             }
@@ -736,8 +743,8 @@ class QueryBuilderFiltersUtils
                     });
                 } else {
                     $keyCol = $columns[0];
-                    if (str_contains($value, ',')) {
-                        $builder->whereNotIn($table . '.' . $keyCol, array_map(trim(...), explode(',', $value)));
+                    if (str_contains((string) $value, ',')) {
+                        $builder->whereNotIn($table . '.' . $keyCol, array_map(trim(...), explode(',', (string) $value)));
                     } else {
                         $builder->where($table . '.' . $keyCol, '!=', $value);
                     }
@@ -814,7 +821,7 @@ class QueryBuilderFiltersUtils
                 break;
 
             case 'in':
-                $vals = array_map(trim(...), explode(',', $value));
+                $vals = array_map(trim(...), explode(',', (string) $value));
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $vals, $table): void {
                         foreach ($columns as $column) {
@@ -867,7 +874,7 @@ class QueryBuilderFiltersUtils
                 break;
 
             case 'not_in':
-                $vals = array_map(trim(...), explode(',', $value));
+                $vals = array_map(trim(...), explode(',', (string) $value));
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $vals, $table): void {
                         foreach ($columns as $column) {
@@ -972,34 +979,62 @@ class QueryBuilderFiltersUtils
                 break;
 
             case 'empty':
+                // For text columns: NULL or '' is considered empty.
+                // For non-text columns: only NULL is considered empty to avoid invalid casts
+                // on databases like PostgreSQL (e.g. comparing integer column to '').
+                $searchableCols = self::getSearchableColumns($table, $allowedCols);
+
                 if ($isMultiple) {
-                    $builder->where(function ($q) use ($columns, $table): void {
+                    $builder->where(function ($q) use ($columns, $table, $searchableCols): void {
                         foreach ($columns as $column) {
-                            $q->orWhere(function ($subQ) use ($table, $column): void {
-                                $subQ->whereNull($table . '.' . $column)->orWhere($table . '.' . $column, '=', '');
+                            $q->orWhere(function ($subQ) use ($table, $column, $searchableCols): void {
+                                if (in_array($column, $searchableCols, true)) {
+                                    $subQ->whereNull($table . '.' . $column)->orWhere($table . '.' . $column, '=', '');
+                                } else {
+                                    $subQ->whereNull($table . '.' . $column);
+                                }
                             });
                         }
                     });
                 } else {
-                    $builder->where(function ($q) use ($table, $columns): void {
-                        $q->whereNull($table . '.' . $columns[0])->orWhere($table . '.' . $columns[0], '=', '');
+                    $builder->where(function ($q) use ($table, $columns, $searchableCols): void {
+                        $column = $columns[0];
+                        if (in_array($column, $searchableCols, true)) {
+                            $q->whereNull($table . '.' . $column)->orWhere($table . '.' . $column, '=', '');
+                        } else {
+                            $q->whereNull($table . '.' . $column);
+                        }
                     });
                 }
 
                 break;
 
             case 'not_empty':
+                // For text columns: NOT NULL and != '' is considered not empty.
+                // For non-text columns: only NOT NULL; comparing to '' would break on
+                // strict type databases like PostgreSQL.
+                $searchableCols = self::getSearchableColumns($table, $allowedCols);
+
                 if ($isMultiple) {
-                    $builder->where(function ($q) use ($columns, $table): void {
+                    $builder->where(function ($q) use ($columns, $table, $searchableCols): void {
                         foreach ($columns as $column) {
-                            $q->orWhere(function ($subQ) use ($table, $column): void {
-                                $subQ->whereNotNull($table . '.' . $column)->where($table . '.' . $column, '!=', '');
+                            $q->orWhere(function ($subQ) use ($table, $column, $searchableCols): void {
+                                if (in_array($column, $searchableCols, true)) {
+                                    $subQ->whereNotNull($table . '.' . $column)->where($table . '.' . $column, '!=', '');
+                                } else {
+                                    $subQ->whereNotNull($table . '.' . $column);
+                                }
                             });
                         }
                     });
                 } else {
-                    $builder->where(function ($q) use ($table, $columns): void {
-                        $q->whereNotNull($table . '.' . $columns[0])->where($table . '.' . $columns[0], '!=', '');
+                    $builder->where(function ($q) use ($table, $columns, $searchableCols): void {
+                        $column = $columns[0];
+                        if (in_array($column, $searchableCols, true)) {
+                            $q->whereNotNull($table . '.' . $column)->where($table . '.' . $column, '!=', '');
+                        } else {
+                            $q->whereNotNull($table . '.' . $column);
+                        }
                     });
                 }
 
@@ -1327,9 +1362,14 @@ class QueryBuilderFiltersUtils
 
             $values = is_array($values) ? $values : [$values];
             foreach ($values as $value) {
-                if (preg_match('/^(is|eq|neq|like|gt|lt|gte|lte|in|contains|between|not_between|starts_with|ends_with|not_like|not_in|is_not|regex|date_eq|date_gt|date_lt|date_gte|date_lte|empty|not_empty)\.(.+)$/', (string) $value, $m)) {
+                $raw = (string) $value;
+
+                if (preg_match('/^(is|eq|neq|like|gt|lt|gte|lte|in|contains|between|not_between|starts_with|ends_with|not_like|not_in|is_not|regex|date_eq|date_gt|date_lt|date_gte|date_lte|empty|not_empty)\.(.+)$/', $raw, $m)) {
                     self::applyOperator($builder, $table, $allowedCols, $key, $m[1], 'null' === $m[2] ? null : $m[2]);
-                } elseif (preg_match('/^compare\.(eq|neq|gt|lt|gte|lte)\.(.+)$/', (string) $value, $m)) {
+                } elseif (in_array($raw, ['is', 'is_not', 'empty', 'not_empty'], true)) {
+                    // Support valueless syntax like field=empty & field=not_empty
+                    self::applyOperator($builder, $table, $allowedCols, $key, $raw, null);
+                } elseif (preg_match('/^compare\.(eq|neq|gt|lt|gte|lte)\.(.+)$/', $raw, $m)) {
                     $left = $key;
                     $right = $m[2];
                     if (str_contains((string) $left, '.')) {
@@ -1404,7 +1444,9 @@ class QueryBuilderFiltersUtils
 
             $values = is_array($values) ? $values : [$values];
             foreach ($values as $value) {
-                if (preg_match('/^(is|eq|neq|like|gt|lt|gte|lte|in|contains|between|not_between|starts_with|ends_with|not_like|not_in|is_not|regex|date_eq|date_gt|date_lt|date_gte|date_lte|empty|not_empty)\.(.+)$/', (string) $value, $m)) {
+                $raw = (string) $value;
+
+                if (preg_match('/^(is|eq|neq|like|gt|lt|gte|lte|in|contains|between|not_between|starts_with|ends_with|not_like|not_in|is_not|regex|date_eq|date_gt|date_lt|date_gte|date_lte|empty|not_empty)\.(.+)$/', $raw, $m)) {
                     $operator = $m[1];
                     $operatorValue = 'null' === $m[2] ? null : $m[2];
 
@@ -1416,13 +1458,27 @@ class QueryBuilderFiltersUtils
                         }
 
                         $relationshipFilters[$key][$operator] = $operatorValue;
-                    } elseif (in_array($operator, ['eq', 'neq', 'is', 'is_not', 'in', 'not_in'])) {
+                    } elseif (in_array($operator, ['eq', 'neq', 'is', 'is_not', 'in', 'not_in'], true)) {
                         // Regular column filter - categorize operations for batch processing
                         $regularOperations['equality'][] = [$key, $operator, $operatorValue];
-                    } elseif (in_array($operator, ['gt', 'lt', 'gte', 'lte', 'between', 'not_between', 'date_gt', 'date_lt', 'date_gte', 'date_lte'])) {
+                    } elseif (in_array($operator, ['gt', 'lt', 'gte', 'lte', 'between', 'not_between', 'date_gt', 'date_lt', 'date_gte', 'date_lte'], true)) {
                         $regularOperations['range'][] = [$key, $operator, $operatorValue];
-                    } elseif (in_array($operator, ['like', 'contains', 'starts_with', 'ends_with', 'not_like'])) {
+                    } elseif (in_array($operator, ['like', 'contains', 'starts_with', 'ends_with', 'not_like'], true)) {
                         $regularOperations['text'][] = [$key, $operator, $operatorValue];
+                    } else {
+                        $regularOperations['complex'][] = [$key, $operator, $operatorValue];
+                    }
+                } elseif (in_array($raw, ['is', 'is_not', 'empty', 'not_empty'], true)) {
+                    // Support valueless syntax like field=empty & field=not_empty
+                    $operator = $raw;
+                    $operatorValue = null;
+
+                    if (str_contains((string) $key, '.')) {
+                        if (!isset($relationshipFilters[$key])) {
+                            $relationshipFilters[$key] = [];
+                        }
+
+                        $relationshipFilters[$key][$operator] = $operatorValue;
                     } else {
                         $regularOperations['complex'][] = [$key, $operator, $operatorValue];
                     }

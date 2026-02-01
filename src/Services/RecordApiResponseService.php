@@ -134,7 +134,7 @@ class RecordApiResponseService
         return $data;
     }
 
-    public static function successWrapped(mixed $data, array $meta = [], int $status = RecordApiJsonResponseEnum::SUCCESS->value, array $headers = []): JsonResponse
+    public static function successWrapped(mixed $data, array $meta = [], int $status = RecordApiJsonResponseEnum::SUCCESS->value, array $headers = [], ?int $error_code = null): JsonResponse
     {
         $requestId = request()->attributes->get('request_id');
         $meta = array_merge(['request_id' => $requestId], $meta);
@@ -142,7 +142,7 @@ class RecordApiResponseService
 
         return response()->json([
             'success' => true,
-            'error_code' => HttpErrorCodeConstant::SUCCESS,
+            'error_code' => $error_code ?? HttpErrorCodeConstant::SUCCESS,
             'data' => $data,
             'meta' => $meta,
         ], $status, $headers);
