@@ -418,7 +418,7 @@ these relations are always loaded.
 
 ```php
 'invoices' => new RecordTableType(
-    pms_name: 'invoices',
+    pmsName: 'invoices',
     table: 'invoices',
     relationships: [
         'items' => new RecordHasManyType(table: 'invoice_items', foreignKey: 'invoice_id'),

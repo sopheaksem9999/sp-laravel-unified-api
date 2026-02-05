@@ -219,35 +219,35 @@ return [
             },
             beforeCreate: new RecordTableTriggerType(
                 class: \App\Record\Triggers\UserTriggers::class,
-                function_method: 'beforeCreate',
+                functionName: 'beforeCreate',
             ),
             afterCreate: new RecordTableTriggerType(
                 class: \App\Record\Triggers\UserTriggers::class,
-                function_method: 'afterCreate',
+                functionName: 'afterCreate',
             ),
             beforeUpdate: new RecordTableTriggerType(
                 class: \App\Record\Triggers\UserTriggers::class,
-                function_method: 'beforeUpdate',
+                functionName: 'beforeUpdate',
             ),
             afterUpdate: new RecordTableTriggerType(
                 class: \App\Record\Triggers\UserTriggers::class,
-                function_method: 'afterUpdate',
+                functionName: 'afterUpdate',
             ),
             beforeDelete: new RecordTableTriggerType(
                 class: \App\Record\Triggers\UserTriggers::class,
-                function_method: 'beforeDelete',
+                functionName: 'beforeDelete',
             ),
             afterDelete: new RecordTableTriggerType(
                 class: \App\Record\Triggers\UserTriggers::class,
-                function_method: 'afterDelete',
+                functionName: 'afterDelete',
             ),
             beforeRead: new RecordTableTriggerType(
                 class: \App\Record\Triggers\UserTriggers::class,
-                function_method: 'beforeRead',
+                functionName: 'beforeRead',
             ),
             afterRead: new RecordTableTriggerType(
                 class: \App\Record\Triggers\UserTriggers::class,
-                function_method: 'afterRead',
+                functionName: 'afterRead',
             ),
         ),
     ],
@@ -826,7 +826,7 @@ return [
 ];
 ```
 
-When `enable_tenant_id=true`, requests for tables configured with `has_tenant_id=true` must include the tenant header (default: `X-Tenant-ID`).
+When `enable_tenant_id=true`, requests for tables configured with `hasTenantId=true` must include the tenant header (default: `X-Tenant-ID`).
 
 ### Custom Middleware
 

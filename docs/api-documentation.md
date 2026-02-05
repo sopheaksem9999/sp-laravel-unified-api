@@ -445,7 +445,7 @@ use Sopheak\Core\Types\RecordTableType;
 
 return [
     'invoices' => new RecordTableType(
-        pms_name: 'invoice',
+        pmsName: 'invoice',
         createValidator: function (Request $request, ?int $id = null): ValidatorContract {
             return Validator::make($request->all(), [
                 'invoice_number' => 'required|string|max:50',
@@ -484,42 +484,42 @@ use Sopheak\Core\Types\RecordTableTriggerType;
 
 return [
     'users' => new RecordTableType(
-        pms_name: 'user',
+        pmsName: 'user',
         public: new RecordTablePublic(
             read: false,
             write: false,
         ),
         beforeRead: new RecordTableTriggerType(
             class: \App\Record\Triggers\UserTriggers::class,
-            function_method: 'beforeRead',
+            functionName: 'beforeRead',
         ),
         afterRead: new RecordTableTriggerType(
             class: \App\Record\Triggers\UserTriggers::class,
-            function_method: 'afterRead',
+            functionName: 'afterRead',
         ),
         beforeCreate: new RecordTableTriggerType(
             class: \App\Record\Triggers\UserTriggers::class,
-            function_method: 'beforeCreate',
+            functionName: 'beforeCreate',
         ),
         afterCreate: new RecordTableTriggerType(
             class: \App\Record\Triggers\UserTriggers::class,
-            function_method: 'afterCreate',
+            functionName: 'afterCreate',
         ),
         beforeUpdate: new RecordTableTriggerType(
             class: \App\Record\Triggers\UserTriggers::class,
-            function_method: 'beforeUpdate',
+            functionName: 'beforeUpdate',
         ),
         afterUpdate: new RecordTableTriggerType(
             class: \App\Record\Triggers\UserTriggers::class,
-            function_method: 'afterUpdate',
+            functionName: 'afterUpdate',
         ),
         beforeDelete: new RecordTableTriggerType(
             class: \App\Record\Triggers\UserTriggers::class,
-            function_method: 'beforeDelete',
+            functionName: 'beforeDelete',
         ),
         afterDelete: new RecordTableTriggerType(
             class: \App\Record\Triggers\UserTriggers::class,
-            function_method: 'afterDelete',
+            functionName: 'afterDelete',
         ),
     ),
 ];
@@ -558,24 +558,24 @@ Constructor (named arguments recommended):
 
 ```php
 new RecordTableType(
-    pms_name: 'invoice',
+    pmsName: 'invoice',
     table: null,
-    has_tenant_id: false,
-    soft_deletes: false,
-    disable_auditLog: false,
-    disable_cache: false,
-    can_read: true,
-    can_create: true,
-    can_update: true,
-    can_delete: true,
+    hasTenantId: false,
+    softDeletes: false,
+    disableAuditLog: false,
+    disableCache: false,
+    canRead: true,
+    canCreate: true,
+    canUpdate: true,
+    canDelete: true,
     public: new RecordTablePublic(),
     relationships: [],
     functions: [],
-    primary_key: 'id',
+    primaryKey: 'id',
     columns: [],
-    column_hiddens: [],
-    column_writes: [],
-    fulltext_indexes: [],
+    columnHiddens: [],
+    columnWriteDisabled: [],
+    columnIndexes: [],
     auditLogFn: null,
     createValidator: null,
     updateValidator: null,
@@ -592,39 +592,39 @@ new RecordTableType(
 ```
 
 #### Identity & Routing
-- `pms_name` (?string, default: `null`): Used for permission mapping (e.g. `view:{pms_name}`). If `null`, it falls back to the table name (singular, snake_case) for permission generation.
+- `pmsName` (?string, default: `null`): Used for permission mapping (e.g. `view:{pmsName}`). If `null`, it falls back to the table name (singular, snake_case) for permission generation.
 - `table` (?string, default: `null`): Physical database table name. When `null`, the route table name is used as the DB table name.
-- `primary_key` (?string, default: `'id'`): Primary key column name used by show/update/delete endpoints.
+- `primaryKey` (?string, default: `'id'`): Primary key column name used by show/update/delete endpoints.
 
 #### Tenancy
-- `has_tenant_id` (bool, default: `false`): Marks this table as tenant-scoped when `record.enable_tenant_id` is enabled. When enabled and `has_tenant_id` is true, requests must include the tenant header (default: `X-Tenant-ID`) and queries are automatically filtered by tenant.
+- `hasTenantId` (bool, default: `false`): Marks this table as tenant-scoped when `record.enable_tenant_id` is enabled. When enabled and `hasTenantId` is true, requests must include the tenant header (default: `X-Tenant-ID`) and queries are automatically filtered by tenant.
 
 #### Access Control & Endpoint Availability
 - `public` (RecordTablePublic, default: `new RecordTablePublic()`): Public access flags for grouped actions:
   - `read`: Allows unauthenticated access to read actions (`read`, `view`).
   - `write`: Allows unauthenticated access to write actions (`create`, `update`, `delete`, `restore`).
-- `can_read` (bool, default: `true`): Enables/disables read endpoints for this table (list/show). When false, read routes respond as “not found”.
-- `can_create` (bool, default: `true`): Enables/disables create endpoint.
-- `can_update` (bool, default: `true`): Enables/disables update and restore endpoints.
-- `can_delete` (bool, default: `true`): Enables/disables delete and force-delete endpoints.
+- `canRead` (bool, default: `true`): Enables/disables read endpoints for this table (list/show). When false, read routes respond as “not found”.
+- `canCreate` (bool, default: `true`): Enables/disables create endpoint.
+- `canUpdate` (bool, default: `true`): Enables/disables update and restore endpoints.
+- `canDelete` (bool, default: `true`): Enables/disables delete and force-delete endpoints.
 
 #### Soft Deletes
-- `soft_deletes` (bool, default: `false`): When true, list endpoints exclude `deleted_at` rows by default and restore/force-delete endpoints become relevant.
+- `softDeletes` (bool, default: `false`): When true, list endpoints exclude `deleted_at` rows by default and restore/force-delete endpoints become relevant.
 
 #### Caching & Audit
-- `disable_cache` (bool, default: `false`): Disables query caching for this table (even if `record.cache.enabled` is true).
-- `disable_auditLog` (bool, default: `false`): Disables audit log inserts for create/update/delete on this table.
+- `disableCache` (bool, default: `false`): Disables query caching for this table (even if `record.cache.enabled` is true).
+- `disableAuditLog` (bool, default: `false`): Disables audit log inserts for create/update/delete on this table.
 - `auditLogFn` (?string, default: `null`): Reserved for custom audit log behavior; not used by the current runtime.
 
 #### Schema & Search Metadata
 - `columns` (?array, default: `[]`): Column metadata map. In normal usage this is populated at runtime from the database schema; leaving it empty is expected. It is used to whitelist payload fields and to detect audit columns like `created_by` / `updated_by`.
-- `column_hiddens` (?array, default: `[]`): List of column names to always hide from API responses. This is applied recursively to nested relationships as well. Hidden columns are removed even if their value is `null`.
-- `column_writes` (?array, default: `[]`): List of column names that are not writable via API payloads (create, update, upsert, and nested relationship writes). These columns are stripped from incoming payloads even if provided by the client.
-- `fulltext_indexes` (?array, default: `[]`): Declares full-text index column sets for search optimization. Format: a list of column name arrays, e.g. `[['name', 'description'], ['content']]`.
+- `columnHiddens` (?array, default: `[]`): List of column names to always hide from API responses. This is applied recursively to nested relationships as well. Hidden columns are removed even if their value is `null`.
+- `columnWriteDisabled` (?array, default: `[]`): List of column names that are not writable via API payloads (create, update, upsert, and nested relationship writes). These columns are stripped from incoming payloads even if provided by the client.
+- `columnIndexes` (?array, default: `[]`): Declares full-text index column sets for search optimization. Format: a list of column name arrays, e.g. `[['name', 'description'], ['content']]`.
 
 #### Relationships & Table RPC Functions
 - `relationships` (?array, default: `[]`): Map of relationship name => relationship config object (e.g. `RecordHasManyType`, `RecordBelongsToType`, `RecordMetaBelongsToManyType`, etc.). Used by `select` relationship includes and nested relationship selections.
-- `functions` (?array, default: `[]`): Map of function route name => function config (`RecordFunctionType` or array config). These are exposed under the table RPC route (e.g. `/{api_prefix}/{table}/rpc/{function}`) and can enforce permissions via `pms_name`.
+- `functions` (?array, default: `[]`): Map of function route name => function config (`RecordFunctionType` or array config). These are exposed under the table RPC route (e.g. `/{api_prefix}/{table}/rpc/{function}`) and can enforce permissions via `pmsName`.
 
 #### Validators
 - `createValidator` (callable|null, default: `null`): Runs before create. Must return an `Illuminate\Contracts\Validation\Validator`.
@@ -640,7 +640,7 @@ fn(\Illuminate\Http\Request $request, ?int $id = null): \Illuminate\Contracts\Va
 #### Triggers
 - `beforeRead`, `afterRead`, `beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete` (`RecordTableTriggerType|array|null`, default: `null`): Lifecycle triggers. Each value can be:
   - a `RecordTableTriggerType` instance,
-  - a single array trigger config (`['class' => ..., 'function_method' => ..., 'description' => ...]`),
+  - a single array trigger config (`['class' => ..., 'functionName' => ..., 'description' => ...]`),
   - or an array of trigger configs to run sequentially.
 
 ### Class-Based Configuration (Lazy Loading)
@@ -662,9 +662,9 @@ class UserTable extends RecordResource
     {
         return new RecordTableType(
             table: 'users',
-            can_create: true,
-            can_update: true,
-            can_delete: false,
+            canCreate: true,
+            canUpdate: true,
+            canDelete: false,
             // ...
         );
     }
@@ -730,7 +730,7 @@ $public = new RecordTablePublic(
 Trigger configuration for table lifecycle events.
 
 - `class` (string, required): Trigger handler class name.
-- `function_method` (string, required): Static method to call on the class.
+- `functionName` (string, required): Static method to call on the class.
 - `description` (?string, default: `null`): Optional description.
 
 ```php
@@ -738,7 +738,7 @@ use Sopheak\Core\Types\RecordTableTriggerType;
 
 $beforeCreate = new RecordTableTriggerType(
     class: \App\Record\Triggers\InvoiceTriggers::class,
-    function_method: 'beforeCreate',
+    functionName: 'beforeCreate',
 );
 ```
 
@@ -747,10 +747,10 @@ Defines a callable RPC endpoint config (table RPC or global RPC).
 
 - `method` (array|string|RecordFunctionMethodEnum, required): Allowed HTTP methods.
 - `class` (string, required): Handler class.
-- `function_method` (string, required): Method name on handler class.
-- `pms_name` (array|string|null, default: `null`): Permission(s). When `null`, the function is public (no permission check).
+- `functionName` (string, required): Method name on handler class.
+- `pmsName` (array|string|null, default: `null`): Permission(s). When `null`, the function is public (no permission check).
 - `description` (?string, default: `null`): Optional description.
-- `query_schema`, `payload_schema`, `response_schema` (?array, default: `null`): Optional schema metadata used by OpenAPI generation.
+- `querySchema`, `payloadSchema`, `responseSchema` (?array, default: `null`): Optional schema metadata used by OpenAPI generation.
 
 ```php
 use Sopheak\Core\Types\RecordFunctionType;
@@ -1274,7 +1274,7 @@ Global RPC functions allow you to define custom endpoints that are not tied to a
 Global functions are configured in `config/record.php` under the `global_functions` key.
 
 ### Public Global Functions
-You can create public endpoints by setting `pms_name` to `null`. These functions can be accessed without authentication.
+You can create public endpoints by setting `pmsName` to `null`. These functions can be accessed without authentication.
 
 **Configuration Example:**
 ```php
@@ -1282,11 +1282,11 @@ You can create public endpoints by setting `pms_name` to `null`. These functions
     'login' => [
         'method' => ['POST'],
         'class' => \App\Http\Controllers\AuthController::class,
-        'function_method' => 'login',
+        'functionName' => 'login',
         'description' => 'User login',
-        'pms_name' => null, // Public access
-        'payload_schema' => [ ... ],
-        'response_schema' => [ ... ],
+        'pmsName' => null, // Public access
+        'payloadSchema' => [ ... ],
+        'responseSchema' => [ ... ],
     ],
 ],
 ```
@@ -1299,7 +1299,7 @@ curl -X POST http://localhost:8000/api/v1/rpc/login \
 ```
 
 ### Protected Global Functions
-By providing a `pms_name`, the function requires authentication and the user must have the specified permission(s).
+By providing a `pmsName`, the function requires authentication and the user must have the specified permission(s).
 
 **Configuration Example:**
 ```php
@@ -1307,9 +1307,9 @@ By providing a `pms_name`, the function requires authentication and the user mus
     'system_stats' => [
         'method' => ['GET'],
         'class' => \App\Services\StatsService::class,
-        'function_method' => 'getSystemStats',
+        'functionName' => 'getSystemStats',
         'description' => 'Get system statistics',
-        'pms_name' => 'view_system_stats', // Requires auth & permission
+        'pmsName' => 'view_system_stats', // Requires auth & permission
     ],
 ],
 ```
