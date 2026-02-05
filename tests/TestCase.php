@@ -19,35 +19,34 @@ class TestCase extends BaseTestCase
         ];
     }
 
-    protected function setUp(): void
+    protected function getEnvironmentSetUp($app): void
     {
-        parent::setUp();
-
-        // Basic app configuration for tests
-        Config::set('app.url', 'http://localhost');
-        Config::set('sp-laravel-api.auth.guard', 'api');
-        // Define a simple 'api' guard for tests using the array user provider
-        Config::set('auth.guards.api', [
+        $app['config']->set('app.url', 'http://localhost');
+        $app['config']->set('sp-laravel-api.auth.guard', 'api');
+        $app['config']->set('auth.guards.api', [
             'driver' => 'session',
             'provider' => 'users',
         ]);
-        Config::set('auth.providers.users', [
+        $app['config']->set('auth.providers.users', [
             'driver' => 'database',
             'table' => 'users',
         ]);
 
-        // Record config defaults
-        Config::set('record.api_prefix', 'api');
-        Config::set('record.enable_tenant_id', false);
-        Config::set('record.tables', []);
-        Config::set('record.cache', [
+        $app['config']->set('record.api_prefix', 'api');
+        $app['config']->set('record.enable_tenant_id', false);
+        $app['config']->set('record.tables', []);
+        $app['config']->set('record.cache', [
             'enabled' => true,
             'default_ttl' => 3600,
             'per_table' => [],
             'per_table_ttl' => [],
         ]);
-        // Disable audit logs for tests (no audit_logs table)
-        Config::set('audit.enabled', false);
+        $app['config']->set('audit.enabled', false);
+    }
+
+    protected function setUp(): void
+    {
+        parent::setUp();
 
         // Define rate limiters used by routes to avoid missing limiter errors in tests
         RateLimiter::for('api-reads', fn() => Limit::perMinute(1000));

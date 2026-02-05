@@ -7,6 +7,7 @@ This document provides comprehensive documentation for the SP Laravel API packag
 This section documents the record CRUD endpoints provided by this package, including request/response formats, filtering, pagination, and error handling.
 
 ### Query Filtering (applyRequestFilters macro)
+
 The package extends Laravel's `Illuminate\Database\Query\Builder` with a macro `applyRequestFilters`. This is the same filtering/pagination mechanism used by the record CRUD endpoints when listing records.
 
 ```php
@@ -26,6 +27,7 @@ public function index(Request $request)
 ```
 
 The `applyRequestFilters` method returns an array containing:
+
 - `data`: The result set
 - `meta`: Pagination metadata
 - `headers`: Response headers
@@ -76,7 +78,7 @@ Relationship loading uses the `select` query parameter (not `with`). This suppor
    You can apply filters to related records using the `column=operator.value` syntax inside the relationship parenthesis.
 
    `GET /api/v1/projects?select=*,tasks(*,assignees(*,name=eq.admin))`
-   
+
    This fetches:
    - All columns from `projects`
    - All columns from `tasks`
@@ -89,7 +91,7 @@ Relationship loading uses the `select` query parameter (not `with`). This suppor
    - `lt`, `lte`: Less than (or equal) (`price=lt.100`)
    - `like`: Pattern matching (`name=like.%Smith%`)
    - `in`: In list (`status=in.active,pending`)
-   
+
    **Note:** If no operator is specified (e.g., `name=admin`), it defaults to equality (`eq`).
 
 4. **Filtering by Relationship (Top-Level):**
@@ -380,6 +382,7 @@ Example usage:
 ### Base Configuration
 
 ### API Prefix
+
 All endpoints are served under a configurable prefix defined in `config/record.php`:
 
 ```php
@@ -388,20 +391,22 @@ All endpoints are served under a configurable prefix defined in `config/record.p
 ```
 
 **Default**:
+
 - CRUD API: `/api/v1`
 - Global RPC: `/api/v1/rpc`
 
 **Examples**: `/api`, `/api/v1`, `/api/v2`
 
 ### Global RPC
+
 Global functions can be executed via the configured RPC prefix. Nested function names are supported.
 
 `POST /api/v1/rpc/{functionName}`
 
 Example:
+
 - `POST /api/v1/rpc/auth/login`
 - `POST /api/v1/rpc/system/status`
-
 
 ### Table Configuration Files
 
@@ -422,49 +427,83 @@ This creates `config/records/tables/customers.php` with a basic `RecordTableType
 php artisan sp-laravel-api:sync-record-columns --force
 ```
 
-
 Record endpoints use table-level access rules from `config/record.php`:
 
 - If a table/action is configured as public (`RecordTablePublic`), the endpoint is accessible without authentication.
 - Otherwise, the controller requires an authenticated user from the guard configured in `config/sp-laravel-api.php` (`sp-laravel-api.auth.guard`, default: `api`) and checks permissions.
 
 ### Middleware Stack
+
 - `api` - API middleware group
 - `auth:{guard}` - Authentication (for routes that enforce middleware)
 - `request.id` - Request ID tracking for audit trails
 - Rate limiting with different throttles for different operation types
 
 ### Table-Level Validation
+
 Each table configured in `config/record.php` (or in per-table files under `config/record/tables`) can define event-specific validators using the `RecordTableType` configuration:
 
 ```php
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Contracts\Validation\Validator as ValidatorContract;
+use App\Record\Validators\RecordValidator;
 use Sopheak\Core\Types\RecordTableType;
 
 return [
     'invoices' => new RecordTableType(
         pmsName: 'invoice',
-        createValidator: function (Request $request, ?int $id = null): ValidatorContract {
-            return Validator::make($request->all(), [
-                'invoice_number' => 'required|string|max:50',
-                'customer_id' => 'required|integer',
-                'total' => 'required|numeric|min:0',
-            ]);
-        },
-        updateValidator: function (Request $request, ?int $id = null): ValidatorContract {
-            return Validator::make($request->all(), [
-                'status' => 'sometimes|required|in:draft,pending,paid,cancelled',
-            ]);
-        },
-        deleteValidator: function (Request $request, ?int $id = null): ValidatorContract {
-            return Validator::make(['id' => $id], [
-                'id' => 'required|integer',
-            ]);
-        },
+        createValidator: [RecordValidator::class, 'createInvoice'],
+        updateValidator: [RecordValidator::class, 'updateInvoice'],
+        deleteValidator: [RecordValidator::class, 'deleteInvoice'],
     ),
 ];
+```
+
+If you run `php artisan config:cache`, avoid closures (including `fn (...) => ...`) in config files. Use callable arrays like `[ClassName::class, 'method']` (or a `'ClassName::method'` callable string).
+
+Example validator class:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace App\Record\Validators;
+
+use Illuminate\Contracts\Validation\Validator as ValidatorContract;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+
+final class RecordValidator
+{
+    public static function createInvoice(Request $request, ?int $id = null): ValidatorContract
+    {
+        return Validator::make($request->all(), [
+            'invoice_number' => 'required|string|max:50',
+            'customer_id' => 'required|integer',
+            'total' => 'required|numeric|min:0',
+        ]);
+    }
+
+    public static function updateInvoice(Request $request, ?int $id = null): ValidatorContract
+    {
+        return Validator::make($request->all(), [
+            'status' => 'sometimes|required|in:draft,pending,paid,cancelled',
+        ]);
+    }
+
+    public static function deleteInvoice(Request $request, ?int $id = null): ValidatorContract
+    {
+        return Validator::make(['id' => $id], [
+            'id' => 'required|integer',
+        ]);
+    }
+
+    public static function deletePackage(Request $request, ?int $id = null): ValidatorContract
+    {
+        return Validator::make(['id' => $id], [
+            'id' => 'required|integer',
+        ]);
+    }
+}
 ```
 
 - `createValidator` runs before `POST /{api_prefix}/{table}`.
@@ -474,6 +513,7 @@ return [
 If a validator fails, the API returns a `422 Validation Error` with the standard error format described in the **Error Responses** section.
 
 ### Table-Level Triggers
+
 In addition to validators, you can configure lifecycle triggers per table using `RecordTableTriggerType`. Triggers allow you to run custom code before and after core CRUD operations.
 
 ```php
@@ -489,38 +529,70 @@ return [
             read: false,
             write: false,
         ),
-        beforeRead: new RecordTableTriggerType(
+        beforeRead: [
+          [
+            new RecordTableTriggerType(
             class: \App\Record\Triggers\UserTriggers::class,
             functionName: 'beforeRead',
-        ),
-        afterRead: new RecordTableTriggerType(
+          )
+          ]
+        ],
+        afterRead: [
+          [
+            new RecordTableTriggerType(
             class: \App\Record\Triggers\UserTriggers::class,
             functionName: 'afterRead',
-        ),
-        beforeCreate: new RecordTableTriggerType(
+          )
+          ]
+        ],
+        beforeCreate: [
+          [
+            new RecordTableTriggerType(
             class: \App\Record\Triggers\UserTriggers::class,
             functionName: 'beforeCreate',
-        ),
-        afterCreate: new RecordTableTriggerType(
+          )
+          ]
+        ],
+        afterCreate: [
+          [
+            new RecordTableTriggerType(
             class: \App\Record\Triggers\UserTriggers::class,
             functionName: 'afterCreate',
-        ),
-        beforeUpdate: new RecordTableTriggerType(
+          )
+          ]
+        ],
+        beforeUpdate: [
+          [
+            new RecordTableTriggerType(
             class: \App\Record\Triggers\UserTriggers::class,
             functionName: 'beforeUpdate',
-        ),
-        afterUpdate: new RecordTableTriggerType(
-            class: \App\Record\Triggers\UserTriggers::class,
-            functionName: 'afterUpdate',
-        ),
-        beforeDelete: new RecordTableTriggerType(
-            class: \App\Record\Triggers\UserTriggers::class,
-            functionName: 'beforeDelete',
-        ),
-        afterDelete: new RecordTableTriggerType(
-            class: \App\Record\Triggers\UserTriggers::class,
-            functionName: 'afterDelete',
-        ),
+          )
+          ]
+        ],
+        afterUpdate: [
+          [
+            new RecordTableTriggerType(
+              class: \App\Record\Triggers\UserTriggers::class,
+              functionName: 'afterUpdate',
+          )
+          ]
+        ],
+        beforeDelete: [
+          [
+            new RecordTableTriggerType(
+              class: \App\Record\Triggers\UserTriggers::class,
+              functionName: 'beforeDelete',
+          )
+          ]
+        ],
+        afterDelete: [
+          [
+            new RecordTableTriggerType(
+              class: \App\Record\Triggers\UserTriggers::class,
+              functionName: 'afterDelete',
+          )
+          ]
+        ],
     ),
 ];
 ```
@@ -532,6 +604,7 @@ public static function someTrigger(Request $request, string $table, mixed ...$ar
 ```
 
 Triggers are invoked with `call_user_func_array([$class, $method], $params)` where `$params` always starts with:
+
 - `Request $request`
 - `string $table`
 
@@ -545,6 +618,7 @@ Additional arguments depend on the event/endpoint. Common patterns:
 - Bulk endpoints may pass different params per item (e.g. `[$request, $table, $item]`, `[$request, $table, $id, $item]`, `[$request, $table, $id]`)
 
 Return values:
+
 - Return a `Request` to replace the current request (used mainly by `beforeRead`/`beforeCreate`/`beforeUpdate`/`beforeDelete`)
 - Return an `array` to merge into the request input (merged into `$request->merge($result)`)
 - Return `null` / no return to leave the request unchanged
@@ -552,6 +626,7 @@ Return values:
 Trigger handlers are strict: invalid trigger config, missing class/method, or any runtime error will abort the request and surface as an API error response. Use validators when you want user-friendly `422` validation errors.
 
 ### RecordTableType Parameters
+
 `RecordTableType` configures a table’s routing, access control, caching, tenancy, validation, and lifecycle hooks.
 
 Constructor (named arguments recommended):
@@ -592,14 +667,17 @@ new RecordTableType(
 ```
 
 #### Identity & Routing
+
 - `pmsName` (?string, default: `null`): Used for permission mapping (e.g. `view:{pmsName}`). If `null`, it falls back to the table name (singular, snake_case) for permission generation.
 - `table` (?string, default: `null`): Physical database table name. When `null`, the route table name is used as the DB table name.
 - `primaryKey` (?string, default: `'id'`): Primary key column name used by show/update/delete endpoints.
 
 #### Tenancy
+
 - `hasTenantId` (bool, default: `false`): Marks this table as tenant-scoped when `record.enable_tenant_id` is enabled. When enabled and `hasTenantId` is true, requests must include the tenant header (default: `X-Tenant-ID`) and queries are automatically filtered by tenant.
 
 #### Access Control & Endpoint Availability
+
 - `public` (RecordTablePublic, default: `new RecordTablePublic()`): Public access flags for grouped actions:
   - `read`: Allows unauthenticated access to read actions (`read`, `view`).
   - `write`: Allows unauthenticated access to write actions (`create`, `update`, `delete`, `restore`).
@@ -609,24 +687,29 @@ new RecordTableType(
 - `canDelete` (bool, default: `true`): Enables/disables delete and force-delete endpoints.
 
 #### Soft Deletes
+
 - `softDeletes` (bool, default: `false`): When true, list endpoints exclude `deleted_at` rows by default and restore/force-delete endpoints become relevant.
 
 #### Caching & Audit
+
 - `disableCache` (bool, default: `false`): Disables query caching for this table (even if `record.cache.enabled` is true).
 - `disableAuditLog` (bool, default: `false`): Disables audit log inserts for create/update/delete on this table.
 - `auditLogFn` (?string, default: `null`): Reserved for custom audit log behavior; not used by the current runtime.
 
 #### Schema & Search Metadata
+
 - `columns` (?array, default: `[]`): Column metadata map. In normal usage this is populated at runtime from the database schema; leaving it empty is expected. It is used to whitelist payload fields and to detect audit columns like `created_by` / `updated_by`.
 - `columnHiddens` (?array, default: `[]`): List of column names to always hide from API responses. This is applied recursively to nested relationships as well. Hidden columns are removed even if their value is `null`.
 - `columnWriteDisabled` (?array, default: `[]`): List of column names that are not writable via API payloads (create, update, upsert, and nested relationship writes). These columns are stripped from incoming payloads even if provided by the client.
 - `columnIndexes` (?array, default: `[]`): Declares full-text index column sets for search optimization. Format: a list of column name arrays, e.g. `[['name', 'description'], ['content']]`.
 
 #### Relationships & Table RPC Functions
+
 - `relationships` (?array, default: `[]`): Map of relationship name => relationship config object (e.g. `RecordHasManyType`, `RecordBelongsToType`, `RecordMetaBelongsToManyType`, etc.). Used by `select` relationship includes and nested relationship selections.
 - `functions` (?array, default: `[]`): Map of function route name => function config (`RecordFunctionType` or array config). These are exposed under the table RPC route (e.g. `/{api_prefix}/{table}/rpc/{function}`) and can enforce permissions via `pmsName`.
 
 #### Validators
+
 - `createValidator` (callable|null, default: `null`): Runs before create. Must return an `Illuminate\Contracts\Validation\Validator`.
 - `updateValidator` (callable|null, default: `null`): Runs before update. Must return an `Illuminate\Contracts\Validation\Validator`.
 - `deleteValidator` (callable|null, default: `null`): Runs before delete. Must return an `Illuminate\Contracts\Validation\Validator`.
@@ -638,6 +721,7 @@ fn(\Illuminate\Http\Request $request, ?int $id = null): \Illuminate\Contracts\Va
 ```
 
 #### Triggers
+
 - `beforeRead`, `afterRead`, `beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete` (`RecordTableTriggerType|array|null`, default: `null`): Lifecycle triggers. Each value can be:
   - a `RecordTableTriggerType` instance,
   - a single array trigger config (`['class' => ..., 'functionName' => ..., 'description' => ...]`),
@@ -648,6 +732,7 @@ fn(\Illuminate\Http\Request $request, ?int $id = null): \Illuminate\Contracts\Va
 For large applications with many tables or complex schemas, you can define configurations in separate classes. This improves performance by only loading the necessary configuration for the requested endpoint (Lazy Loading).
 
 #### 1. Table Configuration
+
 Create a class extending `Sopheak\Core\Resources\RecordResource`:
 
 ```php
@@ -672,6 +757,7 @@ class UserTable extends RecordResource
 ```
 
 #### 2. Global Function Configuration
+
 Create a class extending `Sopheak\Core\Resources\GlobalFunction`:
 
 ```php
@@ -695,6 +781,7 @@ class LoginFunction extends GlobalFunction
 ```
 
 #### 3. Registration
+
 Register your classes in `config/record.php` or via `SchemaRegistry::register()`:
 
 ```php
@@ -712,6 +799,7 @@ return [
 ### Type Reference
 
 #### RecordTablePublic
+
 Public access flags for a table.
 
 - `read` (bool, default: `false`): Allows unauthenticated read actions (`read`, `view`).
@@ -727,6 +815,7 @@ $public = new RecordTablePublic(
 ```
 
 #### RecordTableTriggerType
+
 Trigger configuration for table lifecycle events.
 
 - `class` (string, required): Trigger handler class name.
@@ -743,6 +832,7 @@ $beforeCreate = new RecordTableTriggerType(
 ```
 
 #### RecordFunctionType
+
 Defines a callable RPC endpoint config (table RPC or global RPC).
 
 - `method` (array|string|RecordFunctionMethodEnum, required): Allowed HTTP methods.
@@ -765,6 +855,7 @@ $function = new RecordFunctionType(
 ```
 
 #### RecordBelongsToType
+
 Belongs-to relationship configuration.
 
 - `table` (string, required): Related table name.
@@ -785,6 +876,7 @@ $customer = new RecordBelongsToType(
 ```
 
 #### RecordHasManyType
+
 Has-many relationship configuration (also used for nested writes when enabled).
 
 - `table` (string, required): Related table name.
@@ -811,6 +903,7 @@ $items = new RecordHasManyType(
 ```
 
 #### RecordHasManyThroughType
+
 Has-many-through relationship configuration.
 
 - `table` (string, required): Target table name.
@@ -843,6 +936,7 @@ $payments = new RecordHasManyThroughType(
 ```
 
 #### RecordMetaBelongsToManyType
+
 Many-to-many relationship configuration with optional pivot details.
 
 - `related` (string, required): Related model class name or related table name.
@@ -879,6 +973,7 @@ $roles = new RecordMetaBelongsToManyType(
 ```
 
 #### RecordSpatiePermissionType
+
 Specialized relationship config for `spatie/laravel-permission` morph pivot tables.
 
 - Requires `spatie/laravel-permission` to be installed; the constructor throws if it is missing.
@@ -902,6 +997,7 @@ $userRoles = new RecordSpatiePermissionType(
 ### Standard CRUD Operations
 
 #### List Records
+
 ```http
 GET /{api_prefix}/{table}
 ```
@@ -911,24 +1007,30 @@ Retrieve a paginated list of records with filtering, sorting, and relationship l
 #### Query Parameters
 
 **Pagination**
+
 - `per_page` (integer, max: 100) - Items per page
 - `page` (integer) - Page number (offset pagination)
 
 **Search**
+
 - `s` (string) - Search across searchable columns (uses full-text index when available, otherwise LIKE)
 
 **Selection & Relationships**
+
 - `select` (string) - Select main columns and include relationships using parentheses syntax.
   - Example: `?select=*,customer(*),items(*,product(*))`
 
 **Sorting**
+
 - `sortby` (string) - Field to sort by
 - `order` (string: `asc`|`desc`) - Sort direction
 
 **Limiting**
+
 - `limit` (integer, max: 1000) - Limit results (only applied when `per_page` is not provided)
 
 **Result Shape & Aggregation**
+
 - `distinct` (boolean) - Apply SQL `DISTINCT` to the main query.
 - `only_trashed` (boolean) - For soft-deleted tables, return only rows where `deleted_at` is not null.
 - `aggregate` (string) - One or more aggregate expressions (comma-separated):
@@ -941,6 +1043,7 @@ Retrieve a paginated list of records with filtering, sorting, and relationship l
 - `group_by` (string) - Comma-separated list of columns to group by. Column names are validated against the table schema.
 
 **Debugging**
+
 - `X-Debug` (HTTP header, boolean) - When sent as `true`, `1`, `yes`, or `on`, responses include lazy-loading diagnostics:
   - `meta.debug.lazy_stats` with the output of `QueryBuilderFilters::getLazyStats()`:
     - `total_operations`
@@ -951,6 +1054,7 @@ Retrieve a paginated list of records with filtering, sorting, and relationship l
 
 **Filter Operators**
 Filters are usually passed as `{column}={operator}.{value}` (operators validated against the table schema). Some operators support a value-less shorthand form for `null`:
+
 - `is.null`, `is_not.null` or simply `is`, `is_not` (equivalent to `IS NULL` / `IS NOT NULL`)
 - `eq.{value}`, `neq.{value}`, `in.{a,b,c}`, `not_in.{a,b,c}`
 - `like.{value}`, `contains.{value}`, `not_like.{value}`, `starts_with.{value}`, `ends_with.{value}`, `regex.{pattern}`
@@ -962,18 +1066,21 @@ Filters are usually passed as `{column}={operator}.{value}` (operators validated
   - On non-text columns (e.g. integers), `empty` ⇔ `IS NULL`, `not_empty` ⇔ `IS NOT NULL`.
 
 When `aggregate` is present and valid, the list endpoint returns aggregated rows instead of paginated records. The response still follows the standard shape, with:
+
 - `data`: Aggregated rows (including `group_by` columns and aggregate aliases like `count_id`).
 - `meta.total`: Number of aggregated rows.
 - `meta.group_by`: Grouped columns (when provided).
 - `meta.aggregate`: List of aggregate operations with function, column, and alias metadata.
 
 #### Example Request
+
 ```http
 GET /api/v1/invoices?per_page=25&sortby=created_at&order=desc&select=*,customer(*),items(*,product(*))&status=eq.pending&total=gte.100&s=invoice
 Authorization: Bearer {access_token}
 ```
 
 #### Response Format
+
 ```json
 {
   "success": true,
@@ -982,7 +1089,7 @@ Authorization: Bearer {access_token}
     {
       "id": 1,
       "invoice_number": "INV-001",
-      "total": 150.00,
+      "total": 150.0,
       "status": "pending",
       "created_at": "2024-01-15T10:30:00Z",
       "customer": {
@@ -995,7 +1102,7 @@ Authorization: Bearer {access_token}
           "id": 10,
           "description": "Product A",
           "quantity": 2,
-          "price": 75.00
+          "price": 75.0
         }
       ]
     }
@@ -1010,6 +1117,7 @@ Authorization: Bearer {access_token}
 ```
 
 #### Status Codes
+
 - `200` - Success
 - `401` - Unauthorized
 - `403` - Forbidden
@@ -1017,6 +1125,7 @@ Authorization: Bearer {access_token}
 - `500` - Server error
 
 #### Get Single Record
+
 ```http
 GET /{api_prefix}/{table}/{id}
 ```
@@ -1024,16 +1133,19 @@ GET /{api_prefix}/{table}/{id}
 Retrieve a single record by its primary key.
 
 #### Query Parameters
+
 - `select` (string) - Select main columns and include relationships using parentheses syntax
   - Example: `?select=*,customer(*),items(*,product(*))`
 
 #### Example Request
+
 ```http
 GET /api/v1/invoices/123?select=*,customer(*),items(*),payments(*)
 Authorization: Bearer {access_token}
 ```
 
 #### Response Format
+
 ```json
 {
   "success": true,
@@ -1057,6 +1169,7 @@ Authorization: Bearer {access_token}
 ```
 
 #### Status Codes
+
 - `200` - Success
 - `401` - Unauthorized
 - `403` - Forbidden
@@ -1064,6 +1177,7 @@ Authorization: Bearer {access_token}
 - `500` - Server error
 
 #### Create Record
+
 ```http
 POST /{api_prefix}/{table}
 ```
@@ -1073,6 +1187,7 @@ Create a new record.
 If a `createValidator` is defined for the target table in `config/record.php`, the request body is validated using that validator before any database changes. On validation failure, the endpoint returns `422` with detailed error messages.
 
 #### Create With Relationships In Response
+
 To return related records in the response of the create call, pass a nested `select` query parameter. Relationship selection uses parentheses:
 `relationship(columns,childRelationship(...))`.
 
@@ -1090,25 +1205,27 @@ curl --location 'http://127.0.0.1:8000/api/v1/orders?select=*,customer(*),items(
 ```
 
 #### Request Body
+
 JSON object with field values:
 
 ```json
 {
   "invoice_number": "INV-124",
   "customer_id": 5,
-  "total": 300.00,
+  "total": 300.0,
   "status": "draft",
   "items": [
     {
       "description": "Product B",
       "quantity": 3,
-      "price": 100.00
+      "price": 100.0
     }
   ]
 }
 ```
 
 #### Response Format
+
 ```json
 {
   "success": true,
@@ -1117,7 +1234,7 @@ JSON object with field values:
     "id": 124,
     "invoice_number": "INV-124",
     "customer_id": 5,
-    "total": 300.00,
+    "total": 300.0,
     "status": "draft",
     "created_at": "2024-01-15T11:00:00Z",
     "updated_at": "2024-01-15T11:00:00Z"
@@ -1129,6 +1246,7 @@ JSON object with field values:
 ```
 
 #### Status Codes
+
 - `200` - Success
 - `401` - Unauthorized
 - `403` - Forbidden
@@ -1137,6 +1255,7 @@ JSON object with field values:
 - `500` - Server error
 
 #### Update Record
+
 ```http
 PUT /{api_prefix}/{table}/{id}
 PATCH /{api_prefix}/{table}/{id}
@@ -1147,14 +1266,16 @@ Update an existing record. `PUT` expects complete data, `PATCH` allows partial u
 If an `updateValidator` is defined for the target table, the request is validated with access to both the incoming payload and the current record ID. Validation failures return `422` with error details.
 
 #### Request Body
+
 ```json
 {
   "status": "sent",
-  "total": 275.00
+  "total": 275.0
 }
 ```
 
 #### Response Format
+
 ```json
 {
   "success": true,
@@ -1163,7 +1284,7 @@ If an `updateValidator` is defined for the target table, the request is validate
     "id": 124,
     "invoice_number": "INV-124",
     "status": "sent",
-    "total": 275.00,
+    "total": 275.0,
     "updated_at": "2024-01-15T11:30:00Z"
   },
   "meta": {
@@ -1173,6 +1294,7 @@ If an `updateValidator` is defined for the target table, the request is validate
 ```
 
 #### Status Codes
+
 - `200` - Success
 - `401` - Unauthorized
 - `403` - Forbidden
@@ -1181,6 +1303,7 @@ If an `updateValidator` is defined for the target table, the request is validate
 - `500` - Server error
 
 #### Delete Record
+
 ```http
 DELETE /{api_prefix}/{table}/{id}
 ```
@@ -1190,6 +1313,7 @@ Delete a record (soft delete if enabled, otherwise hard delete).
 If a `deleteValidator` is defined for the target table, the request is validated (typically against the ID and context) before the record is deleted. Validation failures return `422` with error details.
 
 #### Response Format
+
 ```json
 {
   "success": true,
@@ -1204,6 +1328,7 @@ If a `deleteValidator` is defined for the target table, the request is validated
 ```
 
 #### Status Codes
+
 - `200` - Success
 - `401` - Unauthorized
 - `403` - Forbidden
@@ -1212,6 +1337,7 @@ If a `deleteValidator` is defined for the target table, the request is validated
 - `500` - Server error
 
 #### Restore Record
+
 ```http
 POST /{api_prefix}/{table}/{id}/restore
 ```
@@ -1219,6 +1345,7 @@ POST /{api_prefix}/{table}/{id}/restore
 Restore a soft-deleted record (only available for tables with soft deletes enabled).
 
 #### Response Format
+
 ```json
 {
   "success": true,
@@ -1233,6 +1360,7 @@ Restore a soft-deleted record (only available for tables with soft deletes enabl
 ```
 
 #### Status Codes
+
 - `200` - Success
 - `401` - Unauthorized
 - `403` - Forbidden
@@ -1240,6 +1368,7 @@ Restore a soft-deleted record (only available for tables with soft deletes enabl
 - `500` - Server error
 
 #### Force Delete Record
+
 ```http
 DELETE /{api_prefix}/{table}/{id}/force
 ```
@@ -1247,6 +1376,7 @@ DELETE /{api_prefix}/{table}/{id}/force
 Permanently delete a record (bypasses soft delete).
 
 #### Response Format
+
 ```json
 {
   "success": true,
@@ -1261,6 +1391,7 @@ Permanently delete a record (bypasses soft delete).
 ```
 
 #### Status Codes
+
 - `200` - Success
 - `401` - Unauthorized
 - `403` - Forbidden
@@ -1274,9 +1405,11 @@ Global RPC functions allow you to define custom endpoints that are not tied to a
 Global functions are configured in `config/record.php` under the `global_functions` key.
 
 ### Public Global Functions
+
 You can create public endpoints by setting `pmsName` to `null`. These functions can be accessed without authentication.
 
 **Configuration Example:**
+
 ```php
 'global_functions' => [
     'login' => [
@@ -1292,6 +1425,7 @@ You can create public endpoints by setting `pmsName` to `null`. These functions 
 ```
 
 **Request:**
+
 ```bash
 curl -X POST http://localhost:8000/api/v1/rpc/login \
   -H "Content-Type: application/json" \
@@ -1299,9 +1433,11 @@ curl -X POST http://localhost:8000/api/v1/rpc/login \
 ```
 
 ### Protected Global Functions
+
 By providing a `pmsName`, the function requires authentication and the user must have the specified permission(s).
 
 **Configuration Example:**
+
 ```php
 'global_functions' => [
     'system_stats' => [
@@ -1315,12 +1451,14 @@ By providing a `pmsName`, the function requires authentication and the user must
 ```
 
 **Request:**
+
 ```bash
 curl -X GET http://localhost:8000/api/v1/rpc/system_stats \
   -H "Authorization: Bearer {token}"
 ```
 
 ### Routing
+
 Global functions are registered with high priority, so a global function named `login` will take precedence over a table named `login`. However, they are constrained to the configured keys to avoid shadowing valid table routes unnecessarily.
 
 ---
@@ -1330,33 +1468,36 @@ Global functions are registered with high priority, so a global function named `
 You can perform Create and Update operations on a record and its related records in a single request. This is supported for `hasMany` relationships configured in `config/record.php`.
 
 ### Nested Create
+
 Create a parent record along with its related child records.
 
 #### Request Body
+
 ```json
 {
   "customer_name": "Tech Corp",
   "date": "2023-12-23",
-  "total": 1500.00,
+  "total": 1500.0,
   "status": "draft",
   "items": [
     {
       "product_name": "Laptop",
       "quantity": 1,
-      "price": 1200.00,
-      "total": 1200.00
+      "price": 1200.0,
+      "total": 1200.0
     },
     {
       "product_name": "Mouse",
       "quantity": 2,
-      "price": 150.00,
-      "total": 300.00
+      "price": 150.0,
+      "total": 300.0
     }
   ]
 }
 ```
 
 #### Example Request
+
 ```bash
 curl --location 'http://127.0.0.1:8000/api/v1/invoices' \
 --header 'Content-Type: application/json' \
@@ -1378,20 +1519,23 @@ curl --location 'http://127.0.0.1:8000/api/v1/invoices' \
 ```
 
 ### Nested Update
+
 Update a parent record and manage its relationships simultaneously. You can:
+
 - **Update** existing children (provide `id`).
 - **Create** new children (omit `id`).
 - **Delete** existing children (provide `id` and `_delete: true` or `_destroy: true`).
 
 #### Request Body
+
 ```json
 {
-  "total": 1750.00,
+  "total": 1750.0,
   "items": [
     {
       "id": 1,
       "quantity": 2,
-      "total": 2400.00
+      "total": 2400.0
     },
     {
       "id": 2,
@@ -1400,14 +1544,15 @@ Update a parent record and manage its relationships simultaneously. You can:
     {
       "product_name": "Keyboard",
       "quantity": 5,
-      "price": 50.00,
-      "total": 250.00
+      "price": 50.0,
+      "total": 250.0
     }
   ]
 }
 ```
 
 #### Example Request
+
 ```bash
 curl --location --request PUT 'http://127.0.0.1:8000/api/v1/invoices/123' \
 --header 'Content-Type: application/json' \
@@ -1444,9 +1589,10 @@ For performance considerations and best practices when using bulk operations, pl
 
 - **Validation**: Table-level validators (`createValidator`, `updateValidator`, `deleteValidator`) are currently **not** automatically applied to bulk operations. You should validate your payload before sending.
 - **Triggers**: Table-level triggers (`beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete`) **are executed** for each individual item in the bulk batch.
-    - This allows you to maintain consistent business logic (e.g., setting default values, syncing with external systems) regardless of whether a record is created individually or in bulk.
+  - This allows you to maintain consistent business logic (e.g., setting default values, syncing with external systems) regardless of whether a record is created individually or in bulk.
 
 ### Legacy Bulk Operation
+
 ```http
 POST /{api_prefix}/{table}/bulk
 ```
@@ -1454,6 +1600,7 @@ POST /{api_prefix}/{table}/bulk
 Auto-detects operation type based on request data structure.
 
 ### Bulk Create
+
 ```http
 POST /{api_prefix}/{table}/bulk/create
 ```
@@ -1461,22 +1608,24 @@ POST /{api_prefix}/{table}/bulk/create
 Create multiple records in a single request.
 
 #### Request Body
+
 ```json
 {
   "data": [
     {
       "name": "Product A",
-      "price": 100.00
+      "price": 100.0
     },
     {
-      "name": "Product B", 
-      "price": 150.00
+      "name": "Product B",
+      "price": 150.0
     }
   ]
 }
 ```
 
 #### Response Format
+
 ```json
 {
   "success": true,
@@ -1488,12 +1637,12 @@ Create multiple records in a single request.
       {
         "id": 10,
         "name": "Product A",
-        "price": 100.00
+        "price": 100.0
       },
       {
         "id": 11,
         "name": "Product B",
-        "price": 150.00
+        "price": 150.0
       }
     ]
   },
@@ -1503,6 +1652,7 @@ Create multiple records in a single request.
 ```
 
 ### Bulk Update
+
 ```http
 POST /{api_prefix}/{table}/bulk/update
 ```
@@ -1510,22 +1660,24 @@ POST /{api_prefix}/{table}/bulk/update
 Update multiple records by ID.
 
 #### Request Body
+
 ```json
 {
   "data": [
     {
       "id": 10,
-      "price": 110.00
+      "price": 110.0
     },
     {
       "id": 11,
-      "price": 160.00
+      "price": 160.0
     }
   ]
 }
 ```
 
 ### Bulk Delete
+
 ```http
 POST /{api_prefix}/{table}/bulk/delete
 ```
@@ -1533,6 +1685,7 @@ POST /{api_prefix}/{table}/bulk/delete
 Delete multiple records by ID.
 
 #### Request Body
+
 ```json
 {
   "ids": [10, 11, 12]
@@ -1542,6 +1695,7 @@ Delete multiple records by ID.
 ### Audit Management
 
 ### Get Audit Logs
+
 ```http
 GET /{api_prefix}/audit/logs
 ```
@@ -1549,17 +1703,20 @@ GET /{api_prefix}/audit/logs
 Retrieve audit logs with filtering options.
 
 #### Query Parameters
+
 - `entity_type` (string, required) - Filter by entity type (table name, e.g. `invoices`)
 - `entity_id` (integer, required) - Filter by specific entity ID
 - `limit` (integer) - Max results (default: 50, max: 100)
 
 #### Example Request
+
 ```http
 GET /api/v1/audit/logs?entity_type=invoices&entity_id=123&limit=20
 Authorization: Bearer {access_token}
 ```
 
 #### Response Format
+
 ```json
 {
   "success": true,
@@ -1586,6 +1743,7 @@ Authorization: Bearer {access_token}
 **Note:** `old_data`, `new_data`, and `metadata` are stored as JSON strings in the database. Clients can `JSON.parse` / `json_decode` them when needed.
 
 ### Get Audit Statistics
+
 ```http
 GET /{api_prefix}/audit/stats
 ```
@@ -1593,6 +1751,7 @@ GET /{api_prefix}/audit/stats
 Get audit statistics and metrics.
 
 #### Query Parameters
+
 - `entity_type` (string) - Filter by entity type (table name)
 - `entity_id` (integer) - Filter by specific entity ID
 - `start_date` (date: Y-m-d) - Filter from date
@@ -1600,6 +1759,7 @@ Get audit statistics and metrics.
 - `event` (string) - Filter by event type (`created`, `updated`, `deleted`, `login`, `logout`, `failed_login`)
 
 #### Response Format
+
 ```json
 {
   "success": true,
@@ -1611,9 +1771,7 @@ Get audit statistics and metrics.
       "updated": 30,
       "deleted": 5
     },
-    "top_users": [
-      { "user_name": "John Admin", "count": 20 }
-    ],
+    "top_users": [{ "user_name": "John Admin", "count": 20 }],
     "entity_types": {
       "invoices": 45
     }
@@ -1622,6 +1780,7 @@ Get audit statistics and metrics.
 ```
 
 ### Get Field Timeline
+
 ```http
 GET /{api_prefix}/audit/field-timeline
 ```
@@ -1629,14 +1788,17 @@ GET /{api_prefix}/audit/field-timeline
 Get timeline of changes for a specific field.
 
 #### Query Parameters (Required)
+
 - `entity_type` (string) - Entity type
 - `entity_id` (integer) - Entity ID
 - `field` (string) - Field name
 
 #### Optional Parameters
+
 - `limit` (integer) - Max results (default: 50, max: 50)
 
 #### Response Format
+
 ```json
 {
   "success": true,
@@ -1667,6 +1829,7 @@ Get timeline of changes for a specific field.
 ```
 
 ### Get Field Statistics
+
 ```http
 GET /{api_prefix}/audit/field-stats
 ```
@@ -1674,11 +1837,13 @@ GET /{api_prefix}/audit/field-stats
 Get statistics for a specific field across entities.
 
 #### Query Parameters (Required)
+
 - `entity_type` (string) - Entity type
 - `entity_id` (integer) - Entity ID
 - `field` (string) - Field name
 
 #### Response Format
+
 ```json
 {
   "success": true,
@@ -1697,6 +1862,7 @@ Get statistics for a specific field across entities.
 ```
 
 ### Create Audit Log
+
 ```http
 POST /{api_prefix}/audit/logs
 ```
@@ -1704,6 +1870,7 @@ POST /{api_prefix}/audit/logs
 Manually create an audit log entry.
 
 #### Request Body
+
 ```json
 {
   "event": "updated",
@@ -1723,6 +1890,7 @@ Manually create an audit log entry.
 **Note:** If `metadata.old_data` and `metadata.new_data` are provided, they are used as the explicit old/new snapshots for the audit record. If omitted for updates, the system may infer `old_data` from the most recent `new_data` stored for the same entity.
 
 ### Get Specific Audit Log
+
 ```http
 GET /{api_prefix}/audit/logs/{id}
 ```
@@ -1730,6 +1898,7 @@ GET /{api_prefix}/audit/logs/{id}
 Retrieve a specific audit log by ID.
 
 ### Cleanup Audit Logs
+
 ```http
 DELETE /{api_prefix}/audit/cleanup
 ```
@@ -1737,12 +1906,14 @@ DELETE /{api_prefix}/audit/cleanup
 Clean up old audit logs (admin only - requires `can:manage-audit-logs` permission).
 
 #### Query Parameters
+
 - `days` (integer) - Retention period in days
 - `dry_run` (boolean) - Preview what would be deleted
 
 ### Custom Functions
 
 ### Global Functions
+
 ```http
 GET|POST|PUT|PATCH|DELETE /{api_prefix}/rpc/{functionName}
 ```
@@ -1750,11 +1921,12 @@ GET|POST|PUT|PATCH|DELETE /{api_prefix}/rpc/{functionName}
 Execute global custom functions defined in `config/record.php`.
 
 #### Examples
+
 ```http
 # Simple global function
 GET /api/v1/rpc/system_stats
 
-# Parameterized global function  
+# Parameterized global function
 POST /api/v1/rpc/generate_report
 Content-Type: application/json
 {
@@ -1764,6 +1936,7 @@ Content-Type: application/json
 ```
 
 ### Table Functions
+
 ```http
 GET|POST|PUT|PATCH|DELETE /{api_prefix}/{table}/rpc/{functionName}
 ```
@@ -1771,6 +1944,7 @@ GET|POST|PUT|PATCH|DELETE /{api_prefix}/{table}/rpc/{functionName}
 Execute table-specific custom functions.
 
 #### Examples
+
 ```http
 # Simple table function
 GET /api/v1/invoices/rpc/calculate_totals
@@ -1787,6 +1961,7 @@ Content-Type: application/json
 ### Error Responses
 
 #### Standard Success Format
+
 ```json
 {
   "success": true,
@@ -1799,6 +1974,7 @@ Content-Type: application/json
 ```
 
 #### Standard Error Format
+
 ```json
 {
   "success": false,
@@ -1815,6 +1991,7 @@ Content-Type: application/json
 ```
 
 `error_code` is a stable, machine-friendly code that complements the HTTP status:
+
 - On success responses it is always the success code.
 - On error responses it is derived from the HTTP status (unauthorized, forbidden, not found, validation, server error, etc.), unless a downstream handler explicitly sets `error_code` in its JSON body, in which case that value is preserved.
 
@@ -1841,6 +2018,7 @@ The package uses a fixed set of numeric `error_code` values to make client-side 
 - `10015` – **TOKEN_EXPIRED**: Authentication token is valid but expired.
 
 #### HTTP Status Codes
+
 - `200` - Success
 - `201` - Created
 - `204` - Deleted (no content)
@@ -1857,7 +2035,7 @@ The package uses a fixed set of numeric `error_code` values to make client-side 
 Different endpoints have different rate limits:
 
 - **API Reads** (`throttle:api-reads`) - GET operations
-- **API Writes** (`throttle:api-writes`) - POST, PUT, PATCH, DELETE operations  
+- **API Writes** (`throttle:api-writes`) - POST, PUT, PATCH, DELETE operations
 - **API Functions** (`throttle:api-functions`) - Custom function calls
 
 Rate limits are configurable in your Laravel application's rate limiting configuration.
@@ -1865,21 +2043,25 @@ Rate limits are configurable in your Laravel application's rate limiting configu
 ### Security Considerations
 
 ### Authentication
+
 - All endpoints require valid JWT tokens unless configured as public
 - Tokens should be included in the `Authorization: Bearer {token}` header
 
 ### Authorization
+
 - Permission-based access control using Spatie Laravel Permission
 - Automatic tenant isolation when `tenant_id` column is present
 - Special permissions for restricted access patterns
 
 ### Data Protection
+
 - Automatic SQL injection prevention
 - Input validation and sanitization
 - Audit trail for all operations
 - Configurable field exclusion for sensitive data
 
 ### Best Practices
+
 - Use HTTPS in production
 - Implement proper CORS policies
 - Monitor rate limits and adjust as needed
@@ -1891,12 +2073,14 @@ Rate limits are configurable in your Laravel application's rate limiting configu
 `Sopheak\Core\Traits\QueryHelpers` is an Eloquent-only utility for building custom ORM-based endpoints. It is not part of the Record CRUD table endpoints and does not affect how `/api/v1/{table}` works.
 
 ### Purpose
+
 - Provide a single Eloquent scope (`applyRequestFilters`) that converts request query parameters into Eloquent query constraints.
 - Standardize filtering, sorting, pagination, and eager-loading patterns for custom controllers/services using Eloquent models.
 
 ### Usage (Clean Architecture)
 
 **Model**
+
 ```php
 namespace App\Models;
 
@@ -1910,6 +2094,7 @@ class Invoice extends Model
 ```
 
 **Service**
+
 ```php
 namespace App\Services;
 
@@ -1926,6 +2111,7 @@ class InvoiceService
 ```
 
 **Controller**
+
 ```php
 namespace App\Http\Controllers;
 
@@ -1952,7 +2138,9 @@ class InvoiceController
 ### Public API
 
 #### applyRequestFilters (Eloquent scope)
+
 Signature:
+
 ```php
 public function scopeApplyRequestFilters(
     \Illuminate\Database\Eloquent\Builder $builder,
@@ -1963,6 +2151,7 @@ public function scopeApplyRequestFilters(
 ```
 
 Return behavior:
+
 - Returns `LengthAwarePaginator` when `per_page` is present.
 - Returns `LazyCollection` when `lazy=true`.
 - Returns `array{data: mixed, total: int}` when `total_record=true`.
@@ -1982,12 +2171,15 @@ $result = Invoice::query()->applyRequestFilters(
 ### Supported Query Parameters
 
 **Search**
+
 - `s` or `search`: Searches across all columns in the model table. Example: `?s=invoice`.
 
 **Select (main table only)**
+
 - `select`: Selects only columns from the main table (table-prefixed). Example: `?select=id,invoice_number,total`.
 
 **Eager Loading**
+
 - `with`: Eloquent eager-loading. Examples:
   - `?with=customer,items`
   - `?with=posts.comments`
@@ -1995,22 +2187,26 @@ $result = Invoice::query()->applyRequestFilters(
   - JSON array is accepted: `?with=["customer(id,name)","items"]`
 
 **Sorting**
+
 - `sortby`: Sort column (defaults to `$orderBy`, default `id`)
 - `order`: Sort direction (`asc` or `desc`, default `desc`)
 
 **Result Shape**
+
 - `per_page`: Enables pagination.
 - `lazy=true`: Returns a `LazyCollection`.
 - `limit`: Limits results when `$isArray=true` (max 20000).
 - `total_record=true`: Returns `{ data, total }` (uses `limit` for the data size).
 
 **Join Helpers**
+
 - `join`: Table join by name. Example: `?join=customer` joins `customer.id = {main_table}.customer_id`.
 - `select_join`: JSON map of `{table: [columns...]}`. Example: `?select_join={"customers":["name","email"]}`.
 
 ### Filter Operators
 
 Operators are passed as `{column}={operator}.{value}`:
+
 - `is.null`
 - `eq.{value}`, `neq.{value}`
 - `like.{value}`, `contains.{value}`
@@ -2019,9 +2215,11 @@ Operators are passed as `{column}={operator}.{value}`:
 - `between.{start,end}`, `not_between.{start,end}`
 
 Multiple columns OR (comma-separated keys):
+
 - `?invoice_number,reference=contains.ACME`
 
 Compare two columns:
+
 - `?total=compare.gt.balance`
 
 ### Helper Methods (Internal)
@@ -2029,6 +2227,7 @@ Compare two columns:
 These are private methods used by the trait implementation:
 
 #### applyFilterOperator
+
 ```php
 private function applyFilterOperator(
     \Illuminate\Database\Eloquent\Builder $builder,
@@ -2040,21 +2239,25 @@ private function applyFilterOperator(
 ```
 
 #### parseSelectColumns
+
 ```php
 private function parseSelectColumns(string $selectParam, string $tableName): array
 ```
 
 #### parseWithRelations
+
 ```php
 private function parseWithRelations(string $withParam): array
 ```
 
 #### castStringToArray
+
 ```php
 private function castStringToArray(string $value): array
 ```
 
 #### handleOptimizedQuery
+
 ```php
 private function handleOptimizedQuery(
     \Illuminate\Database\Eloquent\Builder $builder,
