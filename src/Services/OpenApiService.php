@@ -327,7 +327,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                 ],
             ],
             'servers' => $servers,
-            'tags' => self::tags($tables),
+            'tags' => self::tags($tables, $globalFunctions),
             'paths' => $paths + self::rpcPaths($tables, $globalFunctions),
             'components' => [
                 'schemas' => $schemas,
@@ -496,7 +496,7 @@ Accepts an array of IDs or an array of objects with the primary key.
         ];
     }
 
-    private static function tags(array $tables): array
+    private static function tags(array $tables, array $globalFunctions): array
     {
         $tags = [];
         foreach (array_keys($tables) as $table) {
@@ -505,6 +505,25 @@ Accepts an array of IDs or an array of objects with the primary key.
         }
 
         $tags[] = ['name' => 'RPC', 'description' => 'Global RPC functions'];
+
+        $rpcGroups = [];
+        foreach (array_keys($globalFunctions) as $functionName) {
+            if (!is_string($functionName) || $functionName === '') {
+                continue;
+            }
+
+            $segments = explode('/', trim($functionName, '/'));
+            $group = $segments[0] ?? '';
+            if ($group !== '' && $group !== $functionName) {
+                $rpcGroups[$group] = true;
+            }
+        }
+
+        foreach (array_keys($rpcGroups) as $group) {
+            $formatted = ucwords(str_replace('_', ' ', $group));
+            $tags[] = ['name' => 'RPC - ' . $formatted, 'description' => sprintf('Global RPC functions under `%s/*`', $group)];
+        }
+
         if (RecordConfigService::auditEnabled()) {
             $tags[] = ['name' => 'Audit', 'description' => 'Audit log operations'];
         }
@@ -965,6 +984,7 @@ Accepts an array of IDs or an array of objects with the primary key.
     private static function rpcPaths(array $tables, array $globalFunctions): array
     {
         $apiPrefix = RecordConfigService::apiPrefix();
+        $rpcPrefix = RecordConfigService::rpcPrefix();
         $paths = [];
 
         // Global RPC Functions - Generate individual endpoints
@@ -994,11 +1014,19 @@ Accepts an array of IDs or an array of objects with the primary key.
             $payloadSchema = $functionConfig->payloadSchema ?? null;
             $responseSchema = $functionConfig->responseSchema ?? null;
 
-            $endpoint = '/' . $apiPrefix . '/' . RecordConfigService::rpcPrefix() . '/' . $functionName;
+            $endpoint = $rpcPrefix === ''
+                ? '/' . $apiPrefix . '/' . $functionName
+                : '/' . $apiPrefix . '/' . $rpcPrefix . '/' . $functionName;
             $paths[$endpoint] = [];
 
             foreach ($allowedMethods as $method) {
                 $methodLower = strtolower((string) $method);
+
+                $rpcTag = 'RPC';
+                $segments = explode('/', trim((string) $functionName, '/'));
+                if (count($segments) > 1 && $segments[0] !== '') {
+                    $rpcTag = 'RPC - ' . ucwords(str_replace('_', ' ', (string) $segments[0]));
+                }
 
                 // Determine response schema
                 $successResponseSchema = [
@@ -1015,10 +1043,10 @@ Accepts an array of IDs or an array of objects with the primary key.
                 }
 
                 $paths[$endpoint][$methodLower] = [
-                    'tags' => ['RPC Endpoints'],
+                    'tags' => [$rpcTag],
                     'summary' => $summary,
                     'description' => $description,
-                    'operationId' => 'globalRpc' . ucfirst((string) $functionName) . ucfirst($methodLower),
+                    'operationId' => 'globalRpc' . ucfirst((string) preg_replace('/[^A-Za-z0-9]/', '', (string) $functionName)) . ucfirst($methodLower),
                     'responses' => [
                         '200' => [
                             'description' => 'Successful response',
@@ -1215,7 +1243,9 @@ Accepts an array of IDs or an array of objects with the primary key.
                 $responseSchema = $functionConfig->responseSchema ?? null;
 
                 // Handle parameterized endpoints like 'update/{id}'
-                $endpoint = sprintf('/%s/%s/%s/%s', $apiPrefix, $tableName, RecordConfigService::rpcPrefix(), $functionName);
+                $endpoint = $rpcPrefix === ''
+                    ? sprintf('/%s/%s/%s', $apiPrefix, $tableName, $functionName)
+                    : sprintf('/%s/%s/%s/%s', $apiPrefix, $tableName, $rpcPrefix, $functionName);
                 $paths[$endpoint] = [];
 
                 // Check if function name contains parameters

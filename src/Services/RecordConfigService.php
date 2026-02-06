@@ -33,7 +33,7 @@ class RecordConfigService
 
     public static function rpcPrefix(): string
     {
-        return (string) config('record.rpc_prefix', 'rpc');
+        return (string) config('record.rpc_prefix', '');
     }
 
     public static function perPageMax(): int

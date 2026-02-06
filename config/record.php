@@ -70,7 +70,7 @@ return [
     | By default, routes are registered under 'rpc' (e.g., /api/v1/rpc/my_function).
     |
     */
-    'rpc_prefix' => 'rpc',
+    'rpc_prefix' => 'rpc', // or ''
 
     // Maximum items returned per page for list endpoints
     'per_page_max' => 10000,

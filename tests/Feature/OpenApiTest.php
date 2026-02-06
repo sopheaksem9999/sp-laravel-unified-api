@@ -26,4 +26,49 @@ class OpenApiTest extends TestCase
         // The fix should remove the appended '/api', so it should just be the app.url
         $this->assertEquals('http://mylekha_task_management_back.test', $serverUrl);
     }
+
+    /** @test */
+    public function it_generates_global_rpc_paths_with_rpc_prefix(): void
+    {
+        Config::set('app.url', 'http://localhost');
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.rpc_prefix', 'rpc');
+        Config::set('record.tables', []);
+        Config::set('record.global_functions', [
+            'auth/login' => [
+                'method' => ['POST'],
+                'description' => 'Login',
+            ],
+        ]);
+
+        $service = new OpenApiService();
+        $spec = $service->generateInternal();
+
+        $this->assertArrayHasKey('paths', $spec);
+        $this->assertArrayHasKey('/api/v2/rpc/auth/login', $spec['paths']);
+        $this->assertSame(['RPC - Auth'], $spec['paths']['/api/v2/rpc/auth/login']['post']['tags']);
+    }
+
+    /** @test */
+    public function it_generates_global_rpc_paths_without_rpc_prefix(): void
+    {
+        Config::set('app.url', 'http://localhost');
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.rpc_prefix', '');
+        Config::set('record.tables', []);
+        Config::set('record.global_functions', [
+            'auth/login' => [
+                'method' => ['POST'],
+                'description' => 'Login',
+            ],
+        ]);
+
+        $service = new OpenApiService();
+        $spec = $service->generateInternal();
+
+        $this->assertArrayHasKey('paths', $spec);
+        $this->assertArrayHasKey('/api/v2/auth/login', $spec['paths']);
+        $this->assertArrayNotHasKey('/api/v2/rpc/auth/login', $spec['paths']);
+        $this->assertSame(['RPC - Auth'], $spec['paths']['/api/v2/auth/login']['post']['tags']);
+    }
 }
