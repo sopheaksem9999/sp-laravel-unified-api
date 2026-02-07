@@ -508,10 +508,12 @@ Accepts an array of IDs or an array of objects with the primary key.
 
         $rpcGroups = [];
         foreach (array_keys($globalFunctions) as $functionName) {
-            if (!is_string($functionName) || $functionName === '') {
+            if (!is_string($functionName)) {
                 continue;
             }
-
+            if ($functionName === '') {
+                continue;
+            }
             $segments = explode('/', trim($functionName, '/'));
             $group = $segments[0] ?? '';
             if ($group !== '' && $group !== $functionName) {
@@ -1025,7 +1027,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                 $rpcTag = 'RPC';
                 $segments = explode('/', trim((string) $functionName, '/'));
                 if (count($segments) > 1 && $segments[0] !== '') {
-                    $rpcTag = 'RPC - ' . ucwords(str_replace('_', ' ', (string) $segments[0]));
+                    $rpcTag = 'RPC - ' . ucwords(str_replace('_', ' ', $segments[0]));
                 }
 
                 // Determine response schema

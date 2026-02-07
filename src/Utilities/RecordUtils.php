@@ -70,8 +70,10 @@ class RecordUtils
                     }
                 }
             }
-
-            if (!is_string($typeName) || $typeName === '') {
+            if (!is_string($typeName)) {
+                continue;
+            }
+            if ($typeName === '') {
                 continue;
             }
 

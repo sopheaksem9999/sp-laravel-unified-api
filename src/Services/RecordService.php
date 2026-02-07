@@ -817,9 +817,7 @@ class RecordService
 
         unset($payload['id'], $payload['deleted_at'], $payload['created_at'], $payload['updated_at']);
 
-        $payload = RecordUtils::applyCompositeTypes($payload, $meta->columns ?? []);
-
-        return $payload;
+        return RecordUtils::applyCompositeTypes($payload, $meta->columns ?? []);
     }
 
     public function applyTimestampsAndAuditFields(array $payload, object $tableSchema, bool $isUpdate = false): array
@@ -1617,10 +1615,8 @@ class RecordService
             $config = $functionConfig;
         }
 
-        if (!array_key_exists('isPublic', $config)) {
-            if (!array_key_exists('pmsName', $config) || $config['pmsName'] === null) {
-                $config['isPublic'] = true;
-            }
+        if (!array_key_exists('isPublic', $config) && (!array_key_exists('pmsName', $config) || $config['pmsName'] === null)) {
+            $config['isPublic'] = true;
         }
 
         $isPublic = (bool)($config['isPublic'] ?? false);

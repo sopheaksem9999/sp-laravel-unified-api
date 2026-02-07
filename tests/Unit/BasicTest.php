@@ -106,7 +106,7 @@ class BasicTest extends TestCase
         DB::shouldReceive('getDriverName')->andReturn('pgsql');
         DB::shouldReceive('connection')->andReturnSelf();
         DB::shouldReceive('getPdo')->andReturn(new PDO('sqlite::memory:'));
-        DB::shouldReceive('raw')->andReturnUsing(fn(string $sql) => new Expression($sql));
+        DB::shouldReceive('raw')->andReturnUsing(fn(string $sql): Expression => new Expression($sql));
 
         $payload = [
             'name' => 'Example',
@@ -137,7 +137,7 @@ class BasicTest extends TestCase
         DB::shouldReceive('getDriverName')->andReturn('pgsql');
         DB::shouldReceive('connection')->andReturnSelf();
         DB::shouldReceive('getPdo')->andReturn(new PDO('sqlite::memory:'));
-        DB::shouldReceive('raw')->andReturnUsing(fn(string $sql) => new Expression($sql));
+        DB::shouldReceive('raw')->andReturnUsing(fn(string $sql): Expression => new Expression($sql));
 
         $payload = [
             'location' => json_encode(['lat' => 11.5, 'lng' => 104.9]),

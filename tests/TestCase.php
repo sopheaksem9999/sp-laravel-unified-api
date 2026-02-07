@@ -3,7 +3,6 @@
 namespace Sopheak\Core\Tests;
 
 use Orchestra\Testbench\TestCase as BaseTestCase;
-use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Cache\RateLimiting\Limit;
 use Sopheak\Core\CoreSpLaravelApiProvider;
