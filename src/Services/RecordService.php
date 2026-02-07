@@ -1112,6 +1112,7 @@ class RecordService
 
         $data = RecordApiResponseService::removeDeletedAtFields($data);
         $data = RecordApiResponseService::removeHiddenFields($data, $table);
+        $data = RecordApiResponseService::convertCompositeFields($data, $table);
 
         if ($isCacheable && $cacheKey) {
             $cacheData = [
@@ -1437,6 +1438,7 @@ class RecordService
 
         $data = RecordApiResponseService::removeDeletedAtFields($data);
         $data = RecordApiResponseService::removeHiddenFields($data, $table);
+        $data = RecordApiResponseService::convertCompositeFields($data, $table);
 
         if ($isCacheable && $cacheKey) {
             $cacheData = [
@@ -1595,6 +1597,7 @@ class RecordService
         }
 
         $record = RecordApiResponseService::removeDeletedAtFields($record);
+        $record = RecordApiResponseService::convertCompositeFields($record, $table);
 
         if ($this->isCacheableRequest($request, $table)) {
             $ttl = $this->calculateOptimalCacheTTL($table, 1, $request->has('select'));

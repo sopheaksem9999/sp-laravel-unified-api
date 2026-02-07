@@ -134,6 +134,229 @@ class RecordApiResponseService
         return $data;
     }
 
+    public static function convertCompositeFields(mixed $data, string $table): mixed
+    {
+        if (null === $data) {
+            return null;
+        }
+
+        if ($data instanceof Collection) {
+            return $data->map(fn($item): mixed => static::convertCompositeFields($item, $table));
+        }
+
+        if ($data instanceof LengthAwarePaginator) {
+            $items = $data->getCollection()->map(fn($item): mixed => static::convertCompositeFields($item, $table));
+
+            return new LengthAwarePaginator(
+                $items,
+                $data->total(),
+                $data->perPage(),
+                $data->currentPage(),
+                [
+                    'path' => request()->url(),
+                    'pageName' => 'page',
+                ]
+            );
+        }
+
+        if (is_array($data) && !empty($data)) {
+            $isList = true;
+            foreach (array_keys($data) as $k) {
+                if (!is_int($k)) {
+                    $isList = false;
+                    break;
+                }
+            }
+
+            if ($isList) {
+                foreach ($data as $key => $value) {
+                    $data[$key] = static::convertCompositeFields($value, $table);
+                }
+
+                return $data;
+            }
+        }
+
+        if (!is_array($data) && !is_object($data)) {
+            return $data;
+        }
+
+        $schema = SchemaRegistryUtils::resolveTableSchema($table);
+        $columns = $schema->columns ?? [];
+        $compositeColumns = [];
+
+        if (is_array($columns)) {
+            foreach ($columns as $column => $meta) {
+                if (!is_array($meta)) {
+                    continue;
+                }
+
+                $fields = $meta['compositeFields'] ?? ($meta['composite_fields'] ?? []);
+                if (!is_array($fields)) {
+                    continue;
+                }
+                if ($fields === []) {
+                    continue;
+                }
+
+                $fields = array_values(array_filter($fields, is_string(...)));
+                if ($fields === []) {
+                    continue;
+                }
+
+                $compositeColumns[$column] = $fields;
+            }
+        }
+
+        $isObject = is_object($data);
+
+        foreach ($compositeColumns as $column => $fields) {
+            if ($isObject) {
+                if (!property_exists($data, $column)) {
+                    continue;
+                }
+
+                $value = $data->{$column};
+            } else {
+                if (!array_key_exists($column, $data)) {
+                    continue;
+                }
+
+                $value = $data[$column];
+            }
+            if (is_array($value)) {
+                continue;
+            }
+            if (is_object($value)) {
+                continue;
+            }
+            if (!is_string($value)) {
+                continue;
+            }
+
+            $parsed = self::parseCompositeLiteral($value);
+            if ($parsed === null) {
+                continue;
+            }
+
+            $mapped = [];
+            foreach ($fields as $index => $field) {
+                $mapped[$field] = $parsed[$index] ?? null;
+            }
+
+            if ($isObject) {
+                $data->{$column} = $mapped;
+            } else {
+                $data[$column] = $mapped;
+            }
+        }
+
+        $keys = $isObject ? array_keys(get_object_vars($data)) : array_keys($data);
+
+        foreach ($keys as $key) {
+            $relationConfig = RelationshipResolverUtils::resolveRelationship($table, $key);
+            if ($relationConfig) {
+                $relatedTable = $relationConfig['table'] ?? null;
+                if ($relatedTable) {
+                    if ($isObject) {
+                        $data->{$key} = static::convertCompositeFields($data->{$key}, $relatedTable);
+                    } else {
+                        $data[$key] = static::convertCompositeFields($data[$key], $relatedTable);
+                    }
+                }
+            }
+        }
+
+        return $data;
+    }
+
+    private static function parseCompositeLiteral(string $literal): ?array
+    {
+        $value = trim($literal);
+        if ($value === '') {
+            return null;
+        }
+
+        if (!str_starts_with($value, '(') || !str_ends_with($value, ')')) {
+            return null;
+        }
+
+        $inner = substr($value, 1, -1);
+        $length = strlen($inner);
+        $values = [];
+        $token = '';
+        $inQuotes = false;
+        $quoted = false;
+
+        for ($i = 0; $i < $length; $i++) {
+            $char = $inner[$i];
+
+            if ($inQuotes) {
+                if ($char === '"') {
+                    if ($i + 1 < $length && $inner[$i + 1] === '"') {
+                        $token .= '"';
+                        $i++;
+                    } else {
+                        $inQuotes = false;
+                        $quoted = true;
+                    }
+
+                    continue;
+                }
+
+                if ($char === '\\') {
+                    if ($i + 1 < $length) {
+                        $token .= $inner[$i + 1];
+                        $i++;
+                    } else {
+                        $token .= $char;
+                    }
+
+                    continue;
+                }
+
+                $token .= $char;
+                continue;
+            }
+
+            if ($char === '"') {
+                $inQuotes = true;
+                continue;
+            }
+
+            if ($char === ',') {
+                $values[] = self::normalizeCompositeToken($token, $quoted);
+                $token = '';
+                $quoted = false;
+                continue;
+            }
+
+            $token .= $char;
+        }
+
+        $values[] = self::normalizeCompositeToken($token, $quoted);
+
+        return $values;
+    }
+
+    private static function normalizeCompositeToken(string $token, bool $quoted): mixed
+    {
+        if ($quoted) {
+            return $token;
+        }
+
+        $trimmed = trim($token);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        if (strtolower($trimmed) === 'null') {
+            return null;
+        }
+
+        return $trimmed;
+    }
+
     public static function successWrapped(mixed $data, array $meta = [], int $status = RecordApiJsonResponseEnum::SUCCESS->value, array $headers = [], ?int $error_code = null): JsonResponse
     {
         $requestId = request()->attributes->get('request_id');

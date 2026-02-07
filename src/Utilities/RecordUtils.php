@@ -70,9 +70,11 @@ class RecordUtils
                     }
                 }
             }
+
             if (!is_string($typeName)) {
                 continue;
             }
+
             if ($typeName === '') {
                 continue;
             }
@@ -83,6 +85,10 @@ class RecordUtils
                 if (JSON_ERROR_NONE === json_last_error() && is_array($decoded)) {
                     $value = $decoded;
                 }
+            }
+
+            if (is_object($value)) {
+                $value = get_object_vars($value);
             }
 
             if (!is_array($value)) {

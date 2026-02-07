@@ -406,9 +406,11 @@ class SyncRecordColumnsCommand extends Command
                 $inDouble = !$inDouble;
                 continue;
             }
+
             if ($inSingle) {
                 continue;
             }
+
             if ($inDouble) {
                 continue;
             }

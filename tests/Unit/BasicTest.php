@@ -8,8 +8,10 @@ use Illuminate\Database\Query\Expression;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Config;
 use PDO;
+use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Utilities\PermissionUtils;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Utilities\RecordUtils;
 use Sopheak\Core\Types\RecordTableType;
@@ -155,6 +157,64 @@ class BasicTest extends TestCase
         $result = RecordUtils::applyCompositeTypes($payload, $columns);
 
         $this->assertInstanceOf(Expression::class, $result['location']);
+    }
+
+    /** @test */
+    public function it_builds_pgsql_composite_payload_from_object(): void
+    {
+        DB::shouldReceive('getDriverName')->andReturn('pgsql');
+        DB::shouldReceive('connection')->andReturnSelf();
+        DB::shouldReceive('getPdo')->andReturn(new PDO('sqlite::memory:'));
+        DB::shouldReceive('raw')->andReturnUsing(fn(string $sql): Expression => new Expression($sql));
+
+        $payload = [
+            'location' => (object) ['lat' => 11.5, 'lng' => 104.9],
+        ];
+
+        $columns = [
+            'location' => [
+                'type' => 'USER-DEFINED',
+                'udt_name' => 'geo_point',
+                'udt_schema' => 'public',
+                'compositeFields' => ['lat', 'lng'],
+            ],
+        ];
+
+        $result = RecordUtils::applyCompositeTypes($payload, $columns);
+
+        $this->assertInstanceOf(Expression::class, $result['location']);
+    }
+
+    /** @test */
+    public function it_converts_pgsql_composite_response_to_object(): void
+    {
+        SchemaRegistryUtils::clearAllCache();
+
+        $schema = new RecordTableType(
+            table: 'companies',
+            hasTenantId: false,
+            columns: [
+                'bill_addr' => [
+                    'type' => 'USER-DEFINED',
+                    'udt_name' => 'billing_address',
+                    'udt_schema' => 'public',
+                    'compositeFields' => ['line1', 'line2'],
+                ],
+                'name' => ['type' => 'string'],
+            ]
+        );
+
+        SchemaRegistryUtils::register('companies', $schema);
+
+        $record = (object) [
+            'id' => 1,
+            'name' => 'ACME',
+            'bill_addr' => '(,"Main Street")',
+        ];
+
+        $converted = RecordApiResponseService::convertCompositeFields($record, 'companies');
+
+        $this->assertSame(['line1' => null, 'line2' => 'Main Street'], $converted->bill_addr);
     }
 
     /** @test */
