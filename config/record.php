@@ -145,8 +145,8 @@ return [
     |     'system_status' => [
     |         'type' => 'class',
     |         'class' => 'App\\Services\\SystemStatusService',
-    |         'method' => 'getStatus',
-    |         'allowed_methods' => [HttpMethodEnum::GET->value],
+    |         'functionName' => 'getStatus',
+    |         'httpMethod' => [HttpMethodEnum::GET->value],
     |     ],
     | ],
     |

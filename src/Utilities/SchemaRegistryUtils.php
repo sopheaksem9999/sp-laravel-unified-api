@@ -6,6 +6,7 @@ use Sopheak\Core\Interfaces\RecordResourceInterface;
 use stdClass;
 use Exception;
 use Sopheak\Core\Types\RecordTableType;
+use Sopheak\Core\Utilities\RelationshipResolverUtils;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Sopheak\Core\Services\RecordConfigService;
@@ -104,11 +105,13 @@ class SchemaRegistryUtils
     public static function refresh(): void
     {
         self::$cache = [];
+        RelationshipResolverUtils::clearSchemaCache();
     }
 
     public static function clearAllCache(): void
     {
         self::$cache = [];
+        RelationshipResolverUtils::clearSchemaCache();
     }
 
     /**
@@ -118,6 +121,7 @@ class SchemaRegistryUtils
     {
         if (is_string($config) || ($config instanceof RecordResourceInterface)) {
             self::$cache[$tableName] = $config;
+            RelationshipResolverUtils::clearSchemaCache();
             return;
         }
 
@@ -134,6 +138,7 @@ class SchemaRegistryUtils
         $config->hasTenantId ??= true;
 
         self::$cache[$tableName] = $config;
+        RelationshipResolverUtils::clearSchemaCache();
     }
 
     /**
@@ -168,18 +173,42 @@ class SchemaRegistryUtils
                 }
             } elseif ($driver === 'pgsql') {
                 $columns = DB::select(
-                    'select column_name, data_type, is_nullable, column_default from information_schema.columns where table_name = ? and table_schema = current_schema()',
+                    'select column_name, data_type, udt_name, udt_schema, is_nullable, column_default from information_schema.columns where table_name = ? and table_schema = current_schema()',
                     [$tableName]
                 );
 
+                $compositeCache = [];
+
                 foreach ($columns as $column) {
+                    $compositeFields = [];
+                    $typeName = $column->udt_name ?? null;
+                    $typeSchema = $column->udt_schema ?? null;
+                    $dataType = strtolower((string) $column->data_type);
+
+                    if ($dataType === 'user-defined' && is_string($typeName) && $typeName !== '') {
+                        $schemaKey = is_string($typeSchema) && $typeSchema !== '' ? $typeSchema : 'public';
+                        $cacheKey = $schemaKey . '.' . $typeName;
+
+                        if (!array_key_exists($cacheKey, $compositeCache)) {
+                            $compositeCache[$cacheKey] = self::getCompositeTypeFields($schemaKey, $typeName);
+                        }
+
+                        $compositeFields = $compositeCache[$cacheKey];
+                    }
+
                     $columnInfo[$column->column_name] = [
                         'type' => $column->data_type,
+                        'udt_name' => $column->udt_name ?? null,
+                        'udt_schema' => $column->udt_schema ?? null,
                         'nullable' => 'YES' === $column->is_nullable,
                         'key' => '',
                         'default' => $column->column_default,
                         'extra' => '',
                     ];
+
+                    if ($compositeFields !== []) {
+                        $columnInfo[$column->column_name]['compositeFields'] = $compositeFields;
+                    }
                 }
             } else {
                 $columns = DB::select(sprintf('DESCRIBE `%s`', $tableName));
@@ -201,5 +230,15 @@ class SchemaRegistryUtils
 
             return [];
         }
+    }
+
+    private static function getCompositeTypeFields(string $schema, string $typeName): array
+    {
+        $rows = DB::select(
+            'select a.attname as field_name from pg_type t join pg_namespace n on n.oid = t.typnamespace join pg_class c on c.oid = t.typrelid join pg_attribute a on a.attrelid = c.oid where t.typtype = ? and n.nspname = ? and t.typname = ? and a.attnum > 0 and not a.attisdropped order by a.attnum',
+            ['c', $schema, $typeName]
+        );
+
+        return array_map(static fn($row): string => (string) $row->field_name, $rows);
     }
 }

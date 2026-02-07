@@ -19,7 +19,7 @@ class RecordFunctionTypeTest extends TestCase
 
         $array = $type->toArray();
 
-        $this->assertSame(['GET', 'POST'], $array['method']);
+        $this->assertSame(['GET', 'POST'], $array['httpMethod']);
     }
 
     /** @test */
@@ -33,14 +33,14 @@ class RecordFunctionTypeTest extends TestCase
 
         $array = $type->toArray();
 
-        $this->assertSame(RecordFunctionMethodEnum::GET, $array['method']);
+        $this->assertSame(RecordFunctionMethodEnum::GET, $array['httpMethod']);
     }
 
     /** @test */
     public function it_can_be_created_from_array_with_method_key(): void
     {
         $config = [
-            'method' => ['GET'],
+            'httpMethod' => ['GET'],
             'class' => 'App\\Services\\DummyService',
             'functionName' => 'handle',
         ];
@@ -49,6 +49,6 @@ class RecordFunctionTypeTest extends TestCase
 
         $array = $type->toArray();
 
-        $this->assertSame(['GET'], $array['method']);
+        $this->assertSame(['GET'], $array['httpMethod']);
     }
 }

@@ -1413,7 +1413,7 @@ You can create public endpoints by setting `pmsName` to `null`. These functions 
 ```php
 'global_functions' => [
     'login' => [
-        'method' => ['POST'],
+        'httpMethod' => ['POST'],
         'class' => \App\Http\Controllers\AuthController::class,
         'functionName' => 'login',
         'description' => 'User login',
@@ -1441,7 +1441,7 @@ By providing a `pmsName`, the function requires authentication and the user must
 ```php
 'global_functions' => [
     'system_stats' => [
-        'method' => ['GET'],
+        'httpMethod' => ['GET'],
         'class' => \App\Services\StatsService::class,
         'functionName' => 'getSystemStats',
         'description' => 'Get system statistics',

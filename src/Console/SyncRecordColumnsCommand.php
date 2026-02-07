@@ -9,7 +9,7 @@ use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Interfaces\RecordResourceInterface;
 use Throwable;
 
-class GenerateRecordSchemaCacheCommand extends Command
+class SyncRecordColumnsCommand extends Command
 {
     protected $signature = 'sp-laravel-api:sync-record-columns {--force : Force regeneration even if columns already exist} {--table= : Sync columns only for the specified table}';
 
@@ -161,14 +161,19 @@ class GenerateRecordSchemaCacheCommand extends Command
             return;
         }
 
-        // Find end of constructor: first occurrence of ');' after start
-        $end = strpos($content, ');', $start);
-        if ($end === false) {
+        $endParen = $this->findMatchingParen($content, $start);
+        if ($endParen === null) {
             $this->warn(sprintf('  - Could not determine end of RecordTableType constructor for table %s in %s', $tableName, $filePath));
             return;
         }
 
-        $constructor = substr($content, $start, $end + 2 - $start);
+        $end = strpos($content, ';', $endParen);
+        if ($end === false) {
+            $this->warn(sprintf('  - Could not locate constructor terminator for table %s in %s', $tableName, $filePath));
+            return;
+        }
+
+        $constructor = substr($content, $start, $end + 1 - $start);
 
         $usesNamedArguments = str_contains($constructor, 'pmsName:')
             || str_contains($constructor, 'table:')
@@ -264,14 +269,13 @@ class GenerateRecordSchemaCacheCommand extends Command
             $insertOffset = strlen($arguments);
         }
 
-        // $insert = "\n" . $indent . 'columns: ' . $columnsCode . ',';
-        $insert = $indent . 'columns: ' . $columnsCode . ',' . "\n" . '  ' ;
+        $insert = "\n" . $indent . 'columns: ' . $columnsCode . ',';
 
         $newArguments = substr($arguments, 0, $insertOffset) . $insert . substr($arguments, $insertOffset);
 
         $newConstructor = substr($constructor, 0, $openParenPos + 1) . $newArguments . substr($constructor, $closeParenPos);
 
-        $newContent = substr($content, 0, $start) . $newConstructor . substr($content, $end + 2);
+        $newContent = substr($content, 0, $start) . $newConstructor . substr($content, $end + 1);
 
         file_put_contents($filePath, $newContent);
         $this->info('  - Updated columns in file: ' . $filePath);
@@ -291,6 +295,7 @@ class GenerateRecordSchemaCacheCommand extends Command
 
         return implode("\n", $lines);
     }
+
 
     private function removeExistingColumnsArgument(string $arguments): string
     {
@@ -342,6 +347,7 @@ class GenerateRecordSchemaCacheCommand extends Command
         return substr($arguments, 0, $segmentStart) . substr($arguments, $segmentEnd);
     }
 
+
     private function exportValue(mixed $value, string $currentIndent): string
     {
         if (is_array($value)) {
@@ -363,5 +369,61 @@ class GenerateRecordSchemaCacheCommand extends Command
         }
 
         return var_export($value, true);
+    }
+
+    private function findMatchingParen(string $content, int $start): ?int
+    {
+        $openPos = strpos($content, '(', $start);
+        if ($openPos === false) {
+            return null;
+        }
+
+        $depth = 0;
+        $inSingle = false;
+        $inDouble = false;
+        $escaped = false;
+        $len = strlen($content);
+
+        for ($i = $openPos; $i < $len; $i++) {
+            $ch = $content[$i];
+
+            if ($escaped) {
+                $escaped = false;
+                continue;
+            }
+
+            if ($ch === '\\' && ($inSingle || $inDouble)) {
+                $escaped = true;
+                continue;
+            }
+
+            if ($ch === "'" && !$inDouble) {
+                $inSingle = !$inSingle;
+                continue;
+            }
+
+            if ($ch === '"' && !$inSingle) {
+                $inDouble = !$inDouble;
+                continue;
+            }
+
+            if ($inSingle || $inDouble) {
+                continue;
+            }
+
+            if ($ch === '(') {
+                $depth++;
+                continue;
+            }
+
+            if ($ch === ')') {
+                $depth--;
+                if ($depth === 0) {
+                    return $i;
+                }
+            }
+        }
+
+        return null;
     }
 }

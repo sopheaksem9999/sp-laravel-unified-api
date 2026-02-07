@@ -43,7 +43,7 @@ class LegacyConfigTest extends TestCase
                 'canCreate' => true, // Granular permission override
                 'functions' => [
                     'legacy_func' => [
-                        'method' => ['GET'],
+                        'httpMethod' => ['GET'],
                         'class' => LegacyFunction::class,
                         'functionName' => 'handle',
                         'description' => 'Legacy function',
@@ -92,7 +92,7 @@ class LegacyConfigTest extends TestCase
         // Define global function using array
         Config::set('record.global_functions', [
             'legacy_global' => [
-                'method' => ['GET'],
+                'httpMethod' => ['GET'],
                 'class' => LegacyFunction::class,
                 'functionName' => 'handle',
                 'description' => 'Legacy global function',

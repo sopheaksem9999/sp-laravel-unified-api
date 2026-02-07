@@ -13,7 +13,7 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
 class GenerateRecordTablesFromDatabaseCommand extends Command
 {
-    protected $signature = 'sp-laravel-api:generate-all-configs';
+    protected $signature = 'sp-laravel-api:generate-all-configs|sp-laravel-api:generate-record-tables-from-db';
 
     protected $description = 'Create RecordTableType config files for all database tables.';
 

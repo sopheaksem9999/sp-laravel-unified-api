@@ -15,7 +15,7 @@ use Sopheak\Core\Types\RecordHasManyType;
 use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordTableType;
 
-class AuditableTraitRelationshipAuditTest extends TestCase
+class AuditableRelationshipAuditTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -25,6 +25,7 @@ class AuditableTraitRelationshipAuditTest extends TestCase
 
         Config::set('audit.enabled', true);
 
+        
         Schema::create('parents', function (Blueprint $table): void {
             $table->id();
             $table->string('name');

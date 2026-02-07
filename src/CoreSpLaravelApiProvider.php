@@ -8,7 +8,7 @@ use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
 use Sopheak\Core\Console\CleanAuditLogsCommand;
 use Sopheak\Core\Console\GenerateOpenApiSpecCommand;
-use Sopheak\Core\Console\GenerateRecordSchemaCacheCommand;
+use Sopheak\Core\Console\SyncRecordColumnsCommand;
 use Sopheak\Core\Console\GenerateRecordTablesFromDatabaseCommand;
 use Sopheak\Core\Console\MakeRecordTableCommand;
 use Sopheak\Core\Console\SetupPackageCommand;
@@ -53,7 +53,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
                 GenerateOpenApiSpecCommand::class,
                 SetupPackageCommand::class,
                 ValidateSetupCommand::class,
-                GenerateRecordSchemaCacheCommand::class,
+                SyncRecordColumnsCommand::class,
                 CleanAuditLogsCommand::class,
                 MakeRecordTableCommand::class,
                 GenerateRecordTablesFromDatabaseCommand::class,
@@ -82,7 +82,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
          *     cursor_meta: mixed
          * }
          */
-        Builder::macro('applyRequestFilters', function (Request $request, bool $isArray = false, string $orderBy = 'id', ?string $tenantColumn = ''): array {
+        Builder::macro('applyRequestFilters', function (Request $request, bool $isArray = true, string $orderBy = 'id', ?string $tenantColumn = ''): array {
             /** @var Builder $this */
             return RecordService::applyRequestFilters($request, $this, $tenantColumn, $isArray, $orderBy);
         });

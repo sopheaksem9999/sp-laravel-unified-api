@@ -4,11 +4,16 @@ namespace Sopheak\Core\Tests\Unit;
 
 use Exception;
 use Illuminate\Http\Request;
+use Illuminate\Database\Query\Expression;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Config;
+use PDO;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Utilities\PermissionUtils;
 use Sopheak\Core\Tests\TestCase;
+use Sopheak\Core\Utilities\RecordUtils;
 use Sopheak\Core\Types\RecordTableType;
+
 
 class BasicTest extends TestCase
 {
@@ -93,6 +98,63 @@ class BasicTest extends TestCase
 
         $this->assertInstanceOf(Request::class, $params[0]);
         $this->assertSame('bar', $params[0]->get('foo'));
+    }
+
+    /** @test */
+    public function it_builds_pgsql_composite_payload_from_array(): void
+    {
+        DB::shouldReceive('getDriverName')->andReturn('pgsql');
+        DB::shouldReceive('connection')->andReturnSelf();
+        DB::shouldReceive('getPdo')->andReturn(new PDO('sqlite::memory:'));
+        DB::shouldReceive('raw')->andReturnUsing(fn(string $sql) => new Expression($sql));
+
+        $payload = [
+            'name' => 'Example',
+            'location' => [
+                'lat' => 11.5,
+                'lng' => 104.9,
+            ],
+        ];
+
+        $columns = [
+            'location' => [
+                'type' => 'USER-DEFINED',
+                'udt_name' => 'geo_point',
+                'udt_schema' => 'public',
+                'compositeFields' => ['lat', 'lng'],
+            ],
+        ];
+
+        $result = RecordUtils::applyCompositeTypes($payload, $columns);
+
+        $this->assertInstanceOf(Expression::class, $result['location']);
+        $this->assertSame('Example', $result['name']);
+    }
+
+    /** @test */
+    public function it_builds_pgsql_composite_payload_from_json_string(): void
+    {
+        DB::shouldReceive('getDriverName')->andReturn('pgsql');
+        DB::shouldReceive('connection')->andReturnSelf();
+        DB::shouldReceive('getPdo')->andReturn(new PDO('sqlite::memory:'));
+        DB::shouldReceive('raw')->andReturnUsing(fn(string $sql) => new Expression($sql));
+
+        $payload = [
+            'location' => json_encode(['lat' => 11.5, 'lng' => 104.9]),
+        ];
+
+        $columns = [
+            'location' => [
+                'type' => 'USER-DEFINED',
+                'udt_name' => 'geo_point',
+                'udt_schema' => 'public',
+                'compositeFields' => ['lat', 'lng'],
+            ],
+        ];
+
+        $result = RecordUtils::applyCompositeTypes($payload, $columns);
+
+        $this->assertInstanceOf(Expression::class, $result['location']);
     }
 
     /** @test */

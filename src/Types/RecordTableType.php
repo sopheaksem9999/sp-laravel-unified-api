@@ -22,7 +22,7 @@ namespace Sopheak\Core\Types;
  * @property null|array        $columnHiddens   Columns to hide from responses
  * @property null|array        $columnWriteDisabled    Columns that cannot be written via API payloads
  * @property null|array        $columnIndexes  Array of full-text index configurations for optimized search
- * @property string|array|null $customAuditLog Custom audit logger callback (callable string or [class, method])
+ * @property string|array|null $customAuditLog Custom audit logger callback (callable string or [class, httpMethod])
  *
  * Example usage:
  * ```php
@@ -57,7 +57,7 @@ namespace Sopheak\Core\Types;
  *             'type' => 'class',
  *             'class' => 'App\\Services\\UserStatsService',
  *             'functionName' => 'calculate',
- *             'method' => ['POST'],
+ *             'httpMethod' => ['POST'],
  *             'required_params' => ['period'],
  *             'description' => 'Calculate user statistics'
  *         ],
@@ -122,10 +122,13 @@ class RecordTableType
 
     /**
      * Handle var_export() for configuration caching.
-     * This method is required for Laravel's config:cache command.
+     * This httpMethod is required for Laravel's config:cache command.
      */
     public static function __set_state(array $properties): self
     {
+        $legacyCanWrite = $properties['can_write'] ?? null;
+        $legacyCanRead = $properties['can_read'] ?? null;
+
         return new self(
             table: $properties['table'] ?? null,
             pmsName: $properties['pmsName'] ?? null,
@@ -133,10 +136,10 @@ class RecordTableType
             softDeletes: $properties['softDeletes'] ?? false,
             disableAuditLog: $properties['disableAuditLog'] ?? false,
             disableCache: $properties['disableCache'] ?? false,
-            canRead: $properties['canRead'] ?? true,
-            canCreate: $properties['canCreate'] ?? true,
-            canUpdate: $properties['canUpdate'] ?? true,
-            canDelete: $properties['canDelete'] ?? true,
+            canRead: $properties['canRead'] ?? ($legacyCanRead ?? true),
+            canCreate: $properties['canCreate'] ?? ($legacyCanWrite ?? true),
+            canUpdate: $properties['canUpdate'] ?? ($legacyCanWrite ?? true),
+            canDelete: $properties['canDelete'] ?? ($legacyCanWrite ?? true),
             public: is_array($properties['public'] ?? null) ? RecordTablePublic::__set_state($properties['public']) : ($properties['public'] ?? new RecordTablePublic()),
             primaryKey: $properties['primaryKey'] ?? 'id',
             columns: $properties['columns'] ?? [],

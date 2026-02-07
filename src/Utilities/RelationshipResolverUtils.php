@@ -528,6 +528,8 @@ class RelationshipResolverUtils
                     $item[RecordConfigService::tenantColumn()] = $tenantId;
                 }
 
+                $item = RecordUtils::applyCompositeTypes($item, $relatedSchema->columns ?? []);
+
                 // Permission check per related action
                 // $action = ($hasPk && $allowUpdate) ? 'update' : 'create';
                 // if (!PermissionUtils::isPublicAction($relatedTable, $action)) {

@@ -36,7 +36,7 @@ class OpenApiTest extends TestCase
         Config::set('record.tables', []);
         Config::set('record.global_functions', [
             'auth/login' => [
-                'method' => ['POST'],
+                'httpMethod' => ['POST'],
                 'description' => 'Login',
             ],
         ]);
@@ -58,7 +58,7 @@ class OpenApiTest extends TestCase
         Config::set('record.tables', []);
         Config::set('record.global_functions', [
             'auth/login' => [
-                'method' => ['POST'],
+                'httpMethod' => ['POST'],
                 'description' => 'Login',
             ],
         ]);

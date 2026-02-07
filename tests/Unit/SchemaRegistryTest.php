@@ -6,6 +6,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
@@ -13,7 +14,7 @@ use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordTableType;
 
-class SchemaRegistryUtilsTest extends TestCase
+class SchemaRegistryTest extends TestCase
 {
     protected function setUp(): void
     {
@@ -222,5 +223,53 @@ class SchemaRegistryUtilsTest extends TestCase
         $request = Request::create('/api/users', 'GET');
 
         $this->assertTrue($service->isCacheableRequest($request, 'users'));
+    }
+
+    public function test_get_table_columns_adds_composite_fields_for_pgsql(): void
+    {
+        DB::shouldReceive('getDriverName')
+            ->once()
+            ->andReturn('pgsql');
+
+        DB::shouldReceive('select')
+            ->once()
+            ->with(
+                'select column_name, data_type, udt_name, udt_schema, is_nullable, column_default from information_schema.columns where table_name = ? and table_schema = current_schema()',
+                ['places']
+            )
+            ->andReturn([
+                (object) [
+                    'column_name' => 'location',
+                    'data_type' => 'USER-DEFINED',
+                    'udt_name' => 'geo_point',
+                    'udt_schema' => 'public',
+                    'is_nullable' => 'YES',
+                    'column_default' => null,
+                ],
+                (object) [
+                    'column_name' => 'name',
+                    'data_type' => 'character varying',
+                    'udt_name' => 'varchar',
+                    'udt_schema' => 'pg_catalog',
+                    'is_nullable' => 'NO',
+                    'column_default' => null,
+                ],
+            ]);
+
+        DB::shouldReceive('select')
+            ->once()
+            ->with(
+                'select a.attname as field_name from pg_type t join pg_namespace n on n.oid = t.typnamespace join pg_class c on c.oid = t.typrelid join pg_attribute a on a.attrelid = c.oid where t.typtype = ? and n.nspname = ? and t.typname = ? and a.attnum > 0 and not a.attisdropped order by a.attnum',
+                ['c', 'public', 'geo_point']
+            )
+            ->andReturn([
+                (object) ['field_name' => 'lat'],
+                (object) ['field_name' => 'lng'],
+            ]);
+
+        $columns = SchemaRegistryUtils::getTableColumns('places');
+
+        $this->assertSame(['lat', 'lng'], $columns['location']['compositeFields']);
+        $this->assertArrayNotHasKey('compositeFields', $columns['name']);
     }
 }

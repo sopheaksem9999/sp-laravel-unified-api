@@ -817,6 +817,8 @@ class RecordService
 
         unset($payload['id'], $payload['deleted_at'], $payload['created_at'], $payload['updated_at']);
 
+        $payload = RecordUtils::applyCompositeTypes($payload, $meta->columns ?? []);
+
         return $payload;
     }
 
@@ -1069,7 +1071,7 @@ class RecordService
 
             if ($useSubqueryOptimization && [] !== $includes) {
                 $primaryKey = $tableSchema->primaryKey ?? 'id';
-                $recordIds = array_column($data, $primaryKey);
+                $recordIds = self::extractRecordIds($data, $primaryKey);
 
                 if ([] !== $recordIds) {
                     $optimizedBuilder = DB::table($actualTableName);
@@ -1156,7 +1158,7 @@ class RecordService
      *     cursor_meta: mixed
      * }
      */
-    public static function applyRequestFilters(Request $request, Builder|RecordTableType|string $tableOrBuilder, ?string $tanentColumn = '', bool $isArray = false, string $orderBy = 'id'): array
+    public static function applyRequestFilters(Request $request, Builder|RecordTableType|string $tableOrBuilder, ?string $tanentColumn = '', bool $isArray = true, string $orderBy = 'id'): array
     {
         $service = app(self::class);
         $builder = null;
@@ -1394,7 +1396,7 @@ class RecordService
 
             if ($useSubqueryOptimization && [] !== $includes) {
                 $primaryKey = $tableSchema->primaryKey ?? 'id';
-                $recordIds = array_column($data, $primaryKey);
+                $recordIds = self::extractRecordIds($data, $primaryKey);
 
                 if ([] !== $recordIds) {
                     $optimizedBuilder = DB::table($actualTableName);
@@ -1615,6 +1617,12 @@ class RecordService
             $config = $functionConfig;
         }
 
+        if (!array_key_exists('isPublic', $config)) {
+            if (!array_key_exists('pmsName', $config) || $config['pmsName'] === null) {
+                $config['isPublic'] = true;
+            }
+        }
+
         $isPublic = (bool)($config['isPublic'] ?? false);
         $pmsName = $config['pmsName'] ?? null;
 
@@ -1769,5 +1777,23 @@ class RecordService
         }
 
         return 'delete';
+    }
+
+    private static function extractRecordIds(array $data, string $primaryKey): array
+    {
+        $recordIds = [];
+
+        foreach ($data as $item) {
+            if (is_array($item) && array_key_exists($primaryKey, $item)) {
+                $recordIds[] = $item[$primaryKey];
+                continue;
+            }
+
+            if (is_object($item) && isset($item->{$primaryKey})) {
+                $recordIds[] = $item->{$primaryKey};
+            }
+        }
+
+        return $recordIds;
     }
 }

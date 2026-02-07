@@ -22,7 +22,7 @@ class TimeUtilsTest extends TestCase
         $result = TimeUtils::now($request);
 
         $this->assertInstanceOf(Carbon::class, $result);
-        $this->assertSame('2025-01-01T10:00:00+00:00', $result->toISOString());
+        $this->assertSame(Carbon::parse('2025-01-01T10:00:00+00:00')->toISOString(), $result->toISOString());
     }
 
     /** @test */
@@ -44,4 +44,3 @@ class TimeUtilsTest extends TestCase
         Carbon::setTestNow();
     }
 }
-

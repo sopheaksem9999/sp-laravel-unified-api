@@ -29,7 +29,7 @@ class HiddenColumnTest extends TestCase
             $table->id();
             $table->string('name');
             $table->string('password');
-            $table->string('email');
+            $table->string('email')->nullable();
             $table->string('remember_token')->nullable();
             $table->timestamp('email_verified_at')->nullable();
             $table->timestamps();
@@ -39,7 +39,7 @@ class HiddenColumnTest extends TestCase
             $table->id();
             $table->foreignId('user_id');
             $table->string('title');
-            $table->string('secret');
+            $table->string('secret')->nullable();
             $table->timestamps();
         });
 

@@ -110,7 +110,7 @@ class RecordFunctionType
     /**
      * Handle var_export() for configuration caching.
      *
-     * This method is required for Laravel's config:cache command to properly
+     * This httpMethod is required for Laravel's config:cache command to properly
      * serialize and deserialize the object when caching configurations.
      *
      * @param array $properties The properties array from var_export
@@ -145,7 +145,7 @@ class RecordFunctionType
         $config = [
             'pmsName' => $this->pmsName,
             'isPublic' => $this->isPublic,
-            'method' => $this->httpMethod,
+            'httpMethod' => $this->httpMethod,
             'class' => $this->class,
             'functionName' => $this->functionName,
         ];
@@ -185,7 +185,7 @@ class RecordFunctionType
      * ```php
      * $config = [
      *     'pmsName' => 'user_report',
-     *     'method' => ['GET', 'POST'],
+     *     'httpMethod' => ['GET', 'POST'],
      *     'class' => 'App\\Services\\UserReportService',
      *     'functionName' => 'generateReport',
      *     'description' => 'Generate user reports'
@@ -196,7 +196,7 @@ class RecordFunctionType
     public static function fromArray(array $config): self
     {
         return new self(
-            httpMethod: $config['method'] ?? throw new InvalidArgumentException('method is required in config array'),
+            httpMethod: $config['httpMethod'] ?? throw new InvalidArgumentException('httpMethod is required in config array'),
             class: $config['class'] ?? throw new InvalidArgumentException('class is required in config array'),
             functionName: $config['functionName'] ?? throw new InvalidArgumentException('functionName is required in config array'),
             isPublic: $config['isPublic'] ?? false,
