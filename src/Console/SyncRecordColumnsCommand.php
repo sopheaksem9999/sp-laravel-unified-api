@@ -232,46 +232,49 @@ class SyncRecordColumnsCommand extends Command
             $insertOffset = strlen($arguments);
         }
 
-        $indent = '        ';
+        $indent = '  ';
         $beforeInsert = substr($arguments, 0, $insertOffset);
-        $lastNewlinePos = strrpos($beforeInsert, "\n");
-
+        $lines = explode("\n", $beforeInsert);
+        $closingIndent = '';
+        $lastNewlinePos = strrpos($arguments, "\n");
         if ($lastNewlinePos !== false) {
-            $indent = '';
-            $i = $lastNewlinePos + 1;
-            $len = strlen($arguments);
+            $tail = substr($arguments, $lastNewlinePos + 1);
+            if (trim($tail) === '') {
+                $closingIndent = $tail;
+            }
+        }
 
-            while ($i < $len && $arguments[$i] === ' ') {
-                $indent .= ' ';
-                $i++;
+        for ($i = count($lines) - 1; $i >= 0; $i--) {
+            if (trim($lines[$i]) === '') {
+                continue;
             }
 
-            if ($indent === '') {
+            $lineIndent = strspn($lines[$i], ' ');
+            if ($lineIndent > 0) {
+                $indent = str_repeat(' ', $lineIndent);
+            } else {
                 $indent = '  ';
             }
+
+            break;
         }
 
         $columnsCode = $this->exportColumnsAsShortArray($columns, $indent);
-        $isInsertingAtEnd = $insertOffset === strlen($arguments);
+        $beforeInsert = rtrim(substr($arguments, 0, $insertOffset));
+        $afterInsert = substr($arguments, $insertOffset);
 
-        if ($isInsertingAtEnd) {
-            $trimmed = rtrim($arguments);
-
-            if ($trimmed !== '') {
-                $lastChar = substr($trimmed, -1);
-
-                if ($lastChar !== ',' && $lastChar !== '(') {
-                    $lastCharPos = strlen($trimmed) - 1;
-                    $arguments = substr($arguments, 0, $lastCharPos + 1) . ',' . substr($arguments, $lastCharPos + 1);
-                }
-            }
-
-            $insertOffset = strlen($arguments);
+        if ($beforeInsert !== '' && !str_ends_with($beforeInsert, ',')) {
+            $beforeInsert .= ',';
         }
 
-        $insert = "\n" . $indent . 'columns: ' . $columnsCode . ',';
+        $beforeInsert .= "\n" . $indent . 'columns: ' . $columnsCode . ',';
 
-        $newArguments = substr($arguments, 0, $insertOffset) . $insert . substr($arguments, $insertOffset);
+        $afterInsert = ltrim($afterInsert);
+        if ($afterInsert !== '') {
+            $newArguments = $beforeInsert . "\n" . $indent . $afterInsert;
+        } else {
+            $newArguments = $beforeInsert . "\n" . $closingIndent;
+        }
 
         $newConstructor = substr($constructor, 0, $openParenPos + 1) . $newArguments . substr($constructor, $closeParenPos);
 
@@ -368,7 +371,28 @@ class SyncRecordColumnsCommand extends Command
             return implode("\n", $lines);
         }
 
+        if (is_string($value)) {
+            return $this->exportString($value);
+        }
+
         return var_export($value, true);
+    }
+
+    private function exportString(string $value): string
+    {
+        if (!str_contains($value, "'")) {
+            return "'" . str_replace('\\', '\\\\', $value) . "'";
+        }
+
+        if (!str_contains($value, '"')) {
+            $escaped = str_replace(['\\', '"'], ['\\\\', '\\"'], $value);
+
+            return '"' . $escaped . '"';
+        }
+
+        $escaped = str_replace(['\\', "'"], ['\\\\', "\\'"], $value);
+
+        return "'" . $escaped . "'";
     }
 
     private function findMatchingParen(string $content, int $start): ?int

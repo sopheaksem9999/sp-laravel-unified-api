@@ -3,13 +3,19 @@
 namespace Sopheak\Core\Tests\Unit;
 
 use Exception;
+use ReflectionMethod;
 use Illuminate\Http\Request;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Config;
 use PDO;
+use Illuminate\Console\OutputStyle;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\NullOutput;
+use Sopheak\Core\Console\SyncRecordColumnsCommand;
 use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\RecordService;
+use Sopheak\Core\Utilities\QueryBuilderFiltersUtils;
 use Sopheak\Core\Utilities\PermissionUtils;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Tests\TestCase;
@@ -215,6 +221,127 @@ class BasicTest extends TestCase
         $converted = RecordApiResponseService::convertCompositeFields($record, 'companies');
 
         $this->assertSame(['line1' => null, 'line2' => 'Main Street'], $converted->bill_addr);
+    }
+
+    /** @test */
+    public function it_exports_pgsql_defaults_without_escaped_single_quotes(): void
+    {
+        $command = new SyncRecordColumnsCommand();
+        $method = new ReflectionMethod($command, 'exportValue');
+        $method->setAccessible(true);
+
+        $result = $method->invoke($command, "nextval('purchase_orders_id_seq'::regclass)", '    ');
+
+        $this->assertSame('"nextval(\'purchase_orders_id_seq\'::regclass)"', $result);
+    }
+
+    /** @test */
+    public function it_does_not_add_extra_blank_lines_when_syncing_columns_multiple_times(): void
+    {
+        $command = new SyncRecordColumnsCommand();
+        $command->setOutput(new OutputStyle(new ArrayInput([]), new NullOutput()));
+        $method = new ReflectionMethod($command, 'updateConfigFile');
+        $method->setAccessible(true);
+
+        $content = "<?php\n\nreturn new RecordTableType(\n    pmsName: 'purchaseOrder',\n    hasTenantId: true,\n    softDeletes: true,\n    public: new RecordTablePublic(read: true, write: true),\n    primaryKey: 'id',\n);\n";
+
+        $path = tempnam(sys_get_temp_dir(), 'record_table_');
+        file_put_contents($path, $content);
+
+        $columns = [
+            'id' => [
+                'type' => 'bigint',
+                'udt_name' => 'int8',
+                'udt_schema' => 'pg_catalog',
+                'nullable' => false,
+                'key' => '',
+                'default' => "nextval('purchase_orders_id_seq'::regclass)",
+                'extra' => '',
+            ],
+        ];
+
+        $method->invoke($command, $path, 'purchase_orders', $columns, false);
+        $method->invoke($command, $path, 'purchase_orders', $columns, false);
+
+        $updated = file_get_contents($path);
+        if ($updated !== false) {
+            $this->assertSame(1, preg_match_all('/\n\s*columns:/', $updated));
+            $this->assertSame(0, preg_match("/\n\n\s*columns:/", $updated));
+            $this->assertSame(1, preg_match('/\n\s*\],?\n\s*\);/', $updated));
+        }
+
+        unlink($path);
+    }
+
+    /** @test */
+    public function it_handles_fulltext_indexes_from_record_table_type(): void
+    {
+        SchemaRegistryUtils::clearAllCache();
+
+        $schema = new RecordTableType(
+            table: 'articles',
+            columnIndexes: [
+                ['title', 'body'],
+            ],
+        );
+
+        SchemaRegistryUtils::register('articles', $schema);
+        QueryBuilderFiltersUtils::clearColumnCache();
+
+        $method = new ReflectionMethod(QueryBuilderFiltersUtils::class, 'hasFullTextIndex');
+        $method->setAccessible(true);
+
+        $this->assertTrue($method->invoke(null, 'articles', ['title', 'body']));
+    }
+
+    /** @test */
+    public function it_supports_pgsql_text_types_for_searchable_columns(): void
+    {
+        SchemaRegistryUtils::clearAllCache();
+
+        $schema = new RecordTableType(
+            table: 'products',
+            columns: [
+                'id' => ['type' => 'bigint'],
+                'name' => ['type' => 'character varying'],
+                'meta_data' => ['type' => 'jsonb'],
+            ],
+        );
+
+        SchemaRegistryUtils::register('products', $schema);
+        QueryBuilderFiltersUtils::clearColumnCache();
+
+        $method = new ReflectionMethod(QueryBuilderFiltersUtils::class, 'getSearchableColumns');
+        $method->setAccessible(true);
+
+        $result = $method->invoke(null, 'products', ['id', 'name', 'meta_data']);
+
+        $this->assertSame(['name', 'meta_data'], $result);
+    }
+
+    /** @test */
+    public function it_supports_pgsql_numeric_types_for_searchable_columns(): void
+    {
+        SchemaRegistryUtils::clearAllCache();
+
+        $schema = new RecordTableType(
+            table: 'inventory',
+            columns: [
+                'id' => ['type' => 'bigint'],
+                'qty_on_hand' => ['type' => 'numeric'],
+                'name' => ['type' => 'character varying'],
+            ],
+        );
+
+        SchemaRegistryUtils::register('inventory', $schema);
+        QueryBuilderFiltersUtils::clearColumnCache();
+
+        $method = new ReflectionMethod(QueryBuilderFiltersUtils::class, 'getNumericSearchableColumns');
+        $method->setAccessible(true);
+
+        $result = $method->invoke(null, 'inventory', ['id', 'qty_on_hand', 'name']);
+
+        $this->assertSame(['id', 'qty_on_hand'], $result);
     }
 
     /** @test */

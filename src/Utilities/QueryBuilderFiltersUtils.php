@@ -115,22 +115,29 @@ class QueryBuilderFiltersUtils
 
         // Basic search across columns (only allowed columns) - optimized for performance
         if ($request->has('s') && [] !== $allowedCols) {
-            $keyword = $request->query('s');
-            // Limit search to text/varchar columns for better performance
+            $keyword = (string) $request->query('s');
             $searchableCols = self::getSearchableColumns($table, $allowedCols);
+            $numericCols = self::getNumericSearchableColumns($table, $allowedCols);
+            $isNumeric = is_numeric($keyword);
+            $likeOperator = DB::getDriverName() === 'pgsql' ? 'ilike' : 'like';
 
-            if ([] !== $searchableCols) {
-                // Optimized search with single query and proper indexing hints
-                $builder->where(function ($q) use ($searchableCols, $keyword, $table): void {
-                    // Use MATCH AGAINST for full-text search if available, fallback to LIKE
-                    $hasFullText = self::hasFullTextIndex($table, $searchableCols);
-                    if ($hasFullText && strlen($keyword) >= 3) {
-                        $columns = implode(',', array_map(fn($col): string => sprintf('%s.%s', $table, $col), $searchableCols));
-                        $q->whereRaw(sprintf('MATCH(%s) AGAINST(? IN BOOLEAN MODE)', $columns), [sprintf('+%s*', $keyword)]);
-                    } else {
-                        // Optimized LIKE search with reduced overhead
-                        foreach ($searchableCols as $searchableCol) {
-                            $q->orWhere($table . '.' . $searchableCol, 'like', sprintf('%%%s%%', $keyword));
+            if ([] !== $searchableCols || ($isNumeric && [] !== $numericCols)) {
+                $builder->where(function ($q) use ($searchableCols, $numericCols, $keyword, $table, $isNumeric, $likeOperator): void {
+                    if ([] !== $searchableCols) {
+                        $hasFullText = self::hasFullTextIndex($table, $searchableCols);
+                        if ($hasFullText && strlen($keyword) >= 3) {
+                            $columns = implode(',', array_map(fn($col): string => sprintf('%s.%s', $table, $col), $searchableCols));
+                            $q->whereRaw(sprintf('MATCH(%s) AGAINST(? IN BOOLEAN MODE)', $columns), [sprintf('+%s*', $keyword)]);
+                        } else {
+                            foreach ($searchableCols as $searchableCol) {
+                                $q->orWhere($table . '.' . $searchableCol, $likeOperator, sprintf('%%%s%%', $keyword));
+                            }
+                        }
+                    }
+
+                    if ($isNumeric && [] !== $numericCols) {
+                        foreach ($numericCols as $numericCol) {
+                            $q->orWhere($table . '.' . $numericCol, '=', $keyword);
                         }
                     }
                 });
@@ -1275,28 +1282,71 @@ class QueryBuilderFiltersUtils
         $cacheKey = $table . '_searchable';
         if (!isset(self::$columnCache[$cacheKey])) {
             $searchableCols = [];
-            $schema = SchemaRegistryUtils::get();
+            $tableConfig = SchemaRegistryUtils::getTable($table);
+            $columns = [];
+            if ($tableConfig instanceof \Sopheak\Core\Types\RecordTableType) {
+                $columns = $tableConfig->columns ?? [];
+            } elseif (is_array($tableConfig)) {
+                $columns = $tableConfig['columns'] ?? [];
+            }
 
-            if (!isset($schema[$table]) || $schema[$table]->columns === null || empty($schema[$table]->columns)) {
+            if ($columns === null || $columns === []) {
                 self::$columnCache[$cacheKey] = [];
 
                 return [];
             }
 
             foreach ($allowedCols as $allowedCol) {
-                $columnInfo = $schema[$table]->columns[$allowedCol] ?? [];
-                $rawType = strtolower($columnInfo['type'] ?? '');
+                $columnInfo = $columns[$allowedCol] ?? [];
+                $rawType = strtolower((string) ($columnInfo['type'] ?? $columnInfo['udt_name'] ?? ''));
 
                 // Extract base type by removing length specifications (e.g., varchar(191) -> varchar)
                 $type = preg_replace('/\([^)]*\)/', '', $rawType);
+                $type = str_replace('character varying', 'varchar', $type);
+                $type = str_replace('character', 'char', $type);
 
                 // Only include text-based columns for search
-                if (in_array($type, ['varchar', 'text', 'char', 'string', 'longtext', 'mediumtext'])) {
+                if (in_array($type, ['varchar', 'text', 'char', 'string', 'longtext', 'mediumtext', 'citext', 'uuid', 'json', 'jsonb'], true)) {
                     $searchableCols[] = $allowedCol;
                 }
             }
 
             self::$columnCache[$cacheKey] = $searchableCols;
+        }
+
+        return self::$columnCache[$cacheKey];
+    }
+
+    private static function getNumericSearchableColumns(string $table, array $allowedCols): array
+    {
+        $cacheKey = $table . '_numeric_searchable';
+        if (!isset(self::$columnCache[$cacheKey])) {
+            $numericCols = [];
+            $tableConfig = SchemaRegistryUtils::getTable($table);
+            $columns = [];
+            if ($tableConfig instanceof \Sopheak\Core\Types\RecordTableType) {
+                $columns = $tableConfig->columns ?? [];
+            } elseif (is_array($tableConfig)) {
+                $columns = $tableConfig['columns'] ?? [];
+            }
+
+            if ($columns === null || $columns === []) {
+                self::$columnCache[$cacheKey] = [];
+
+                return [];
+            }
+
+            foreach ($allowedCols as $allowedCol) {
+                $columnInfo = $columns[$allowedCol] ?? [];
+                $rawType = strtolower((string) ($columnInfo['type'] ?? $columnInfo['udt_name'] ?? ''));
+                $type = preg_replace('/\([^)]*\)/', '', $rawType);
+
+                if (in_array($type, ['int2', 'int4', 'int8', 'integer', 'bigint', 'smallint', 'serial', 'bigserial', 'numeric', 'decimal', 'float4', 'float8', 'real', 'double precision'], true)) {
+                    $numericCols[] = $allowedCol;
+                }
+            }
+
+            self::$columnCache[$cacheKey] = $numericCols;
         }
 
         return self::$columnCache[$cacheKey];
@@ -1328,12 +1378,15 @@ class QueryBuilderFiltersUtils
     {
         $cacheKey = $table . '_fulltext_' . implode('_', $columns);
         if (!isset(self::$searchableCache[$cacheKey])) {
-            // Check if full-text index exists for these columns
-            // This is a simplified check - in production, you'd query INFORMATION_SCHEMA
-            $schema = SchemaRegistryUtils::get();
-            $tableConfig = $schema[$table] ?? [];
-            $hasFullText = isset($tableConfig['columnIndexes'])
-                && in_array($columns, $tableConfig['columnIndexes']);
+            $tableConfig = SchemaRegistryUtils::getTable($table);
+            $indexes = [];
+            if ($tableConfig instanceof \Sopheak\Core\Types\RecordTableType) {
+                $indexes = $tableConfig->columnIndexes ?? [];
+            } elseif (is_array($tableConfig)) {
+                $indexes = $tableConfig['columnIndexes'] ?? [];
+            }
+
+            $hasFullText = is_array($indexes) && in_array($columns, $indexes, true);
 
             self::$searchableCache[$cacheKey] = $hasFullText;
         }
