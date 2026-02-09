@@ -93,6 +93,22 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
 
     /*
     |--------------------------------------------------------------------------
+    | Table-specific RPC Functions
+    |--------------------------------------------------------------------------
+    */
+
+    if (!empty(RecordConfigService::rpcPrefix())) {
+        Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/' . RecordConfigService::rpcPrefix() . '/{functionName}', [CoreRecordController::class, 'executeTableFunction'])
+            ->where(['table' => $tableWhere, 'functionName' => '.*'])
+            ->middleware('throttle:api-functions');
+    } else {
+        Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/{functionName}', [CoreRecordController::class, 'executeTableFunction'])
+            ->where(['table' => $tableWhere, 'functionName' => '(?!\d+$).+'])
+            ->middleware('throttle:api-functions');
+    }
+
+    /*
+    |--------------------------------------------------------------------------
     | Standard CRUD Operations
     |--------------------------------------------------------------------------
     */
@@ -120,20 +136,4 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
     Route::post('{table}/bulk/create', [CoreRecordController::class, 'bulkRecordCreate'])->where('table', $tableWhere)->middleware('throttle:api-writes');
     Route::post('{table}/bulk/update', [CoreRecordController::class, 'bulkRecordUpdate'])->where('table', $tableWhere)->middleware('throttle:api-writes');
     Route::post('{table}/bulk/delete', [CoreRecordController::class, 'bulkRecordDelete'])->where('table', $tableWhere)->middleware('throttle:api-writes');
-
-    /*
-    |--------------------------------------------------------------------------
-    | Table-specific RPC Functions
-    |--------------------------------------------------------------------------
-    */
-
-    if (!empty(RecordConfigService::rpcPrefix())) {
-        Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/' . RecordConfigService::rpcPrefix() . '/{functionName}', [CoreRecordController::class, 'executeTableFunction'])
-            ->where(['table' => $tableWhere, 'functionName' => '.*'])
-            ->middleware('throttle:api-functions');
-    } else {
-        Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/{functionName}', [CoreRecordController::class, 'executeTableFunction'])
-            ->where(['table' => $tableWhere, 'functionName' => '.*'])
-            ->middleware('throttle:api-functions');
-    }
 });
