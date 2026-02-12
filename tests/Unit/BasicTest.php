@@ -21,6 +21,7 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Utilities\RecordUtils;
 use Sopheak\Core\Types\RecordTableType;
+use Sopheak\Core\Types\RecordBelongsToType;
 
 
 class BasicTest extends TestCase
@@ -212,6 +213,8 @@ class BasicTest extends TestCase
 
         SchemaRegistryUtils::register('companies', $schema);
 
+        DB::shouldReceive('getDriverName')->andReturn('pgsql');
+
         $record = (object) [
             'id' => 1,
             'name' => 'ACME',
@@ -342,6 +345,36 @@ class BasicTest extends TestCase
         $result = $method->invoke(null, 'inventory', ['id', 'qty_on_hand', 'name']);
 
         $this->assertSame(['id', 'qty_on_hand'], $result);
+    }
+
+    /** @test */
+    public function it_keeps_belongs_to_relationships_with_fk_in_audit_payload(): void
+    {
+        $service = new RecordService();
+        $schema = new RecordTableType(
+            relationships: [
+                'roles' => [],
+                'profile' => new RecordBelongsToType(table: 'profiles', foreignKey: 'profile_id'),
+            ]
+        );
+
+        $method = new ReflectionMethod(RecordService::class, 'stripRelationshipAuditData');
+        $method->setAccessible(true);
+
+        $result = $method->invoke($service, [
+            'name' => 'Example',
+            'roles' => [['id' => 1]],
+            'profile' => ['id' => 2],
+            'profile_id' => 2,
+            'relationship' => ['ref_number' => 'REF-001'],
+            'relationships' => ['other'],
+        ], $schema);
+
+        $this->assertSame([
+            'name' => 'Example',
+            'profile' => ['id' => 2],
+            'profile_id' => 2,
+        ], $result);
     }
 
     /** @test */

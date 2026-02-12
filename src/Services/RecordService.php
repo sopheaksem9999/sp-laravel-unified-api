@@ -22,6 +22,7 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Types\RecordTableTriggerType;
 use Sopheak\Core\Types\RecordTableType;
+use Sopheak\Core\Types\RecordBelongsToType;
 use Sopheak\Core\Utilities\RecordUtils;
 
 class RecordService
@@ -263,6 +264,8 @@ class RecordService
                 }
             }
 
+            $auditData = $this->stripRelationshipAuditData($auditData, $tableSchema);
+
             // Ensure ID is present for delete operations if available in context
             if (!isset($auditData['id']) && isset($recordContext['id'])) {
                 $auditData['id'] = $recordContext['id'];
@@ -300,6 +303,39 @@ class RecordService
                 tenantId: $tenantId
             );
         }
+    }
+
+    private function stripRelationshipAuditData(array $auditData, RecordTableType $tableSchema): array
+    {
+        $relationships = is_array($tableSchema->relationships ?? null) ? $tableSchema->relationships : [];
+        $allowedRelations = [];
+
+        foreach ($relationships as $relationKey => $relationConfig) {
+            $foreignKey = null;
+
+            if ($relationConfig instanceof RecordBelongsToType) {
+                $foreignKey = $relationConfig->foreignKey ?? (Str::singular($relationConfig->table) . '_id');
+            } elseif (is_array($relationConfig)) {
+                $type = $relationConfig['type'] ?? null;
+                if ('belongsTo' === $type) {
+                    $foreignKey = $relationConfig['foreignKey'] ?? $relationConfig['foreign_key'] ?? (is_string($relationConfig['table'] ?? null) ? (Str::singular($relationConfig['table']) . '_id') : null);
+                }
+            }
+
+            if ($foreignKey && array_key_exists($foreignKey, $auditData) && null !== $auditData[$foreignKey]) {
+                $allowedRelations[] = $relationKey;
+            }
+        }
+
+        foreach (array_keys($relationships) as $relationKey) {
+            if (!in_array($relationKey, $allowedRelations, true)) {
+                unset($auditData[$relationKey]);
+            }
+        }
+
+        unset($auditData['relationship'], $auditData['relationships']);
+
+        return $auditData;
     }
 
     /**

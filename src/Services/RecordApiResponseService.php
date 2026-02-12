@@ -7,6 +7,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\MessageBag;
+use Illuminate\Support\Facades\DB;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 use Sopheak\Core\Constants\HttpErrorCodeConstant;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
@@ -138,6 +139,10 @@ class RecordApiResponseService
     {
         if (null === $data) {
             return null;
+        }
+
+        if (DB::getDriverName() !== 'pgsql') {
+            return $data;
         }
 
         if ($data instanceof Collection) {
