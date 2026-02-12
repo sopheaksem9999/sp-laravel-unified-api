@@ -65,8 +65,8 @@ class CoreRecordController extends Controller
             $response = RecordApiResponseService::successWrapped($data, $meta, RecordApiJsonResponseEnum::SUCCESS->value, $headers);
 
             $this->recordService->executeTableTrigger(
-                $tableSchema->afterRead ?? null,
-                [
+                trigger: $tableSchema->afterRead ?? null,
+                params: [
                     $request,
                     $table,
                     [
@@ -123,8 +123,8 @@ class CoreRecordController extends Controller
             $response = RecordApiResponseService::successWrapped($record);
 
             $this->recordService->executeTableTrigger(
-                $tableSchema->afterRead ?? null,
-                [
+                trigger: $tableSchema->afterRead ?? null,
+                params: [
                     $request,
                     $table,
                     [
@@ -173,7 +173,10 @@ class CoreRecordController extends Controller
                 RecordConfigService::tenantColumn() => $tenantId,
             ],
         ];
-        $triggerParams = $this->recordService->executeTableTrigger($tableSchema->beforeCreate ?? null, $triggerParams);
+        $triggerParams = $this->recordService->executeTableTrigger(
+            trigger: $tableSchema->beforeCreate ?? null,
+            params: $triggerParams
+        );
         if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
             $request = $triggerParams[0];
         }
@@ -204,16 +207,21 @@ class CoreRecordController extends Controller
             DB::commit();
             QueryCacheService::invalidateTable($table);
 
-            $recordData = $this->fetchRecordData($request, $table, $insertedId, $tenantId);
+            $recordData = $this->fetchRecordData(request: $request, table: $table, id: $insertedId, tenantId: $tenantId);
             $recordResponse = RecordApiResponseService::successWrapped($recordData);
 
             // Execute Post-Write Logic (Triggers and Audit Logs)
-            $this->recordService->processPostWriteLogic($request, $table, 'create', [
-                'id' => $insertedId,
-                'payload' => $result['payload'],
-                RecordConfigService::tenantColumn() => $result['tenant_id'],
-                'response' => $recordResponse,
-            ]);
+            $this->recordService->processPostWriteLogic(
+                request: $request,
+                table: $table,
+                operation: 'create',
+                recordContext: [
+                    'id' => $insertedId,
+                    'payload' => $result['payload'],
+                    RecordConfigService::tenantColumn() => $result['tenant_id'],
+                    'response' => $recordResponse,
+                ]
+            );
 
             return $recordResponse;
         } catch (Exception $exception) {
@@ -259,7 +267,10 @@ class CoreRecordController extends Controller
         ];
 
         // Execute beforeUpdate trigger
-        $triggerParams = $this->recordService->executeTableTrigger($tableSchema->beforeUpdate ?? null, $triggerParams);
+        $triggerParams = $this->recordService->executeTableTrigger(
+            trigger: $tableSchema->beforeUpdate ?? null,
+            params: $triggerParams
+        );
         if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
             $request = $triggerParams[0];
         }
@@ -297,17 +308,22 @@ class CoreRecordController extends Controller
             DB::commit();
             QueryCacheService::invalidateTable($table);
 
-            $recordData = $this->fetchRecordData($request, $table, $id, $tenantId);
+            $recordData = $this->fetchRecordData(request: $request, table: $table, id: $id, tenantId: $tenantId);
             $recordResponse = RecordApiResponseService::successWrapped($recordData);
 
             // Execute Post-Write Logic (Triggers and Audit Logs)
-            $this->recordService->processPostWriteLogic($request, $table, 'update', [
-                'id' => $id,
-                'payload' => $result['payload'],
-                RecordConfigService::tenantColumn() => $result['tenant_id'],
-                'updated' => $updated,
-                'response' => $recordResponse,
-            ]);
+            $this->recordService->processPostWriteLogic(
+                request: $request,
+                table: $table,
+                operation: 'update',
+                recordContext: [
+                    'id' => $id,
+                    'payload' => $result['payload'],
+                    RecordConfigService::tenantColumn() => $result['tenant_id'],
+                    'updated' => $updated,
+                    'response' => $recordResponse,
+                ]
+            );
 
             return $recordResponse;
         } catch (Exception $exception) {
@@ -353,7 +369,10 @@ class CoreRecordController extends Controller
         ];
 
         // Execute beforeDelete trigger if defined
-        $triggerParams = $this->recordService->executeTableTrigger($tableSchema->beforeDelete ?? null, $triggerParams);
+        $triggerParams = $this->recordService->executeTableTrigger(
+            trigger: $tableSchema->beforeDelete ?? null,
+            params: $triggerParams
+        );
         if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
             $request = $triggerParams[0];
         };
@@ -393,13 +412,18 @@ class CoreRecordController extends Controller
             $response = RecordApiResponseService::successWrapped(['deleted' => $affected]);
 
             // Execute Post-Write Logic (Triggers and Audit Logs)
-            $this->recordService->processPostWriteLogic($request, $table, 'delete', [
-                'id' => $id,
-                RecordConfigService::tenantColumn() => $tenantId,
-                'affected' => $affected,
-                'soft_deleted' => $tableSchema->softDeletes,
-                'response' => $response,
-            ]);
+            $this->recordService->processPostWriteLogic(
+                request: $request,
+                table: $table,
+                operation: 'delete',
+                recordContext: [
+                    'id' => $id,
+                    RecordConfigService::tenantColumn() => $tenantId,
+                    'affected' => $affected,
+                    'soft_deleted' => $tableSchema->softDeletes,
+                    'response' => $response,
+                ]
+            );
 
             return $response;
         } catch (Exception $exception) {
@@ -458,13 +482,18 @@ class CoreRecordController extends Controller
             $response = RecordApiResponseService::successWrapped(['restored' => $affected]);
 
             // Execute Post-Write Logic (Triggers and Audit Logs)
-            $this->recordService->processPostWriteLogic($request, $table, 'update', [
-                'id' => $id,
-                'payload' => [], // No payload for restore
-                RecordConfigService::tenantColumn() => $tenantId,
-                'restored' => $affected,
-                'response' => $response,
-            ]);
+            $this->recordService->processPostWriteLogic(
+                request: $request,
+                table: $table,
+                operation: 'update',
+                recordContext: [
+                    'id' => $id,
+                    'payload' => [], // No payload for restore
+                    RecordConfigService::tenantColumn() => $tenantId,
+                    'restored' => $affected,
+                    'response' => $response,
+                ]
+            );
 
             return $response;
         } catch (Exception $exception) {
@@ -523,14 +552,19 @@ class CoreRecordController extends Controller
             $response = RecordApiResponseService::successWrapped(['deleted' => $deleted]);
 
             // Execute Post-Write Logic (Triggers and Audit Logs)
-            $this->recordService->processPostWriteLogic($request, $table, 'delete', [
-                'id' => $id,
-                RecordConfigService::tenantColumn() => $tenantId,
-                'deleted' => $deleted,
-                'force_deleted' => true,
-                'response_data' => ['id' => $id], // Preserve original audit log data
-                'response' => $response,
-            ]);
+            $this->recordService->processPostWriteLogic(
+                request: $request,
+                table: $table,
+                operation: 'delete',
+                recordContext: [
+                    'id' => $id,
+                    RecordConfigService::tenantColumn() => $tenantId,
+                    'deleted' => $deleted,
+                    'force_deleted' => true,
+                    'response_data' => ['id' => $id], // Preserve original audit log data
+                    'response' => $response,
+                ]
+            );
 
             return $response;
         } catch (Exception $exception) {
@@ -657,24 +691,32 @@ class CoreRecordController extends Controller
                 }
 
                 // Execute beforeCreate trigger
-                $this->recordService->executeTableTrigger($schema[$table]->beforeCreate ?? null, [$request, $table, $item]);
+                $this->recordService->executeTableTrigger(
+                    trigger: $schema[$table]->beforeCreate ?? null,
+                    params: [$request, $table, $item]
+                );
 
                 $result = $this->recordService->createRecord(table: $table, payload: $item, tenantId: $tenantId);
                 $insertId = $result['id'];
 
-                $createdRecordData = $this->fetchRecordData($request, $table, $insertId, $tenantId);
+                $createdRecordData = $this->fetchRecordData(request: $request, table: $table, id: $insertId, tenantId: $tenantId);
                 $createdRecordResponse = RecordApiResponseService::successWrapped($createdRecordData);
                 $recordData = json_decode(json_encode($createdRecordData), true);
                 $createdData[] = $recordData;
                 ++$affected;
 
                 // Post-write logic
-                $this->recordService->processPostWriteLogic($request, $table, 'create', [
-                    'id' => $insertId,
-                    'payload' => $result['payload'],
-                    RecordConfigService::tenantColumn() => $result['tenant_id'],
-                    'response' => $createdRecordResponse,
-                ]);
+                $this->recordService->processPostWriteLogic(
+                    request: $request,
+                    table: $table,
+                    operation: 'create',
+                    recordContext: [
+                        'id' => $insertId,
+                        'payload' => $result['payload'],
+                        RecordConfigService::tenantColumn() => $result['tenant_id'],
+                        'response' => $createdRecordResponse,
+                    ]
+                );
             }
 
             DB::commit();
@@ -782,26 +824,34 @@ class CoreRecordController extends Controller
                 unset($item[$pk]);
 
                 // Execute beforeUpdate trigger
-                $this->recordService->executeTableTrigger($schema[$table]->beforeUpdate ?? null, [$request, $table, $id, $item]);
+                $this->recordService->executeTableTrigger(
+                    trigger: $schema[$table]->beforeUpdate ?? null,
+                    params: [$request, $table, $id, $item]
+                );
 
                 $result = $this->recordService->updateRecord(table: $table, id: $id, payload: $item, tenantId: $tenantId);
                 $updateCount = $result['updated'];
 
                 if ($updateCount > 0) {
-                    $updatedRecordData = $this->fetchRecordData($request, $table, $id, $tenantId);
+                    $updatedRecordData = $this->fetchRecordData(request: $request, table: $table, id: $id, tenantId: $tenantId);
                     $updatedRecordResponse = RecordApiResponseService::successWrapped($updatedRecordData);
                     $recordData = json_decode(json_encode($updatedRecordData), true);
                     $updatedData[] = $recordData;
                     $affected += $updateCount;
 
                     // Post-write logic
-                    $this->recordService->processPostWriteLogic($request, $table, 'update', [
-                        'id' => $id,
-                        'payload' => $result['payload'],
-                        RecordConfigService::tenantColumn() => $result['tenant_id'],
-                        'updated' => $updateCount,
-                        'response' => $updatedRecordResponse,
-                    ]);
+                    $this->recordService->processPostWriteLogic(
+                        request: $request,
+                        table: $table,
+                        operation: 'update',
+                        recordContext: [
+                            'id' => $id,
+                            'payload' => $result['payload'],
+                            RecordConfigService::tenantColumn() => $result['tenant_id'],
+                            'updated' => $updateCount,
+                            'response' => $updatedRecordResponse,
+                        ]
+                    );
                 } else {
                     // Record not found or no changes made
                     throw ValidationException::withMessages([
@@ -920,7 +970,10 @@ class CoreRecordController extends Controller
         try {
             foreach ($idsToDelete as $idToDelete) {
                 // Execute beforeDelete trigger
-                $this->recordService->executeTableTrigger($schema[$table]->beforeDelete ?? null, [$request, $table, $idToDelete]);
+                $this->recordService->executeTableTrigger(
+                    trigger: $schema[$table]->beforeDelete ?? null,
+                    params: [$request, $table, $idToDelete]
+                );
 
                 $result = $this->recordService->deleteRecord(table: $table, id: $idToDelete, tenantId: $tenantId);
                 $deleteCount = $result['affected'];
@@ -932,14 +985,19 @@ class CoreRecordController extends Controller
                     $response = RecordApiResponseService::successWrapped(['deleted' => $deleteCount]);
 
                     // Post-write logic
-                    $this->recordService->processPostWriteLogic($request, $table, 'delete', [
-                        'id' => $idToDelete,
-                        'payload' => ['id' => $idToDelete],
-                        RecordConfigService::tenantColumn() => $tenantId,
-                        'affected' => $deleteCount,
-                        'soft_deleted' => $schema[$table]->softDeletes ?? false,
-                        'response' => $response,
-                    ]);
+                    $this->recordService->processPostWriteLogic(
+                        request: $request,
+                        table: $table,
+                        operation: 'delete',
+                        recordContext: [
+                            'id' => $idToDelete,
+                            'payload' => ['id' => $idToDelete],
+                            RecordConfigService::tenantColumn() => $tenantId,
+                            'affected' => $deleteCount,
+                            'soft_deleted' => $schema[$table]->softDeletes ?? false,
+                            'response' => $response,
+                        ]
+                    );
                 }
             }
 
