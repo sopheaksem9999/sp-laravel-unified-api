@@ -59,7 +59,7 @@ $result = DB::table('invoices')->applyRequestFilters(
 
 ### Relationship Selection & Filtering
 
-Relationship loading uses the `select` query parameter (not `with`). This supports nested relationships and filtering within those relationships.
+Relationship loading uses the `select` query parameter for nested inclusion and filtering. The legacy `with` parameter is still supported for simple eager loading without column filtering.
 
 **Syntax:**
 `?select=column1,column2,relationship(column1,column2,filter)`
@@ -112,6 +112,11 @@ Relationship loading uses the `select` query parameter (not `with`). This suppor
    **Example:**
    `GET /api/v1/posts?author.name=eq.John`
    Fetches posts where the author's name is 'John'.
+
+5. **Legacy `with` Parameter (still supported):**
+   - `GET /api/v1/customers?with=invoices`
+   - `GET /api/v1/customers?with=invoices,contacts`
+   This eagerly loads relationships but does not support nested filters inside `with`.
 
 ### Supported Relationship Types
 

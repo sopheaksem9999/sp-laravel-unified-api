@@ -7,6 +7,7 @@ use stdClass;
 use Exception;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Utilities\RelationshipResolverUtils;
+use Sopheak\Core\Utilities\QueryBuilderFiltersUtils;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Sopheak\Core\Services\RecordConfigService;
@@ -106,12 +107,14 @@ class SchemaRegistryUtils
     {
         self::$cache = [];
         RelationshipResolverUtils::clearSchemaCache();
+        QueryBuilderFiltersUtils::clearColumnCache();
     }
 
     public static function clearAllCache(): void
     {
         self::$cache = [];
         RelationshipResolverUtils::clearSchemaCache();
+        QueryBuilderFiltersUtils::clearColumnCache();
     }
 
     /**
@@ -139,6 +142,7 @@ class SchemaRegistryUtils
 
         self::$cache[$tableName] = $config;
         RelationshipResolverUtils::clearSchemaCache();
+        QueryBuilderFiltersUtils::clearColumnCache();
     }
 
     /**

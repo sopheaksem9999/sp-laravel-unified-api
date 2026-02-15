@@ -6,11 +6,12 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\LazyCollection;
 use Sopheak\Core\Services\RecordConfigService;
+use Sopheak\Core\Types\RecordTableType;
+use Sopheak\Core\Utilities\QueryBuilderFiltersUtils;
+use Sopheak\Core\Utilities\RelationshipResolverUtils;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
 trait QueryHelpersTrait
 {
@@ -66,42 +67,40 @@ trait QueryHelpersTrait
      */
     public function scopeApplyRequestFilters(Builder $builder, Request $request, bool $isArray = false, string $orderBy = 'id')
     {
+        $this->normalizeSearchParameter($request);
         $isTenantEnabled = RecordConfigService::enableTenantId();
         $tenantColumn = RecordConfigService::tenantColumn();
         $tenantHeader = RecordConfigService::tenantHeader();
 
         $tableName = $builder->getModel()->getTable();
+        $this->ensureSchemaForTable($tableName);
 
         // check if model has tenant_column
         $hasCompanyId = in_array($tenantColumn, $builder->getModel()->getFillable());
 
-        $commonQuery = $builder
-            // Apply tenant filter if tenant is enabled and model has tenant_column
-            ->when($isTenantEnabled && $hasCompanyId, function ($query) use ($request, $tenantColumn, $tenantHeader) {
-                $tenantId = $request->header($tenantHeader);
+        $commonQuery = $builder->when($isTenantEnabled && $hasCompanyId, function ($query) use ($request, $tenantColumn, $tenantHeader) {
+            $tenantId = $request->header($tenantHeader);
 
-                return $query->where($tenantColumn, $tenantId);
-            })
-            ->when($request->has('s') || $request->has('search'), function ($query) use ($request) {
-                $keyword = $request->query('s') ?? $request->query('search');
-                $columns = Schema::getColumnListing($query->getModel()->getTable());
+            return $query->where($tenantColumn, $tenantId);
+        });
 
-                return $query->where(function ($q) use ($columns, $keyword): void {
-                    foreach ($columns as $column) {
-                        $q->orWhere($column, 'like', sprintf('%%%s%%', $keyword));
-                    }
-                });
-            })
-            ->when($request->has('with'), function ($query) use ($request) {
-                $withRelations = $this->parseWithRelations($request->query('with'));
+        $withMap = $request->has('with') ? $this->parseWithRelations($request->query('with')) : [];
 
-                return $query->with($withRelations);
-            })
-            ->when($request->has('select'), function ($query) use ($request, $tableName) {
-                $selectColumns = $this->parseSelectColumns($request->query('select'), $tableName);
+        if ($request->has('select')) {
+            $selectColumns = $this->parseSelectColumns($request->query('select'), $tableName);
+            $hasRelationshipSelects = [] !== $selectColumns['includes'];
+            if ([] !== $selectColumns['main']) {
+                $mainSelect = $this->ensurePrimaryKeyInSelect($builder, $selectColumns['main'], $hasRelationshipSelects);
+                $commonQuery = $commonQuery->select($mainSelect);
+            }
 
-                return $query->select($selectColumns['main']);
-            });
+            $selectRelations = $this->buildWithMapFromIncludes($selectColumns['includes']);
+            $withMap = $this->mergeWithRelationMaps($withMap, $selectRelations);
+        }
+
+        if ([] !== $withMap) {
+            $commonQuery = $commonQuery->with($this->buildWithArray($withMap));
+        }
 
         /*
          * Select columns from joined tables
@@ -132,72 +131,13 @@ trait QueryHelpersTrait
             }
         }
 
-        // Apply filters with operators - Handle multiple values for same parameter
-        $queryString = $request->getQueryString();
-        if (null !== $queryString && '' !== $queryString && '0' !== $queryString) {
-            parse_str($queryString, $allParams);
-
-            // Group parameters by key to handle multiple values
-            $groupedParams = [];
-            foreach ($allParams as $key => $value) {
-                $groupedParams[$key] = is_array($value) ? $value : [$value];
-            }
-
-            foreach ($groupedParams as $key => $values) {
-                foreach ($values as $value) {
-                    if (preg_match('/^(is|eq|neq|like|gt|lt|gte|lte|in|contains|between|not_between)\.(.+)$/', (string) $value, $matches)) {
-                        $operator = $matches[1];
-                        $queryValue = 'null' === $matches[2] ? null : $matches[2];
-                        $this->applyFilterOperator($commonQuery, $key, $operator, $queryValue, $tableName);
-                    }
-                    // Compare two fields: ?field1=compare.neq.field2
-                    elseif (preg_match('/^compare\.(eq|neq|gt|lt|gte|lte)\.(.+)$/', (string) $value, $matches)) {
-                        $compareOperator = $matches[1];
-                        $compareField = $matches[2];
-                        $operatorMap = [
-                            'eq' => '=',
-                            'neq' => '!=',
-                            'gt' => '>',
-                            'lt' => '<',
-                            'gte' => '>=',
-                            'lte' => '<=',
-                        ];
-                        if (isset($operatorMap[$compareOperator])) {
-                            $commonQuery = $commonQuery->whereColumn($key, $operatorMap[$compareOperator], $compareField);
-                        }
-                    }
-                }
-            }
-        }
-
-        // handle check permission query only own user created record
-        $modelClass = class_basename($commonQuery->getModel());
-        $modelName = lcfirst($modelClass); // e.g., 'ReceivePayment' => 'receivePayment'
-        $permission = RecordConfigService::ownRecordsPermissionPrefix() . RecordConfigService::permissionSeparator() . $modelName;
-
-        if (Auth::check() && Gate::check($permission) && RecordConfigService::ownRecordsPermissionPrefix()) {
-            $commonQuery = $commonQuery->where($tableName . '.created_by', Auth::id());
-        }
-
         // Apply soft delete filter if model uses soft deletes
         $commonQuery = $commonQuery->when(
             method_exists($commonQuery->getModel(), 'getDeletedAtColumn'),
             fn($query) => $query->whereNull($tableName . '.' . $commonQuery->getModel()->getDeletedAtColumn())
         );
 
-        // Apply sorting with sortby and order parameters
-        $sortBy = $request->query('sortby', $orderBy);
-        $sortOrder = $request->query('order', 'desc');
-
-        // Validate sort order (only allow 'asc' or 'desc')
-        $sortOrder = in_array(strtolower($sortOrder), ['asc', 'desc']) ? strtolower($sortOrder) : 'desc';
-
-        // Prefix sortBy with table name if it doesn't already have a table prefix
-        if (!str_contains($sortBy, '.')) {
-            $sortBy = $tableName . '.' . $sortBy;
-        }
-
-        $commonQuery = $commonQuery->orderBy($sortBy, $sortOrder);
+        QueryBuilderFiltersUtils::apply($commonQuery->getQuery(), $request, $tableName, $orderBy);
 
         // Handle pagination, chunking, and result formatting
         if ($request->has('per_page')) {
@@ -233,6 +173,31 @@ trait QueryHelpersTrait
         }
 
         return $commonQuery;
+    }
+
+    private function normalizeSearchParameter(Request $request): void
+    {
+        if (!$request->has('s') && $request->has('search')) {
+            $request->query->set('s', $request->query('search'));
+            $this->syncQueryString($request);
+        }
+    }
+
+    private function syncQueryString(Request $request): void
+    {
+        $params = $request->query->all();
+        $request->server->set('QUERY_STRING', http_build_query($params));
+    }
+
+    private function ensureSchemaForTable(string $tableName): void
+    {
+        $schema = SchemaRegistryUtils::getTable($tableName);
+        if ($schema && !empty($schema->columns)) {
+            return;
+        }
+
+        $config = $schema instanceof RecordTableType ? $schema : new RecordTableType(table: $tableName);
+        SchemaRegistryUtils::register($tableName, $config);
     }
 
     /**
@@ -459,42 +424,25 @@ trait QueryHelpersTrait
      */
     private function parseSelectColumns(string $selectParam, string $tableName): array
     {
-        $columns = $this->castStringToArray($selectParam);
         $mainColumns = [];
-        $relationships = [];
-
-        foreach ($columns as $column) {
+        $mainCandidates = RelationshipResolverUtils::getMainTableColumns($selectParam);
+        foreach ($mainCandidates as $column) {
             $column = trim((string) $column);
-
-            // Check for parentheses syntax: customer(*) or customer(id,name)
-            if (preg_match('/^([a-zA-Z_]\w*)\(([^)]*)\)$/', $column, $matches)) {
-                $relationName = trim($matches[1]);
-                $relationColumns = trim($matches[2]);
-
-                $relationships[$relationName] = '*' === $relationColumns ? ['*'] : array_map(trim(...), explode(',', $relationColumns));
-
-                // IMPORTANT: Skip adding to main columns - this is a relationship!
+            if ('' === $column) {
                 continue;
             }
 
-            // Check for colon syntax: customer:id,name
-            if (str_contains($column, ':')) {
-                $parts = explode(':', $column, 2);
-                $relationName = trim($parts[0]);
-                $relationColumns = array_map(trim(...), explode(',', $parts[1]));
-                $relationships[$relationName] = $relationColumns;
-
-                // IMPORTANT: Skip adding to main columns - this is a relationship!
+            if ('*' === $column) {
+                $mainColumns[] = $tableName . '.*';
                 continue;
             }
 
-            // Regular column - prefix with table name to avoid ambiguity
             $mainColumns[] = str_contains($column, '.') ? $column : $tableName . '.' . $column;
         }
 
         return [
             'main' => $mainColumns,
-            'relationships' => $relationships,
+            'includes' => RelationshipResolverUtils::parseSelectForIncludes($selectParam),
         ];
     }
 
@@ -518,28 +466,102 @@ trait QueryHelpersTrait
                 $columns = trim($matches[2]);
 
                 if ('*' === $columns) {
-                    // Load all columns for this relationship
-                    $withRelations[] = $relationName;
+                    $withRelations[$relationName] = null;
                 } else {
-                    // Apply specific column selection
                     $columnArray = array_map(trim(...), explode(',', $columns));
-                    // Ensure primary key is included for relationship to work
-                    if (!in_array('id', $columnArray)) {
-                        array_unshift($columnArray, 'id');
+                    $columnArray = $this->normalizeRelationColumns($columnArray);
+                    if (['*'] === $columnArray) {
+                        $withRelations[$relationName] = null;
+                    } else {
+                        $withRelations[$relationName] = (fn($query) => $query->select($columnArray));
                     }
-
-                    // Use Laravel's ORM format with colon syntax
-                    $withRelations[] = $relationName . ':' . implode(',', $columnArray);
-
-                    $withRelations[$relationName] = (fn($query) => $query->select($columnArray));
                 }
             } else {
-                // Load relationship without column constraints
-                $withRelations[] = $relation;
+                $withRelations[$relation] = null;
             }
         }
 
         return $withRelations;
+    }
+
+    private function buildWithMapFromIncludes(array $includes, string $prefix = ''): array
+    {
+        $map = [];
+        foreach ($includes as $relation => $config) {
+            $relationKey = '' === $prefix ? $relation : $prefix . '.' . $relation;
+            $columns = $config['columns'] ?? ['*'];
+            $columns = $this->normalizeRelationColumns($columns);
+            if (['*'] === $columns) {
+                $map[$relationKey] = null;
+            } else {
+                $map[$relationKey] = (fn($query) => $query->select($columns));
+            }
+
+            if (!empty($config['children'])) {
+                $map = array_merge($map, $this->buildWithMapFromIncludes($config['children'], $relationKey));
+            }
+        }
+
+        return $map;
+    }
+
+    private function normalizeRelationColumns(array $columns): array
+    {
+        $columns = array_values(array_filter(array_map(trim(...), $columns), fn($column): bool => '' !== $column));
+        if ([] === $columns || in_array('*', $columns, true)) {
+            return ['*'];
+        }
+
+        if (!in_array('id', $columns, true)) {
+            array_unshift($columns, 'id');
+        }
+
+        return $columns;
+    }
+
+    private function mergeWithRelationMaps(array $base, array $override): array
+    {
+        foreach ($override as $relation => $constraint) {
+            $base[$relation] = $constraint;
+        }
+
+        return $base;
+    }
+
+    private function buildWithArray(array $withMap): array
+    {
+        $with = [];
+        foreach ($withMap as $relation => $constraint) {
+            if (null === $constraint) {
+                $with[] = $relation;
+            } else {
+                $with[$relation] = $constraint;
+            }
+        }
+
+        return $with;
+    }
+
+    private function ensurePrimaryKeyInSelect(Builder $builder, array $columns, bool $hasRelationshipSelects): array
+    {
+        if (!$hasRelationshipSelects) {
+            return $columns;
+        }
+
+        $tableName = $builder->getModel()->getTable();
+        if (in_array($tableName . '.*', $columns, true) || in_array('*', $columns, true)) {
+            return $columns;
+        }
+
+        $qualifiedKey = $builder->getModel()->getQualifiedKeyName();
+        $keyName = $builder->getModel()->getKeyName();
+        if (in_array($qualifiedKey, $columns, true) || in_array($keyName, $columns, true)) {
+            return $columns;
+        }
+
+        array_unshift($columns, $qualifiedKey);
+
+        return $columns;
     }
 
     /**

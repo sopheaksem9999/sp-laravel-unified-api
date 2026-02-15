@@ -140,7 +140,7 @@ class RelationshipMixedFilterTest extends TestCase
     {
         $request = Request::create('/api/v1/users', 'GET', [
             'select' => '*,posts(*),roles(*)',
-            'name' => 'eq.User 2',
+            'name' => 'eq.User 1',
         ]);
 
         $result = DB::table('users')
