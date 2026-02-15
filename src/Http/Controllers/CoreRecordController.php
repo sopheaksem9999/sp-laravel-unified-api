@@ -21,6 +21,7 @@ use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Utilities\PermissionUtils;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Types\RecordTableType;
+use Sopheak\Core\Types\RecordValidationType;
 use Sopheak\Core\Jobs\ProcessBulkOperationJob;
 
 class CoreRecordController extends Controller
@@ -183,13 +184,9 @@ class CoreRecordController extends Controller
 
         $validatorCallback = $tableSchema->createValidator ?? null;
         if ($validatorCallback) {
-            $validator = $validatorCallback($request, null);
-            if (!$validator instanceof \Illuminate\Contracts\Validation\Validator) {
-                throw new RuntimeException('Validator callback must return a Validator instance');
-            }
-
-            if ($validator->fails()) {
-                return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $validator->errors()->toArray());
+            $response = $this->runTableValidators($validatorCallback, $request, null);
+            if ($response instanceof JsonResponse) {
+                return $response;
             }
         }
 
@@ -277,13 +274,9 @@ class CoreRecordController extends Controller
 
         $validatorCallback = $tableSchema->updateValidator ?? null;
         if ($validatorCallback) {
-            $validator = $validatorCallback($request, $id);
-            if (!$validator instanceof \Illuminate\Contracts\Validation\Validator) {
-                throw new RuntimeException('Validator callback must return a Validator instance');
-            }
-
-            if ($validator->fails()) {
-                return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $validator->errors()->toArray());
+            $response = $this->runTableValidators($validatorCallback, $request, $id);
+            if ($response instanceof JsonResponse) {
+                return $response;
             }
         }
 
@@ -379,13 +372,9 @@ class CoreRecordController extends Controller
 
         $validatorCallback = $tableSchema->deleteValidator ?? null;
         if ($validatorCallback) {
-            $validator = $validatorCallback($request, $id);
-            if (!$validator instanceof \Illuminate\Contracts\Validation\Validator) {
-                throw new RuntimeException('Validator callback must return a Validator instance');
-            }
-
-            if ($validator->fails()) {
-                return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $validator->errors()->toArray());
+            $response = $this->runTableValidators($validatorCallback, $request, $id);
+            if ($response instanceof JsonResponse) {
+                return $response;
             }
         }
 
@@ -1050,6 +1039,147 @@ class CoreRecordController extends Controller
         } catch (Exception $exception) {
             return RecordApiResponseService::errorWrapped($exception->getMessage(), $exception->getCode() ?: RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
+    }
+
+    private function resolveValidatorConfigs(mixed $validatorConfig): array
+    {
+        if (null === $validatorConfig) {
+            return [];
+        }
+
+        if ($validatorConfig instanceof RecordValidationType || is_callable($validatorConfig)) {
+            return [$validatorConfig];
+        }
+
+        if (is_array($validatorConfig)) {
+            if (is_callable($validatorConfig)) {
+                return [$validatorConfig];
+            }
+
+            if ($this->isValidatorConfigArray($validatorConfig)) {
+                return [$validatorConfig];
+            }
+
+            return $this->flattenValidatorConfigs($validatorConfig);
+        }
+
+        throw new RuntimeException(sprintf(
+            'Invalid validator configuration. Expected callable, %s, or array, got %s',
+            RecordValidationType::class,
+            get_debug_type($validatorConfig)
+        ));
+    }
+
+    private function flattenValidatorConfigs(array $items): array
+    {
+        $resolved = [];
+
+        foreach ($items as $item) {
+            if (null === $item) {
+                continue;
+            }
+
+            if ($item instanceof RecordValidationType || is_callable($item)) {
+                $resolved[] = $item;
+                continue;
+            }
+
+            if (is_array($item)) {
+                if (is_callable($item) || $this->isValidatorConfigArray($item)) {
+                    $resolved[] = $item;
+                    continue;
+                }
+
+                $resolved = array_merge($resolved, $this->flattenValidatorConfigs($item));
+                continue;
+            }
+
+            throw new RuntimeException(sprintf(
+                'Invalid validator configuration. Expected callable, %s, or array, got %s',
+                RecordValidationType::class,
+                get_debug_type($item)
+            ));
+        }
+
+        return $resolved;
+    }
+
+    private function isValidatorConfigArray(array $config): bool
+    {
+        return isset($config['class']) || isset($config['functionName']);
+    }
+
+    private function runTableValidators(mixed $validatorConfig, Request $request, ?string $id): ?JsonResponse
+    {
+        $validators = $this->resolveValidatorConfigs($validatorConfig);
+       
+        foreach ($validators as $index => $validatorItem) {
+            if (is_callable($validatorItem)) {
+                $validator = $this->invokeValidatorCallable($validatorItem, $request, $id);
+                if ($validator->fails()) {
+                    return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $validator->errors()->toArray());
+                }
+
+                continue;
+            } else {
+                $config = $this->resolveValidationType($validatorItem, $index);
+                $validator = $this->invokeValidationType($config, $request, $id);
+                if ($validator->fails()) {
+                    return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $validator->errors()->toArray());
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function invokeValidatorCallable(callable $callback, Request $request, ?string $id): \Illuminate\Contracts\Validation\Validator
+    {
+        $validator = $callback($request, $id);
+        if (!$validator instanceof \Illuminate\Contracts\Validation\Validator) {
+            throw new RuntimeException('Validator callback must return a Validator instance');
+        }
+
+        return $validator;
+    }
+
+    private function resolveValidationType(mixed $item, int|string $index): RecordValidationType
+    {
+        if ($item instanceof RecordValidationType) {
+            return $item;
+        }
+
+        if (is_array($item) && $this->isValidatorConfigArray($item)) {
+            return RecordValidationType::fromArray($item);
+        }
+
+        throw new RuntimeException(sprintf(
+            'Invalid validator item at index %s. Expected callable, %s, or array, got %s',
+            (string) $index,
+            RecordValidationType::class,
+            get_debug_type($item)
+        ));
+    }
+
+    private function invokeValidationType(RecordValidationType $config, Request $request, ?string $id): \Illuminate\Contracts\Validation\Validator
+    {
+        $className = $config->class;
+        $method = $config->functionName;
+
+        if (!class_exists($className)) {
+            throw new RuntimeException(sprintf("Validator class '%s' does not exist", $className));
+        }
+
+        if (!method_exists($className, $method)) {
+            throw new RuntimeException(sprintf("Validator method '%s::%s' does not exist", $className, $method));
+        }
+
+        $validator = call_user_func([$className, $method], $request, $id);
+        if (!$validator instanceof \Illuminate\Contracts\Validation\Validator) {
+            throw new RuntimeException('Validator callback must return a Validator instance');
+        }
+
+        return $validator;
     }
 
     /**

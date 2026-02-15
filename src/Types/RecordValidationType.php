@@ -4,12 +4,11 @@ namespace Sopheak\Core\Types;
 
 use InvalidArgumentException;
 
-class RecordTableTriggerType
+class RecordValidationType
 {
     public function __construct(
         public string $class,
         public string $functionName,
-        public ?string $description = null,
     ) {
         if (empty($class)) {
             throw new InvalidArgumentException('class cannot be empty');
@@ -25,7 +24,7 @@ class RecordTableTriggerType
         return new self(
             class: $properties['class'] ?? throw new InvalidArgumentException('class is required'),
             functionName: $properties['functionName'] ?? throw new InvalidArgumentException('functionName is required'),
-            description: $properties['description'] ?? null,
+
         );
     }
 
@@ -35,10 +34,6 @@ class RecordTableTriggerType
             'class' => $this->class,
             'functionName' => $this->functionName,
         ];
-
-        if (null !== $this->description) {
-            $config['description'] = $this->description;
-        }
 
         return $config;
     }
@@ -54,7 +49,7 @@ class RecordTableTriggerType
                 return new self(
                     class: $first['class'] ?? throw new InvalidArgumentException('class is required in config array'),
                     functionName: $first['functionName'] ?? throw new InvalidArgumentException('functionName is required in config array'),
-                    description: $first['description'] ?? null,
+
                 );
             }
         }
@@ -62,7 +57,7 @@ class RecordTableTriggerType
         return new self(
             class: $config['class'] ?? throw new InvalidArgumentException('class is required in config array'),
             functionName: $config['functionName'] ?? throw new InvalidArgumentException('functionName is required in config array'),
-            description: $config['description'] ?? null,
+
         );
     }
 }

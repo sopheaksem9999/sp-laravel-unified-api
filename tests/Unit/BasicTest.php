@@ -6,8 +6,11 @@ use Exception;
 use ReflectionMethod;
 use Illuminate\Http\Request;
 use Illuminate\Database\Query\Expression;
+use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Validator;
 use PDO;
 use Illuminate\Console\OutputStyle;
 use Symfony\Component\Console\Input\ArrayInput;
@@ -15,6 +18,8 @@ use Symfony\Component\Console\Output\NullOutput;
 use Sopheak\Core\Console\SyncRecordColumnsCommand;
 use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\RecordService;
+use Sopheak\Core\Http\Controllers\CoreRecordController;
+use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 use Sopheak\Core\Utilities\QueryBuilderFiltersUtils;
 use Sopheak\Core\Utilities\PermissionUtils;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
@@ -22,6 +27,8 @@ use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Utilities\RecordUtils;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordBelongsToType;
+use Sopheak\Core\Types\RecordTableTriggerType;
+use Sopheak\Core\Types\RecordValidationType;
 
 
 class BasicTest extends TestCase
@@ -107,6 +114,132 @@ class BasicTest extends TestCase
 
         $this->assertInstanceOf(Request::class, $params[0]);
         $this->assertSame('bar', $params[0]->get('foo'));
+    }
+
+    /** @test */
+    public function it_executes_table_trigger_when_wrapped_in_array_of_objects(): void
+    {
+        $service = new RecordService();
+        $request = Request::create('/test', 'GET');
+
+        $params = $service->executeTableTrigger(
+            [
+                [
+                    new RecordTableTriggerType(
+                        class: TestTriggerHandler::class,
+                        functionName: 'handle'
+                    ),
+                ],
+            ],
+            [$request, 'users', []]
+        );
+
+        $this->assertInstanceOf(Request::class, $params[0]);
+        $this->assertSame('bar', $params[0]->get('foo'));
+    }
+
+    /** @test */
+    public function it_throws_http_response_exception_when_trigger_returns_json_response(): void
+    {
+        $service = new RecordService();
+        $request = Request::create('/test', 'GET');
+
+        try {
+            $service->executeTableTrigger(
+                [
+                    [
+                        'class' => TestTriggerResponseHandler::class,
+                        'functionName' => 'handle',
+                    ],
+                ],
+                [$request, 'users', []]
+            );
+            $this->fail('Expected HttpResponseException to be thrown.');
+        } catch (HttpResponseException $exception) {
+            $response = $exception->getResponse();
+            $data = json_decode((string) $response->getContent(), true);
+
+            $this->assertSame((int) RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $response->getStatusCode());
+            $this->assertSame(false, $data['success']);
+            $this->assertSame('Not allowed', $data['message']);
+            $this->assertSame(['message' => 'Not allowed'], $data['errors']);
+        }
+    }
+
+    /** @test */
+    public function it_runs_table_validators_when_wrapped_in_array_of_objects(): void
+    {
+        $controller = new CoreRecordController(new RecordService());
+        $request = Request::create('/test', 'POST', ['name' => 'Example']);
+
+        $method = new ReflectionMethod(CoreRecordController::class, 'runTableValidators');
+        $method->setAccessible(true);
+
+        $result = $method->invoke(
+            $controller,
+            [
+                [
+                    new RecordValidationType(
+                        class: TestValidationHandler::class,
+                        functionName: 'handle'
+                    ),
+                ],
+            ],
+            $request,
+            null
+        );
+
+        $this->assertNull($result);
+    }
+
+    /** @test */
+    public function it_runs_table_validators_with_callable_array_config(): void
+    {
+        $controller = new CoreRecordController(new RecordService());
+        $request = Request::create('/test', 'POST', ['name' => 'Example']);
+
+        $method = new ReflectionMethod(CoreRecordController::class, 'runTableValidators');
+        $method->setAccessible(true);
+
+        $result = $method->invoke(
+            $controller,
+            [TestValidationHandler::class, 'handle'],
+            $request,
+            null
+        );
+
+        $this->assertNull($result);
+    }
+
+    /** @test */
+    public function it_returns_error_when_any_validator_in_nested_array_fails(): void
+    {
+        $controller = new CoreRecordController(new RecordService());
+        $request = Request::create('/test', 'POST', ['name' => 'Example']);
+
+        $method = new ReflectionMethod(CoreRecordController::class, 'runTableValidators');
+        $method->setAccessible(true);
+
+        $result = $method->invoke(
+            $controller,
+            [
+                [
+                    new RecordValidationType(
+                        class: TestValidationHandler::class,
+                        functionName: 'handle'
+                    ),
+                    new RecordValidationType(
+                        class: TestFailValidationHandler::class,
+                        functionName: 'handle'
+                    ),
+                ],
+            ],
+            $request,
+            null
+        );
+
+        $this->assertInstanceOf(JsonResponse::class, $result);
+        $this->assertSame((int) RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $result->status());
     }
 
     /** @test */
@@ -426,5 +559,33 @@ class TestTriggerHandler
     public static function handle(Request $request, string $table, array $context): array
     {
         return ['foo' => 'bar'];
+    }
+}
+
+class TestValidationHandler
+{
+    public static function handle(Request $request, ?string $id = null): \Illuminate\Contracts\Validation\Validator
+    {
+        return Validator::make($request->all(), [
+            'name' => 'required',
+        ]);
+    }
+}
+
+class TestFailValidationHandler
+{
+    public static function handle(Request $request, ?string $id = null): \Illuminate\Contracts\Validation\Validator
+    {
+        return Validator::make($request->all(), [
+            'blocked' => 'required',
+        ]);
+    }
+}
+
+class TestTriggerResponseHandler
+{
+    public static function handle(Request $request, string $table, array $context): \Illuminate\Http\JsonResponse
+    {
+        return RecordApiResponseService::validationError(['message' => 'Not allowed']);
     }
 }

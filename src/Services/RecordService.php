@@ -8,6 +8,7 @@ use Throwable;
 use BackedEnum;
 use UnitEnum;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -678,16 +679,27 @@ class RecordService
 
     public function executeTableTrigger(mixed $trigger, array $params): array
     {
+        $triggers = $this->resolveTableTriggers($trigger);
+
+        foreach ($triggers as $index => $item) {
+            $triggerItem = $this->resolveTriggerItem($item, $index);
+            $this->executeSingleTrigger($triggerItem, $params);
+        }
+
+        return $params;
+    }
+
+    private function resolveTableTriggers(mixed $trigger): array
+    {
         if (null === $trigger) {
-            return $params;
+            return [];
         }
 
         if ($trigger instanceof RecordTableTriggerType) {
-            $triggers = [$trigger];
-        } elseif (is_array($trigger)) {
-            $isSingleTriggerConfig = isset($trigger['class']) || isset($trigger['functionName']);
-            $triggers = $isSingleTriggerConfig ? [$trigger] : $trigger;
-        } else {
+            return [$trigger];
+        }
+
+        if (!is_array($trigger)) {
             throw new Exception(sprintf(
                 'Invalid table trigger configuration. Expected %s or array, got %s',
                 RecordTableTriggerType::class,
@@ -695,63 +707,125 @@ class RecordService
             ));
         }
 
-        if (!is_array($triggers)) {
-            throw new Exception(sprintf(
-                'Invalid table trigger configuration. Expected %s or array, got %s',
-                RecordTableTriggerType::class,
-                get_debug_type($triggers)
-            ));
+        if (isset($trigger['class']) || isset($trigger['functionName'])) {
+            return [$trigger];
         }
 
-        foreach ($triggers as $index => $item) {
-            if ($item instanceof RecordTableTriggerType) {
-            } elseif (is_array($item)) {
-                try {
-                    $item = RecordTableTriggerType::fromArray($item);
-                } catch (Throwable $exception) {
-                    throw new Exception(sprintf(
-                        'Invalid table trigger config at index %s: %s',
-                        (string) $index,
-                        $exception->getMessage()
-                    ), 0, $exception);
-                }
-            } else {
-                throw new Exception(sprintf(
-                    'Invalid table trigger item at index %s. Expected %s or array, got %s',
-                    (string) $index,
-                    RecordTableTriggerType::class,
-                    get_debug_type($item)
-                ));
-            }
+        return $trigger;
+    }
 
-            $className = $item->class;
-            $method = $item->functionName;
-            if (!class_exists($className)) {
-                throw new Exception(sprintf("Table trigger class '%s' does not exist", $className));
-            }
+    private function resolveTriggerItem(mixed $item, int|string $index): RecordTableTriggerType
+    {
+        if ($item instanceof RecordTableTriggerType) {
+            return $item;
+        }
 
-            if (!method_exists($className, $method)) {
-                throw new Exception(sprintf("Table trigger method '%s::%s' does not exist", $className, $method));
-            }
-
+        if (is_array($item)) {
             try {
-                $result = call_user_func_array([$className, $method], $params);
-                if ($result instanceof Request && isset($params[0]) && $params[0] instanceof Request) {
-                    $params[0] = $result;
-                } elseif (is_array($result) && isset($params[0]) && $params[0] instanceof Request) {
-                    $params[0]->merge($result);
-                }
+                return RecordTableTriggerType::fromArray($item);
             } catch (Throwable $exception) {
                 throw new Exception(sprintf(
-                    "Table trigger execution failed for '%s::%s': %s",
-                    $className,
-                    $method,
+                    'Invalid table trigger config at index %s: %s',
+                    (string) $index,
                     $exception->getMessage()
                 ), 0, $exception);
             }
         }
 
-        return $params;
+        throw new Exception(sprintf(
+            'Invalid table trigger item at index %s. Expected %s or array, got %s',
+            (string) $index,
+            RecordTableTriggerType::class,
+            get_debug_type($item)
+        ));
+    }
+
+    private function executeSingleTrigger(RecordTableTriggerType $trigger, array &$params): void
+    {
+        $className = $trigger->class;
+        $method = $trigger->functionName;
+
+        if (!class_exists($className)) {
+            throw new Exception(sprintf("Table trigger class '%s' does not exist", $className));
+        }
+
+        if (!method_exists($className, $method)) {
+            throw new Exception(sprintf("Table trigger method '%s::%s' does not exist", $className, $method));
+        }
+
+        try {
+            $result = call_user_func_array([$className, $method], $params);
+            if ($result instanceof JsonResponse) {
+                throw new HttpResponseException($this->normalizeTriggerResponse($result));
+            }
+            if ($result instanceof Request && isset($params[0]) && $params[0] instanceof Request) {
+                $params[0] = $result;
+            } elseif (is_array($result) && isset($params[0]) && $params[0] instanceof Request) {
+                $params[0]->merge($result);
+            }
+        } catch (Throwable $exception) {
+            if ($exception instanceof HttpResponseException) {
+                throw $exception;
+            }
+            throw new Exception(sprintf(
+                "Table trigger execution failed for '%s::%s': %s",
+                $className,
+                $method,
+                $exception->getMessage()
+            ), 0, $exception);
+        }
+    }
+
+    private function normalizeTriggerResponse(JsonResponse $response): JsonResponse
+    {
+        $data = $response->getData(true);
+
+        if (is_array($data) && array_key_exists('success', $data)) {
+            return $response;
+        }
+
+        $status = $response->getStatusCode();
+
+        if (is_array($data) && array_key_exists('validation_errors', $data)) {
+            $validationErrors = $this->resolveValidationErrors($data['validation_errors']);
+            $message = $this->resolveValidationErrorMessage($validationErrors);
+            return RecordApiResponseService::errorWrapped(
+                $message,
+                RecordApiJsonResponseEnum::VALIDATION_ERROR->value,
+                $validationErrors
+            );
+        }
+
+        $message = 'Request failed';
+        $errors = [];
+
+        if (is_array($data)) {
+            if (array_key_exists('message', $data)) {
+                $message = (string) $data['message'];
+            } elseif (array_key_exists('errors', $data) && is_string($data['errors'])) {
+                $message = $data['errors'];
+            }
+
+            if (array_key_exists('errors', $data) && is_array($data['errors'])) {
+                $errors = $data['errors'];
+            }
+        }
+
+        return RecordApiResponseService::errorWrapped($message, $status, $errors);
+    }
+
+    private function resolveValidationErrors(mixed $errors): array
+    {
+        return is_array($errors) ? $errors : [];
+    }
+
+    private function resolveValidationErrorMessage(array $errors): string
+    {
+        if (array_key_exists('message', $errors) && is_string($errors['message'])) {
+            return $errors['message'];
+        }
+
+        return 'Validation failed';
     }
 
     // --- Helper Methods ---

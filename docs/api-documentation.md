@@ -441,18 +441,36 @@ Record endpoints use table-level access rules from `config/record.php`:
 
 ### Table-Level Validation
 
-Each table configured in `config/record.php` (or in per-table files under `config/record/tables`) can define event-specific validators using the `RecordTableType` configuration:
+Each table configured in `config/record.php` (or in per-table files under `config/record/tables`) can define event-specific validators using the `RecordTableType` configuration. Validators support:
+
+- Callable arrays (e.g. `[ClassName::class, 'method']`)
+- `RecordValidationType` objects
+- Arrays of validator configs (multiple validators per event)
 
 ```php
 use App\Record\Validators\RecordValidator;
 use Sopheak\Core\Types\RecordTableType;
+use Sopheak\Core\Types\RecordValidationType;
 
 return [
     'invoices' => new RecordTableType(
         pmsName: 'invoice',
-        createValidator: [RecordValidator::class, 'createInvoice'],
-        updateValidator: [RecordValidator::class, 'updateInvoice'],
-        deleteValidator: [RecordValidator::class, 'deleteInvoice'],
+        createValidator: [
+            [RecordValidator::class, 'createInvoice'],
+            new RecordValidationType(
+                class: RecordValidator::class,
+                functionName: 'createInvoice',
+            ),
+        ],
+        updateValidator: [
+            new RecordValidationType(
+                class: RecordValidator::class,
+                functionName: 'updateInvoice',
+            ),
+        ],
+        deleteValidator: [
+            [RecordValidator::class, 'deleteInvoice'],
+        ],
     ),
 ];
 ```

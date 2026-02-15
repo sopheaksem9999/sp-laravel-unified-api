@@ -2,6 +2,8 @@
 
 namespace Sopheak\Core\Types;
 
+use Closure;
+
 /**
  * Class RecordTableType.
  *
@@ -106,9 +108,9 @@ class RecordTableType
         public ?array $relationships = [],
         public ?array $functions = [],
         public string|array|null $customAuditLog = null,
-        public $createValidator = null,
-        public $updateValidator = null,
-        public $deleteValidator = null,
+        public Closure|RecordValidationType|array|null $createValidator = null,
+        public Closure|RecordValidationType|array|null $updateValidator = null,
+        public Closure|RecordValidationType|array|null $deleteValidator = null,
         public RecordTableTriggerType|array|null $beforeRead = null,
         public RecordTableTriggerType|array|null $afterRead = null,
         public RecordTableTriggerType|array|null $beforeCreate = null,
