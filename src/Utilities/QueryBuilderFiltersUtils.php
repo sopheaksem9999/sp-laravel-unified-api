@@ -1471,10 +1471,25 @@ class QueryBuilderFiltersUtils
      */
     private static function executeOperatorsOptimized(Builder $builder, string $table, array $allowedCols, array $params): void
     {
-        // Check if tenant_id functionality is enabled
         $enableTenantId = RecordConfigService::enableTenantId();
         $tenantCol = RecordConfigService::tenantColumn();
-        $tenantId = $enableTenantId && isset($params[$tenantCol]) ? $params[$tenantCol] : null;
+        $tenantFilterValue = null;
+        $tenantHasOperator = false;
+        $tenantId = null;
+        if ($enableTenantId && isset($params[$tenantCol])) {
+            $tenantValues = is_array($params[$tenantCol]) ? $params[$tenantCol] : [$params[$tenantCol]];
+            foreach ($tenantValues as $value) {
+                if (self::isOperatorExpression((string) $value)) {
+                    $tenantHasOperator = true;
+                    break;
+                }
+            }
+
+            $tenantFilterValue = is_array($params[$tenantCol]) ? ($params[$tenantCol][0] ?? null) : $params[$tenantCol];
+            if (!$tenantHasOperator) {
+                $tenantId = $tenantFilterValue;
+            }
+        }
 
         // Separate relationship filters from regular column filters
         $relationshipFilters = [];
@@ -1491,7 +1506,7 @@ class QueryBuilderFiltersUtils
                 continue;
             }
 
-            if ($enableTenantId && $tenantCol === $key) {
+            if ($enableTenantId && $tenantCol === $key && !$tenantHasOperator) {
                 continue;
             }
 
@@ -1556,12 +1571,21 @@ class QueryBuilderFiltersUtils
         }
 
         // Apply tenant_id filtering if enabled and available
-        if ($enableTenantId && isset($params[$tenantCol])) {
+        if ($enableTenantId && null !== $tenantFilterValue && '' !== $tenantFilterValue && !$tenantHasOperator) {
             $schema = SchemaRegistryUtils::get();
             if (isset($schema[$table]->columns[$tenantCol])) {
-                $builder->where($table . '.' . $tenantCol, $params[$tenantCol]);
+                $builder->where($table . '.' . $tenantCol, $tenantFilterValue);
             }
         }
+    }
+
+    private static function isOperatorExpression(string $value): bool
+    {
+        if (in_array($value, ['is', 'is_not', 'empty', 'not_empty'], true)) {
+            return true;
+        }
+
+        return 1 === preg_match('/^(is|eq|neq|like|gt|lt|gte|lte|in|contains|between|not_between|starts_with|ends_with|not_like|not_in|is_not|regex|date_eq|date_gt|date_lt|date_gte|date_lte|empty|not_empty)\.(.+)$/', $value);
     }
 
     /**

@@ -8,6 +8,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Tests\TestCase;
@@ -55,6 +56,17 @@ class ApplyRequestFiltersConfigTest extends TestCase
             ['name' => 'Item A1', 'category_id' => $categoryA],
             ['name' => 'Item A2', 'category_id' => $categoryA],
             ['name' => 'Item B1', 'category_id' => $categoryB],
+        ]);
+
+        Schema::create('qht_subscriptions', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('company_id');
+            $table->string('status');
+        });
+
+        DB::table('qht_subscriptions')->insert([
+            ['company_id' => 3, 'status' => 'paid'],
+            ['company_id' => 4, 'status' => 'pending'],
         ]);
     }
 
@@ -153,6 +165,39 @@ class ApplyRequestFiltersConfigTest extends TestCase
         $this->assertCount(2, $categories);
         $this->assertTrue($categories->first()->relationLoaded('items'));
         $this->assertCount(2, $categories->first()->items);
+    }
+
+    public function test_tenant_column_operator_value_is_parsed_as_filter(): void
+    {
+        Config::set('record.enable_tenant_id', true);
+        Config::set('record.tenant_column', 'company_id');
+
+        $config = new RecordTableType(
+            table: 'qht_subscriptions',
+            hasTenantId: true,
+            public: new RecordTablePublic(true, true),
+        );
+
+        $config->columns = [
+            'id' => ['type' => 'bigint'],
+            'company_id' => ['type' => 'bigint'],
+            'status' => ['type' => 'string'],
+        ];
+
+        SchemaRegistryUtils::refresh();
+        SchemaRegistryUtils::register('qht_subscriptions', $config);
+        QueryBuilderFiltersUtils::clearColumnCache();
+
+        $request = Request::create('/api/qht_subscriptions', 'GET', [
+            'company_id' => 'eq.3',
+            'sortby' => 'id',
+            'order' => 'asc',
+        ]);
+
+        $result = RecordService::applyRequestFilters($request, $config);
+
+        $this->assertCount(1, $result['data']);
+        $this->assertEquals(3, $result['data'][0]->company_id);
     }
 }
 
