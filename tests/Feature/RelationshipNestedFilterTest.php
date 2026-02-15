@@ -9,8 +9,11 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Services\RecordService;
+use Sopheak\Core\Utilities\RelationshipResolverUtils;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Tests\TestCase;
+use Sopheak\Core\Enums\RecordRelationshipsEnum;
+use Sopheak\Core\Types\RecordAassociationType;
 use Sopheak\Core\Types\RecordHasManyThroughType;
 use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordTableType;
@@ -42,6 +45,14 @@ class RelationshipNestedFilterTest extends TestCase
             $table->foreignId('user_id');
             $table->timestamps();
         });
+        Schema::create('meta', function (Blueprint $table): void {
+            $table->id();
+            $table->string('owner');
+            $table->unsignedBigInteger('owner_id');
+            $table->string('target');
+            $table->unsignedBigInteger('target_id');
+            $table->timestamps();
+        });
 
         // Insert data
         $taskId1 = DB::table('tasks')->insertGetId(['title' => 'Task 1']);
@@ -56,6 +67,10 @@ class RelationshipNestedFilterTest extends TestCase
 
         // Task 2 has User 2 only
         DB::table('task_assignees')->insert(['task_id' => $taskId2, 'user_id' => $userId2]);
+
+        DB::table('meta')->insert(['owner' => 'tasks', 'owner_id' => $taskId1, 'target' => 'users', 'target_id' => $userId1]);
+        DB::table('meta')->insert(['owner' => 'tasks', 'owner_id' => $taskId1, 'target' => 'users', 'target_id' => $userId2]);
+        DB::table('meta')->insert(['owner' => 'tasks', 'owner_id' => $taskId2, 'target' => 'users', 'target_id' => $userId2]);
 
         Config::set('record.tables', [
             'tasks' => new RecordTableType(
@@ -158,5 +173,93 @@ class RelationshipNestedFilterTest extends TestCase
         $data = $result['data'];
 
         $this->assertCount(0, $data);
+    }
+
+    public function test_association_type_supports_has_many_through_params(): void
+    {
+        Config::set('record.tables', [
+            'tasks' => new RecordTableType(
+                table: 'tasks',
+                pmsName: 'tasks',
+                hasTenantId: false,
+                softDeletes: false,
+                public: new RecordTablePublic(read: true, write: true),
+                relationships: [
+                    'assignees' => new RecordAassociationType(
+                        related: 'meta',
+                        type: RecordRelationshipsEnum::HAS_MANY_THROUGH,
+                        fromObjectType: 'tasks',
+                        fromObjectId: 'owner_id',
+                        toObjectType: 'users',
+                        toObjectId: 'target_id',
+                    )
+                ],
+            ),
+            'users' => new RecordTableType(
+                table: 'users',
+                pmsName: 'users',
+                hasTenantId: false,
+                softDeletes: false,
+                public: new RecordTablePublic(read: true, write: true),
+                relationships: [],
+            ),
+        ]);
+
+        SchemaRegistryUtils::refresh();
+
+        $request = Request::create('/api/v1/tasks', 'GET', [
+            'select' => '*,assignees(*)'
+        ]);
+
+        $schema = SchemaRegistryUtils::get();
+        $config = $schema['tasks'];
+
+        $result = RecordService::applyRequestFilters($request, $config);
+        $data = $result['data'];
+
+        $this->assertCount(2, $data);
+        $this->assertCount(2, $data[0]->assignees);
+    }
+
+    public function test_association_type_resolves_allow_flags(): void
+    {
+        Config::set('record.tables', [
+            'tasks' => new RecordTableType(
+                table: 'tasks',
+                pmsName: 'tasks',
+                hasTenantId: false,
+                softDeletes: false,
+                public: new RecordTablePublic(read: true, write: true),
+                relationships: [
+                    'assignees' => new RecordAassociationType(
+                        related: 'meta',
+                        type: RecordRelationshipsEnum::HAS_MANY_THROUGH,
+                        fromObjectType: 'tasks',
+                        fromObjectId: 'owner_id',
+                        toObjectType: 'users',
+                        toObjectId: 'target_id',
+                        allowCreate: false,
+                        allowUpdate: false,
+                        allowDelete: true,
+                    )
+                ],
+            ),
+            'users' => new RecordTableType(
+                table: 'users',
+                pmsName: 'users',
+                hasTenantId: false,
+                softDeletes: false,
+                public: new RecordTablePublic(read: true, write: true),
+                relationships: [],
+            ),
+        ]);
+
+        SchemaRegistryUtils::refresh();
+
+        $config = RelationshipResolverUtils::resolveRelationship('tasks', 'assignees');
+
+        $this->assertFalse($config['allow_create']);
+        $this->assertFalse($config['allow_update']);
+        $this->assertTrue($config['allow_delete']);
     }
 }

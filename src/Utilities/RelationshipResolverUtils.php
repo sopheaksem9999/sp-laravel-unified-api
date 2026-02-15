@@ -3,8 +3,10 @@
 namespace Sopheak\Core\Utilities;
 
 use Illuminate\Foundation\Auth\User;
+use Sopheak\Core\Enums\RecordRelationshipsEnum;
 use Spatie\Permission\PermissionServiceProvider;
 use RuntimeException;
+use Sopheak\Core\Types\RecordAassociationType;
 use Sopheak\Core\Types\RecordBelongsToType;
 use Sopheak\Core\Types\RecordHasManyThroughType;
 use Sopheak\Core\Types\RecordHasManyType;
@@ -36,6 +38,7 @@ class RelationshipResolverUtils
     public static function clearSchemaCache(): void
     {
         self::$schemaCache = null;
+        self::$resolveCache = [];
         self::$subqueryCache = [];
     }
 
@@ -298,6 +301,36 @@ class RelationshipResolverUtils
                         'table' => $rel->table,
                         'foreign_key' => $rel->foreignKey ?? (Str::singular($mainTable) . '_id'),
                         'local_key' => $rel->localKey ?? $localPk,
+                        'selectable' => ['*'],
+                        'allow_create' => $rel->allowCreate,
+                        'allow_update' => $rel->allowUpdate,
+                        'allow_delete' => $rel->allowDelete,
+                    ];
+                    self::$resolveCache[$cacheKey] = $result;
+
+                    return $result;
+                }
+
+                if ($rel instanceof RecordAassociationType) {
+                    if ($rel->type !== RecordRelationshipsEnum::HAS_MANY_THROUGH) {
+                        self::$resolveCache[$cacheKey] = false;
+
+                        return null;
+                    }
+
+                    $result = [
+                        'type' => 'hasManyThrough',
+                        'table' => $rel->toObjectType,
+                        'through_table' => $rel->related,
+                        'first_key' => $rel->fromObjectId ?? 'owner_id',
+                        'second_key' => 'id',
+                        'second_local_key' => $rel->toObjectId ?? 'target_id',
+                        'local_key' => $localPk,
+                        'order_by' => null,
+                        'owner_column' => 'owner',
+                        'owner_value' => $rel->fromObjectType,
+                        'target_column' => 'target',
+                        'target_value' => $rel->toObjectType,
                         'selectable' => ['*'],
                         'allow_create' => $rel->allowCreate,
                         'allow_update' => $rel->allowUpdate,
@@ -1558,6 +1591,13 @@ class RelationshipResolverUtils
 
         if (isset($config['owner_column'], $config['owner_value'])) {
             $builder->where($config['owner_column'], $config['owner_value']);
+        }
+
+        if (isset($config['target_column'], $config['target_value'])) {
+            $targetColumn = $config['target_column'];
+            if (is_string($targetColumn) && isset($schema[$throughTable]->columns[$targetColumn])) {
+                $builder->where($targetColumn, $config['target_value']);
+            }
         }
 
         $tenantCol = RecordConfigService::tenantColumn();

@@ -204,7 +204,7 @@ Example usage:
 
 #### Belongs To Many (`belongsToMany`)
 
-Use `RecordMetaBelongsToManyType` for many-to-many relationships backed by a pivot table.
+Use `RecordMetaBelongsToManyType` for many-to-many relationships backed by a pivot table. This cannot be replaced by `RecordAassociationType` because `RecordAassociationType` only supports has-many-through over a meta table with owner/target columns and does not support pivot semantics (extra pivot columns, timestamps, morph pivots, or arbitrary pivot keys).
 
 Example configuration:
 
@@ -232,10 +232,13 @@ Example usage:
 
 #### Has Many Through (`hasManyThrough`)
 
-Two variants are supported:
+Three variants are supported:
 
 1. **Standard has-many-through** using `RecordHasManyThroughType`.
 2. **Global meta-table has-many-through** using `RecordMetaHasManyThroughType`.
+3. **Association has-many-through** using `RecordAassociationType` with simplified parameters.
+
+`RecordAassociationType` can replace `RecordMetaHasManyThroughType` only when your meta table uses the standard columns (`owner`, `owner_id`, `target`, `target_id`) and `owner` stores the source table name while `target` stores the related table name. If your meta table uses different column names or needs ownerColumn customization, keep `RecordMetaHasManyThroughType`.
 
 Standard example:
 
@@ -282,6 +285,30 @@ use Sopheak\Core\Types\RecordMetaHasManyThroughType;
 Example usage:
 
 - `GET /api/v1/projects?select=*,tasks(*)`
+- `GET /api/v1/packages?select=*,modules(*)`
+
+Association example (simplified parameters with meta table):
+
+```php
+use Sopheak\Core\Types\RecordAassociationType;
+
+'packages' => new RecordTableType(
+    table: 'packages',
+    relationships: [
+        'modules' => new RecordAassociationType(
+            related: 'meta',
+            type: RecordRelationshipsEnum::HAS_MANY_THROUGH,
+            fromObjectType: 'packages',
+            fromObjectId: 'owner_id',
+            toObjectType: 'modules',
+            toObjectId: 'target_id',
+        ),
+    ],
+),
+```
+
+Example usage:
+
 - `GET /api/v1/packages?select=*,modules(*)`
 
 #### Has One Through (`hasOneThrough`)
