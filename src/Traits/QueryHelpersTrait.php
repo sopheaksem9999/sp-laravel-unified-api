@@ -3,6 +3,7 @@
 namespace Sopheak\Core\Traits;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -473,7 +474,9 @@ trait QueryHelpersTrait
                     if (['*'] === $columnArray) {
                         $withRelations[$relationName] = null;
                     } else {
-                        $withRelations[$relationName] = (fn($query) => $query->select($columnArray));
+                        $withRelations[$relationName] = function ($query) use ($columnArray): void {
+                            $query->select($this->qualifyRelationColumns($query, $columnArray));
+                        };
                     }
                 }
             } else {
@@ -494,7 +497,9 @@ trait QueryHelpersTrait
             if (['*'] === $columns) {
                 $map[$relationKey] = null;
             } else {
-                $map[$relationKey] = (fn($query) => $query->select($columns));
+                $map[$relationKey] = function ($query) use ($columns): void {
+                    $query->select($this->qualifyRelationColumns($query, $columns));
+                };
             }
 
             if (!empty($config['children'])) {
@@ -562,6 +567,21 @@ trait QueryHelpersTrait
         array_unshift($columns, $qualifiedKey);
 
         return $columns;
+    }
+
+    private function qualifyRelationColumns(Builder|Relation $query, array $columns): array
+    {
+        if (['*'] === $columns) {
+            return $columns;
+        }
+
+        $model = $query instanceof Relation ? $query->getRelated() : $query->getModel();
+        $tableName = $model->getTable();
+
+        return array_map(
+            static fn(string $column): string => str_contains($column, '.') ? $column : $tableName . '.' . $column,
+            $columns
+        );
     }
 
     /**
