@@ -10,6 +10,7 @@ use Sopheak\Core\Enums\AuditLogEventEnum;
 use Illuminate\Http\JsonResponse;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 use Sopheak\Core\Constants\HttpErrorCodeConstant;
+use Sopheak\Core\Services\RecordConfigService;
 
 /**
  * Trait for controllers that implement audit query functionality.
@@ -55,6 +56,21 @@ trait HasAuditQueryTrait
         }
     }
 
+    protected function resolveTenantIdFromRequest(): ?string
+    {
+        if (!RecordConfigService::enableTenantId()) {
+            return null;
+        }
+
+        $tenantHeader = RecordConfigService::tenantHeader();
+        $tenantColumn = RecordConfigService::tenantColumn();
+        $request = request();
+
+        return $request->header($tenantHeader)
+            ?? $request->input($tenantColumn)
+            ?? $request->input('tenant_id');
+    }
+
     /**
      * Log an audit event using the custom audit query.
      *
@@ -77,6 +93,9 @@ trait HasAuditQueryTrait
         $entityName = $this->resolveAuditEntityName();
         $entityClass = $this->resolveAuditEntityClass();
         $entityType = AuditLogService::getTableNameFromEntityType($entityClass);
+        $tenantColumn = RecordConfigService::tenantColumn();
+        $tenantId = is_array($queryData) ? ($queryData[$tenantColumn] ?? null) : null;
+        $tenantId ??= $this->resolveTenantIdFromRequest();
 
         AuditLogService::handleAuditDataEntry(
             event: $auditLogEventEnum,
@@ -84,7 +103,8 @@ trait HasAuditQueryTrait
             entityType: $entityType,
             queryData: $queryData,
             subject: $subject,
-            recap: $recap
+            recap: $recap,
+            tenantId: $tenantId
         );
     }
 
@@ -98,8 +118,9 @@ trait HasAuditQueryTrait
     {
         $entityClass = $this->resolveAuditEntityClass();
         $entityType = AuditLogService::getTableNameFromEntityType($entityClass);
+        $tenantId = $this->resolveTenantIdFromRequest();
 
-        return AuditLogService::getEntityAuditLogs($entityType, $id, $limit);
+        return AuditLogService::getEntityAuditLogs(entityType: $entityType, entityId: $id, tenantId: $tenantId, limit: $limit);
     }
 
     /**

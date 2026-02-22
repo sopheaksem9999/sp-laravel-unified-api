@@ -208,6 +208,7 @@ class CoreRecordController extends Controller
             $recordResponse = RecordApiResponseService::successWrapped($recordData);
 
             // Execute Post-Write Logic (Triggers and Audit Logs)
+            $tenantColumn = RecordConfigService::tenantColumn();
             $this->recordService->processPostWriteLogic(
                 request: $request,
                 table: $table,
@@ -215,7 +216,7 @@ class CoreRecordController extends Controller
                 recordContext: [
                     'id' => $insertedId,
                     'payload' => $result['payload'],
-                    RecordConfigService::tenantColumn() => $result['tenant_id'],
+                    $tenantColumn => $result[$tenantColumn] ?? $tenantId,
                     'response' => $recordResponse,
                 ]
             );
@@ -305,6 +306,7 @@ class CoreRecordController extends Controller
             $recordResponse = RecordApiResponseService::successWrapped($recordData);
 
             // Execute Post-Write Logic (Triggers and Audit Logs)
+            $tenantColumn = RecordConfigService::tenantColumn();
             $this->recordService->processPostWriteLogic(
                 request: $request,
                 table: $table,
@@ -312,7 +314,7 @@ class CoreRecordController extends Controller
                 recordContext: [
                     'id' => $id,
                     'payload' => $result['payload'],
-                    RecordConfigService::tenantColumn() => $result['tenant_id'],
+                    $tenantColumn => $result[$tenantColumn] ?? $tenantId,
                     'updated' => $updated,
                     'response' => $recordResponse,
                 ]
@@ -695,6 +697,7 @@ class CoreRecordController extends Controller
                 ++$affected;
 
                 // Post-write logic
+                $tenantColumn = RecordConfigService::tenantColumn();
                 $this->recordService->processPostWriteLogic(
                     request: $request,
                     table: $table,
@@ -702,7 +705,7 @@ class CoreRecordController extends Controller
                     recordContext: [
                         'id' => $insertId,
                         'payload' => $result['payload'],
-                        RecordConfigService::tenantColumn() => $result['tenant_id'],
+                        $tenantColumn => $result[$tenantColumn] ?? $tenantId,
                         'response' => $createdRecordResponse,
                     ]
                 );
@@ -829,6 +832,7 @@ class CoreRecordController extends Controller
                     $affected += $updateCount;
 
                     // Post-write logic
+                    $tenantColumn = RecordConfigService::tenantColumn();
                     $this->recordService->processPostWriteLogic(
                         request: $request,
                         table: $table,
@@ -836,7 +840,7 @@ class CoreRecordController extends Controller
                         recordContext: [
                             'id' => $id,
                             'payload' => $result['payload'],
-                            RecordConfigService::tenantColumn() => $result['tenant_id'],
+                            $tenantColumn => $result[$tenantColumn] ?? $tenantId,
                             'updated' => $updateCount,
                             'response' => $updatedRecordResponse,
                         ]

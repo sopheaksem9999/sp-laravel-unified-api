@@ -63,10 +63,12 @@ class RecordService
         // Process nested relationships
         RelationshipResolverUtils::processRelatedData($table, $payload, $insertedId, $tenantId, 'create');
 
+        $tenantColumn = RecordConfigService::tenantColumn();
+
         return [
             'id' => $insertedId,
             'payload' => $payloadMain,
-            'tenant_id' => $tenantId,
+            $tenantColumn => $tenantId,
         ];
     }
 
@@ -110,10 +112,12 @@ class RecordService
             RelationshipResolverUtils::processRelatedData($table, $payload, $id, $tenantId, 'update');
         }
 
+        $tenantColumn = RecordConfigService::tenantColumn();
+
         return [
             'id' => $id,
             'payload' => $payloadMain,
-            'tenant_id' => $tenantId,
+            $tenantColumn => $tenantId,
             'updated' => $updated,
             'exists' => $exists,
         ];
@@ -505,10 +509,11 @@ class RecordService
                     $createdData[] = $recordResult['data'];
                     ++$affected;
 
+                    $tenantColumn = RecordConfigService::tenantColumn();
                     $this->processPostWriteLogic($request, $table, 'create', [
                         'id' => $insertId,
                         'payload' => $result['payload'],
-                        RecordConfigService::tenantColumn() => $result['tenant_id'],
+                        $tenantColumn => $result[$tenantColumn] ?? $tenantId,
                         'response' => $recordResult['data'],
                     ]);
                 } elseif ('update' === $operation) {
@@ -527,10 +532,11 @@ class RecordService
                         $updatedData[] = $recordResult['data'];
                         $affected += $result['updated'];
 
+                        $tenantColumn = RecordConfigService::tenantColumn();
                         $this->processPostWriteLogic($request, $table, 'update', [
                             'id' => $id,
                             'payload' => $result['payload'],
-                            RecordConfigService::tenantColumn() => $result['tenant_id'],
+                            $tenantColumn => $result[$tenantColumn] ?? $tenantId,
                             'updated' => $result['updated'],
                             'response' => $recordResult['data'],
                         ]);
@@ -885,10 +891,11 @@ class RecordService
 
     public function generateRecordCacheKey(string $table, mixed $id, mixed $tenantId, mixed $select): string
     {
+        $tenantColumn = RecordConfigService::tenantColumn();
         $keyData = [
             'table' => $table,
             'id' => $id,
-            'tenant_id' => $this->isTenantIdEnabled() ? $tenantId : null,
+            $tenantColumn => $this->isTenantIdEnabled() ? $tenantId : null,
             'select' => $select,
             'tenant_enabled' => $this->isTenantIdEnabled(),
         ];

@@ -9,7 +9,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Schema\Blueprint;
 use Sopheak\Core\Services\AuditLogService;
+use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Services\RecordService;
+use Sopheak\Core\Traits\HasAuditQueryTrait;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
@@ -81,10 +83,11 @@ class AuditLogTenantTest extends TestCase
 
         $result = $service->createRecord(table: 'test_products', payload: $payload, tenantId: $tenantId);
 
+        $tenantColumn = RecordConfigService::tenantColumn();
         $service->processPostWriteLogic($request, 'test_products', 'create', [
             'id' => $result['id'],
             'payload' => $result['payload'],
-            'tenant_id' => $tenantId, // Passed by controller usually
+            $tenantColumn => $tenantId, // Passed by controller usually
             'response' => $result['payload']
         ]);
 
@@ -117,10 +120,11 @@ class AuditLogTenantTest extends TestCase
 
         $result = $service->updateRecord(table: 'test_products', id: $id, payload: $payload, tenantId: $tenantId);
 
+        $tenantColumn = RecordConfigService::tenantColumn();
         $service->processPostWriteLogic($request, 'test_products', 'update', [
             'id' => $id,
             'payload' => $result['payload'],
-            'tenant_id' => $tenantId,
+            $tenantColumn => $tenantId,
             'updated' => 1,
             'response' => $result['payload']
         ]);
@@ -132,6 +136,73 @@ class AuditLogTenantTest extends TestCase
 
         $this->assertNotNull($log);
         $this->assertEquals($tenantId, $log->tenant_id);
+    }
+
+    public function test_entity_audit_logs_ignore_tenant_filter_when_disabled(): void
+    {
+        Config::set('record.enable_tenant_id', false);
+
+        DB::table('audit_logs')->insert([
+            'entity_type' => 'test_products',
+            'entity_id' => 100,
+            'event' => 'created',
+            'tenant_id' => 'tenant-x',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $logs = AuditLogService::getEntityAuditLogs(
+            entityType: 'test_products',
+            entityId: 100,
+            tenantId: 'tenant-y',
+            limit: 50
+        );
+
+        $this->assertCount(1, $logs);
+    }
+
+    public function test_custom_audit_query_uses_tenant_header_when_missing_in_payload(): void
+    {
+        $tenantId = 'tenant-trait-123';
+        $request = Request::create('/audit', 'POST');
+        $request->headers->set(RecordConfigService::tenantHeader(), $tenantId);
+        $this->app->instance('request', $request);
+
+        $controller = new class {
+            use HasAuditQueryTrait;
+
+            public function getAuditQuery(int $id): array
+            {
+                return [
+                    'id' => $id,
+                    'new_data' => ['name' => 'Test'],
+                ];
+            }
+
+            public function getAuditEntityClass(): string
+            {
+                return 'test_products';
+            }
+
+            public function getAuditEntityName(): string
+            {
+                return 'test_products';
+            }
+
+            public function logForTest(int $id): void
+            {
+                $this->logAuditWithCustomQuery($id, AuditLogEventEnum::CREATED);
+            }
+        };
+
+        $controller->logForTest(321);
+
+        $log = DB::table('audit_logs')
+            ->where('entity_id', 321)
+            ->where('tenant_id', $tenantId)
+            ->first();
+
+        $this->assertNotNull($log);
     }
 
     public function test_auth_event_stores_tenant_id(): void

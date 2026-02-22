@@ -77,6 +77,7 @@ class AuditLogService
         }
 
         // Create audit log entry only when there are changes or for CREATE/DELETE events
+        $tenantColumn = RecordConfigService::tenantColumn();
         static::createAuditLogEntry([
             'title' => static::getAuditTitle($event, $entityName),
             'old_data' => $oldData,
@@ -86,7 +87,7 @@ class AuditLogService
             'entity_type' => $entityType ?? null,
             'entity_id' => $entityId,
             'event' => $event->value,
-            'tenant_id' => $tenantId,
+            $tenantColumn => $tenantId,
             'metadata' => $queryData,
         ]);
     }
@@ -135,7 +136,7 @@ class AuditLogService
 
         if (RecordConfigService::enableTenantId()) {
             $tenantColumn = RecordConfigService::tenantColumn();
-            $auditData[$tenantColumn] = $data['tenant_id'] ?? null;
+            $auditData[$tenantColumn] = $data[$tenantColumn] ?? null;
         }
 
         if (!in_array($data['event'], [AuditLogEventEnum::LOGIN->value, AuditLogEventEnum::LOGOUT->value, AuditLogEventEnum::FAILED_LOGIN->value])) {
@@ -294,9 +295,13 @@ class AuditLogService
     {
         $query = DB::table('audit_logs')
             ->where('entity_id', $entityId)
-            ->where('entity_name', $entityName)
-            ->where('tenant_id', $tenantId)
-            ->orderByDesc('created_at');
+            ->where('entity_name', $entityName);
+
+        if (RecordConfigService::enableTenantId()) {
+            $query->where(RecordConfigService::tenantColumn(), $tenantId);
+        }
+
+        $query->orderByDesc('created_at');
 
         $data = $query->first();
 
@@ -401,9 +406,13 @@ class AuditLogService
     {
         $query = DB::table('audit_logs')
             ->where('entity_type', $entityType)
-            ->where('entity_id', $entityId)
-            ->where('tenant_id', $tenantId)
-            ->orderBy('created_at', 'desc')
+            ->where('entity_id', $entityId);
+
+        if (RecordConfigService::enableTenantId()) {
+            $query->where(RecordConfigService::tenantColumn(), $tenantId);
+        }
+
+        $query->orderBy('created_at', 'desc')
             ->limit($limit);
 
         return $query->get();
@@ -418,10 +427,14 @@ class AuditLogService
     {
         $cutoffDate = Carbon::now()->subDays($daysToKeep);
 
-        return DB::table('audit_logs')
-            ->where('created_at', '<', $cutoffDate)
-            ->where('tenant_id', $tenantId)
-            ->delete();
+        $query = DB::table('audit_logs')
+            ->where('created_at', '<', $cutoffDate);
+
+        if (RecordConfigService::enableTenantId()) {
+            $query->where(RecordConfigService::tenantColumn(), $tenantId);
+        }
+
+        return $query->delete();
     }
 
     /**

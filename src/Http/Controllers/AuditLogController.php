@@ -42,8 +42,20 @@ class AuditLogController extends Controller
             $entityType = $request->input('entity_type');
             $entityId = $request->input('entity_id');
             $limit = $request->input('limit', 50);
+            $tenantId = null;
 
-            $logs = AuditLogService::getEntityAuditLogs($entityType, $entityId, $limit);
+            if (RecordConfigService::enableTenantId()) {
+                $tenantHeader = RecordConfigService::tenantHeader();
+                $tenantColumn = RecordConfigService::tenantColumn();
+                $tenantId = $request->header($tenantHeader) ?? $request->input($tenantColumn) ?? $request->input('tenant_id');
+            }
+
+            $logs = AuditLogService::getEntityAuditLogs(
+                entityType: $entityType,
+                entityId: $entityId,
+                tenantId: $tenantId,
+                limit: $limit
+            );
 
             return $this->apiResponseService->successWrapped($logs->toArray());
         } catch (Exception $exception) {
@@ -208,7 +220,10 @@ class AuditLogController extends Controller
 
         try {
             $daysToKeep = $request->input('days_to_keep', 365);
-            $deletedCount = AuditLogService::cleanupOldLogs($daysToKeep);
+            $tenantHeader = RecordConfigService::tenantHeader();
+            $tenantColumn = RecordConfigService::tenantColumn();
+            $tenantId = $request->header($tenantHeader) ?? $request->input($tenantColumn) ?? $request->input('tenant_id');
+            $deletedCount = AuditLogService::cleanupOldLogs(daysToKeep: $daysToKeep, tenantId: $tenantId);
 
             return $this->apiResponseService->successWrapped([
                 'deleted_count' => $deletedCount,
