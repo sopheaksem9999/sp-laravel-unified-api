@@ -180,36 +180,6 @@ trait HasAuditQueryTrait
     }
 
     /**
-     * API endpoint to get field timeline for a specific field.
-     *
-     * @param int $id The ID of the record
-     * @param string $field The field name to get timeline for
-     * @param int $limit Maximum number of timeline entries
-     */
-    public function fieldTimeline(int $id, string $field, int $limit = 10): JsonResponse
-    {
-        try {
-            $entityClass = $this->resolveAuditEntityClass();
-            $entityType = AuditLogService::getTableNameFromEntityType($entityClass);
-
-            $timeline = AuditLogService::getFieldTimeline($entityType, $id, $field, $limit);
-
-            return response()->json([
-                'success' => true,
-                'error_code' => HttpErrorCodeConstant::SUCCESS,
-                'data' => $timeline,
-                'message' => 'Field timeline retrieved successfully'
-            ]);
-        } catch (Exception $exception) {
-            return response()->json([
-                'success' => false,
-                'error_code' => HttpErrorCodeConstant::INTERNAL_SERVER_ERROR,
-                'message' => 'Failed to retrieve field timeline: ' . $exception->getMessage()
-            ], RecordApiJsonResponseEnum::SERVER_ERROR->value);
-        }
-    }
-
-    /**
      * API endpoint to get field statistics for a specific field.
      *
      * @param int $id The ID of the record

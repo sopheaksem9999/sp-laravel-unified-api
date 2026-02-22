@@ -1391,7 +1391,6 @@ php artisan sp-laravel-api:clean-audit-logs --dry-run --days=90
 - **Audit Log Service**: `Sopheak\Core\Services\AuditLogService`
 - **Query Cache Service**: `Sopheak\Core\Services\QueryCacheService`
 - **Record API Controller**: `Sopheak\Core\Http\Controllers\CoreRecordController`
-- **Audit Log Controller**: `Sopheak\Core\Http\Controllers\AuditLogController`
 - **Query Helpers Trait**: `Sopheak\Core\Traits\QueryHelpers`
 - **Audit Query Interface**: `Sopheak\Core\Interfaces\AuditQueryInterface`
 

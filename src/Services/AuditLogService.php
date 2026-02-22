@@ -51,7 +51,7 @@ class AuditLogService
                 if (is_array($providedOldData)) {
                     $oldData = $providedOldData;
                 } else {
-                    $getOldAuditLogDate = static::getOldAuditLogDate($entityId, $entityName);
+                    $getOldAuditLogDate = static::getOldAuditLogDate(entityId: $entityId, entityName: $entityName, tenantId: $tenantId);
                     $oldData = null === $getOldAuditLogDate || [] === $getOldAuditLogDate ? [] : $getOldAuditLogDate;
                 }
 
@@ -69,7 +69,7 @@ class AuditLogService
                 if (is_array($providedOldData)) {
                     $oldData = $providedOldData;
                 } else {
-                    $getOldAuditLogDate = static::getOldAuditLogDate($entityId, $entityName, $tenantId);
+                    $getOldAuditLogDate = static::getOldAuditLogDate(entityId: $entityId, entityName: $entityName, tenantId: $tenantId);
                     $oldData = null === $getOldAuditLogDate || [] === $getOldAuditLogDate ? [] : $getOldAuditLogDate;
                 }
 
@@ -82,8 +82,8 @@ class AuditLogService
             'title' => static::getAuditTitle($event, $entityName),
             'old_data' => $oldData,
             'new_data' => $newData,
-            'recap' => null != $recap ? $recap : static::generateRecap($event, $entityName, $oldData, $newData),
-            'subject' => null != $subject ? $subject : static::getAuditSubject([] === $newData ? ([] !== $oldData ? $oldData : $queryData) : ($newData)),
+            'recap' => null != $recap ? $recap : static::generateRecap(event: $event, entityName: $entityName, oldData: $oldData, newData: $newData),
+            'subject' => null != $subject ? $subject : static::getAuditSubject(data: [] === $newData ? ([] !== $oldData ? $oldData : $queryData) : ($newData)),
             'entity_type' => $entityType ?? null,
             'entity_id' => $entityId,
             'event' => $event->value,
@@ -115,7 +115,7 @@ class AuditLogService
         $tableName = static::getTableNameFromEntityType($data['entity_type']);
 
         // Determine changed fields for enhanced metadata
-        $changedFields = self::getChangedFields($data['old_data'] ?? [], $data['new_data'] ?? []);
+        $changedFields = self::getChangedFields(oldData: $data['old_data'] ?? [], newData: $data['new_data'] ?? []);
 
         // Prepare the audit log data
         $auditData = [
@@ -140,7 +140,13 @@ class AuditLogService
         }
 
         if (!in_array($data['event'], [AuditLogEventEnum::LOGIN->value, AuditLogEventEnum::LOGOUT->value, AuditLogEventEnum::FAILED_LOGIN->value])) {
-            $auditData['metadata'] = json_encode(static::getAuditMetadata($changedFields, $data['old_data'] ?? [], $data['new_data'] ?? [], $data['entity_type'] ?? null, $data['entity_id'] ?? null));
+            $auditData['metadata'] = json_encode(static::getAuditMetadata(
+                changedFields: $changedFields,
+                oldData: $data['old_data'] ?? [],
+                newData: $data['new_data'] ?? [],
+                entityType: $data['entity_type'] ?? null,
+                entityId: $data['entity_id'] ?? null
+            ));
         }
 
         DB::table('audit_logs')->insert($auditData);
@@ -175,17 +181,26 @@ class AuditLogService
 
             // Special handling for items array
             if ('items' === $changedField && is_array($oldValue) && is_array($newValue)) {
-                $itemChanges = self::getItemChanges($oldValue, $newValue, $entityType, $entityId);
+                $itemChanges = self::getItemChanges(
+                    oldItems: $oldValue,
+                    newItems: $newValue,
+                    entityType: $entityType,
+                    entityId: $entityId
+                );
                 $metadata['field_changes'] = array_merge($metadata['field_changes'], $itemChanges);
             } else {
                 // Get previous change timestamp and count for this field
-                $previousChangeData = self::getFieldPreviousChange($entityType, $entityId, $changedField);
+                $previousChangeData = self::getFieldPreviousChange(
+                    entityType: $entityType,
+                    entityId: $entityId,
+                    field: $changedField
+                );
 
                 $metadata['field_changes'][$changedField] = [
                     'old_value' => $oldValue,
                     'new_value' => $newValue,
-                    'data_type' => self::getFieldDataType($oldValue, $newValue),
-                    'change_type' => self::getChangeType($oldValue, $newValue),
+                    'data_type' => self::getFieldDataType(oldValue: $oldValue, newValue: $newValue),
+                    'change_type' => self::getChangeType(oldValue: $oldValue, newValue: $newValue),
                     'changed_at' => $currentTime,
                     'previous_change' => $previousChangeData['previous_change'],
                     'change_count' => $previousChangeData['change_count'] + 1,
@@ -209,7 +224,7 @@ class AuditLogService
         $userModel = config('auth.providers.users.model', 'App\\Models\\User');
         $auditLogJobClass = RecordConfigService::auditLogJobClass(default: AuditLogJob::class);
 
-        $entityName = static::getTableNameFromEntityType($userModel);
+        $entityName = static::getTableNameFromEntityType(entityType: $userModel);
 
         if (static::isAuditQueueEnabled() && class_exists($auditLogJobClass) && method_exists($auditLogJobClass, 'dispatch')) {
             $auditLogJobClass::dispatch(
@@ -339,7 +354,6 @@ class AuditLogService
         }
 
         $baseQuery = clone $query;
-
         $totalLogs = (clone $baseQuery)->count();
 
         $actionsBreakdown = (clone $baseQuery)
@@ -667,47 +681,6 @@ class AuditLogService
     }
 
     /**
-     * Get field timeline for a specific entity and field.
-     */
-    public static function getFieldTimeline(string $entityType, mixed $entityId, string $field, int $limit = 10): array
-    {
-        $driver = DB::getDriverName();
-        $query = DB::table('audit_logs')
-            ->where('entity_type', $entityType)
-            ->where('entity_id', $entityId);
-
-        if ('sqlite' === $driver) {
-            $safeField = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $field);
-            $query->where('metadata', 'LIKE', '%"field_changes"%')
-                ->where('metadata', 'LIKE', '%"' . $safeField . '":%');
-        } else {
-            $jsonQuery = self::getJsonExtractQuery('metadata', 'field_changes.' . $field);
-            $query->whereRaw($jsonQuery . ' IS NOT NULL');
-        }
-
-        $logs = $query->orderBy('created_at', 'desc')
-            ->orderBy('id', 'desc')
-            ->limit($limit)
-            ->get();
-
-        return $logs->map(function ($log) use ($field): array {
-            $metadata = json_decode((string) $log->metadata, true);
-            $fieldChange = $metadata['field_changes'][$field] ?? null;
-
-            return [
-                'id' => $log->id,
-                'changed_at' => $fieldChange['changed_at'] ?? $log->created_at,
-                'old_value' => $fieldChange['old_value'] ?? null,
-                'new_value' => $fieldChange['new_value'] ?? null,
-                'change_type' => $fieldChange['change_type'] ?? 'unknown',
-                'data_type' => $fieldChange['data_type'] ?? 'unknown',
-                'user_name' => $metadata['user_name'] ?? 'Unknown',
-                'event' => $log->event,
-            ];
-        })->toArray();
-    }
-
-    /**
      * Get field statistics for a specific entity and field.
      */
     public static function getFieldStats(string $entityType, mixed $entityId, string $field): array
@@ -858,7 +831,7 @@ class AuditLogService
         $baseQuery = DB::table('audit_logs')
             ->where('entity_type', $entityType)
             ->where('entity_id', $entityId);
-            
+
 
         if ('sqlite' === $driver) {
             $safeField = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $field);

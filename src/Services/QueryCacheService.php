@@ -188,48 +188,4 @@ class QueryCacheService
     {
         return self::forgetByPattern(sprintf('*table:%s*', $table));
     }
-
-    /**
-     * Get cache statistics
-     */
-    public static function getStats(): array
-    {
-        // If caching is disabled, return disabled status
-        if (!self::isCacheEnabled()) {
-            return [
-                'status' => 'disabled',
-                'cache_enabled' => false,
-                'cache_prefix' => self::getCachePrefix()
-            ];
-        }
-
-        try {
-            $store = Cache::getStore();
-            if (!$store instanceof RedisStore) {
-                return [
-                    'status' => 'enabled',
-                    'cache_enabled' => true,
-                    'driver' => config('cache.default'),
-                    'cache_prefix' => self::getCachePrefix()
-                ];
-            }
-
-            $redis = $store->connection();
-            $keys = $redis->keys(self::getCachePrefix() . '*');
-
-            return [
-                'status' => 'enabled',
-                'cache_enabled' => true,
-                'total_keys' => count($keys),
-                'memory_usage' => $redis->info('memory')['used_memory_human'] ?? 'unknown',
-                'cache_prefix' => self::getCachePrefix()
-            ];
-        } catch (Exception $exception) {
-            return [
-                'status' => 'error',
-                'cache_enabled' => true,
-                'error' => $exception->getMessage()
-            ];
-        }
-    }
 }
