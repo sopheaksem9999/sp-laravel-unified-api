@@ -69,7 +69,7 @@ class AuditLogService
                 if (is_array($providedOldData)) {
                     $oldData = $providedOldData;
                 } else {
-                    $getOldAuditLogDate = static::getOldAuditLogDate($entityId, $entityName);
+                    $getOldAuditLogDate = static::getOldAuditLogDate($entityId, $entityName, $tenantId);
                     $oldData = null === $getOldAuditLogDate || [] === $getOldAuditLogDate ? [] : $getOldAuditLogDate;
                 }
 
@@ -290,9 +290,15 @@ class AuditLogService
         );
     }
 
-    public static function getOldAuditLogDate(int|string $entityId, string $entityName): ?array
+    public static function getOldAuditLogDate(int|string $entityId, string $entityName, ?string $tenantId = null): ?array
     {
-        $data = DB::table('audit_logs')->where('entity_id', $entityId)->where('entity_name', $entityName)->orderByDesc('created_at')->first();
+        $query = DB::table('audit_logs')
+            ->where('entity_id', $entityId)
+            ->where('entity_name', $entityName)
+            ->where('tenant_id', $tenantId)
+            ->orderByDesc('created_at');
+
+        $data = $query->first();
 
         if (!empty($data->new_data)) {
             return json_decode((string) $data->new_data, true);
@@ -391,14 +397,16 @@ class AuditLogService
     /**
      * Get audit logs for a specific entity.
      */
-    public static function getEntityAuditLogs(string $entityType, mixed $entityId, int $limit = 50): Collection
+    public static function getEntityAuditLogs(string $entityType, mixed $entityId, ?string $tenantId = null, int $limit = 50): Collection
     {
-        return DB::table('audit_logs')
+        $query = DB::table('audit_logs')
             ->where('entity_type', $entityType)
             ->where('entity_id', $entityId)
+            ->where('tenant_id', $tenantId)
             ->orderBy('created_at', 'desc')
-            ->limit($limit)
-            ->get();
+            ->limit($limit);
+
+        return $query->get();
     }
 
     /**
@@ -406,12 +414,13 @@ class AuditLogService
      *
      * @return int Number of deleted records
      */
-    public static function cleanupOldLogs(int $daysToKeep = 365): int
+    public static function cleanupOldLogs(?string $tenantId = null, int $daysToKeep = 365): int
     {
         $cutoffDate = Carbon::now()->subDays($daysToKeep);
 
         return DB::table('audit_logs')
             ->where('created_at', '<', $cutoffDate)
+            ->where('tenant_id', $tenantId)
             ->delete();
     }
 
@@ -836,6 +845,7 @@ class AuditLogService
         $baseQuery = DB::table('audit_logs')
             ->where('entity_type', $entityType)
             ->where('entity_id', $entityId);
+            
 
         if ('sqlite' === $driver) {
             $safeField = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $field);
