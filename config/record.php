@@ -84,10 +84,10 @@ return [
     // Cache configuration
     'cache' => [
         // Enable/disable caching globally for the Records API
-        'enabled' => env('CACHE_API', false),
+        'enabled' => env('SP_LARAVEL_API_CACHE_API', false),
 
         // Cache TTL for query results (seconds)
-        'ttl' => 3600,
+        'ttl' => env('SP_LARAVEL_API_CACHE_API_TTL', 3600),
 
         // Cache key prefix for Records API
         'prefix' => 'sp_laravel_api',
@@ -106,7 +106,7 @@ return [
     ],
 
     // Legacy cache_ttl for backward compatibility (deprecated, use cache.ttl instead)
-    'cache_ttl' => 3600,
+    'cache_ttl' => env('SP_LARAVEL_API_CACHE_API_TTL', 3600),
 
     // Maximum nesting depth to prevent performance issues (default: 2)
     'max_depth' => 10,

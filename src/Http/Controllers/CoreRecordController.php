@@ -52,7 +52,7 @@ class CoreRecordController extends Controller
         }
 
         try {
-            $result = $this->recordService->listRecords($request, $table, $tenantId);
+            $result = $this->recordService->listRecords(request: $request, table: $table, tenantId: $tenantId);
 
             $data = $result['data'];
             $meta = $result['meta'];
@@ -109,7 +109,7 @@ class CoreRecordController extends Controller
         }
 
         try {
-            $result = $this->recordService->getRecord($request, $table, $id, $tenantId);
+            $result = $this->recordService->getRecord(request: $request, table: $table, id: $id, tenantId: $tenantId);
             $record = $result['data'];
             $request = $result['request'];
 
@@ -202,7 +202,7 @@ class CoreRecordController extends Controller
 
             // Commit transaction
             DB::commit();
-            QueryCacheService::invalidateTable($table);
+            $this->recordService->invalidateTableCache($table, $tenantId, $this->recordService->shouldApplyTenantId($tableSchema));
 
             $recordData = $this->fetchRecordData(request: $request, table: $table, id: $insertedId, tenantId: $tenantId);
             $recordResponse = RecordApiResponseService::successWrapped($recordData);
@@ -300,7 +300,7 @@ class CoreRecordController extends Controller
 
             // Commit transaction
             DB::commit();
-            QueryCacheService::invalidateTable($table);
+            $this->recordService->invalidateTableCache($table, $tenantId, $this->recordService->shouldApplyTenantId($tableSchema));
 
             $recordData = $this->fetchRecordData(request: $request, table: $table, id: $id, tenantId: $tenantId);
             $recordResponse = RecordApiResponseService::successWrapped($recordData);
@@ -397,8 +397,7 @@ class CoreRecordController extends Controller
 
             // Commit transaction
             DB::commit();
-
-            QueryCacheService::invalidateTable($table);
+            $this->recordService->invalidateTableCache($table, $tenantId, $this->recordService->shouldApplyTenantId($tableSchema));
 
             $response = RecordApiResponseService::successWrapped(['deleted' => $affected]);
 
@@ -468,8 +467,7 @@ class CoreRecordController extends Controller
 
             // Commit transaction
             DB::commit();
-
-            QueryCacheService::invalidateTable($table);
+            $this->recordService->invalidateTableCache($table, $tenantId, $this->recordService->shouldApplyTenantId($tableSchema));
             $response = RecordApiResponseService::successWrapped(['restored' => $affected]);
 
             // Execute Post-Write Logic (Triggers and Audit Logs)
@@ -537,8 +535,7 @@ class CoreRecordController extends Controller
 
             // Commit transaction
             DB::commit();
-
-            QueryCacheService::invalidateTable($table);
+            $this->recordService->invalidateTableCache($table, $tenantId, $this->recordService->shouldApplyTenantId($schema[$table]));
 
             $response = RecordApiResponseService::successWrapped(['deleted' => $deleted]);
 
@@ -995,8 +992,7 @@ class CoreRecordController extends Controller
             }
 
             DB::commit();
-
-            QueryCacheService::invalidateTable($table);
+            $this->recordService->invalidateTableCache($table, $tenantId, $this->recordService->shouldApplyTenantId($schema[$table]));
 
             return RecordApiResponseService::successWrapped($deletedData, ['affected' => $affected]);
         } catch (Exception $exception) {

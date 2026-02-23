@@ -6,6 +6,8 @@ use Sopheak\Core\Types\RecordTablePublic;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Services\RecordService;
@@ -108,6 +110,137 @@ class LegacyConfigTest extends TestCase
         $this->assertEquals('Legacy function executed', $response->getData()->data->message);
     }
 
+    public function test_table_function_response_is_cached(): void
+    {
+        Cache::flush();
+        CachedFunctionCounter::$count = 0;
+
+        Config::set('record.cache.enabled', true);
+        Config::set('record.cache.per_table', ['legacy_items' => true]);
+        Config::set('record.tables', [
+            'legacy_items' => [
+                'pmsName' => 'legacy_items',
+                'table' => 'legacy_items',
+                'softDeletes' => false,
+                'public' => ['read' => true, 'write' => true],
+                'functions' => [
+                    'cached_func' => [
+                        'httpMethod' => ['GET'],
+                        'class' => CachedFunctionCounter::class,
+                        'functionName' => 'handle',
+                        'disableCache' => false,
+                    ],
+                ],
+            ],
+        ]);
+
+        SchemaRegistryUtils::refresh();
+
+        $service = new RecordService();
+        $request = Request::create('/api/v1/legacy_items/rpc/cached_func', 'GET', ['foo' => 'bar']);
+        $response = $service->executeTableFunction($request, 'legacy_items', 'cached_func');
+        $this->assertEquals(1, $response->getData()->data->count);
+
+        $response = $service->executeTableFunction($request, 'legacy_items', 'cached_func');
+        $this->assertEquals(1, $response->getData()->data->count);
+        $this->assertSame(1, CachedFunctionCounter::$count);
+    }
+
+    public function test_global_function_response_is_cached(): void
+    {
+        Cache::flush();
+        CachedGlobalFunctionCounter::$count = 0;
+
+        Config::set('record.cache.enabled', true);
+        Config::set('record.global_functions', [
+            'cached_global' => [
+                'httpMethod' => ['GET'],
+                'class' => CachedGlobalFunctionCounter::class,
+                'functionName' => 'handle',
+                'disableCache' => false,
+            ],
+        ]);
+
+        $service = new RecordService();
+        $request = Request::create('/api/v1/rpc/cached_global', 'GET', ['foo' => 'bar']);
+        $response = $service->executeGlobalFunction($request, 'cached_global');
+        $this->assertEquals(1, $response->getData()->data->count);
+
+        $response = $service->executeGlobalFunction($request, 'cached_global');
+        $this->assertEquals(1, $response->getData()->data->count);
+        $this->assertSame(1, CachedGlobalFunctionCounter::$count);
+    }
+
+    public function test_table_function_cache_ttl_override(): void
+    {
+        Cache::flush();
+        CachedFunctionCounter::$count = 0;
+
+        Config::set('record.cache.enabled', true);
+        Config::set('record.cache.per_table_ttl', ['legacy_items' => 1]);
+        Config::set('record.tables', [
+            'legacy_items' => [
+                'pmsName' => 'legacy_items',
+                'table' => 'legacy_items',
+                'softDeletes' => false,
+                'public' => ['read' => true, 'write' => true],
+                'functions' => [
+                    'cached_func' => [
+                        'httpMethod' => ['GET'],
+                        'class' => CachedFunctionCounter::class,
+                        'functionName' => 'handle',
+                        'disableCache' => false,
+                        'cacheTTL' => 10,
+                    ],
+                ],
+            ],
+        ]);
+
+        SchemaRegistryUtils::refresh();
+
+        $service = new RecordService();
+        Carbon::setTestNow(Carbon::now());
+        $request = Request::create('/api/v1/legacy_items/rpc/cached_func', 'GET', ['foo' => 'bar']);
+        $response = $service->executeTableFunction($request, 'legacy_items', 'cached_func');
+        $this->assertEquals(1, $response->getData()->data->count);
+
+        Carbon::setTestNow(Carbon::now()->addSeconds(2));
+        $response = $service->executeTableFunction($request, 'legacy_items', 'cached_func');
+        $this->assertEquals(1, $response->getData()->data->count);
+        $this->assertSame(1, CachedFunctionCounter::$count);
+        Carbon::setTestNow();
+    }
+
+    public function test_global_function_cache_ttl_override(): void
+    {
+        Cache::flush();
+        CachedGlobalFunctionCounter::$count = 0;
+
+        Config::set('record.cache.enabled', true);
+        Config::set('record.cache.ttl', 1);
+        Config::set('record.global_functions', [
+            'cached_global' => [
+                'httpMethod' => ['GET'],
+                'class' => CachedGlobalFunctionCounter::class,
+                'functionName' => 'handle',
+                'disableCache' => false,
+                'cacheTTL' => 10,
+            ],
+        ]);
+
+        $service = new RecordService();
+        Carbon::setTestNow(Carbon::now());
+        $request = Request::create('/api/v1/rpc/cached_global', 'GET', ['foo' => 'bar']);
+        $response = $service->executeGlobalFunction($request, 'cached_global');
+        $this->assertEquals(1, $response->getData()->data->count);
+
+        Carbon::setTestNow(Carbon::now()->addSeconds(2));
+        $response = $service->executeGlobalFunction($request, 'cached_global');
+        $this->assertEquals(1, $response->getData()->data->count);
+        $this->assertSame(1, CachedGlobalFunctionCounter::$count);
+        Carbon::setTestNow();
+    }
+
     public function test_legacy_relationship_array_config(): void
     {
         // Mock schema with legacy relationship array
@@ -142,5 +275,35 @@ class LegacyConfigTest extends TestCase
         $this->assertIsArray($rel);
         $this->assertEquals('hasMany', $rel['type']);
         $this->assertEquals('legacy_child', $rel['table']);
+    }
+}
+
+class CachedFunctionCounter
+{
+    public static int $count = 0;
+
+    public function handle(Request $request): \Illuminate\Http\JsonResponse
+    {
+        self::$count++;
+
+        return response()->json([
+            'success' => true,
+            'count' => self::$count,
+        ]);
+    }
+}
+
+class CachedGlobalFunctionCounter
+{
+    public static int $count = 0;
+
+    public function handle(Request $request): \Illuminate\Http\JsonResponse
+    {
+        self::$count++;
+
+        return response()->json([
+            'success' => true,
+            'count' => self::$count,
+        ]);
     }
 }

@@ -64,6 +64,10 @@ class RecordService
         RelationshipResolverUtils::processRelatedData($table, $payload, $insertedId, $tenantId, 'create');
 
         $tenantColumn = RecordConfigService::tenantColumn();
+        $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
+        $cacheTenantId = $tenantEnabled ? $this->normalizeTenantId($tenantId) : null;
+        $this->invalidateTableCache($table, $cacheTenantId, $tenantEnabled);
+        $this->invalidateRecordCache($table, $insertedId, $cacheTenantId, $tenantEnabled);
 
         return [
             'id' => $insertedId,
@@ -113,6 +117,12 @@ class RecordService
         }
 
         $tenantColumn = RecordConfigService::tenantColumn();
+        if ($exists) {
+            $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
+            $cacheTenantId = $tenantEnabled ? $this->normalizeTenantId($tenantId) : null;
+            $this->invalidateTableCache($table, $cacheTenantId, $tenantEnabled);
+            $this->invalidateRecordCache($table, $id, $cacheTenantId, $tenantEnabled);
+        }
 
         return [
             'id' => $id,
@@ -138,6 +148,12 @@ class RecordService
         $query = DB::table($actualTableName)->where($pk, $id);
         $this->applyTenantFilter($query, $table, $tenantId);
         $affected = $tableSchema->softDeletes ?? false ? $query->update(['deleted_at' => TimeUtils::now()]) : $query->delete();
+        if ($affected > 0) {
+            $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
+            $cacheTenantId = $tenantEnabled ? $this->normalizeTenantId($tenantId) : null;
+            $this->invalidateTableCache($table, $cacheTenantId, $tenantEnabled);
+            $this->invalidateRecordCache($table, $id, $cacheTenantId, $tenantEnabled);
+        }
 
         return [
             'id' => $id,
@@ -162,6 +178,12 @@ class RecordService
         $query->whereNotNull($actualTableName . '.deleted_at');
 
         $restored = $query->update(['deleted_at' => null]);
+        if ($restored > 0) {
+            $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
+            $cacheTenantId = $tenantEnabled ? $this->normalizeTenantId($tenantId) : null;
+            $this->invalidateTableCache($table, $cacheTenantId, $tenantEnabled);
+            $this->invalidateRecordCache($table, $id, $cacheTenantId, $tenantEnabled);
+        }
 
         return [
             'id' => $id,
@@ -185,6 +207,12 @@ class RecordService
         $this->applyTenantFilter($query, $table, $tenantId);
 
         $deleted = $query->delete();
+        if ($deleted > 0) {
+            $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
+            $cacheTenantId = $tenantEnabled ? $this->normalizeTenantId($tenantId) : null;
+            $this->invalidateTableCache($table, $cacheTenantId, $tenantEnabled);
+            $this->invalidateRecordCache($table, $id, $cacheTenantId, $tenantEnabled);
+        }
 
         return [
             'id' => $id,
@@ -217,6 +245,12 @@ class RecordService
         $updateColumns = array_values(array_diff(array_keys($item), [$pk, 'id', 'created_at', 'deleted_at']));
 
         DB::table($actualTableName)->upsert([$item], [$pk], $updateColumns);
+        $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
+        $cacheTenantId = $tenantEnabled ? $this->normalizeTenantId($tenantId) : null;
+        $this->invalidateTableCache($table, $cacheTenantId, $tenantEnabled);
+        if (array_key_exists($pk, $item) && null !== $item[$pk]) {
+            $this->invalidateRecordCache($table, $item[$pk], $cacheTenantId, $tenantEnabled);
+        }
 
         return [
             'id' => $item[$pk] ?? null,
@@ -396,8 +430,53 @@ class RecordService
             throw new Exception(sprintf("Function '%s' not found for table '%s'", $functionName, $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
-        // Execute the custom function with extracted ID parameter
-        return $this->executeCustomFunction($request, $functionConfig, $extractedId);
+        $disableCache = true;
+        $functionCacheTtl = null;
+        if ($functionConfig instanceof RecordFunctionType) {
+            $disableCache = $functionConfig->disableCache;
+            $functionCacheTtl = $functionConfig->cacheTTL;
+        } elseif (is_array($functionConfig)) {
+            $disableCache = (bool) ($functionConfig['disableCache'] ?? true);
+            $functionCacheTtl = isset($functionConfig['cacheTTL']) ? (int) $functionConfig['cacheTTL'] : null;
+        }
+
+        if (null !== $functionCacheTtl && $functionCacheTtl <= 0) {
+            $functionCacheTtl = null;
+        }
+
+        $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
+        $tenantId = $tenantEnabled ? $this->normalizeTenantId($request->header(RecordConfigService::tenantHeader())) : null;
+        $cacheKey = null;
+
+        if (!$disableCache && $this->isCacheableRequest($request, $table)) {
+            $cacheKey = $this->generateTableFunctionCacheKey(
+                table: $table,
+                functionName: $functionName,
+                queryParams: $request->query(),
+                tenantId: $tenantId,
+                tenantEnabled: $tenantEnabled
+            );
+            $cached = QueryCacheService::get($cacheKey);
+            if (is_array($cached) && isset($cached['data'], $cached['status'])) {
+                return new JsonResponse($cached['data'], $cached['status'], $cached['headers'] ?? []);
+            }
+        }
+
+        $response = $this->executeCustomFunction($request, $functionConfig, $extractedId);
+
+        if ($cacheKey) {
+            $ttl = $this->calculateOptimalCacheTTL($table, 1, false);
+            if (null !== $functionCacheTtl && $functionCacheTtl !== $ttl) {
+                $ttl = $functionCacheTtl;
+            }
+            QueryCacheService::put($cacheKey, [
+                'data' => $response->getData(true),
+                'status' => $response->getStatusCode(),
+                'headers' => $response->headers->all(),
+            ], $ttl);
+        }
+
+        return $response;
     }
 
     /**
@@ -448,8 +527,49 @@ class RecordService
             throw new Exception(sprintf("Function '%s' not found", $functionName), RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
-        // Execute the custom function with extracted ID parameter
-        return $this->executeCustomFunction($request, $functionConfig, $extractedId);
+        $disableCache = true;
+        $functionCacheTtl = null;
+        if ($functionConfig instanceof RecordFunctionType) {
+            $disableCache = $functionConfig->disableCache;
+            $functionCacheTtl = $functionConfig->cacheTTL;
+        } elseif (is_array($functionConfig)) {
+            $disableCache = (bool) ($functionConfig['disableCache'] ?? true);
+            $functionCacheTtl = isset($functionConfig['cacheTTL']) ? (int) $functionConfig['cacheTTL'] : null;
+        }
+
+        if (null !== $functionCacheTtl && $functionCacheTtl <= 0) {
+            $functionCacheTtl = null;
+        }
+
+        $tenantEnabled = RecordConfigService::enableTenantId();
+        $tenantId = $tenantEnabled ? $this->normalizeTenantId($request->header(RecordConfigService::tenantHeader())) : null;
+        $cacheKey = null;
+
+        if (!$disableCache && RecordConfigService::cacheEnabled() && 'GET' === $request->method() && !$request->has(['search', 'filter', 'where'])) {
+            $cacheKey = $this->generateGlobalFunctionCacheKey(
+                functionName: $functionName,
+                queryParams: $request->query(),
+                tenantId: $tenantId,
+                tenantEnabled: $tenantEnabled
+            );
+            $cached = QueryCacheService::get($cacheKey);
+            if (is_array($cached) && isset($cached['data'], $cached['status'])) {
+                return new JsonResponse($cached['data'], $cached['status'], $cached['headers'] ?? []);
+            }
+        }
+
+        $response = $this->executeCustomFunction($request, $functionConfig, $extractedId);
+
+        if ($cacheKey) {
+            $ttl = $functionCacheTtl ?? RecordConfigService::cacheTtl();
+            QueryCacheService::put($cacheKey, [
+                'data' => $response->getData(true),
+                'status' => $response->getStatusCode(),
+                'headers' => $response->headers->all(),
+            ], $ttl);
+        }
+
+        return $response;
     }
 
     /**
@@ -608,7 +728,7 @@ class RecordService
             }
 
             DB::commit();
-            QueryCacheService::invalidateTable($table);
+            $this->invalidateTableCache($table, $tenantId, $this->shouldApplyTenantId($tableSchema));
 
             $consolidatedData = array_merge($createdData, $updatedData, $upsertedData);
 
@@ -875,32 +995,82 @@ class RecordService
         return !$request->has(['search', 'filter', 'where']);
     }
 
-    public function generateOptimizedCacheKey(string $table, array $filters, array $includes, int $page, int $limit): string
+    private function resolveTenantCacheKey(mixed $tenantId, bool $tenantEnabled): string
     {
+        if (!$tenantEnabled) {
+            return 'disabled';
+        }
+
+        if (null === $tenantId || '' === (string) $tenantId) {
+            return 'missing';
+        }
+
+        return (string) $tenantId;
+    }
+
+    public function generateOptimizedCacheKey(string $table, array $filters, array $includes, int $page, int $limit, bool $tenantEnabled): string
+    {
+        $tenantColumn = RecordConfigService::tenantColumn();
+        $tenantKey = $this->resolveTenantCacheKey(tenantId: $filters[$tenantColumn] ?? null, tenantEnabled: $tenantEnabled);
         $keyData = [
-            'table' => $table,
             'filters' => $filters,
             'includes' => $includes,
             'page' => $page,
             'limit' => $limit,
-            'tenant_enabled' => $this->isTenantIdEnabled(),
+            'tenant_enabled' => $tenantEnabled,
         ];
 
-        return 'record_index_' . md5(serialize($keyData));
+        return sprintf('record_index:table:%s:tenant:%s:hash:%s', $table, $tenantKey, md5(serialize($keyData)));
     }
 
-    public function generateRecordCacheKey(string $table, mixed $id, mixed $tenantId, mixed $select): string
+    public function generateRecordCacheKey(string $table, mixed $id, mixed $tenantId, mixed $select, bool $tenantEnabled): string
     {
-        $tenantColumn = RecordConfigService::tenantColumn();
+        $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
         $keyData = [
-            'table' => $table,
             'id' => $id,
-            $tenantColumn => $this->isTenantIdEnabled() ? $tenantId : null,
             'select' => $select,
-            'tenant_enabled' => $this->isTenantIdEnabled(),
+            'tenant_enabled' => $tenantEnabled,
         ];
 
-        return 'record_show_' . md5(serialize($keyData));
+        return sprintf('record_show:table:%s:id:%s:tenant:%s:select:%s', $table, $id, $tenantKey, md5(serialize($keyData)));
+    }
+
+    public function generateTableFunctionCacheKey(string $table, string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled): string
+    {
+        $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
+        ksort($queryParams);
+        $keyData = [
+            'function' => $functionName,
+            'query' => $queryParams,
+            'tenant_enabled' => $tenantEnabled,
+        ];
+
+        return sprintf('record_func:table:%s:function:%s:tenant:%s:hash:%s', $table, $functionName, $tenantKey, md5(serialize($keyData)));
+    }
+
+    public function generateGlobalFunctionCacheKey(string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled): string
+    {
+        $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
+        ksort($queryParams);
+        $keyData = [
+            'function' => $functionName,
+            'query' => $queryParams,
+            'tenant_enabled' => $tenantEnabled,
+        ];
+
+        return sprintf('record_func_global:function:%s:tenant:%s:hash:%s', $functionName, $tenantKey, md5(serialize($keyData)));
+    }
+
+    public function invalidateTableCache(string $table, mixed $tenantId, bool $tenantEnabled): void
+    {
+        $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
+        QueryCacheService::invalidateTableForTenant(table: $table, tenantKey: $tenantKey);
+    }
+
+    public function invalidateRecordCache(string $table, mixed $id, mixed $tenantId, bool $tenantEnabled): void
+    {
+        $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
+        QueryCacheService::invalidateRecordForTenant(table: $table, id: $id, tenantKey: $tenantKey);
     }
 
     public function calculateOptimalCacheTTL(string $table, int $recordCount, bool $hasRelationships): int
@@ -934,7 +1104,7 @@ class RecordService
 
         unset($payload['id'], $payload['deleted_at'], $payload['created_at'], $payload['updated_at']);
 
-        return RecordUtils::applyCompositeTypes($payload, $meta->columns ?? []);
+        return RecordUtils::applyCompositeTypes(payload: $payload, columns: $meta->columns ?? []);
     }
 
     public function applyTimestampsAndAuditFields(array $payload, object $tableSchema, bool $isUpdate = false): array
@@ -1014,7 +1184,7 @@ class RecordService
                 RecordConfigService::tenantColumn() => $tenantId,
             ],
         ];
-        $triggerParams = $this->executeTableTrigger($tableSchema->beforeRead ?? null, $triggerParams);
+        $triggerParams = $this->executeTableTrigger( $tableSchema->beforeRead ?? null, $triggerParams);
         if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
             $request = $triggerParams[0];
         }
@@ -1031,19 +1201,24 @@ class RecordService
         $perPage = $request->has('per_page') ? max(1, min((int) $request->get('per_page', 25), RecordConfigService::perPageMax())) : null;
         $limit = $request->has('limit') ? max(1, min((int) $request->get('limit'), RecordConfigService::limitMax())) : RecordConfigService::limitMax();
 
-        $isCacheable = $this->isCacheableRequest($request, $table);
+        $isCacheable = $this->isCacheableRequest(request: $request, table: $table);
         $cacheKey = null;
 
         if ($isCacheable) {
+            $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
+            $cacheFilters = $filters;
+            $cacheFilters['tenant_enabled'] = $tenantEnabled;
+            if ($tenantEnabled) {
+                $cacheFilters[RecordConfigService::tenantColumn()] = $tenantId;
+            }
+
             $cacheKey = $this->generateOptimizedCacheKey(
-                $table,
-                array_merge($filters, [
-                    RecordConfigService::tenantColumn() => $this->shouldApplyTenantId($tableSchema) ? $tenantId : null,
-                    'tenant_enabled' => $this->shouldApplyTenantId($tableSchema),
-                ]),
-                $includes,
-                $page,
-                $perPage ?? $limit
+                table: $table,
+                filters: $cacheFilters,
+                includes: $includes,
+                page: $page,
+                limit: $perPage ?? $limit,
+                tenantEnabled: $tenantEnabled
             );
 
             $cached = QueryCacheService::get($cacheKey);
@@ -1348,15 +1523,20 @@ class RecordService
         $cacheKey = null;
 
         if ($isCacheable) {
+            $tenantEnabled = $tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema);
+            $cacheFilters = $filters;
+            $cacheFilters['tenant_enabled'] = $tenantEnabled;
+            if ($tenantEnabled) {
+                $cacheFilters[RecordConfigService::tenantColumn()] = $tanentColumn;
+            }
+
             $cacheKey = $service->generateOptimizedCacheKey(
-                $table,
-                array_merge($filters, [
-                    RecordConfigService::tenantColumn() => $tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema) ? $tanentColumn : null,
-                    'tenant_enabled' => $tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema),
-                ]),
-                $includes,
-                $page,
-                $perPage ?? $limit
+                table: $table,
+                filters: $cacheFilters,
+                includes: $includes,
+                page: $page,
+                limit: $perPage ?? $limit,
+                tenantEnabled: $tenantEnabled
             );
 
             $cached = QueryCacheService::get($cacheKey);
@@ -1612,8 +1792,15 @@ class RecordService
         $actualTableName = $tableSchema->table ?? $table;
         $pk = $tableSchema->primaryKey ?? 'id';
 
-        $recordCacheKey = $this->generateRecordCacheKey($table, $id, $tenantId, $request->query('select'));
-        if ($this->isCacheableRequest($request, $table)) {
+        $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
+        $recordCacheKey = $this->generateRecordCacheKey(
+            table: $table,
+            id: $id,
+            tenantId: $tenantId,
+            select: $request->query('select'),
+            tenantEnabled: $tenantEnabled
+        );
+        if ($this->isCacheableRequest(request: $request, table: $table)) {
             $cachedRecord = QueryCacheService::get($recordCacheKey);
             if ($cachedRecord) {
                 return ['data' => $cachedRecord, 'request' => $request, 'from_cache' => true];

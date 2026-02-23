@@ -756,7 +756,7 @@ new RecordTableType(
 #### Relationships & Table RPC Functions
 
 - `relationships` (?array, default: `[]`): Map of relationship name => relationship config object (e.g. `RecordHasManyType`, `RecordBelongsToType`, `RecordMetaBelongsToManyType`, etc.). Used by `select` relationship includes and nested relationship selections.
-- `functions` (?array, default: `[]`): Map of function route name => function config (`RecordFunctionType` or array config). These are exposed under the table RPC route (e.g. `/{api_prefix}/{table}/rpc/{function}`) and can enforce permissions via `pmsName`.
+- `functions` (?array, default: `[]`): Map of function route name => function config (`RecordFunctionType` or array config). These are exposed under the table RPC route (e.g. `/{api_prefix}/{table}/rpc/{function}`) and can enforce permissions via `pmsName`. Use `disableCache` and `cacheTTL` to control function caching.
 
 #### Validators
 
@@ -885,10 +885,12 @@ $beforeCreate = new RecordTableTriggerType(
 
 Defines a callable RPC endpoint config (table RPC or global RPC).
 
-- `method` (array|string|RecordFunctionMethodEnum, required): Allowed HTTP methods.
+- `httpMethod` (array|string|RecordFunctionMethodEnum, required): Allowed HTTP methods.
 - `class` (string, required): Handler class.
 - `functionName` (string, required): Method name on handler class.
 - `pmsName` (array|string|null, default: `null`): Permission(s). When `null`, the function is public (no permission check).
+- `disableCache` (bool, default: `true`): Disable caching for this function.
+- `cacheTTL` (?int, default: `null`): Custom cache TTL (seconds). When set, overrides the default cache TTL.
 - `description` (?string, default: `null`): Optional description.
 - `querySchema`, `payloadSchema`, `responseSchema` (?array, default: `null`): Optional schema metadata used by OpenAPI generation.
 
@@ -900,6 +902,7 @@ $function = new RecordFunctionType(
     class: \App\Services\ReportService::class,
     functionName: 'generate',
     pmsName: 'view_report',
+    disableCache: true,
     description: 'Generate a report',
 );
 ```
@@ -2007,6 +2010,23 @@ Content-Type: application/json
   "type": "welcome"
 }
 ```
+
+### Function Caching
+
+Caching is only applied for `GET` requests and when `record.cache.enabled` is true.
+
+**Table functions**
+
+- Caching is disabled by default via `disableCache: true`.
+- Table cache can be disabled globally for a table using `record.cache.per_table[table] = false`.
+- Default TTL uses `record.cache.per_table_ttl[table]` when set; otherwise `record.cache.ttl`.
+- Set `cacheTTL` in the function config to override the computed TTL for this function.
+
+**Global functions**
+
+- Caching is disabled by default via `disableCache: true`.
+- Default TTL uses `record.cache.ttl`.
+- Set `cacheTTL` in the function config to override the default TTL for this function.
 
 ### Error Responses
 

@@ -9,8 +9,6 @@ use Illuminate\Support\Facades\Log;
 
 class QueryCacheService
 {
-    private static int $defaultTtl = 3600;
-
     /**
      * Check if caching is enabled globally
      */
@@ -186,6 +184,24 @@ class QueryCacheService
      */
     public static function invalidateTable(string $table): int
     {
-        return self::forgetByPattern(sprintf('*table:%s*', $table));
+        $deleted = self::forgetByPattern(sprintf('*record_index:table:%s:*', $table));
+        $deleted += self::forgetByPattern(sprintf('*record_show:table:%s:*', $table));
+        $deleted += self::forgetByPattern(sprintf('*record_func:table:%s:*', $table));
+
+        return $deleted;
+    }
+
+    public static function invalidateTableForTenant(string $table, string $tenantKey): int
+    {
+        $deleted = self::forgetByPattern(sprintf('*record_index:table:%s:tenant:%s:*', $table, $tenantKey));
+        $deleted += self::forgetByPattern(sprintf('*record_show:table:%s:tenant:%s:*', $table, $tenantKey));
+        $deleted += self::forgetByPattern(sprintf('*record_func:table:%s:tenant:%s:*', $table, $tenantKey));
+
+        return $deleted;
+    }
+
+    public static function invalidateRecordForTenant(string $table, mixed $id, string $tenantKey): int
+    {
+        return self::forgetByPattern(sprintf('*record_show:table:%s:id:%s:tenant:%s:*', $table, $id, $tenantKey));
     }
 }

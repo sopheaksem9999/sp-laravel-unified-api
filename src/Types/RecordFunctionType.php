@@ -30,6 +30,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  *     httpMethod: 'POST',
  *     class: 'App\\Services\\AuthService',
  *     functionName: 'login',
+ *     disableCache: true,
  *     description: 'User login'
  * );
  *
@@ -39,6 +40,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  *     httpMethod: ['POST'],
  *     class: 'App\\Services\\CalculationService',
  *     functionName: 'calculateTotal',
+ *     disableCache: true,
  *     description: 'Calculate total for given items'
  * );
  *
@@ -48,6 +50,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  *     httpMethod: 'GET',
  *     class: 'App\\Services\\StatusService',
  *     functionName: 'getStatus',
+ *     disableCache: true,
  *     description: 'Get system status information'
  * );
  *
@@ -57,6 +60,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  *     httpMethod: ['GET', 'POST', 'PUT', 'DELETE'],
  *     class: 'App\\Services\\RecordManagementService',
  *     functionName: 'handleRequest',
+ *     disableCache: true,
  *     description: 'Full CRUD operations for records'
  * );
  *
@@ -66,6 +70,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  *     httpMethod: ['POST'],
  *     class: 'App\\Http\\Controllers\\EmployeeRosterController',
  *     functionName: 'upsertEmployeeRosters',
+ *     disableCache: true,
  *     description: 'Create or update employee rosters'
  * );
  * ```
@@ -89,6 +94,8 @@ class RecordFunctionType
         public string $functionName,
         public bool $isPublic = false,
         public array|string|null $pmsName = null,
+        public bool $disableCache = true,
+        public ?int $cacheTTL = null,
         public ?string $description = null,
         public ?array $querySchema = null,
         public ?array $payloadSchema = null,
@@ -104,6 +111,10 @@ class RecordFunctionType
 
         if (empty($functionName)) {
             throw new InvalidArgumentException('functionName cannot be empty');
+        }
+
+        if (null !== $cacheTTL && $cacheTTL <= 0) {
+            throw new InvalidArgumentException('cacheTTL must be greater than 0');
         }
     }
 
@@ -127,6 +138,8 @@ class RecordFunctionType
             functionName: $properties['functionName'] ?? throw new InvalidArgumentException('functionName is required'),
             isPublic: $properties['isPublic'] ?? false,
             pmsName: $properties['pmsName'] ?? null,
+            disableCache: $properties['disableCache'] ?? true,
+            cacheTTL: $properties['cacheTTL'] ?? null,
             description: $properties['description'] ?? null,
             querySchema: $properties['querySchema'] ?? null,
             payloadSchema: $properties['payloadSchema'] ?? null,
@@ -148,6 +161,8 @@ class RecordFunctionType
             'httpMethod' => $this->httpMethod,
             'class' => $this->class,
             'functionName' => $this->functionName,
+            'disableCache' => $this->disableCache,
+            'cacheTTL' => $this->cacheTTL,
         ];
 
         if (null !== $this->description) {
@@ -201,6 +216,8 @@ class RecordFunctionType
             functionName: $config['functionName'] ?? throw new InvalidArgumentException('functionName is required in config array'),
             isPublic: $config['isPublic'] ?? false,
             pmsName: $config['pmsName'] ?? null,
+            disableCache: $config['disableCache'] ?? true,
+            cacheTTL: $config['cacheTTL'] ?? null,
             description: $config['description'] ?? null,
             querySchema: $config['querySchema'] ?? null,
             payloadSchema: $config['payloadSchema'] ?? null,

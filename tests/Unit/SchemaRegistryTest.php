@@ -225,6 +225,44 @@ class SchemaRegistryTest extends TestCase
         $this->assertTrue($service->isCacheableRequest($request, 'users'));
     }
 
+    public function test_cache_keys_include_tenant_when_enabled(): void
+    {
+        Config::set('record.tenant_column', 'tenant_id');
+        $service = new RecordService();
+
+        $indexKey = $service->generateOptimizedCacheKey(
+            'users',
+            ['status' => 'active', 'tenant_id' => 'tenant-1', 'tenant_enabled' => true],
+            [],
+            1,
+            25,
+            true
+        );
+        $recordKey = $service->generateRecordCacheKey('users', 10, 'tenant-1', null, true);
+
+        $this->assertStringContainsString('record_index:table:users:tenant:tenant-1:', $indexKey);
+        $this->assertStringContainsString('record_show:table:users:id:10:tenant:tenant-1:', $recordKey);
+    }
+
+    public function test_cache_keys_use_disabled_tenant_marker_when_disabled(): void
+    {
+        Config::set('record.tenant_column', 'tenant_id');
+        $service = new RecordService();
+
+        $indexKey = $service->generateOptimizedCacheKey(
+            'users',
+            ['status' => 'active', 'tenant_enabled' => false],
+            [],
+            1,
+            25,
+            false
+        );
+        $recordKey = $service->generateRecordCacheKey('users', 10, null, null, false);
+
+        $this->assertStringContainsString('record_index:table:users:tenant:disabled:', $indexKey);
+        $this->assertStringContainsString('record_show:table:users:id:10:tenant:disabled:', $recordKey);
+    }
+
     public function test_get_table_columns_adds_composite_fields_for_pgsql(): void
     {
         DB::shouldReceive('getDriverName')
