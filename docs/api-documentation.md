@@ -1747,6 +1747,17 @@ Delete multiple records by ID.
 
 ### Audit Management
 
+#### Audit Formatting
+
+Audit title, subject, and recap labels are configurable via `config/audit.php`:
+
+- `audit.subject_fields`: Ordered list of fields used as the subject (empty list yields blank subject).
+- `audit.entity_labels`: Per-entity label overrides (falls back to auto-generated labels).
+- `audit.recap_entities`: Entities that use the detailed recap formatter.
+- `audit.main_field_labels`: Field label map used by recap output.
+- `audit.recap_max_fields`: Limits generic recap length and appends “and N more”.
+- `audit.log_relationships`: Includes relationship snapshots in audit data when enabled.
+
 ### Get Audit Logs
 
 ```http

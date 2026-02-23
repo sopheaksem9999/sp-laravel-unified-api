@@ -107,8 +107,45 @@ Audit logging also depends on the global audit config (`config/audit.php`):
 
 - `audit.enabled`: Must be `true` or the package will not create audit logs.
 - `audit.queue_enabled`: When `true`, audit writes are dispatched to a job (instead of being written inline).
+- `audit.log_relationships`: When `true`, audit snapshots include configured relationships (default: `false`).
 
 If you enable tenant mode (`record.enable_tenant_id = true`), audit logs also store the tenant column (default: `tenant_id`).
+
+## Audit Formatting & Labels
+
+Audit title, subject, and recap values are generated from config and normalized by `AuditLogService::generateLabel()` (camelCase, snake_case, and hyphenated values are converted into readable labels).
+
+### Subject Fields
+
+`audit.subject_fields` defines the ordered list of fields to use for the audit subject. If the list is empty, the subject is blank.
+
+Example:
+
+```php
+'subject_fields' => ['ref_number', 'name'],
+```
+
+### Entity Labels
+
+`audit.entity_labels` defines explicit labels per entity. If a label is not defined, the value is derived from `generateLabel()` instead of a hardcoded default.
+
+Example:
+
+```php
+'entity_labels' => [
+    'invoices' => 'Invoice',
+    'sale_orders' => 'Sale Receipt',
+],
+```
+
+### Recap Generation
+
+For updated records, the recap is generated from changed main fields:
+
+- `audit.recap_entities`: Entities that use the detailed recap formatter.
+- `audit.main_field_labels`: Field label map used by detailed recaps and generic recaps.
+- `audit.recap_max_fields`: Max number of fields shown in generic recaps. Additional fields are summarized as “and N more”.
+- Technical fields like `id`, `created_at`, `updated_at`, and `deleted_at` are excluded from recap changes.
 
 ## Model Auditing (Eloquent)
 

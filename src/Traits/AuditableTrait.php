@@ -208,6 +208,10 @@ trait AuditableTrait
 
     protected function resolveAuditRelations(): array
     {
+        if (!RecordConfigService::auditLogRelationships()) {
+            return [];
+        }
+
         $with = [];
 
         if (method_exists($this, 'getAuditWith')) {

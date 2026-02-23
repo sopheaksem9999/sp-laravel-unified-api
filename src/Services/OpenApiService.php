@@ -67,12 +67,6 @@ class OpenApiService
         }
 
         $paths = self::paths($tables);
-        if (RecordConfigService::auditEnabled()) {
-            // $schemas['AuditLog'] = self::auditLogSchema();
-            // $schemas['AuditStats'] = self::auditStatsSchema();
-            // $schemas['AuditTimelineEntry'] = self::auditTimelineEntrySchema();
-            // $paths += self::auditPaths();
-        }
 
         $servers = [
             [

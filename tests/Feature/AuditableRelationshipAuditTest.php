@@ -24,6 +24,7 @@ class AuditableRelationshipAuditTest extends TestCase
         parent::setUp();
 
         Config::set('audit.enabled', true);
+        Config::set('audit.log_relationships', true);
 
         
         Schema::create('parents', function (Blueprint $table): void {

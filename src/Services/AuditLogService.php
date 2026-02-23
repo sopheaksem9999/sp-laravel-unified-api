@@ -145,7 +145,9 @@ class AuditLogService
                 oldData: $data['old_data'] ?? [],
                 newData: $data['new_data'] ?? [],
                 entityType: $data['entity_type'] ?? null,
-                entityId: $data['entity_id'] ?? null
+                entityId: $data['entity_id'] ?? null,
+                event: $data['event'] ?? null,
+                tenantId: RecordConfigService::enableTenantId() ? ($data[RecordConfigService::tenantColumn()] ?? null) : null
             ));
         }
 
@@ -155,17 +157,42 @@ class AuditLogService
     /**
      * Get enhanced audit metadata with field-level changes and timestamps.
      */
-    public static function getAuditMetadata(array $changedFields = [], array $oldData = [], array $newData = [], ?string $entityType = null, mixed $entityId = null): array
+    public static function getAuditMetadata(array $changedFields = [], array $oldData = [], array $newData = [], ?string $entityType = null, mixed $entityId = null, ?string $event = null, ?string $tenantId = null): array
     {
         $currentTime = now()->toISOString();
         $userId = Auth::id();
         $userName = Auth::user()?->name ?? 'Unknown';
+        $isCreateEvent = strtolower((string) $event) === AuditLogEventEnum::CREATED->value;
+        $tableName = null !== $entityType ? static::getTableNameFromEntityType($entityType) : null;
+        $lookupEntityType = $tableName ?? $entityType;
+
+        $prevEntry = static::getPreviousAuditEntry(entityType: $lookupEntityType, entityId: $entityId, tenantId: $tenantId);
+        $prevMetadata = [];
+        $prevEntryCreatedAt = null;
+
+        if ($prevEntry && isset($prevEntry->metadata)) {
+            $prevMetadata = json_decode((string) $prevEntry->metadata, true) ?? [];
+            if (!is_array($prevMetadata)) {
+                $prevMetadata = [];
+            }
+        }
+
+        if ($prevEntry && isset($prevEntry->created_at)) {
+            try {
+                $prevEntryCreatedAt = Carbon::parse($prevEntry->created_at);
+            } catch (\Throwable) {
+                $prevEntryCreatedAt = null;
+            }
+        }
+
+        $globalPrevTs = static::resolveGlobalPrevTimestamp($prevMetadata, $prevEntryCreatedAt);
+        $globalPrevIso = $globalPrevTs ? $globalPrevTs->toISOString() : null;
 
         $metadata = [
             'field_changes' => [],
             'change_summary' => [
                 'total_fields_changed' => count($changedFields),
-                'change_type' => 'update',
+                'change_type' => strtolower((string) $event) ?: 'update',
                 'user_agent' => request()->userAgent() ?? 'unknown',
                 'ip_address' => request()->ip() ?? 'unknown',
                 'session_id' => session()->getId() ?? null,
@@ -174,7 +201,6 @@ class AuditLogService
             'user_name' => $userName,
         ];
 
-        // Add field-level change tracking with enhanced structure
         foreach ($changedFields as $changedField) {
             $oldValue = $oldData[$changedField] ?? null;
             $newValue = $newData[$changedField] ?? null;
@@ -184,17 +210,18 @@ class AuditLogService
                 $itemChanges = self::getItemChanges(
                     oldItems: $oldValue,
                     newItems: $newValue,
-                    entityType: $entityType,
-                    entityId: $entityId
+                    prevMetadata: $prevMetadata,
+                    isCreateEvent: $isCreateEvent,
+                    globalPrevIso: $globalPrevIso,
+                    prevEntryUserId: $prevEntry?->user_id
                 );
                 $metadata['field_changes'] = array_merge($metadata['field_changes'], $itemChanges);
             } else {
-                // Get previous change timestamp and count for this field
-                $previousChangeData = self::getFieldPreviousChange(
-                    entityType: $entityType,
-                    entityId: $entityId,
-                    field: $changedField
-                );
+                $prevFieldMeta = $prevMetadata['field_changes'][$changedField] ?? [];
+                $prevChangeCount = is_array($prevFieldMeta) ? (int) ($prevFieldMeta['change_count'] ?? 0) : 0;
+                $prevChangedAt = is_array($prevFieldMeta) ? ($prevFieldMeta['changed_at'] ?? null) : null;
+                $prevUser = is_array($prevFieldMeta) ? ($prevFieldMeta['previous_user'] ?? null) : null;
+                $previousChange = $isCreateEvent ? null : ($prevChangedAt ?? $globalPrevIso);
 
                 $metadata['field_changes'][$changedField] = [
                     'old_value' => $oldValue,
@@ -202,9 +229,9 @@ class AuditLogService
                     'data_type' => self::getFieldDataType(oldValue: $oldValue, newValue: $newValue),
                     'change_type' => self::getChangeType(oldValue: $oldValue, newValue: $newValue),
                     'changed_at' => $currentTime,
-                    'previous_change' => $previousChangeData['previous_change'],
-                    'change_count' => $previousChangeData['change_count'] + 1,
-                    'previous_user' => $previousChangeData['previous_user'],
+                    'previous_change' => $previousChange,
+                    'change_count' => $prevChangeCount + 1,
+                    'previous_user' => $prevUser ?? ($prevEntry && isset($prevEntry->user_id) ? 'user_' . $prevEntry->user_id : null),
                 ];
             }
         }
@@ -328,92 +355,6 @@ class AuditLogService
     }
 
     /**
-     * Get audit statistics.
-     */
-    public static function getAuditStats(array $filters = []): array
-    {
-        $query = DB::table('audit_logs');
-
-        if (!empty($filters['start_date']) && !empty($filters['end_date'])) {
-            $query->whereBetween('created_at', [
-                Carbon::parse($filters['start_date'])->startOfDay(),
-                Carbon::parse($filters['end_date'])->endOfDay(),
-            ]);
-        }
-
-        if (!empty($filters['entity_type'])) {
-            $query->where('entity_type', $filters['entity_type']);
-        }
-
-        if (!empty($filters['entity_id'])) {
-            $query->where('entity_id', $filters['entity_id']);
-        }
-
-        if (!empty($filters['event'])) {
-            $query->where('event', $filters['event']);
-        }
-
-        $baseQuery = clone $query;
-        $totalLogs = (clone $baseQuery)->count();
-
-        $actionsBreakdown = (clone $baseQuery)
-            ->select('event', DB::raw('count(*) as count'))
-            ->groupBy('event')
-            ->pluck('count', 'event')
-            ->toArray();
-
-        $topUsersQuery = (clone $baseQuery)
-            ->whereNotNull('user_id')
-            ->select('user_id', DB::raw('count(*) as count'))
-            ->groupBy('user_id')
-            ->orderByDesc('count')
-            ->limit(10)
-            ->get();
-
-        $userIds = $topUsersQuery->pluck('user_id')->filter()->unique()->values();
-        $userNames = [];
-
-        if ($userIds->isNotEmpty()) {
-            $userModelClass = config('auth.providers.users.model', 'App\Models\User');
-
-            if (class_exists($userModelClass)) {
-                $userModel = new $userModelClass();
-                if (method_exists($userModel, 'getTable')) {
-                    $userTable = $userModel->getTable();
-                    $userNames = DB::table($userTable)
-                        ->whereIn('id', $userIds)
-                        ->pluck('name', 'id')
-                        ->toArray();
-                }
-            }
-        }
-
-        $topUsers = $topUsersQuery->map(function ($item) use ($userNames): array {
-            $userId = $item->user_id;
-
-            return [
-                'user_name' => $userId && isset($userNames[$userId]) ? $userNames[$userId] : 'Unknown',
-                'count' => $item->count,
-            ];
-        })->toArray();
-
-        $entityTypes = (clone $baseQuery)
-            ->whereNotNull('entity_type')
-            ->select('entity_type', DB::raw('count(*) as count'))
-            ->groupBy('entity_type')
-            ->orderByDesc('count')
-            ->pluck('count', 'entity_type')
-            ->toArray();
-
-        return [
-            'total_logs' => $totalLogs,
-            'actions_breakdown' => $actionsBreakdown,
-            'top_users' => $topUsers,
-            'entity_types' => $entityTypes,
-        ];
-    }
-
-    /**
      * Get audit logs for a specific entity.
      */
     public static function getEntityAuditLogs(string $entityType, mixed $entityId, ?string $tenantId = null, int $limit = 50): Collection
@@ -456,20 +397,18 @@ class AuditLogService
      */
     public static function getAuditSubject(array $data): string
     {
-        // Try common identifier fields
-        $identifierFields = ['name', 'title', 'ref_number', 'account_name', 'entity'];
+        $identifierFields = config('audit.subject_fields', []);
+        if (!is_array($identifierFields) || [] === $identifierFields) {
+            return '';
+        }
 
-        $label = '';
         foreach ($identifierFields as $identifierField) {
             if (isset($data[$identifierField])) {
-                $label = (string) $data[$identifierField];
-
-                continue;
+                return static::generateLabel((string) $data[$identifierField]);
             }
         }
 
-        // Fallback to model name with ID
-        return $label;
+        return '';
     }
 
     /**
@@ -498,26 +437,19 @@ class AuditLogService
             default => $entityLabel = $entityName,
         };
 
-        return ucfirst($eventLabel) . ' ' . static::getEntityLabel($entityLabel);
+        $label = trim(static::generateLabel($eventLabel) . ' ' . static::getEntityLabel($entityLabel));
+
+        return $label;
     }
 
     public static function getEntityLabel(string $label): string
     {
-        match ($label) {
-            'estimates' => $label = 'Estimate & SO',
-            'sale_orders' => $label = 'Sale Receipt',
-            'purchase_orders' => $label = 'Purchase Request',
-            'receive_notes' => $label = 'Receive Note',
-            'inter_transfers' => $label = 'Inter Transfer Request',
-            'transfers' => $label = 'Direct Transfer',
-            'inventory_valuations' => $label = 'Inventory Movement Detail',
-            'inventory_summaries' => $label = 'Inventory Summaries',
-            default => $label,
-        };
+        $customLabels = config('audit.entity_labels', []);
+        if (is_array($customLabels) && array_key_exists($label, $customLabels)) {
+            return (string) $customLabels[$label];
+        }
 
-        $label = str_replace('_', ' ', $label);
-
-        return ucfirst($label);
+        return static::generateLabel($label);
     }
 
     /**
@@ -549,9 +481,25 @@ class AuditLogService
             default:
                 return '';
             case AuditLogEventEnum::UPDATED:
+
                 // Enhanced recap for specific entities
-                $changes = array_reduce(array_keys($newData ?? []), function (array $acc, int|string $key) use ($oldData, $newData): array {
+                $excluded = RecordConfigService::auditExcludedAttributes();
+                if (!is_array($excluded)) {
+                    $excluded = [];
+                }
+
+                $excluded = array_values(array_unique(array_merge($excluded, ['id', 'created_at', 'updated_at', 'deleted_at'])));
+
+                $changes = array_reduce(array_keys($newData ?? []), function (array $acc, int|string $key) use ($oldData, $newData, $excluded): array {
                     if (!isset($oldData[$key])) {
+                        return $acc;
+                    }
+
+                    if (is_string($key) && in_array($key, $excluded, true)) {
+                        return $acc;
+                    }
+
+                    if (is_array($oldData[$key]) || is_array($newData[$key]) || is_object($oldData[$key]) || is_object($newData[$key])) {
                         return $acc;
                     }
 
@@ -565,26 +513,43 @@ class AuditLogService
                     return $acc;
                 }, []);
 
-                // on this condition entity name is table name
-                if (null !== $entityName && '' !== $entityName && '0' !== $entityName && in_array(
-                    $entityName,
-                    [
-                        'estimates',
-                        'delivery_notes',
-                        'invoices',
-                        'sale_orders',
-                        'pos',
-                        'purchase_orders',
-                        'receive_notes',
-                        'bills',
-                        'inter_transfers',
-                        'transfers',
-                    ]
-                )) {
+                $recapEntities = RecordConfigService::auditRecapEntities();
+                if (null !== $entityName && '' !== $entityName && '0' !== $entityName && in_array($entityName, $recapEntities, true)) {
                     return self::generateDetailedUpdateRecap($entityName, $changes);
                 }
+                if ([] === $changes) {
+                    return '';
+                }
 
-                return '';
+                $labels = [];
+                $fieldMappings = RecordConfigService::auditMainFieldLabels();
+                if (!is_array($fieldMappings)) {
+                    $fieldMappings = [];
+                }
+
+                foreach (array_keys($changes) as $field) {
+                    if (!is_string($field)) {
+                        continue;
+                    }
+
+                    $label = $fieldMappings[$field] ?? static::generateLabel($field);
+                    if (!in_array($label, $labels, true)) {
+                        $labels[] = $label;
+                    }
+                }
+
+                if ([] === $labels) {
+                    return '';
+                }
+
+                $maxFields = RecordConfigService::auditRecapMaxFields();
+                if ($maxFields > 0 && count($labels) > $maxFields) {
+                    $remaining = count($labels) - $maxFields;
+                    $labels = array_slice($labels, 0, $maxFields);
+                    $labels[] = 'and ' . $remaining . ' more';
+                }
+
+                return implode(', ', $labels);
         }
     }
 
@@ -680,51 +645,12 @@ class AuditLogService
         }
     }
 
-    /**
-     * Get field statistics for a specific entity and field.
-     */
-    public static function getFieldStats(string $entityType, mixed $entityId, string $field): array
-    {
-        $driver = DB::getDriverName();
-        $query = DB::table('audit_logs')
-            ->where('entity_type', $entityType)
-            ->where('entity_id', $entityId);
 
-        if ('sqlite' === $driver) {
-            $safeField = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $field);
-            $query->where('metadata', 'LIKE', '%"field_changes"%')
-                ->where('metadata', 'LIKE', '%"' . $safeField . '":%');
-        } else {
-            $jsonQuery = self::getJsonExtractQuery('metadata', 'field_changes.' . $field);
-            $query->whereRaw($jsonQuery . ' IS NOT NULL');
-        }
-
-        $logs = $query->get();
-
-        $totalChanges = $logs->count();
-        $firstChange = $logs->sortBy('created_at')->first();
-        $lastChange = $logs->sortByDesc('created_at')->first();
-
-        $changesByUser = $logs->groupBy(function ($log) {
-            $metadata = (string) $log->metadata;
-            $metadata = json_decode($metadata, true);
-
-            return $metadata['user_name'] ?? 'Unknown';
-        })->map->count();
-
-        return [
-            'total_changes' => $totalChanges,
-            'first_changed_at' => $firstChange?->created_at,
-            'last_changed_at' => $lastChange?->created_at,
-            'changes_by_user' => $changesByUser->toArray(),
-            'field_name' => $field,
-        ];
-    }
 
     /**
      * Get item-level changes for items array.
      */
-    private static function getItemChanges(array $oldItems, array $newItems, ?string $entityType = null, mixed $entityId = null): array
+    private static function getItemChanges(array $oldItems, array $newItems, array $prevMetadata = [], bool $isCreateEvent = false, ?string $globalPrevIso = null, mixed $prevEntryUserId = null): array
     {
         $currentTime = now()->toISOString();
         $itemChanges = [];
@@ -756,7 +682,10 @@ class AuditLogService
 
                     if (self::valuesAreDifferent($oldValue, $newValue)) {
                         $fieldKey = sprintf('items.%s.%s', $itemId, $fieldName);
-                        $previousChangeData = self::getFieldPreviousChange($entityType, $entityId, $fieldKey);
+                        $prevFieldMeta = $prevMetadata['field_changes'][$fieldKey] ?? [];
+                        $prevChangeCount = is_array($prevFieldMeta) ? (int) ($prevFieldMeta['change_count'] ?? 0) : 0;
+                        $prevChangedAt = is_array($prevFieldMeta) ? ($prevFieldMeta['changed_at'] ?? null) : null;
+                        $prevUser = is_array($prevFieldMeta) ? ($prevFieldMeta['previous_user'] ?? null) : null;
 
                         $itemChanges[$fieldKey] = [
                             'old_value' => $oldValue,
@@ -764,9 +693,9 @@ class AuditLogService
                             'data_type' => self::getFieldDataType($oldValue, $newValue),
                             'change_type' => self::getChangeType($oldValue, $newValue),
                             'changed_at' => $currentTime,
-                            'previous_change' => $previousChangeData['previous_change'],
-                            'change_count' => $previousChangeData['change_count'] + 1,
-                            'previous_user' => $previousChangeData['previous_user'],
+                            'previous_change' => $isCreateEvent ? null : ($prevChangedAt ?? $globalPrevIso),
+                            'change_count' => $prevChangeCount + 1,
+                            'previous_user' => $prevUser ?? ($prevEntryUserId ? 'user_' . $prevEntryUserId : null),
                         ];
                     }
                 }
@@ -777,7 +706,10 @@ class AuditLogService
         foreach (array_keys($newItemsById) as $itemId) {
             if (!isset($oldItemsById[$itemId])) {
                 $fieldKey = sprintf('items.%s.added', $itemId);
-                $previousChangeData = self::getFieldPreviousChange($entityType, $entityId, $fieldKey);
+                $prevFieldMeta = $prevMetadata['field_changes'][$fieldKey] ?? [];
+                $prevChangeCount = is_array($prevFieldMeta) ? (int) ($prevFieldMeta['change_count'] ?? 0) : 0;
+                $prevChangedAt = is_array($prevFieldMeta) ? ($prevFieldMeta['changed_at'] ?? null) : null;
+                $prevUser = is_array($prevFieldMeta) ? ($prevFieldMeta['previous_user'] ?? null) : null;
 
                 $itemChanges[$fieldKey] = [
                     'old_value' => null,
@@ -785,9 +717,9 @@ class AuditLogService
                     'data_type' => self::getFieldDataType(null, $newItemsById[$itemId] ?? null),
                     'change_type' => self::getChangeType(null, $newItemsById[$itemId] ?? null),
                     'changed_at' => $currentTime,
-                    'previous_change' => $previousChangeData['previous_change'],
-                    'change_count' => $previousChangeData['change_count'] + 1,
-                    'previous_user' => $previousChangeData['previous_user'],
+                    'previous_change' => $isCreateEvent ? null : ($prevChangedAt ?? $globalPrevIso),
+                    'change_count' => $prevChangeCount + 1,
+                    'previous_user' => $prevUser ?? ($prevEntryUserId ? 'user_' . $prevEntryUserId : null),
                 ];
             }
         }
@@ -796,7 +728,10 @@ class AuditLogService
         foreach (array_keys($oldItemsById) as $itemId) {
             if (!isset($newItemsById[$itemId])) {
                 $fieldKey = sprintf('items.%s.deleted', $itemId);
-                $previousChangeData = self::getFieldPreviousChange($entityType, $entityId, $fieldKey);
+                $prevFieldMeta = $prevMetadata['field_changes'][$fieldKey] ?? [];
+                $prevChangeCount = is_array($prevFieldMeta) ? (int) ($prevFieldMeta['change_count'] ?? 0) : 0;
+                $prevChangedAt = is_array($prevFieldMeta) ? ($prevFieldMeta['changed_at'] ?? null) : null;
+                $prevUser = is_array($prevFieldMeta) ? ($prevFieldMeta['previous_user'] ?? null) : null;
 
                 $itemChanges[$fieldKey] = [
                     'old_value' => $oldItemsById[$itemId] ?? null,
@@ -804,9 +739,9 @@ class AuditLogService
                     'data_type' => self::getFieldDataType($oldItemsById[$itemId] ?? null, null),
                     'change_type' => self::getChangeType($oldItemsById[$itemId] ?? null, null),
                     'changed_at' => $currentTime,
-                    'previous_change' => $previousChangeData['previous_change'],
-                    'change_count' => $previousChangeData['change_count'] + 1,
-                    'previous_user' => $previousChangeData['previous_user'],
+                    'previous_change' => $isCreateEvent ? null : ($prevChangedAt ?? $globalPrevIso),
+                    'change_count' => $prevChangeCount + 1,
+                    'previous_user' => $prevUser ?? ($prevEntryUserId ? 'user_' . $prevEntryUserId : null),
                 ];
             }
         }
@@ -814,58 +749,37 @@ class AuditLogService
         return $itemChanges;
     }
 
-    /**
-     * Get previous change information for a specific field.
-     */
-    private static function getFieldPreviousChange(?string $entityType = null, mixed $entityId = null, ?string $field = null): array
+    private static function resolveGlobalPrevTimestamp(array $prevMetadata, ?Carbon $prevEntryCreatedAt = null): ?Carbon
     {
-        if (null === $entityType || '' === $entityType || '0' === $entityType || !$entityId || (null === $field || '' === $field || '0' === $field)) {
-            return [
-                'previous_change' => null,
-                'change_count' => 0,
-                'previous_user' => null,
-            ];
+        try {
+            $itemsPrev = $prevMetadata['field_changes']['items']['changed_at'] ?? null;
+            if (!empty($itemsPrev)) {
+                return Carbon::parse($itemsPrev);
+            }
+        } catch (\Throwable) {
+            return $prevEntryCreatedAt ?? null;
         }
 
-        $driver = DB::getDriverName();
-        $baseQuery = DB::table('audit_logs')
+        return $prevEntryCreatedAt ?? null;
+    }
+
+    private static function getPreviousAuditEntry(?string $entityType = null, mixed $entityId = null, ?string $tenantId = null): ?object
+    {
+        if (null === $entityType || '' === $entityType || '0' === $entityType || !$entityId) {
+            return null;
+        }
+
+        $query = DB::table('audit_logs')
             ->where('entity_type', $entityType)
-            ->where('entity_id', $entityId);
+            ->where('entity_id', $entityId)
+            ->orderBy('created_at', 'desc')
+            ->select(['id', 'metadata', 'created_at', 'user_id']);
 
-
-        if ('sqlite' === $driver) {
-            $safeField = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $field);
+        if (RecordConfigService::enableTenantId()) {
+            $query->where(RecordConfigService::tenantColumn(), $tenantId);
         }
 
-        $previousQuery = clone $baseQuery;
-        if ('sqlite' === $driver) {
-            $safeField = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $field);
-            $previousQuery->where('metadata', 'LIKE', '%"field_changes"%')
-                ->where('metadata', 'LIKE', '%"' . $safeField . '":%');
-        } else {
-            $jsonQuery = self::getJsonExtractQuery('metadata', 'field_changes.' . $field);
-            $previousQuery->whereRaw($jsonQuery . ' IS NOT NULL');
-        }
-
-        $previousLog = $previousQuery->orderBy('created_at', 'desc')->first();
-
-        $totalQuery = clone $baseQuery;
-        if ('sqlite' === $driver) {
-            $safeField = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $field);
-            $totalQuery->where('metadata', 'LIKE', '%"field_changes"%')
-                ->where('metadata', 'LIKE', '%"' . $safeField . '":%');
-        } else {
-            $jsonQuery = self::getJsonExtractQuery('metadata', 'field_changes.' . $field);
-            $totalQuery->whereRaw($jsonQuery . ' IS NOT NULL');
-        }
-
-        $totalChanges = $totalQuery->count();
-
-        return [
-            'previous_change' => $previousLog ? Carbon::parse($previousLog->created_at)->toISOString() : null,
-            'change_count' => $totalChanges,
-            'previous_user' => $previousLog ? 'user_' . $previousLog->user_id : null,
-        ];
+        return $query->first();
     }
 
     /**
@@ -894,28 +808,10 @@ class AuditLogService
      */
     private static function formatMainFieldChanges(array $changes): string
     {
-        // Relationship field mappings (cleaned up duplicates)
-        $fieldMappings = [
-            'customer_name' => 'Customer',
-            'customer_attended_name' => 'Customer Attended',
-            'bank_account_name' => 'Bank Account',
-            'bank_name' => 'Bank',
-            'class_name' => 'Class',
-            'location_name' => 'Location',
-            'term_name' => 'Term',
-            'vendor_name' => 'Vendor',
-            'warehouse_name' => 'Warehouse',
-            'warehouse' => 'Warehouse',
-            'from_warehouse' => 'From Warehouse',
-            'to_warehouse' => 'To Warehouse',
-            'ref_number' => 'Reference Number',
-            'private_note' => 'Private Note',
-            'customer_memo' => 'Customer Memo',
-            'address' => 'Address',
-            'date' => 'Date',
-            'due_date' => 'Due Date',
-            'total_amount' => 'Total Amount',
-        ];
+        $fieldMappings = RecordConfigService::auditMainFieldLabels();
+        if (!is_array($fieldMappings)) {
+            $fieldMappings = [];
+        }
 
         $formattedChanges = [];
         $uniqueLabels = [];
@@ -1213,5 +1109,26 @@ class AuditLogService
         }
 
         return $data;
+    }
+
+    public static function generateLabel(string $name): string
+    {
+        // Normalize common delimiters to spaces
+        $normalized = preg_replace('/[_\-]+/', ' ', $name);
+
+        // Split camelCase/PascalCase and keep numbers as separate tokens
+        // Matches sequences like: "Table", "Id", "Or", "Name", "API", "v2", etc.
+        preg_match_all('/[A-Z]+(?=[A-Z][a-z0-9])|[A-Z]?[a-z0-9]+|[A-Z]+|\d+/', $normalized, $matches);
+        $words = $matches[0] ?? [];
+
+        if (empty($words)) {
+            return 'CustomListener'.uniqid();
+        }
+
+        $labelWords = array_map(function ($w) {
+            return ucfirst(strtolower($w));
+        }, $words);
+
+        return ucwords(str_replace('_', ' ', ucfirst(implode(' ', $labelWords))));
     }
 }

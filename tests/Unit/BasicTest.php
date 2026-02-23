@@ -501,7 +501,7 @@ class BasicTest extends TestCase
             'profile_id' => 2,
             'relationship' => ['ref_number' => 'REF-001'],
             'relationships' => ['other'],
-        ], $schema);
+        ], $schema, true);
 
         $this->assertSame([
             'name' => 'Example',

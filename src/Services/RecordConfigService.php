@@ -186,6 +186,26 @@ class RecordConfigService
         return (bool) config('audit.log_authentication_events', true);
     }
 
+    public static function auditLogRelationships(): bool
+    {
+        return (bool) config('audit.log_relationships', false);
+    }
+
+    public static function auditRecapEntities(): array
+    {
+        return (array) config('audit.recap_entities', []);
+    }
+
+    public static function auditMainFieldLabels(): array
+    {
+        return (array) config('audit.main_field_labels', []);
+    }
+
+    public static function auditRecapMaxFields(): int
+    {
+        return (int) config('audit.recap_max_fields', 6);
+    }
+
     public static function auditPerformanceMaxRelationships(): int
     {
         return (int) config('audit.performance.max_relationships', 10);

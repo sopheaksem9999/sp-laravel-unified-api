@@ -21,7 +21,7 @@ return [
     | When set to false, no audit logs will be created.
     |
     */
-    'enabled' => env('AUDIT_LOG_ENABLED', false),
+    'enabled' => env('SP_LARAVEL_API_AUDIT_LOG_ENABLED', false),
 
     /*
     |--------------------------------------------------------------------------
@@ -43,9 +43,9 @@ return [
     | for better performance, and which queue connection and name to use.
     |
     */
-    'queue_enabled' => env('AUDIT_LOG_QUEUE', false),
-    'queue_connection' => env('AUDIT_LOG_QUEUE_CONNECTION', 'default'),
-    'queue_name' => env('AUDIT_LOG_QUEUE_NAME', 'default'),
+    'queue_enabled' => env('SP_LARAVEL_API_AUDIT_LOG_QUEUE', false),
+    'queue_connection' => env('SP_LARAVEL_API_AUDIT_LOG_QUEUE_CONNECTION', 'default'),
+    'queue_name' => env('SP_LARAVEL_API_AUDIT_LOG_QUEUE_NAME', 'default'),
 
     /*
     |--------------------------------------------------------------------------
@@ -57,7 +57,7 @@ return [
     | Set to null to keep logs indefinitely.
     |
     */
-    'retention_days' => env('AUDIT_LOG_RETENTION_DAYS', 365),
+    'retention_days' => env('SP_LARAVEL_API_AUDIT_LOG_RETENTION_DAYS', 365),
 
     /*
     |--------------------------------------------------------------------------
@@ -89,6 +89,58 @@ return [
         'updated_at',
         'deleted_at',
     ],
+    'log_relationships' => env('SP_LARAVEL_API_AUDIT_LOG_RELATIONSHIPS', false),
+    'subject_fields' => [
+        'name',
+        'title',
+        'ref_number',
+        'account_name',
+        'entity',
+    ],
+    'recap_entities' => [
+        'estimates',
+        'delivery_notes',
+        'invoices',
+        'sale_orders',
+        'pos',
+        'purchase_orders',
+        'receive_notes',
+        'bills',
+        'inter_transfers',
+        'transfers',
+    ],
+    'recap_max_fields' => 6,
+    'main_field_labels' => [
+        'customer_name' => 'Customer',
+        'customer_attended_name' => 'Customer Attended',
+        'bank_account_name' => 'Bank Account',
+        'bank_name' => 'Bank',
+        'class_name' => 'Class',
+        'location_name' => 'Location',
+        'term_name' => 'Term',
+        'vendor_name' => 'Vendor',
+        'warehouse_name' => 'Warehouse',
+        'warehouse' => 'Warehouse',
+        'from_warehouse' => 'From Warehouse',
+        'to_warehouse' => 'To Warehouse',
+        'ref_number' => 'Reference Number',
+        'private_note' => 'Private Note',
+        'customer_memo' => 'Customer Memo',
+        'address' => 'Address',
+        'date' => 'Date',
+        'due_date' => 'Due Date',
+        'total_amount' => 'Total Amount',
+    ],
+    'entity_labels' => [
+        'estimates' => 'Estimate & SO',
+        'sale_orders' => 'Sale Receipt',
+        'purchase_orders' => 'Purchase Request',
+        'receive_notes' => 'Receive Note',
+        'inter_transfers' => 'Inter Transfer Request',
+        'transfers' => 'Direct Transfer',
+        'inventory_valuations' => 'Inventory Movement Detail',
+        'inventory_summaries' => 'Inventory Summaries',
+    ],
 
     /*
     |--------------------------------------------------------------------------
@@ -99,7 +151,7 @@ return [
     | should be logged in the audit trail.
     |
     */
-    'log_authentication_events' => env('AUDIT_LOG_AUTH_EVENTS', true),
+    'log_authentication_events' => env('SP_LARAVEL_API_AUDIT_LOG_AUTH_EVENTS', true),
 
     /*
     |--------------------------------------------------------------------------
@@ -130,12 +182,12 @@ return [
     */
     'security' => [
         // Encrypt sensitive data in audit logs
-        'encrypt_sensitive_data' => env('AUDIT_LOG_ENCRYPT', false),
+        'encrypt_sensitive_data' => env('SP_LARAVEL_API_AUDIT_LOG_ENCRYPT', false),
 
         // Hash user IP addresses for privacy
-        'hash_ip_addresses' => env('AUDIT_LOG_HASH_IPS', false),
+        'hash_ip_addresses' => env('SP_LARAVEL_API_AUDIT_LOG_HASH_IPS', false),
 
         // Anonymize user data after retention period
-        'anonymize_old_logs' => env('AUDIT_LOG_ANONYMIZE', false),
+        'anonymize_old_logs' => env('SP_LARAVEL_API_AUDIT_LOG_ANONYMIZE', false),
     ],
 ];

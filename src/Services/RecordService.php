@@ -303,7 +303,11 @@ class RecordService
                 }
             }
 
-            $auditData = $this->stripRelationshipAuditData($auditData, $tableSchema);
+            $auditData = $this->stripRelationshipAuditData(
+                $auditData,
+                $tableSchema,
+                RecordConfigService::auditLogRelationships()
+            );
 
             // Ensure ID is present for delete operations if available in context
             if (!isset($auditData['id']) && isset($recordContext['id'])) {
@@ -344,9 +348,19 @@ class RecordService
         }
     }
 
-    private function stripRelationshipAuditData(array $auditData, RecordTableType $tableSchema): array
+    private function stripRelationshipAuditData(array $auditData, RecordTableType $tableSchema, bool $includeRelationships): array
     {
         $relationships = is_array($tableSchema->relationships ?? null) ? $tableSchema->relationships : [];
+        if (!$includeRelationships) {
+            foreach (array_keys($relationships) as $relationKey) {
+                unset($auditData[$relationKey]);
+            }
+
+            unset($auditData['relationship'], $auditData['relationships']);
+
+            return $auditData;
+        }
+
         $allowedRelations = [];
 
         foreach ($relationships as $relationKey => $relationConfig) {

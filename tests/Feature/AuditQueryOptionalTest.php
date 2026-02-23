@@ -17,7 +17,6 @@ class AuditQueryOptionalTest extends TestCase
         parent::setUp();
 
         // Register test route
-        Route::get('/test-audit/stats/{id}', [TestAuditController::class, 'auditStats']);
         Route::get('/test-audit/timeline/{id}', [TestAuditController::class, 'fieldTimeline']);
     }
 
