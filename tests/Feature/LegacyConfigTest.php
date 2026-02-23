@@ -146,6 +146,56 @@ class LegacyConfigTest extends TestCase
         $this->assertSame(1, CachedFunctionCounter::$count);
     }
 
+    public function test_table_function_post_clears_cache(): void
+    {
+        Cache::flush();
+        CachedFunctionCounter::$count = 0;
+
+        Config::set('record.cache.enabled', true);
+        Config::set('record.cache.per_table', ['legacy_items' => true]);
+        Config::set('record.tables', [
+            'legacy_items' => [
+                'pmsName' => 'legacy_items',
+                'table' => 'legacy_items',
+                'softDeletes' => false,
+                'public' => ['read' => true, 'write' => true],
+                'functions' => [
+                    'cached_func' => [
+                        'httpMethod' => ['GET'],
+                        'class' => CachedFunctionCounter::class,
+                        'functionName' => 'handle',
+                        'disableCache' => false,
+                    ],
+                    'clear_cache' => [
+                        'httpMethod' => ['POST'],
+                        'class' => LegacyFunction::class,
+                        'functionName' => 'handle',
+                        'disableCache' => true,
+                        'clearCacheTables' => ['legacy_items'],
+                    ],
+                ],
+            ],
+        ]);
+
+        SchemaRegistryUtils::refresh();
+
+        $service = new RecordService();
+        $getRequest = Request::create('/api/v1/legacy_items/rpc/cached_func', 'GET', ['foo' => 'bar']);
+        $response = $service->executeTableFunction($getRequest, 'legacy_items', 'cached_func');
+        $this->assertEquals(1, $response->getData()->data->count);
+
+        $response = $service->executeTableFunction($getRequest, 'legacy_items', 'cached_func');
+        $this->assertEquals(1, $response->getData()->data->count);
+        $this->assertSame(1, CachedFunctionCounter::$count);
+
+        $postRequest = Request::create('/api/v1/legacy_items/rpc/clear_cache', 'POST');
+        $service->executeTableFunction($postRequest, 'legacy_items', 'clear_cache');
+
+        $response = $service->executeTableFunction($getRequest, 'legacy_items', 'cached_func');
+        $this->assertEquals(2, $response->getData()->data->count);
+        $this->assertSame(2, CachedFunctionCounter::$count);
+    }
+
     public function test_global_function_response_is_cached(): void
     {
         Cache::flush();

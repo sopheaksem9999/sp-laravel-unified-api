@@ -891,6 +891,7 @@ Defines a callable RPC endpoint config (table RPC or global RPC).
 - `pmsName` (array|string|null, default: `null`): Permission(s). When `null`, the function is public (no permission check).
 - `disableCache` (bool, default: `true`): Disable caching for this function.
 - `cacheTTL` (?int, default: `null`): Custom cache TTL (seconds). When set, overrides the default cache TTL.
+- `clearCacheTables` (array|string|null, default: `null`): Tables to clear after successful write methods (`POST`, `PUT`, `PATCH`, `DELETE`). If omitted for table functions, the current table is cleared.
 - `description` (?string, default: `null`): Optional description.
 - `querySchema`, `payloadSchema`, `responseSchema` (?array, default: `null`): Optional schema metadata used by OpenAPI generation.
 
@@ -903,6 +904,7 @@ $function = new RecordFunctionType(
     functionName: 'generate',
     pmsName: 'view_report',
     disableCache: true,
+    clearCacheTables: ['reports'],
     description: 'Generate a report',
 );
 ```
@@ -2032,12 +2034,26 @@ Caching is only applied for `GET` requests and when `record.cache.enabled` is tr
 - Table cache can be disabled globally for a table using `record.cache.per_table[table] = false`.
 - Default TTL uses `record.cache.per_table_ttl[table]` when set; otherwise `record.cache.ttl`.
 - Set `cacheTTL` in the function config to override the computed TTL for this function.
+- For write methods (`POST`, `PUT`, `PATCH`, `DELETE`), table functions automatically clear cache for the current table after a successful response. Use `clearCacheTables` to clear additional tables.
 
 **Global functions**
 
 - Caching is disabled by default via `disableCache: true`.
 - Default TTL uses `record.cache.ttl`.
 - Set `cacheTTL` in the function config to override the default TTL for this function.
+- For write methods (`POST`, `PUT`, `PATCH`, `DELETE`), global functions can clear table caches by setting `clearCacheTables`.
+
+**Manual cache clear**
+
+You can clear a table cache manually from any controller, job, or command:
+
+```php
+use Sopheak\Core\Services\RecordCacheService;
+
+$service = app(RecordCacheService::class);
+$service->clearTableCache('settings', $tenantId);
+$service->clearCacheForTables(['settings', 'users'], $tenantId);
+```
 
 ### Error Responses
 

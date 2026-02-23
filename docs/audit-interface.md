@@ -147,6 +147,18 @@ For updated records, the recap is generated from changed main fields:
 - `audit.recap_max_fields`: Max number of fields shown in generic recaps. Additional fields are summarized as “and N more”.
 - Technical fields like `id`, `created_at`, `updated_at`, and `deleted_at` are excluded from recap changes.
 
+## Manual Cache Clear
+
+If your controller, queue, or command updates data outside the Dynamic Record API, you can clear table cache manually:
+
+```php
+use Sopheak\Core\Services\RecordCacheService;
+
+$service = app(RecordCacheService::class);
+$service->clearTableCache('settings', $tenantId);
+$service->clearCacheForTables(['settings', 'users'], $tenantId);
+```
+
 ## Model Auditing (Eloquent)
 
 Apply `AuditableTrait` to an Eloquent model to automatically log create/update/delete events.

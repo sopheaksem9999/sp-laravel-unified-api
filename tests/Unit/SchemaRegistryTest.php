@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Services\RecordService;
+use Sopheak\Core\Services\RecordCacheService;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordTablePublic;
@@ -229,6 +230,25 @@ class SchemaRegistryTest extends TestCase
     {
         Config::set('record.tenant_column', 'tenant_id');
         $service = new RecordService();
+
+        $indexKey = $service->generateOptimizedCacheKey(
+            'users',
+            ['status' => 'active', 'tenant_id' => 'tenant-1', 'tenant_enabled' => true],
+            [],
+            1,
+            25,
+            true
+        );
+        $recordKey = $service->generateRecordCacheKey('users', 10, 'tenant-1', null, true);
+
+        $this->assertStringContainsString('record_index:table:users:tenant:tenant-1:', $indexKey);
+        $this->assertStringContainsString('record_show:table:users:id:10:tenant:tenant-1:', $recordKey);
+    }
+
+    public function test_record_cache_service_generates_cache_keys(): void
+    {
+        Config::set('record.tenant_column', 'tenant_id');
+        $service = new RecordCacheService();
 
         $indexKey = $service->generateOptimizedCacheKey(
             'users',

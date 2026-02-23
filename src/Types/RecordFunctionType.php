@@ -100,6 +100,7 @@ class RecordFunctionType
         public ?array $querySchema = null,
         public ?array $payloadSchema = null,
         public ?array $responseSchema = null,
+        public array|string|null $clearCacheTables = null,
     ) {
         if (null !== $pmsName && (empty($pmsName) || (is_array($pmsName) && [] === $pmsName))) {
             throw new InvalidArgumentException('pmsName cannot be empty if provided');
@@ -144,6 +145,7 @@ class RecordFunctionType
             querySchema: $properties['querySchema'] ?? null,
             payloadSchema: $properties['payloadSchema'] ?? null,
             responseSchema: $properties['responseSchema'] ?? null,
+            clearCacheTables: $properties['clearCacheTables'] ?? null,
         );
     }
 
@@ -163,6 +165,7 @@ class RecordFunctionType
             'functionName' => $this->functionName,
             'disableCache' => $this->disableCache,
             'cacheTTL' => $this->cacheTTL,
+            'clearCacheTables' => $this->clearCacheTables,
         ];
 
         if (null !== $this->description) {
@@ -222,6 +225,7 @@ class RecordFunctionType
             querySchema: $config['querySchema'] ?? null,
             payloadSchema: $config['payloadSchema'] ?? null,
             responseSchema: $config['responseSchema'] ?? null,
+            clearCacheTables: $config['clearCacheTables'] ?? null,
         );
     }
 }

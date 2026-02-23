@@ -137,8 +137,7 @@ class QueryCacheService
         try {
             $store = Cache::getStore();
             if (!$store instanceof RedisStore) {
-                // Pattern invalidation only supported on Redis
-                return 0;
+                return Cache::flush() ? 1 : 0;
             }
 
             $redis = $store->connection();

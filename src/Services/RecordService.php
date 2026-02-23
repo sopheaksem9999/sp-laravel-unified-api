@@ -478,6 +478,22 @@ class RecordService
 
         $response = $this->executeCustomFunction($request, $functionConfig, $extractedId);
 
+        $method = strtoupper($request->method());
+        if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true) && $response->getStatusCode() < 400) {
+            $clearCacheTables = null;
+            if ($functionConfig instanceof RecordFunctionType) {
+                $clearCacheTables = $functionConfig->clearCacheTables;
+            } elseif (is_array($functionConfig)) {
+                $clearCacheTables = $functionConfig['clearCacheTables'] ?? null;
+            }
+
+            if (null === $clearCacheTables || [] === $clearCacheTables || '' === $clearCacheTables) {
+                $clearCacheTables = $table;
+            }
+
+            $this->cacheService()->clearCacheForTables($clearCacheTables, $tenantId);
+        }
+
         if ($cacheKey) {
             $ttl = $this->calculateOptimalCacheTTL($table, 1, false);
             if (null !== $functionCacheTtl && $functionCacheTtl !== $ttl) {
@@ -573,6 +589,18 @@ class RecordService
         }
 
         $response = $this->executeCustomFunction($request, $functionConfig, $extractedId);
+
+        $method = strtoupper($request->method());
+        if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true) && $response->getStatusCode() < 400) {
+            $clearCacheTables = null;
+            if ($functionConfig instanceof RecordFunctionType) {
+                $clearCacheTables = $functionConfig->clearCacheTables;
+            } elseif (is_array($functionConfig)) {
+                $clearCacheTables = $functionConfig['clearCacheTables'] ?? null;
+            }
+
+            $this->cacheService()->clearCacheForTables($clearCacheTables, $tenantId);
+        }
 
         if ($cacheKey) {
             $ttl = $functionCacheTtl ?? RecordConfigService::cacheTtl();
@@ -970,140 +998,54 @@ class RecordService
 
     // --- Helper Methods ---
 
-    public function isCacheableRequest(Request $request, string $table): bool
+    private function cacheService(): RecordCacheService
     {
-        if (!RecordConfigService::cacheEnabled()) {
-            return false;
-        }
-
-        $perTableCache = RecordConfigService::cachePerTable();
-        $schema = SchemaRegistryUtils::get();
-        $tableSchema = $schema[$table] ?? null;
-
-        $schemaTableName = null;
-        if (is_object($tableSchema)) {
-            $schemaTableName = $tableSchema->table ?? null;
-        } elseif (is_array($tableSchema)) {
-            $schemaTableName = $tableSchema['table'] ?? null;
-        }
-
-        if ((isset($perTableCache[$table]) && false === $perTableCache[$table]) || (null !== $schemaTableName && isset($perTableCache[$schemaTableName]) && false === $perTableCache[$schemaTableName])) {
-            return false;
-        }
-
-        $disableCache = false;
-        if (is_object($tableSchema)) {
-            $disableCache = (bool) ($tableSchema->disableCache ?? false);
-        } elseif (is_array($tableSchema)) {
-            $disableCache = (bool) ($tableSchema['disableCache'] ?? false);
-        }
-
-        if ($disableCache) {
-            return false;
-        }
-
-        if ('GET' !== $request->method()) {
-            return false;
-        }
-
-        return !$request->has(['search', 'filter', 'where']);
+        return app(RecordCacheService::class);
     }
 
-    private function resolveTenantCacheKey(mixed $tenantId, bool $tenantEnabled): string
+    public function isCacheableRequest(Request $request, string $table): bool
     {
-        if (!$tenantEnabled) {
-            return 'disabled';
-        }
-
-        if (null === $tenantId || '' === (string) $tenantId) {
-            return 'missing';
-        }
-
-        return (string) $tenantId;
+        return $this->cacheService()->isCacheableRequest($request, $table);
     }
 
     public function generateOptimizedCacheKey(string $table, array $filters, array $includes, int $page, int $limit, bool $tenantEnabled): string
     {
-        $tenantColumn = RecordConfigService::tenantColumn();
-        $tenantKey = $this->resolveTenantCacheKey(tenantId: $filters[$tenantColumn] ?? null, tenantEnabled: $tenantEnabled);
-        $keyData = [
-            'filters' => $filters,
-            'includes' => $includes,
-            'page' => $page,
-            'limit' => $limit,
-            'tenant_enabled' => $tenantEnabled,
-        ];
-
-        return sprintf('record_index:table:%s:tenant:%s:hash:%s', $table, $tenantKey, md5(serialize($keyData)));
+        return $this->cacheService()->generateOptimizedCacheKey($table, $filters, $includes, $page, $limit, $tenantEnabled);
     }
 
     public function generateRecordCacheKey(string $table, mixed $id, mixed $tenantId, mixed $select, bool $tenantEnabled): string
     {
-        $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
-        $keyData = [
-            'id' => $id,
-            'select' => $select,
-            'tenant_enabled' => $tenantEnabled,
-        ];
-
-        return sprintf('record_show:table:%s:id:%s:tenant:%s:select:%s', $table, $id, $tenantKey, md5(serialize($keyData)));
+        return $this->cacheService()->generateRecordCacheKey($table, $id, $tenantId, $select, $tenantEnabled);
     }
 
     public function generateTableFunctionCacheKey(string $table, string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled): string
     {
-        $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
-        ksort($queryParams);
-        $keyData = [
-            'function' => $functionName,
-            'query' => $queryParams,
-            'tenant_enabled' => $tenantEnabled,
-        ];
-
-        return sprintf('record_func:table:%s:function:%s:tenant:%s:hash:%s', $table, $functionName, $tenantKey, md5(serialize($keyData)));
+        return $this->cacheService()->generateTableFunctionCacheKey($table, $functionName, $queryParams, $tenantId, $tenantEnabled);
     }
 
     public function generateGlobalFunctionCacheKey(string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled): string
     {
-        $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
-        ksort($queryParams);
-        $keyData = [
-            'function' => $functionName,
-            'query' => $queryParams,
-            'tenant_enabled' => $tenantEnabled,
-        ];
-
-        return sprintf('record_func_global:function:%s:tenant:%s:hash:%s', $functionName, $tenantKey, md5(serialize($keyData)));
+        return $this->cacheService()->generateGlobalFunctionCacheKey($functionName, $queryParams, $tenantId, $tenantEnabled);
     }
 
     public function invalidateTableCache(string $table, mixed $tenantId, bool $tenantEnabled): void
     {
-        $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
-        QueryCacheService::invalidateTableForTenant(table: $table, tenantKey: $tenantKey);
+        $this->cacheService()->invalidateTableCache($table, $tenantId, $tenantEnabled);
+    }
+
+    public function clearTableCache(string $table, mixed $tenantId = null): void
+    {
+        $this->cacheService()->clearTableCache($table, $tenantId);
     }
 
     public function invalidateRecordCache(string $table, mixed $id, mixed $tenantId, bool $tenantEnabled): void
     {
-        $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
-        QueryCacheService::invalidateRecordForTenant(table: $table, id: $id, tenantKey: $tenantKey);
+        $this->cacheService()->invalidateRecordCache($table, $id, $tenantId, $tenantEnabled);
     }
 
     public function calculateOptimalCacheTTL(string $table, int $recordCount, bool $hasRelationships): int
     {
-        $baseTTL = RecordConfigService::cacheDefaultTtl();
-        if ($recordCount > 100) {
-            $baseTTL = (int) ($baseTTL * 0.5);
-        }
-
-        if ($hasRelationships) {
-            $baseTTL = (int) ($baseTTL * 0.7);
-        }
-
-        $perTableTTL = RecordConfigService::cachePerTableTtl();
-        if (isset($perTableTTL[$table])) {
-            $baseTTL = $perTableTTL[$table];
-        }
-
-        return max($baseTTL, 300);
+        return $this->cacheService()->calculateOptimalCacheTTL($table, $recordCount, $hasRelationships);
     }
 
     public function sanitizePayload(array $input, object $meta): array
