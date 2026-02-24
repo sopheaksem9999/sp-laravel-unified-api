@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Sopheak\Core\Services\QueryCacheService;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Services\RecordCacheService;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
@@ -281,6 +282,23 @@ class SchemaRegistryTest extends TestCase
 
         $this->assertStringContainsString('record_index:table:users:tenant:disabled:', $indexKey);
         $this->assertStringContainsString('record_show:table:users:id:10:tenant:disabled:', $recordKey);
+    }
+
+    public function test_non_redis_invalidation_clears_table_tenant_cache(): void
+    {
+        Config::set('record.cache.enabled', true);
+        $store = Cache::getStore();
+        if ($store instanceof \Illuminate\Cache\RedisStore) {
+            $this->markTestSkipped('Test only applies to non-Redis stores');
+        }
+
+        QueryCacheService::put('record_index:table:settings:tenant:missing:hash:abc', 'value', 600);
+        QueryCacheService::put('unrelated', 'keep', 600);
+
+        QueryCacheService::invalidateTableForTenant('settings', 'missing');
+
+        $this->assertNull(QueryCacheService::get('record_index:table:settings:tenant:missing:hash:abc'));
+        $this->assertSame('keep', QueryCacheService::get('unrelated'));
     }
 
     public function test_get_table_columns_adds_composite_fields_for_pgsql(): void

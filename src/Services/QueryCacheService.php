@@ -3,9 +3,9 @@
 namespace Sopheak\Core\Services;
 
 use Exception;
+use Illuminate\Cache\DatabaseStore;
 use Illuminate\Cache\RedisStore;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
 
 class QueryCacheService
 {
@@ -52,7 +52,9 @@ class QueryCacheService
         $cacheKey = self::getCachePrefix() . $key;
 
         try {
-            return Cache::remember($cacheKey, $ttl, $callback);
+            $value = Cache::remember($cacheKey, $ttl, $callback);
+            self::trackRecordCacheKey($key, $cacheKey, $ttl);
+            return $value;
         } catch (Exception) {
             return $callback();
         }
@@ -72,7 +74,11 @@ class QueryCacheService
         $cacheKey = self::getCachePrefix() . $key;
 
         try {
-            return Cache::put($cacheKey, $value, $ttl);
+            $stored = Cache::put($cacheKey, $value, $ttl);
+            if ($stored) {
+                self::trackRecordCacheKey($key, $cacheKey, $ttl);
+            }
+            return $stored;
         } catch (Exception) {
             return false;
         }
@@ -93,10 +99,6 @@ class QueryCacheService
         try {
             return Cache::get($cacheKey);
         } catch (Exception $exception) {
-            Log::warning('Failed to get cached query result', [
-                'key' => $key,
-                'error' => $exception->getMessage()
-            ]);
             return null;
         }
     }
@@ -116,10 +118,6 @@ class QueryCacheService
         try {
             return Cache::forget($cacheKey);
         } catch (Exception $exception) {
-            Log::warning('Failed to invalidate cache', [
-                'key' => $key,
-                'error' => $exception->getMessage()
-            ]);
             return false;
         }
     }
@@ -136,25 +134,47 @@ class QueryCacheService
 
         try {
             $store = Cache::getStore();
-            if (!$store instanceof RedisStore) {
-                return Cache::flush() ? 1 : 0;
+            $storePrefix = method_exists($store, 'getPrefix') ? $store->getPrefix() : '';
+            $cachePrefix = self::getCachePrefix();
+            $prefix = $storePrefix;
+            if ('' === $prefix || !str_ends_with($prefix, $cachePrefix)) {
+                $prefix .= $cachePrefix;
             }
 
-            $redis = $store->connection();
-            $keys = $redis->keys(self::getCachePrefix() . $pattern);
+            if ($store instanceof RedisStore) {
+                $redis = $store->connection();
+                $keys = $redis->keys($prefix . $pattern);
+                if (empty($keys)) {
+                    return 0;
+                }
 
-            if (empty($keys)) {
-                return 0;
+                return $redis->del($keys);
             }
 
-            return $redis->del($keys);
+            if ($store instanceof DatabaseStore) {
+                $sqlPattern = str_replace('*', '%', $prefix . $pattern);
+                $table = method_exists($store, 'getTable')
+                    ? (string) call_user_func([$store, 'getTable'])
+                    : (string) config('cache.stores.database.table', 'cache');
+                return (int) $store->getConnection()
+                    ->table($table)
+                    ->where('key', 'like', $sqlPattern)
+                    ->delete();
+            }
+
+            return self::forgetByIndexPattern($pattern);
         } catch (Exception $exception) {
-            Log::warning('Failed to invalidate cache by pattern', [
-                'pattern' => $pattern,
-                'error' => $exception->getMessage()
-            ]);
             return 0;
         }
+    }
+
+    /**
+     * Invalidate cache by prefix (Redis only)
+     */
+    public static function forgetByPrefix(string $prefix): int
+    {
+        $prefix = ltrim($prefix, '*');
+        return self::forgetByPattern($prefix . '*');
     }
 
     /**
@@ -183,24 +203,165 @@ class QueryCacheService
      */
     public static function invalidateTable(string $table): int
     {
-        $deleted = self::forgetByPattern(sprintf('*record_index:table:%s:*', $table));
-        $deleted += self::forgetByPattern(sprintf('*record_show:table:%s:*', $table));
-        $deleted += self::forgetByPattern(sprintf('*record_func:table:%s:*', $table));
+        $deleted = self::forgetByPrefix(sprintf('record_index:table:%s', $table));
+        $deleted += self::forgetByPrefix(sprintf('record_show:table:%s', $table));
+        $deleted += self::forgetByPrefix(sprintf('record_func:table:%s', $table));
 
         return $deleted;
     }
 
     public static function invalidateTableForTenant(string $table, string $tenantKey): int
     {
-        $deleted = self::forgetByPattern(sprintf('*record_index:table:%s:tenant:%s:*', $table, $tenantKey));
-        $deleted += self::forgetByPattern(sprintf('*record_show:table:%s:tenant:%s:*', $table, $tenantKey));
-        $deleted += self::forgetByPattern(sprintf('*record_func:table:%s:tenant:%s:*', $table, $tenantKey));
-
+        $deleted = self::forgetByPrefix(sprintf('record_index:table:%s:tenant:%s', $table, $tenantKey));
+        $deleted += self::forgetByPrefix(sprintf('record_show:table:%s:tenant:%s', $table, $tenantKey));
+        $deleted += self::forgetByPrefix(sprintf('record_func:table:%s:tenant:%s', $table, $tenantKey));
         return $deleted;
     }
 
     public static function invalidateRecordForTenant(string $table, mixed $id, string $tenantKey): int
     {
-        return self::forgetByPattern(sprintf('*record_show:table:%s:id:%s:tenant:%s:*', $table, $id, $tenantKey));
+        return self::forgetByPrefix(sprintf('record_show:table:%s:id:%s:tenant:%s', $table, $id, $tenantKey));
+    }
+
+    private static function trackRecordCacheKey(string $key, string $cacheKey, ?int $ttl): void
+    {
+        if (Cache::getStore() instanceof RedisStore) {
+            return;
+        }
+
+        $parsed = self::parseRecordCacheKey($key);
+        if (null === $parsed) {
+            return;
+        }
+
+        $indexKey = self::recordCacheIndexKey($parsed['table']);
+        $index = Cache::get($indexKey, []);
+        if (!is_array($index)) {
+            $index = [];
+        }
+
+        $tenantKey = $parsed['tenant'];
+        $tenantKeys = $index[$tenantKey] ?? [];
+        if (!is_array($tenantKeys)) {
+            $tenantKeys = [];
+        }
+
+        if (!in_array($cacheKey, $tenantKeys, true)) {
+            $tenantKeys[] = $cacheKey;
+        }
+
+        $index[$tenantKey] = $tenantKeys;
+
+        $indexTtl = max($ttl ?? self::getCacheTtl(), 86400);
+        Cache::put($indexKey, $index, $indexTtl);
+    }
+
+    private static function forgetByIndexPattern(string $pattern): int
+    {
+        $parsed = self::parseRecordCachePattern(rtrim($pattern, '*'));
+        if (null === $parsed) {
+            return 0;
+        }
+
+        if (null !== $parsed['tenant']) {
+            return self::forgetByIndex($parsed['table'], $parsed['tenant']);
+        }
+
+        return self::forgetByTableIndex($parsed['table']);
+    }
+
+    private static function forgetByIndex(string $table, string $tenantKey): int
+    {
+        $indexKey = self::recordCacheIndexKey($table);
+        $index = Cache::get($indexKey, []);
+        if (!is_array($index) || [] === $index) {
+            return 0;
+        }
+
+        $deleted = 0;
+        $keys = $index[$tenantKey] ?? [];
+        if (!is_array($keys) || [] === $keys) {
+            return 0;
+        }
+
+        foreach ($keys as $cacheKey) {
+            if (Cache::forget($cacheKey)) {
+                $deleted++;
+            }
+        }
+
+        unset($index[$tenantKey]);
+        if ([] === $index) {
+            Cache::forget($indexKey);
+        } else {
+            Cache::put($indexKey, $index, max(self::getCacheTtl(), 86400));
+        }
+
+        return $deleted;
+    }
+
+    private static function forgetByTableIndex(string $table): int
+    {
+        $indexKey = self::recordCacheIndexKey($table);
+        $index = Cache::get($indexKey, []);
+        if (!is_array($index) || [] === $index) {
+            return 0;
+        }
+
+        $deleted = 0;
+        foreach ($index as $tenantKey => $keys) {
+            if (!is_string($tenantKey) || '' === $tenantKey) {
+                continue;
+            }
+
+            if (!is_array($keys) || [] === $keys) {
+                continue;
+            }
+
+            foreach ($keys as $cacheKey) {
+                if (Cache::forget($cacheKey)) {
+                    $deleted++;
+                }
+            }
+        }
+
+        Cache::forget($indexKey);
+
+        return $deleted;
+    }
+
+    private static function parseRecordCacheKey(string $key): ?array
+    {
+        if (preg_match('/^record_index:table:([^:]+):tenant:([^:]+):hash:/', $key, $matches)) {
+            return ['table' => $matches[1], 'tenant' => $matches[2]];
+        }
+
+        if (preg_match('/^record_show:table:([^:]+):id:[^:]+:tenant:([^:]+):select:/', $key, $matches)) {
+            return ['table' => $matches[1], 'tenant' => $matches[2]];
+        }
+
+        if (preg_match('/^record_func:table:([^:]+):function:[^:]+:tenant:([^:]+):hash:/', $key, $matches)) {
+            return ['table' => $matches[1], 'tenant' => $matches[2]];
+        }
+
+        return null;
+    }
+
+    private static function parseRecordCachePattern(string $pattern): ?array
+    {
+        if (preg_match('/record_(?:index|show|func):table:([^:]+):.*tenant:([^:]+):/', $pattern, $matches)) {
+            return ['table' => $matches[1], 'tenant' => $matches[2]];
+        }
+
+        if (preg_match('/record_(?:index|show|func):table:([^:]+):/', $pattern, $matches)) {
+            return ['table' => $matches[1], 'tenant' => null];
+        }
+
+        return null;
+    }
+
+    private static function recordCacheIndexKey(string $table): string
+    {
+        return self::getCachePrefix() . sprintf('record_cache_index:table:%s', $table);
     }
 }

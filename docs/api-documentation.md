@@ -2055,6 +2055,34 @@ $service->clearTableCache('settings', $tenantId);
 $service->clearCacheForTables(['settings', 'users'], $tenantId);
 ```
 
+**Controller cache example**
+
+```php
+use Illuminate\Http\Request;
+use Sopheak\Core\Services\QueryCacheService;
+use Sopheak\Core\Services\RecordCacheService;
+use Sopheak\Core\Services\RecordService;
+
+public function list(Request $request)
+{
+    $filters = $request->query();
+    $cacheKey = QueryCacheService::tableKey('settings', $filters, [], 1, 50);
+
+    return QueryCacheService::remember($cacheKey, function () use ($request) {
+        return app(RecordService::class)->listRecords($request, 'settings');
+    }, 600);
+}
+
+public function update(Request $request, RecordCacheService $cacheService)
+{
+    app(RecordService::class)->updateRecord($request, 'settings', 1);
+    $tenantId = $request->header('X-Tenant-Id');
+    $cacheService->clearTableCache('settings', $tenantId);
+
+    return response()->json(['ok' => true]);
+}
+```
+
 ### Error Responses
 
 #### Standard Success Format
