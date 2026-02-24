@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Tests\Feature;
 
+use Illuminate\Http\JsonResponse;
 use Sopheak\Core\Types\RecordTablePublic;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -332,7 +333,7 @@ class CachedFunctionCounter
 {
     public static int $count = 0;
 
-    public function handle(Request $request): \Illuminate\Http\JsonResponse
+    public function handle(Request $request): JsonResponse
     {
         self::$count++;
 
@@ -347,7 +348,7 @@ class CachedGlobalFunctionCounter
 {
     public static int $count = 0;
 
-    public function handle(Request $request): \Illuminate\Http\JsonResponse
+    public function handle(Request $request): JsonResponse
     {
         self::$count++;
 

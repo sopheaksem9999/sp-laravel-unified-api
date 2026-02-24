@@ -206,7 +206,9 @@ class QhtCategory extends Model
     use QueryHelpersTrait;
 
     protected $table = 'qht_categories';
+
     protected $guarded = [];
+
     public $timestamps = false;
 
     public function items()
@@ -218,6 +220,8 @@ class QhtCategory extends Model
 class QhtItem extends Model
 {
     protected $table = 'qht_items';
+
     protected $guarded = [];
+
     public $timestamps = false;
 }

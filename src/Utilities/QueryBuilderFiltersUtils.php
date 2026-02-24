@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Utilities;
 
+use Sopheak\Core\Types\RecordTableType;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -1284,7 +1285,7 @@ class QueryBuilderFiltersUtils
             $searchableCols = [];
             $tableConfig = SchemaRegistryUtils::getTable($table);
             $columns = [];
-            if ($tableConfig instanceof \Sopheak\Core\Types\RecordTableType) {
+            if ($tableConfig instanceof RecordTableType) {
                 $columns = $tableConfig->columns ?? [];
             } elseif (is_array($tableConfig)) {
                 $columns = $tableConfig['columns'] ?? [];
@@ -1324,7 +1325,7 @@ class QueryBuilderFiltersUtils
             $numericCols = [];
             $tableConfig = SchemaRegistryUtils::getTable($table);
             $columns = [];
-            if ($tableConfig instanceof \Sopheak\Core\Types\RecordTableType) {
+            if ($tableConfig instanceof RecordTableType) {
                 $columns = $tableConfig->columns ?? [];
             } elseif (is_array($tableConfig)) {
                 $columns = $tableConfig['columns'] ?? [];
@@ -1380,7 +1381,7 @@ class QueryBuilderFiltersUtils
         if (!isset(self::$searchableCache[$cacheKey])) {
             $tableConfig = SchemaRegistryUtils::getTable($table);
             $indexes = [];
-            if ($tableConfig instanceof \Sopheak\Core\Types\RecordTableType) {
+            if ($tableConfig instanceof RecordTableType) {
                 $indexes = $tableConfig->columnIndexes ?? [];
             } elseif (is_array($tableConfig)) {
                 $indexes = $tableConfig['columnIndexes'] ?? [];

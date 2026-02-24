@@ -193,7 +193,7 @@ trait QueryHelpersTrait
     private function ensureSchemaForTable(string $tableName): void
     {
         $schema = SchemaRegistryUtils::getTable($tableName);
-        if ($schema && !empty($schema->columns)) {
+        if ($schema instanceof RecordTableType && !empty($schema->columns)) {
             return;
         }
 
@@ -512,7 +512,7 @@ trait QueryHelpersTrait
 
     private function normalizeRelationColumns(array $columns): array
     {
-        $columns = array_values(array_filter(array_map(trim(...), $columns), fn($column): bool => '' !== $column));
+        $columns = array_values(array_filter(array_map(trim(...), $columns), fn(string $column): bool => '' !== $column));
         if ([] === $columns || in_array('*', $columns, true)) {
             return ['*'];
         }

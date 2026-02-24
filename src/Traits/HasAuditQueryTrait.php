@@ -13,10 +13,10 @@ use Sopheak\Core\Constants\HttpErrorCodeConstant;
 use Sopheak\Core\Services\RecordConfigService;
 
 /**
- * Trait for controllers that implement audit query functionality.
- * 
- * This trait provides common methods for handling audit queries and logging
- * with custom data formatting and relationship handling.
+ * Trait for controllers that expose audit query endpoints.
+ *
+ * Provides shared helpers for resolving audit entity metadata, building
+ * audit payloads from custom queries, and returning audit log responses.
  */
 trait HasAuditQueryTrait
 {
@@ -72,12 +72,12 @@ trait HasAuditQueryTrait
     }
 
     /**
-     * Log an audit event using the custom audit query.
+     * Log an audit event using a controller-defined audit query.
      *
-     * @param int $id The ID of the record
-     * @param AuditLogEventEnum $auditLogEventEnum The audit event type
-     * @param string|null $subject Optional subject for the audit log
-     * @param string|null $recap Optional recap for the audit log
+     * @param int $id The record identifier.
+     * @param AuditLogEventEnum $auditLogEventEnum The audit event type.
+     * @param string|null $subject Optional subject for the log entry.
+     * @param string|null $recap Optional recap text for the log entry.
      */
     protected function logAuditWithCustomQuery(
         int $id,
@@ -109,10 +109,10 @@ trait HasAuditQueryTrait
     }
 
     /**
-     * Get audit logs for a specific record.
+     * Retrieve audit logs for a specific record.
      *
-     * @param int $id The ID of the record
-     * @param int $limit Maximum number of logs to retrieve
+     * @param int $id The record identifier.
+     * @param int $limit Maximum number of logs to retrieve.
      */
     protected function getAuditLogsForRecord(int $id, int $limit = 50): Collection
     {
@@ -124,9 +124,9 @@ trait HasAuditQueryTrait
     }
 
     /**
-     * API endpoint to get audit logs for a record.
+     * API endpoint for returning audit logs for a record.
      *
-     * @param int $id The ID of the record
+     * @param int $id The record identifier.
      */
     public function auditLogs(int $id): JsonResponse
     {

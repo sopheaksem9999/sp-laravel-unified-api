@@ -499,6 +499,7 @@ class RecordService
             if (null !== $functionCacheTtl && $functionCacheTtl !== $ttl) {
                 $ttl = $functionCacheTtl;
             }
+
             QueryCacheService::put($cacheKey, [
                 'data' => $response->getData(true),
                 'status' => $response->getStatusCode(),
@@ -926,21 +927,23 @@ class RecordService
             if ($result instanceof JsonResponse) {
                 throw new HttpResponseException($this->normalizeTriggerResponse($result));
             }
+
             if ($result instanceof Request && isset($params[0]) && $params[0] instanceof Request) {
                 $params[0] = $result;
             } elseif (is_array($result) && isset($params[0]) && $params[0] instanceof Request) {
                 $params[0]->merge($result);
             }
-        } catch (Throwable $exception) {
-            if ($exception instanceof HttpResponseException) {
-                throw $exception;
+        } catch (Throwable $throwable) {
+            if ($throwable instanceof HttpResponseException) {
+                throw $throwable;
             }
+
             throw new Exception(sprintf(
                 "Table trigger execution failed for '%s::%s': %s",
                 $className,
                 $method,
-                $exception->getMessage()
-            ), 0, $exception);
+                $throwable->getMessage()
+            ), 0, $throwable);
         }
     }
 

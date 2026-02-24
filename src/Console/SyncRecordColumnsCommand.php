@@ -250,11 +250,7 @@ class SyncRecordColumnsCommand extends Command
             }
 
             $lineIndent = strspn($lines[$i], ' ');
-            if ($lineIndent > 0) {
-                $indent = str_repeat(' ', $lineIndent);
-            } else {
-                $indent = '  ';
-            }
+            $indent = $lineIndent > 0 ? str_repeat(' ', $lineIndent) : '  ';
 
             break;
         }

@@ -155,8 +155,8 @@ class BasicTest extends TestCase
                 [$request, 'users', []]
             );
             $this->fail('Expected HttpResponseException to be thrown.');
-        } catch (HttpResponseException $exception) {
-            $response = $exception->getResponse();
+        } catch (HttpResponseException $httpResponseException) {
+            $response = $httpResponseException->getResponse();
             $data = json_decode((string) $response->getContent(), true);
 
             $this->assertSame((int) RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $response->getStatusCode());
@@ -173,7 +173,6 @@ class BasicTest extends TestCase
         $request = Request::create('/test', 'POST', ['name' => 'Example']);
 
         $method = new ReflectionMethod(CoreRecordController::class, 'runTableValidators');
-        $method->setAccessible(true);
 
         $result = $method->invoke(
             $controller,
@@ -199,11 +198,10 @@ class BasicTest extends TestCase
         $request = Request::create('/test', 'POST', ['name' => 'Example']);
 
         $method = new ReflectionMethod(CoreRecordController::class, 'runTableValidators');
-        $method->setAccessible(true);
 
         $result = $method->invoke(
             $controller,
-            [TestValidationHandler::class, 'handle'],
+            TestValidationHandler::handle(...),
             $request,
             null
         );
@@ -218,7 +216,6 @@ class BasicTest extends TestCase
         $request = Request::create('/test', 'POST', ['name' => 'Example']);
 
         $method = new ReflectionMethod(CoreRecordController::class, 'runTableValidators');
-        $method->setAccessible(true);
 
         $result = $method->invoke(
             $controller,
@@ -364,7 +361,6 @@ class BasicTest extends TestCase
     {
         $command = new SyncRecordColumnsCommand();
         $method = new ReflectionMethod($command, 'exportValue');
-        $method->setAccessible(true);
 
         $result = $method->invoke($command, "nextval('purchase_orders_id_seq'::regclass)", '    ');
 
@@ -376,8 +372,8 @@ class BasicTest extends TestCase
     {
         $command = new SyncRecordColumnsCommand();
         $command->setOutput(new OutputStyle(new ArrayInput([]), new NullOutput()));
+
         $method = new ReflectionMethod($command, 'updateConfigFile');
-        $method->setAccessible(true);
 
         $content = "<?php\n\nreturn new RecordTableType(\n    pmsName: 'purchaseOrder',\n    hasTenantId: true,\n    softDeletes: true,\n    public: new RecordTablePublic(read: true, write: true),\n    primaryKey: 'id',\n);\n";
 
@@ -425,7 +421,6 @@ class BasicTest extends TestCase
         QueryBuilderFiltersUtils::clearColumnCache();
 
         $method = new ReflectionMethod(QueryBuilderFiltersUtils::class, 'hasFullTextIndex');
-        $method->setAccessible(true);
 
         $this->assertTrue($method->invoke(null, 'articles', ['title', 'body']));
     }
@@ -448,7 +443,6 @@ class BasicTest extends TestCase
         QueryBuilderFiltersUtils::clearColumnCache();
 
         $method = new ReflectionMethod(QueryBuilderFiltersUtils::class, 'getSearchableColumns');
-        $method->setAccessible(true);
 
         $result = $method->invoke(null, 'products', ['id', 'name', 'meta_data']);
 
@@ -473,7 +467,6 @@ class BasicTest extends TestCase
         QueryBuilderFiltersUtils::clearColumnCache();
 
         $method = new ReflectionMethod(QueryBuilderFiltersUtils::class, 'getNumericSearchableColumns');
-        $method->setAccessible(true);
 
         $result = $method->invoke(null, 'inventory', ['id', 'qty_on_hand', 'name']);
 
@@ -492,7 +485,6 @@ class BasicTest extends TestCase
         );
 
         $method = new ReflectionMethod(RecordService::class, 'stripRelationshipAuditData');
-        $method->setAccessible(true);
 
         $result = $method->invoke($service, [
             'name' => 'Example',
@@ -584,7 +576,7 @@ class TestFailValidationHandler
 
 class TestTriggerResponseHandler
 {
-    public static function handle(Request $request, string $table, array $context): \Illuminate\Http\JsonResponse
+    public static function handle(Request $request, string $table, array $context): JsonResponse
     {
         return RecordApiResponseService::validationError(['message' => 'Not allowed']);
     }

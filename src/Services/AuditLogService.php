@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Services;
 
+use Throwable;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 use Sopheak\Core\Jobs\AuditLogJob;
 use Carbon\Carbon;
@@ -11,11 +12,16 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Sopheak\Core\Services\RecordConfigService;
 
+/**
+ * Centralized service for creating and querying audit logs.
+ */
 class AuditLogService
 {
     /**
-     * Handle audit data entry based on the provided event.
-     * Only creates audit log entry if there are actual differences between old and new data.
+     * Build and persist an audit log entry for the given event.
+     *
+     * Only persists update events when there are actual changes between
+     * the old and new data snapshots.
      */
     public static function handleAuditDataEntry(AuditLogEventEnum $event, string $entityName, string $entityType, array $queryData, ?string $subject = null, ?string $recap = null, mixed $tenantId = null): void
     {
@@ -93,8 +99,9 @@ class AuditLogService
     }
 
     /**
-     * Create an audit log entry with proper data formatting.
-     * Includes additional validation to ensure only meaningful changes are logged.
+     * Persist a formatted audit log entry.
+     *
+     * Includes an additional guard to avoid storing update entries with no changes.
      */
     public static function createAuditLogEntry(array $data): void
     {
@@ -155,7 +162,7 @@ class AuditLogService
     }
 
     /**
-     * Get enhanced audit metadata with field-level changes and timestamps.
+     * Build enriched audit metadata with field-level change tracking.
      */
     public static function getAuditMetadata(array $changedFields = [], array $oldData = [], array $newData = [], ?string $entityType = null, mixed $entityId = null, ?string $event = null, ?string $tenantId = null): array
     {
@@ -166,7 +173,7 @@ class AuditLogService
         $tableName = null !== $entityType ? static::getTableNameFromEntityType($entityType) : null;
         $lookupEntityType = $tableName ?? $entityType;
 
-        $prevEntry = static::getPreviousAuditEntry(entityType: $lookupEntityType, entityId: $entityId, tenantId: $tenantId);
+        $prevEntry = self::getPreviousAuditEntry(entityType: $lookupEntityType, entityId: $entityId, tenantId: $tenantId);
         $prevMetadata = [];
         $prevEntryCreatedAt = null;
 
@@ -180,13 +187,13 @@ class AuditLogService
         if ($prevEntry && isset($prevEntry->created_at)) {
             try {
                 $prevEntryCreatedAt = Carbon::parse($prevEntry->created_at);
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 $prevEntryCreatedAt = null;
             }
         }
 
-        $globalPrevTs = static::resolveGlobalPrevTimestamp($prevMetadata, $prevEntryCreatedAt);
-        $globalPrevIso = $globalPrevTs ? $globalPrevTs->toISOString() : null;
+        $globalPrevTs = self::resolveGlobalPrevTimestamp($prevMetadata, $prevEntryCreatedAt);
+        $globalPrevIso = $globalPrevTs instanceof Carbon ? $globalPrevTs->toISOString() : null;
 
         $metadata = [
             'field_changes' => [],
@@ -240,7 +247,7 @@ class AuditLogService
     }
 
     /**
-     * Log user authentication events.
+     * Record authentication-related audit events.
      */
     public static function authEvent(AuditLogEventEnum $event, ?array $data = [], mixed $tenantId = null): void
     {
@@ -275,9 +282,7 @@ class AuditLogService
     }
 
     /**
-     * Insert audit log entry.
-     *
-     * @param array $queryData
+     * Insert an audit log entry for a given entity class and payload.
      */
     public static function insertAuditLog(AuditLogEventEnum $auditLogEventEnum, string $entityClass, array|object $queryData = [], ?string $subject = '', ?string $recap = '', mixed $tenantId = null): void
     {
@@ -355,7 +360,7 @@ class AuditLogService
     }
 
     /**
-     * Get audit logs for a specific entity.
+     * Retrieve audit logs for a specific entity record.
      */
     public static function getEntityAuditLogs(string $entityType, mixed $entityId, ?string $tenantId = null, int $limit = 50): Collection
     {
@@ -376,7 +381,7 @@ class AuditLogService
     /**
      * Clean up old audit logs based on retention policy.
      *
-     * @return int Number of deleted records
+     * @return int Number of deleted records.
      */
     public static function cleanupOldLogs(?string $tenantId = null, int $daysToKeep = 365): int
     {
@@ -393,7 +398,7 @@ class AuditLogService
     }
 
     /**
-     * Get the audit subject (usually a human-readable identifier).
+     * Resolve the audit subject (typically a human-readable identifier).
      */
     public static function getAuditSubject(array $data): string
     {
@@ -412,9 +417,7 @@ class AuditLogService
     }
 
     /**
-     * Get the audit log title for the given action.
-     *
-     * @param string $event The action performed
+     * Get the audit log title for the given event.
      */
     public static function getAuditTitle(AuditLogEventEnum $event, string $entityName): string
     {
@@ -437,9 +440,7 @@ class AuditLogService
             default => $entityLabel = $entityName,
         };
 
-        $label = trim(static::generateLabel($eventLabel) . ' ' . static::getEntityLabel($entityLabel));
-
-        return $label;
+        return trim(static::generateLabel($eventLabel) . ' ' . static::getEntityLabel($entityLabel));
     }
 
     public static function getEntityLabel(string $label): string
@@ -453,36 +454,47 @@ class AuditLogService
     }
 
     /**
-     * Generate a recap for an audit log entry.
-     */
-    /**
      * Generate a human-readable recap of audit log events.
      *
-     * @param AuditLogEventEnum $event The type of audit event
-     * @param null|string       $entityName        The name of the entity being audited
-     * @param null|array        $oldData           The previous state of the entity
-     * @param null|array        $newData           The new state of the entity
+     * @param AuditLogEventEnum $event The type of audit event.
+     * @param string|null $entityName The name of the entity being audited.
+     * @param array|null $oldData The previous state of the entity.
+     * @param array|null $newData The new state of the entity.
      *
-     * @return string A formatted recap string
+     * @return string A formatted recap string.
      */
     public static function generateRecap(AuditLogEventEnum $event, ?string $entityName = '', ?array $oldData = [], ?array $newData = []): string
     {
+        $entityLabel = null !== $entityName && '' !== $entityName && '0' !== $entityName
+            ? static::getEntityLabel($entityName)
+            : '';
+        $actionLabel = match ($event) {
+            AuditLogEventEnum::CREATED => 'Created',
+            AuditLogEventEnum::UPDATED => 'Updated',
+            AuditLogEventEnum::DELETED => 'Deleted',
+            AuditLogEventEnum::LOGIN => 'Logged in',
+            AuditLogEventEnum::LOGOUT => 'Logged out',
+            AuditLogEventEnum::FAILED_LOGIN => 'Failed login',
+            default => '',
+        };
+
         switch ($event) {
             case AuditLogEventEnum::CREATED:
-
             case AuditLogEventEnum::DELETED:
-
             case AuditLogEventEnum::LOGIN:
-
             case AuditLogEventEnum::LOGOUT:
-
             case AuditLogEventEnum::FAILED_LOGIN:
-
             default:
-                return '';
-            case AuditLogEventEnum::UPDATED:
+                if ('' === $actionLabel) {
+                    return '';
+                }
 
-                // Enhanced recap for specific entities
+                if ('' !== $entityLabel) {
+                    return $actionLabel . ' ' . $entityLabel;
+                }
+
+                return $actionLabel;
+            case AuditLogEventEnum::UPDATED:
                 $excluded = RecordConfigService::auditExcludedAttributes();
                 if (!is_array($excluded)) {
                     $excluded = [];
@@ -513,12 +525,22 @@ class AuditLogService
                     return $acc;
                 }, []);
 
-                $recapEntities = RecordConfigService::auditRecapEntities();
-                if (null !== $entityName && '' !== $entityName && '0' !== $entityName && in_array($entityName, $recapEntities, true)) {
-                    return self::generateDetailedUpdateRecap($entityName, $changes);
-                }
                 if ([] === $changes) {
                     return '';
+                }
+
+                $recapEntities = RecordConfigService::auditRecapEntities();
+                if (null !== $entityName && '' !== $entityName && '0' !== $entityName && in_array($entityName, $recapEntities, true)) {
+                    $details = self::generateDetailedUpdateRecap($entityName, $changes);
+                    if ('' === $details) {
+                        return '';
+                    }
+
+                    if ('' === $entityLabel || $details === $entityLabel) {
+                        return $actionLabel . ' ' . $details;
+                    }
+
+                    return $actionLabel . ' ' . $entityLabel . ': ' . $details;
                 }
 
                 $labels = [];
@@ -549,12 +571,18 @@ class AuditLogService
                     $labels[] = 'and ' . $remaining . ' more';
                 }
 
-                return implode(', ', $labels);
+                $details = implode(', ', $labels);
+
+                if ('' === $entityLabel) {
+                    return $actionLabel . ': ' . $details;
+                }
+
+                return $actionLabel . ' ' . $entityLabel . ': ' . $details;
         }
     }
 
     /**
-     * Get table name from entity type.
+     * Resolve the table name from an entity class or identifier.
      */
     public static function getTableNameFromEntityType(string $entityType): string
     {
@@ -575,7 +603,7 @@ class AuditLogService
     }
 
     /**
-     * handle map query data.
+     * Normalize mapper query data for audit logging.
      */
     public static function handleMapperQueryData(array $queryData): array
     {
@@ -615,40 +643,10 @@ class AuditLogService
         return in_array($event, $excludedEvents);
     }
 
-    /**
-     * Get database-specific JSON extract query.
-     */
-    private static function getJsonExtractQuery(string $column, string $path): string
-    {
-        $driver = DB::getDriverName();
-        $rawParts = explode('.', $path);
-        $isFieldChanges = ($rawParts[0] ?? '') === 'field_changes';
-        $parts = $isFieldChanges ? ['field_changes', implode('.', array_slice($rawParts, 1))] : $rawParts;
-
-        switch ($driver) {
-            case 'sqlite':
-                $segments = array_map(fn($p): string => preg_match('/[^A-Za-z0-9_]/', $p) ? "['" . str_replace("'", "''", $p) . "']" : "." . $p, $parts);
-                $sqlitePath = '$' . implode('', $segments);
-                return sprintf("json_extract(%s, '%s')", $column, $sqlitePath);
-            case 'mysql':
-            case 'mariadb':
-                $segments = array_map(fn($p): string => preg_match('/[^A-Za-z0-9_]/', $p) ? '["' . str_replace('"', '\\"', $p) . '"]' : "." . $p, $parts);
-                $mysqlPath = '$' . implode('', $segments);
-                return sprintf("JSON_EXTRACT(%s, '%s')", $column, $mysqlPath);
-            case 'pgsql':
-                $pgPath = '{' . implode(',', $parts) . '}';
-                return sprintf("(%s #> '%s')", $column, $pgPath);
-            default:
-                $segments = array_map(fn($p): string => preg_match('/[^A-Za-z0-9_]/', $p) ? '["' . str_replace('"', '\\"', $p) . '"]' : "." . $p, $parts);
-                $pathStr = '$' . implode('', $segments);
-                return sprintf("JSON_EXTRACT(%s, '%s')", $column, $pathStr);
-        }
-    }
-
 
 
     /**
-     * Get item-level changes for items array.
+     * Build item-level changes for nested items arrays.
      */
     private static function getItemChanges(array $oldItems, array $newItems, array $prevMetadata = [], bool $isCreateEvent = false, ?string $globalPrevIso = null, mixed $prevEntryUserId = null): array
     {
@@ -756,7 +754,7 @@ class AuditLogService
             if (!empty($itemsPrev)) {
                 return Carbon::parse($itemsPrev);
             }
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return $prevEntryCreatedAt ?? null;
         }
 
@@ -783,7 +781,7 @@ class AuditLogService
     }
 
     /**
-     * Generate detailed update recap for estimates, delivery notes, and invoices.
+     * Generate detailed update recap for configured recap entities.
      */
     private static function generateDetailedUpdateRecap(string $entityName, array $changes): string
     {
@@ -804,7 +802,7 @@ class AuditLogService
     }
 
     /**
-     * Format main field changes (totals, quantities, relationships, etc.).
+     * Format main field changes (totals, quantities, relationships).
      */
     private static function formatMainFieldChanges(array $changes): string
     {
@@ -830,9 +828,9 @@ class AuditLogService
     /**
      * Format item addition/removal changes.
      *
-     * @param array $changes The changes array containing item modifications
+     * @param array $changes The changes array containing item modifications.
      *
-     * @return array Array of formatted item change descriptions
+     * @return array Array of formatted item change descriptions.
      */
     private static function formatItemChanges(array $changes): array
     {
@@ -950,10 +948,10 @@ class AuditLogService
     /**
      * Check if there are actual data changes between old and new data.
      *
-     * @param array $oldData The previous state of the data
-     * @param array $newData The new state of the data
+     * @param array $oldData The previous state of the data.
+     * @param array $newData The new state of the data.
      *
-     * @return bool True if there are changes, false otherwise
+     * @return bool True if there are changes, false otherwise.
      */
     private static function hasDataChanges(array $oldData, array $newData): bool
     {
@@ -998,7 +996,7 @@ class AuditLogService
     }
 
     /**
-     * Check if two values are different (handles arrays, objects, etc.).
+     * Check if two values are different (arrays, objects, scalars).
      */
     private static function valuesAreDifferent(mixed $oldValue, mixed $newValue): bool
     {
@@ -1086,11 +1084,10 @@ class AuditLogService
 
     /**
      * Remove timestamp fields from data arrays recursively.
-     * Removes 'created_at', 'updated_at', and 'deleted_at' from nested arrays.
      *
-     * @param array $data The data array to process
+     * @param array $data The data array to process.
      *
-     * @return array The processed array with timestamp fields removed
+     * @return array The processed array with timestamp fields removed.
      */
     private static function removeTimestampFields(array $data): array
     {
@@ -1118,16 +1115,14 @@ class AuditLogService
 
         // Split camelCase/PascalCase and keep numbers as separate tokens
         // Matches sequences like: "Table", "Id", "Or", "Name", "API", "v2", etc.
-        preg_match_all('/[A-Z]+(?=[A-Z][a-z0-9])|[A-Z]?[a-z0-9]+|[A-Z]+|\d+/', $normalized, $matches);
+        preg_match_all('/[A-Z]+(?=[A-Z][a-z0-9])|[A-Z]?[a-z0-9]+|[A-Z]+|\d+/', (string) $normalized, $matches);
         $words = $matches[0] ?? [];
 
         if (empty($words)) {
             return 'CustomListener'.uniqid();
         }
 
-        $labelWords = array_map(function ($w) {
-            return ucfirst(strtolower($w));
-        }, $words);
+        $labelWords = array_map(fn($w): string => ucfirst(strtolower($w)), $words);
 
         return ucwords(str_replace('_', ' ', ucfirst(implode(' ', $labelWords))));
     }

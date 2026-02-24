@@ -200,6 +200,7 @@ class RecordApiResponseService
                 if (!is_array($fields)) {
                     continue;
                 }
+
                 if ($fields === []) {
                     continue;
                 }
@@ -229,12 +230,15 @@ class RecordApiResponseService
 
                 $value = $data[$column];
             }
+
             if (is_array($value)) {
                 continue;
             }
+
             if (is_object($value)) {
                 continue;
             }
+
             if (!is_string($value)) {
                 continue;
             }

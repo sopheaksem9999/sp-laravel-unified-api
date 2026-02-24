@@ -30,12 +30,10 @@ class RecordValidationType
 
     public function toArray(): array
     {
-        $config = [
+        return [
             'class' => $this->class,
             'functionName' => $this->functionName,
         ];
-
-        return $config;
     }
 
     public static function fromArray(array $config): self
@@ -45,6 +43,7 @@ class RecordValidationType
             if ($first instanceof self) {
                 return $first;
             }
+
             if (is_array($first) && (isset($first['class']) || isset($first['functionName']))) {
                 return new self(
                     class: $first['class'] ?? throw new InvalidArgumentException('class is required in config array'),

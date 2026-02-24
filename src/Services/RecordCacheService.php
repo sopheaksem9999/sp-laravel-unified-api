@@ -123,9 +123,13 @@ class RecordCacheService
             return;
         }
 
-        $tableList = is_array($tables) ? $tables : array_filter(array_map('trim', explode(',', (string) $tables)));
+        $tableList = is_array($tables) ? $tables : array_filter(array_map(trim(...), explode(',', $tables)));
         foreach ($tableList as $table) {
-            if (!is_string($table) || '' === $table) {
+            if (!is_string($table)) {
+                continue;
+            }
+
+            if ('' === $table) {
                 continue;
             }
 

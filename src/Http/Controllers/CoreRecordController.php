@@ -14,7 +14,6 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 use Sopheak\Core\Utilities\RecordUtils;
-use Sopheak\Core\Services\QueryCacheService;
 use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Services\RecordService;
@@ -1121,12 +1120,12 @@ class CoreRecordController extends Controller
                 }
 
                 continue;
-            } else {
-                $config = $this->resolveValidationType($validatorItem, $index);
-                $validator = $this->invokeValidationType($config, $request, $id);
-                if ($validator->fails()) {
-                    return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $validator->errors()->toArray());
-                }
+            }
+
+            $config = $this->resolveValidationType($validatorItem, $index);
+            $validator = $this->invokeValidationType($config, $request, $id);
+            if ($validator->fails()) {
+                return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $validator->errors()->toArray());
             }
         }
 

@@ -13,21 +13,20 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
 /**
  * Trait AuditableTrait.
  *
- * Provides automatic audit logging functionality for Eloquent models.
- * This trait automatically logs create, update, and delete operations.
+ * Adds automatic audit logging for Eloquent model lifecycle events.
+ * Records create, update, and delete operations with configurable payloads.
  */
 trait AuditableTrait
 {
     protected ?array $auditOldData = null;
 
     /**
-     * Default implementation of getAuditQuery method.
+     * Default audit payload builder.
      *
-     * This method provides a basic audit query that returns the current model instance.
-     * Models can override this method to include specific relationships or custom data
-     * needed for audit logging.
+     * Models may override this method to include relationships or custom
+     * data needed for audit logging.
      *
-     * @return null|Model The model instance for audit logging
+     * @return array The serialized model payload for audit logging.
      */
     protected function getAuditQuery(?int $id = null): array
     {
@@ -35,9 +34,9 @@ trait AuditableTrait
     }
 
     /**
-     * Boot the AuditableTrait trait for a model.
+     * Boot the audit listeners for the model.
      *
-     * Registers model event listeners for created, updated, and deleted events.
+     * Registers handlers for created, updating/updated, and deleting/deleted events.
      */
     protected static function bootAuditableTrait(): void
     {
@@ -65,7 +64,7 @@ trait AuditableTrait
     /**
      * Create an audit log entry for the model.
      *
-     * @param AuditLogEventEnum $auditLogEventEnum The event performed (created, updated, deleted)
+     * @param AuditLogEventEnum $auditLogEventEnum The event performed.
      */
     protected function auditLog(AuditLogEventEnum $auditLogEventEnum): void
     {
@@ -289,10 +288,10 @@ trait AuditableTrait
 
     /**
      * Manually trigger audit logging for the model.
-     * This method allows controllers to manually trigger audit logging
-     * after completing related operations (e.g., after inserting items).
      *
-     * @param AuditLogEventEnum $auditLogEventEnum The event performed (created, updated, deleted)
+     * Use this after completing related operations that should be captured in the audit trail.
+     *
+     * @param AuditLogEventEnum $auditLogEventEnum The event performed.
      */
     public function triggerAuditLog(AuditLogEventEnum $auditLogEventEnum): void
     {
@@ -301,7 +300,6 @@ trait AuditableTrait
 
     /**
      * Temporarily disable automatic audit logging for this model instance.
-     * This is useful when you want to manually control when audit logging occurs.
      */
     public function disableAuditLogging(): void
     {
@@ -345,7 +343,7 @@ trait AuditableTrait
     /**
      * Determine if the model should be audited for the given event.
      *
-     * @param string $event The event being performed
+     * @param string $event The event being performed.
      */
     protected function shouldAudit(string $event): bool
     {

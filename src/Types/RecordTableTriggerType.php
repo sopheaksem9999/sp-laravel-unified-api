@@ -50,6 +50,7 @@ class RecordTableTriggerType
             if ($first instanceof self) {
                 return $first;
             }
+
             if (is_array($first) && (isset($first['class']) || isset($first['functionName']))) {
                 return new self(
                     class: $first['class'] ?? throw new InvalidArgumentException('class is required in config array'),

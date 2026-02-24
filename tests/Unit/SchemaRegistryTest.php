@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Tests\Unit;
 
+use Illuminate\Cache\RedisStore;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -288,7 +289,7 @@ class SchemaRegistryTest extends TestCase
     {
         Config::set('record.cache.enabled', true);
         $store = Cache::getStore();
-        if ($store instanceof \Illuminate\Cache\RedisStore) {
+        if ($store instanceof RedisStore) {
             $this->markTestSkipped('Test only applies to non-Redis stores');
         }
 

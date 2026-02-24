@@ -78,6 +78,7 @@ class QueryCacheService
             if ($stored) {
                 self::trackRecordCacheKey($key, $cacheKey, $ttl);
             }
+
             return $stored;
         } catch (Exception) {
             return false;
@@ -98,7 +99,7 @@ class QueryCacheService
 
         try {
             return Cache::get($cacheKey);
-        } catch (Exception $exception) {
+        } catch (Exception) {
             return null;
         }
     }
@@ -117,7 +118,7 @@ class QueryCacheService
 
         try {
             return Cache::forget($cacheKey);
-        } catch (Exception $exception) {
+        } catch (Exception) {
             return false;
         }
     }
@@ -153,9 +154,7 @@ class QueryCacheService
 
             if ($store instanceof DatabaseStore) {
                 $sqlPattern = str_replace('*', '%', $prefix . $pattern);
-                $table = method_exists($store, 'getTable')
-                    ? (string) call_user_func([$store, 'getTable'])
-                    : (string) config('cache.stores.database.table', 'cache');
+                $table = (string) config('cache.stores.database.table', 'cache');
                 return (int) $store->getConnection()
                     ->table($table)
                     ->where('key', 'like', $sqlPattern)
@@ -163,7 +162,7 @@ class QueryCacheService
             }
 
             return self::forgetByIndexPattern($pattern);
-        } catch (Exception $exception) {
+        } catch (Exception) {
             return 0;
         }
     }
@@ -205,17 +204,15 @@ class QueryCacheService
     {
         $deleted = self::forgetByPrefix(sprintf('record_index:table:%s', $table));
         $deleted += self::forgetByPrefix(sprintf('record_show:table:%s', $table));
-        $deleted += self::forgetByPrefix(sprintf('record_func:table:%s', $table));
 
-        return $deleted;
+        return $deleted + self::forgetByPrefix(sprintf('record_func:table:%s', $table));
     }
 
     public static function invalidateTableForTenant(string $table, string $tenantKey): int
     {
         $deleted = self::forgetByPrefix(sprintf('record_index:table:%s:tenant:%s', $table, $tenantKey));
         $deleted += self::forgetByPrefix(sprintf('record_show:table:%s:tenant:%s', $table, $tenantKey));
-        $deleted += self::forgetByPrefix(sprintf('record_func:table:%s:tenant:%s', $table, $tenantKey));
-        return $deleted;
+        return $deleted + self::forgetByPrefix(sprintf('record_func:table:%s:tenant:%s', $table, $tenantKey));
     }
 
     public static function invalidateRecordForTenant(string $table, mixed $id, string $tenantKey): int
@@ -310,11 +307,19 @@ class QueryCacheService
 
         $deleted = 0;
         foreach ($index as $tenantKey => $keys) {
-            if (!is_string($tenantKey) || '' === $tenantKey) {
+            if (!is_string($tenantKey)) {
                 continue;
             }
 
-            if (!is_array($keys) || [] === $keys) {
+            if ('' === $tenantKey) {
+                continue;
+            }
+
+            if (!is_array($keys)) {
+                continue;
+            }
+
+            if ([] === $keys) {
                 continue;
             }
 

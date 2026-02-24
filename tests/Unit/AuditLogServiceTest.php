@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Tests\Unit;
 
+use Sopheak\Core\Enums\AuditLogEventEnum;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -63,7 +64,7 @@ class AuditLogServiceTest extends TestCase
         ]);
 
         $recap = AuditLogService::generateRecap(
-            event: \Sopheak\Core\Enums\AuditLogEventEnum::UPDATED,
+            event: AuditLogEventEnum::UPDATED,
             entityName: 'customs',
             oldData: ['custom_field' => 'old'],
             newData: ['custom_field' => 'new']
@@ -80,7 +81,7 @@ class AuditLogServiceTest extends TestCase
         Config::set('audit.excluded_attributes', []);
 
         $recap = AuditLogService::generateRecap(
-            event: \Sopheak\Core\Enums\AuditLogEventEnum::UPDATED,
+            event: AuditLogEventEnum::UPDATED,
             entityName: 'any_table',
             oldData: [
                 'id' => 1,
@@ -94,7 +95,7 @@ class AuditLogServiceTest extends TestCase
             ]
         );
 
-        $this->assertSame('Name', $recap);
+        $this->assertSame('Updated Any Table: Name', $recap);
     }
 
     /** @test */
@@ -104,7 +105,7 @@ class AuditLogServiceTest extends TestCase
         Config::set('audit.excluded_attributes', []);
 
         $recap = AuditLogService::generateRecap(
-            event: \Sopheak\Core\Enums\AuditLogEventEnum::UPDATED,
+            event: AuditLogEventEnum::UPDATED,
             entityName: 'any_table',
             oldData: [
                 'created_at' => '2025-01-01 00:00:00',
@@ -128,7 +129,7 @@ class AuditLogServiceTest extends TestCase
         Config::set('audit.recap_max_fields', 2);
 
         $recap = AuditLogService::generateRecap(
-            event: \Sopheak\Core\Enums\AuditLogEventEnum::UPDATED,
+            event: AuditLogEventEnum::UPDATED,
             entityName: 'any_table',
             oldData: [
                 'name' => 'Old',
@@ -144,7 +145,7 @@ class AuditLogServiceTest extends TestCase
             ]
         );
 
-        $this->assertSame('Name, Title, and 2 more', $recap);
+        $this->assertSame('Updated Any Table: Name, Title, and 2 more', $recap);
     }
 
     /** @test */
