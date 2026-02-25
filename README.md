@@ -26,6 +26,7 @@ curl -X GET http://your-app.test/api/v1/users
 ## ✨ Features
 
 - **🔄 Dynamic API Controller**: Full CRUD operations for any database table with advanced filtering
+- **🚀 Upsert Support**: Atomic update-or-create operations with configurable matching logic
 - **📊 Standardized API Responses**: Consistent JSON response format across your application
 - **🔍 QueryHelpers Trait**: Powerful trait for advanced query filtering and manipulation
 - **📝 Audit Logging**: Comprehensive audit trail for all data changes with queue-based processing
@@ -1181,6 +1182,7 @@ The package automatically registers RESTful API routes for dynamic database oper
 - `GET /{prefix}/{table}/{id}` - Get specific record
 - `POST /{prefix}/{table}` - Create new record
 - `PUT/PATCH /{prefix}/{table}/{id}` - Update record
+- `POST /{prefix}/{table}/upsert` - Upsert (create or update) record
 - `DELETE /{prefix}/{table}/{id}` - Soft delete record
 
 ### Advanced Operations
@@ -1190,6 +1192,7 @@ The package automatically registers RESTful API routes for dynamic database oper
 - `POST /{prefix}/{table}/bulk/create` - Bulk create
 - `POST /{prefix}/{table}/bulk/update` - Bulk update
 - `POST /{prefix}/{table}/bulk/delete` - Bulk delete
+- `POST /{prefix}/{table}/bulk/upsert` - Bulk upsert
 
 ### RPC Functions
 - `GET|POST|PUT|PATCH|DELETE /{prefix}/rpc/{functionName}` - Execute global functions

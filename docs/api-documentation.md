@@ -1309,6 +1309,56 @@ JSON object with field values:
 - `422` - Validation error (table validator or request validation)
 - `500` - Server error
 
+#### Upsert Record
+
+```http
+POST /{api_prefix}/{table}/upsert
+```
+
+Create a new record or update an existing one based on matching columns.
+
+#### Query Parameters
+
+- `match_on` (string, required) - Comma-separated list of columns to use for matching records.
+  - Example: `?match_on=sku` or `?match_on=email,tenant_id`
+
+#### Request Body
+
+JSON object with field values:
+
+```json
+{
+  "sku": "PROD-001",
+  "name": "Wireless Mouse",
+  "price": 29.99
+}
+```
+
+#### Response Format
+
+```json
+{
+  "success": true,
+  "error_code": 0,
+  "data": {
+    "id": 125,
+    "payload": {
+      "sku": "PROD-001",
+      "name": "Wireless Mouse",
+      "price": 29.99
+    }
+  },
+  "meta": {
+    "request_id": "req_abc123def456"
+  }
+}
+```
+
+#### Status Codes
+
+- `200` - Success
+- `422` - Validation error (missing `match_on` or invalid payload)
+
 #### Update Record
 
 ```http
@@ -1744,6 +1794,54 @@ Delete multiple records by ID.
 ```json
 {
   "ids": [10, 11, 12]
+}
+```
+
+### Bulk Upsert
+
+```http
+POST /{api_prefix}/{table}/bulk/upsert
+```
+
+Bulk create or update records based on matching columns.
+
+#### Query Parameters
+
+- `match_on` (string, required) - Comma-separated list of columns to use for matching records.
+  - Example: `?match_on=sku`
+
+#### Request Body
+
+JSON array of objects.
+
+```json
+[
+  {
+    "sku": "PROD-001",
+    "name": "Wireless Mouse",
+    "price": 29.99
+  },
+  {
+    "sku": "PROD-002",
+    "name": "Mechanical Keyboard",
+    "price": 89.99
+  }
+]
+```
+
+#### Response Format
+
+```json
+{
+  "success": true,
+  "error_code": 0,
+  "data": {
+    "count": 2
+  },
+  "meta": {
+    "request_id": "req_abc123def456",
+    "total": 2
+  }
 }
 ```
 

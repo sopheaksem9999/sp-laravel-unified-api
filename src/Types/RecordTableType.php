@@ -99,6 +99,7 @@ class RecordTableType
         public bool $canCreate = true,
         public bool $canUpdate = true,
         public bool $canDelete = true,
+        public bool $canUpsert = true,
         public RecordTablePublic|bool $public = new RecordTablePublic(),
         public ?string $primaryKey = 'id',
         public ?array $columns = [],
@@ -142,6 +143,7 @@ class RecordTableType
             canCreate: $properties['canCreate'] ?? ($legacyCanWrite ?? true),
             canUpdate: $properties['canUpdate'] ?? ($legacyCanWrite ?? true),
             canDelete: $properties['canDelete'] ?? ($legacyCanWrite ?? true),
+            canUpsert: $properties['canUpsert'] ?? ($legacyCanWrite ?? true),
             public: is_array($properties['public'] ?? null) ? RecordTablePublic::__set_state($properties['public']) : ($properties['public'] ?? new RecordTablePublic()),
             primaryKey: $properties['primaryKey'] ?? 'id',
             columns: $properties['columns'] ?? [],
@@ -162,7 +164,6 @@ class RecordTableType
             afterUpdate: $properties['afterUpdate'] ?? null,
             beforeDelete: $properties['beforeDelete'] ?? null,
             afterDelete: $properties['afterDelete'] ?? null,
-
         );
     }
 }

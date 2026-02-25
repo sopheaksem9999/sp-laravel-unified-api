@@ -225,12 +225,24 @@ class RecordService
      *
      * @return array Returns ['id' => mixed, 'payload' => array]
      */
-    public function upsertRecord(Request $request, string $table, array $payload, mixed $tenantId): array
+    public function upsertRecord(Request $request, string $table, array $payload, mixed $tenantId, array $matchOn = []): array
     {
         $tableSchema = SchemaRegistryUtils::getTable($table);
 
         $actualTableName = $tableSchema->table ?? $table;
         $pk = $tableSchema->primaryKey ?? 'id';
+
+        // Resolve match_on if not provided
+        if (empty($matchOn)) {
+            $matchOnStr = $request->query('match_on');
+            if (!empty($matchOnStr)) {
+                $matchOn = explode(',', $matchOnStr);
+            }
+        }
+
+        if (empty($matchOn)) {
+            throw new Exception('match_on query parameter is required for upsert operation', RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
+        }
 
         // Sanitize payload
         $item = $this->sanitizePayload($payload, $tableSchema);
@@ -241,20 +253,117 @@ class RecordService
         // Apply timestamps and audit fields
         $item = $this->applyTimestampsAndAuditFields($item, $tableSchema, true);
 
-        // Upsert requires update columns; exclude primary key and system timestamps
-        $updateColumns = array_values(array_diff(array_keys($item), [$pk, 'id', 'created_at', 'deleted_at']));
+        // Upsert requires update columns; exclude match columns, primary key and system timestamps
+        $excludeColumns = array_merge($matchOn, [$pk, 'id', 'created_at', 'deleted_at']);
+        
+        // If specific update columns are configured, use them. Otherwise, update all non-excluded columns.
+        $updateColumns = array_values(array_diff(array_keys($item), $excludeColumns));
+        
+        // Ensure we have something to update, otherwise upsert might fail or do nothing if all columns match
+        if (empty($updateColumns)) {
+             // If no columns to update, we might just return the existing record or do nothing.
+             // But DB::upsert expects at least one column to update if we want to update.
+             // If the intention is "insert if not exists, do nothing if exists", we can pass an empty array for update columns in some drivers, but Laravel's upsert expects columns.
+             // However, let's assume if there are no other columns, we touch updated_at if it exists.
+             if (array_key_exists('updated_at', $item)) {
+                 $updateColumns = ['updated_at'];
+             }
+        }
 
-        DB::table($actualTableName)->upsert([$item], [$pk], $updateColumns);
+        DB::table($actualTableName)->upsert([$item], $matchOn, $updateColumns);
+        
         $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
         $cacheTenantId = $tenantEnabled ? $this->normalizeTenantId($tenantId) : null;
         $this->invalidateTableCache($table, $cacheTenantId, $tenantEnabled);
-        if (array_key_exists($pk, $item) && null !== $item[$pk]) {
-            $this->invalidateRecordCache($table, $item[$pk], $cacheTenantId, $tenantEnabled);
+        
+        // Retrieve the ID - this is tricky with upsert as we don't always get the ID back easily across all drivers.
+        // We might need to query it back using the matchOn columns.
+        $query = DB::table($actualTableName);
+        foreach ($matchOn as $col) {
+            $query->where($col, $item[$col]);
+        }
+        if ($tenantEnabled) {
+            $this->applyTenantFilter($query, $table, $tenantId);
+        }
+        $record = $query->first([$pk]);
+        $id = $record ? $record->$pk : null;
+
+        if ($id) {
+            $this->invalidateRecordCache($table, $id, $cacheTenantId, $tenantEnabled);
+            
+            // Trigger post-write logic (audit logs, triggers)
+            // Determining if it was insert or update is hard with standard upsert.
+            // We'll treat it as 'update' for now as it's the safer assumption for audit logs in upsert context,
+            // or we could check if created_at == updated_at (if we had precision).
+            // For now, let's log it as 'upsert' (which might map to update or a custom event).
+            // But processPostWriteLogic expects 'create', 'update', 'delete'.
+            // Let's check if the record existed before? No, that defeats the performance purpose of upsert.
+            // We will trigger 'update' logic as a fallback.
+            $this->processPostWriteLogic($request, $table, 'update', [
+                'id' => $id,
+                'payload' => $item,
+                RecordConfigService::tenantColumn() => $tenantId,
+            ]);
         }
 
         return [
-            'id' => $item[$pk] ?? null,
-            'payload' => $item,
+            'data' => [
+                'id' => $id,
+                'payload' => $item,
+            ],
+            'meta' => [],
+        ];
+    }
+
+    /**
+     * Bulk upsert records.
+     *
+     * @return array Returns ['count' => int]
+     */
+    public function bulkUpsertRecord(Request $request, string $table, array $payloads, mixed $tenantId, array $matchOn): array
+    {
+        $tableSchema = SchemaRegistryUtils::getTable($table);
+        $actualTableName = $tableSchema->table ?? $table;
+        $pk = $tableSchema->primaryKey ?? 'id';
+        $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
+        $cacheTenantId = $tenantEnabled ? $this->normalizeTenantId($tenantId) : null;
+
+        $preparedItems = [];
+        $updateColumns = [];
+
+        foreach ($payloads as $payload) {
+            $item = $this->sanitizePayload($payload, $tableSchema);
+            if ($tenantEnabled) {
+                $item[RecordConfigService::tenantColumn()] = $cacheTenantId;
+            }
+            $item = $this->applyTimestampsAndAuditFields($item, $tableSchema, true);
+            $preparedItems[] = $item;
+        }
+
+        if (empty($preparedItems)) {
+            return ['count' => 0];
+        }
+
+        // Calculate update columns from the first item (assuming uniform payload structure)
+        $firstItem = $preparedItems[0];
+        $excludeColumns = array_merge($matchOn, [$pk, 'id', 'created_at', 'deleted_at']);
+        $updateColumns = array_values(array_diff(array_keys($firstItem), $excludeColumns));
+         if (empty($updateColumns) && array_key_exists('updated_at', $firstItem)) {
+             $updateColumns = ['updated_at'];
+         }
+
+        $affected = DB::table($actualTableName)->upsert($preparedItems, $matchOn, $updateColumns);
+
+        $this->invalidateTableCache($table, $cacheTenantId, $tenantEnabled);
+        
+        // We can't easily invalidate individual record caches or fire individual triggers for bulk upsert
+        // without querying them all back. This is a trade-off for bulk performance.
+
+        return [
+            'data' => [
+                'count' => $affected,
+            ],
+            'meta' => [],
         ];
     }
 
@@ -728,7 +837,7 @@ class RecordService
                     }
                 } elseif ('upsert' === $operation) {
                     $result = $this->upsertRecord($request, $table, $item, $tenantId);
-                    $upsertedId = $result['id'] ?? ($item[$pk] ?? null);
+                    $upsertedId = $result['data']['id'] ?? ($item[$pk] ?? null);
 
                     if ($upsertedId) {
                         $recordResult = $this->getRecord($request, $table, $upsertedId, $tenantId);
@@ -2025,6 +2134,10 @@ class RecordService
     {
         if (null !== $legacyAction && '' !== $legacyAction && '0' !== $legacyAction) {
             return $legacyAction;
+        }
+
+        if (isset($row['operation'])) {
+            return $row['operation'];
         }
 
         $hasId = isset($row[$pk]) && !empty($row[$pk]);

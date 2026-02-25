@@ -563,6 +563,63 @@ class CoreRecordController extends Controller
     }
 
     /**
+     * Create or update a record based on matching criteria.
+     */
+    public function upsertRecord(Request $request, string $table): JsonResponse
+    {
+        $tableSchema = SchemaRegistryUtils::getTable($table);
+        if (!$tableSchema instanceof RecordTableType) {
+            return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
+        }
+
+        if (!$this->isUpsertEndpointEnabled($tableSchema)) {
+            return $this->resourceNotAvailableResponse();
+        }
+
+        $this->authorizeAction($table, 'create');
+        $this->authorizeAction($table, 'update');
+
+        // Resolve actual table name from RecordTableType configuration
+        $this->resolveActualTableName($table);
+        $tenantId = $this->recordService->normalizeTenantId($request->header(RecordConfigService::tenantHeader()));
+        if (($response = $this->validateTenantIdRequired($tableSchema, $tenantId)) instanceof JsonResponse) {
+            return $response;
+        }
+
+        try {
+            // Get matching columns from query parameter
+            $matchOn = $request->query('match_on');
+            if (empty($matchOn)) {
+                return RecordApiResponseService::errorWrapped('match_on query parameter is required', RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
+            }
+            $matchOn = explode(',', $matchOn);
+
+            $payload = $request->all();
+            
+            // Validate that match_on columns exist in payload
+            foreach ($matchOn as $col) {
+                if (!array_key_exists($col, $payload)) {
+                    return RecordApiResponseService::errorWrapped("Missing required matching column: $col", RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
+                }
+            }
+
+            $result = $this->recordService->upsertRecord($request, $table, $payload, $tenantId, $matchOn);
+            
+            return RecordApiResponseService::successWrapped($result['data'], $result['meta']);
+
+        } catch (Exception $exception) {
+            // Rollback transaction on any error
+            DB::rollBack();
+            
+            if ($exception instanceof ValidationException) {
+                return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $exception->errors());
+            }
+
+            return RecordApiResponseService::errorWrapped('Failed to upsert record: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
+        }
+    }
+
+    /**
      * Batch create, update, or delete records in a single API call.
      */
     public function bulkRecord(Request $request, string $table, ?string $legacyAction = null): JsonResponse
@@ -596,6 +653,75 @@ class CoreRecordController extends Controller
             }
 
             return RecordApiResponseService::errorWrapped($exception->getMessage(), $code);
+        }
+    }
+
+    /**
+     * Batch create, update, or delete records in a single API call.
+     */
+    public function bulkRecordUpsert(Request $request, string $table): JsonResponse
+    {
+        $tableSchema = SchemaRegistryUtils::getTable($table);
+        if (!$tableSchema instanceof RecordTableType) {
+            return RecordApiResponseService::errorWrapped('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
+        }
+
+        if (!$this->isUpsertEndpointEnabled($tableSchema)) {
+            return $this->resourceNotAvailableResponse();
+        }
+
+        $this->authorizeAction($table, 'create');
+        $this->authorizeAction($table, 'update');
+
+        $tenantId = $this->recordService->normalizeTenantId($request->header(RecordConfigService::tenantHeader()));
+        if (($response = $this->validateTenantIdRequired($tableSchema, $tenantId)) instanceof JsonResponse) {
+            return $response;
+        }
+
+        try {
+            // Get matching columns from query parameter
+            $matchOn = $request->query('match_on');
+            if (empty($matchOn)) {
+                return RecordApiResponseService::errorWrapped('match_on query parameter is required', RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
+            }
+            $matchOn = explode(',', $matchOn);
+
+            $payload = $request->except(['match_on', 'select', 'per_page', 'page']);
+            
+            // Handle both direct array and single object (standardize to array)
+            if (!is_array($payload) || (is_array($payload) && !array_key_exists(0, $payload) && !empty($payload))) {
+                $items = [$payload];
+            } else {
+                $items = $payload;
+            }
+
+            // Validate bulk size
+            if (count($items) > RecordConfigService::bulkMax()) {
+                return RecordApiResponseService::errorWrapped('Bulk limit exceeded', RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
+            }
+
+            // Validate that match_on columns exist in each item
+            foreach ($items as $index => $item) {
+                foreach ($matchOn as $col) {
+                    if (!array_key_exists($col, $item)) {
+                        return RecordApiResponseService::errorWrapped("Item at index $index missing required matching column: $col", RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
+                    }
+                }
+            }
+
+            $result = $this->recordService->bulkUpsertRecord($request, $table, $items, $tenantId, $matchOn);
+            
+            return RecordApiResponseService::successWrapped($result['data'], $result['meta']);
+
+        } catch (Exception $exception) {
+            // Rollback transaction on any error
+            DB::rollBack();
+            
+            if ($exception instanceof ValidationException) {
+                return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $exception->errors());
+            }
+
+            return RecordApiResponseService::errorWrapped('Failed to bulk upsert records: ' . $exception->getMessage(), RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -1243,6 +1369,11 @@ class CoreRecordController extends Controller
     private function isDeleteEndpointEnabled(object $tableSchema): bool
     {
         return (bool) ($tableSchema->canDelete ?? true);
+    }
+
+    private function isUpsertEndpointEnabled(object $tableSchema): bool
+    {
+        return (bool) ($tableSchema->canUpsert ?? false);
     }
 
     private function fetchRecordData(Request $request, string $table, mixed $id, mixed $tenantId): mixed

@@ -546,6 +546,7 @@ Accepts an array of IDs or an array of objects with the primary key.
             $canCreate = (bool) ($config->canCreate ?? true);
             $canUpdate = (bool) ($config->canUpdate ?? true);
             $canDelete = (bool) ($config->canDelete ?? true);
+            $canUpsert = (bool) ($config->canUpsert ?? true);
 
             // Generate relationship description
             $relationshipDescription = self::generateRelationshipDescription($config);
@@ -635,6 +636,167 @@ Accepts an array of IDs or an array of objects with the primary key.
 
             if (!isset($paths[$basePath]['get']) && !isset($paths[$basePath]['post'])) {
                 unset($paths[$basePath]);
+            }
+
+            // Upsert
+            if ($canUpsert) {
+                $upsertPath = $basePath . '/upsert';
+                $paths[$upsertPath] = [
+                    'parameters' => array_merge($tenantHeaderParameters, [
+                        [
+                            'name' => 'match_on',
+                            'in' => 'query',
+                            'required' => true,
+                            'description' => 'Comma-separated list of columns to use for matching records (e.g. "sku,name")',
+                            'schema' => ['type' => 'string'],
+                        ],
+                    ]),
+                    'post' => [
+                        'tags' => [$formattedRecordName],
+                        'summary' => 'Upsert ' . $formattedRecordName,
+                        'description' => "Create or update a {$recordName} record based on match_on columns.\n\n{$relationshipDescription}",
+                        'requestBody' => [
+                            'required' => true,
+                            'content' => [
+                                'application/json' => [
+                                    'schema' => ['$ref' => $schemaRefWrite],
+                                ],
+                            ],
+                        ],
+                        'responses' => [
+                            '200' => [
+                                'description' => 'Upserted',
+                                'content' => [
+                                    'application/json' => [
+                                        'schema' => [
+                                            'type' => 'object',
+                                            'properties' => [
+                                                'success' => ['type' => 'boolean', 'example' => true],
+                                                'error_code' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::SUCCESS],
+                                                'data' => ['$ref' => $schemaRef],
+                                                'meta' => [
+                                                    'type' => 'object',
+                                                    'properties' => [
+                                                        'request_id' => ['type' => 'string'],
+                                                    ],
+                                                ],
+                                            ],
+                                            'required' => ['success', 'error_code', 'data', 'meta'],
+                                        ],
+                                    ],
+                                ],
+                            ],
+                            '400' => [
+                                'description' => 'Validation Error',
+                                'content' => [
+                                    'application/json' => [
+                                        'schema' => [
+                                            'type' => 'object',
+                                            'properties' => [
+                                                'success' => ['type' => 'boolean', 'example' => false],
+                                                'error_code' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::INVALID_REQUEST],
+                                                'message' => ['type' => 'string', 'example' => 'Validation failed'],
+                                                'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
+                                                'meta' => [
+                                                    'type' => 'object',
+                                                    'properties' => [
+                                                        'request_id' => ['type' => 'string'],
+                                                    ],
+                                                ],
+                                            ],
+                                            'required' => ['success', 'error_code', 'message', 'errors', 'meta'],
+                                        ],
+                                    ],
+                                ],
+                            ],
+                        ],
+                        'security' => [['bearerAuth' => []]],
+                    ],
+                ];
+
+                // Bulk Upsert
+                $bulkUpsertPath = $basePath . '/bulk/upsert';
+                $paths[$bulkUpsertPath] = [
+                    'parameters' => array_merge($tenantHeaderParameters, [
+                        [
+                            'name' => 'match_on',
+                            'in' => 'query',
+                            'required' => true,
+                            'description' => 'Comma-separated list of columns to use for matching records (e.g. "sku,name")',
+                            'schema' => ['type' => 'string'],
+                        ],
+                    ]),
+                    'post' => [
+                        'tags' => [$formattedRecordName],
+                        'summary' => 'Bulk Upsert ' . $formattedRecordName,
+                        'description' => "Bulk create or update {$recordName} records based on match_on columns.\n\n{$relationshipDescription}",
+                        'requestBody' => [
+                            'required' => true,
+                            'content' => [
+                                'application/json' => [
+                                    'schema' => [
+                                        'type' => 'array',
+                                        'items' => ['$ref' => $schemaRefWrite],
+                                    ],
+                                ],
+                            ],
+                        ],
+                        'responses' => [
+                            '200' => [
+                                'description' => 'Bulk Upserted',
+                                'content' => [
+                                    'application/json' => [
+                                        'schema' => [
+                                            'type' => 'object',
+                                            'properties' => [
+                                                'success' => ['type' => 'boolean', 'example' => true],
+                                                'error_code' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::SUCCESS],
+                                                'data' => [
+                                                    'type' => 'object',
+                                                    'properties' => [
+                                                        'count' => ['type' => 'integer'],
+                                                    ],
+                                                ],
+                                                'meta' => [
+                                                    'type' => 'object',
+                                                    'properties' => [
+                                                        'request_id' => ['type' => 'string'],
+                                                        'total' => ['type' => 'integer'],
+                                                    ],
+                                                ],
+                                            ],
+                                            'required' => ['success', 'error_code', 'data', 'meta'],
+                                        ],
+                                    ],
+                                ],
+                            ],
+                            '400' => [
+                                'description' => 'Validation Error',
+                                'content' => [
+                                    'application/json' => [
+                                        'schema' => [
+                                            'type' => 'object',
+                                            'properties' => [
+                                                'success' => ['type' => 'boolean', 'example' => false],
+                                                'error_code' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::INVALID_REQUEST],
+                                                'message' => ['type' => 'string', 'example' => 'Validation failed'],
+                                                'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
+                                                'meta' => [
+                                                    'type' => 'object',
+                                                    'properties' => [
+                                                        'request_id' => ['type' => 'string'],
+                                                    ],
+                                                ],
+                                            ],
+                                            'required' => ['success', 'error_code', 'message', 'errors', 'meta'],
+                                        ],
+                                    ],
+                                ],
+                            ],
+                        ],
+                        'security' => [['bearerAuth' => []]],
+                    ],
+                ];
             }
 
             // Read/Update/Delete
@@ -752,65 +914,6 @@ Accepts an array of IDs or an array of objects with the primary key.
                     ],
                     'security' => [['bearerAuth' => []]],
                 ] : [],
-                // 'patch' => $canUpdate ? [
-                //     'tags' => [$formattedRecordName],
-                //     'summary' => 'Partially update ' . $formattedRecordName,
-                //     'description' => "Update an existing {$recordName} record with comprehensive validation:\n\n**Advanced Validation:** Multiple rules ([Validation](#description/-getting-started))\n\n{$relationshipDescription}",
-                //     'requestBody' => [
-                //         'required' => true,
-                //         'content' => [
-                //             'application/json' => [
-                //                 'schema' => ['$ref' => $schemaRefWrite],
-                //             ],
-                //         ],
-                //     ],
-                //     'responses' => [
-                //         '200' => [
-                //             'description' => 'Updated',
-                //             'content' => [
-                //                 'application/json' => [
-                //                     'schema' => [
-                //                         'type' => 'object',
-                //                         'properties' => [
-                //                             'success' => ['type' => 'boolean', 'example' => true],
-                //                             'data' => ['$ref' => $schemaRef],
-                //                             'meta' => [
-                //                                 'type' => 'object',
-                //                                 'properties' => [
-                //                                     'request_id' => ['type' => 'string'],
-                //                                 ],
-                //                             ],
-                //                         ],
-                //                         'required' => ['success', 'data', 'meta'],
-                //                     ],
-                //                 ],
-                //             ],
-                //         ],
-                //         '404' => [
-                //             'description' => 'Not Found',
-                //             'content' => [
-                //                 'application/json' => [
-                //                     'schema' => [
-                //                         'type' => 'object',
-                //                         'properties' => [
-                //                             'success' => ['type' => 'boolean', 'example' => false],
-                //                             'message' => ['type' => 'string', 'example' => 'Record not found'],
-                //                             'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
-                //                             'meta' => [
-                //                                 'type' => 'object',
-                //                                 'properties' => [
-                //                                     'request_id' => ['type' => 'string'],
-                //                                 ],
-                //                             ],
-                //                         ],
-                //                         'required' => ['success', 'message', 'errors', 'meta'],
-                //                     ],
-                //                 ],
-                //             ],
-                //         ],
-                //     ],
-                //     'security' => [['bearerAuth' => []]],
-                // ] : [],
                 'delete' => $canDelete ? [
                     'tags' => [$formattedRecordName],
                     'summary' => 'Delete ' . $formattedRecordName,
