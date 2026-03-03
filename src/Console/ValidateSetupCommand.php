@@ -41,6 +41,7 @@ class ValidateSetupCommand extends Command
 
         // Run all validation checks
         $this->validateConfigFiles();
+        $this->validateRecordConfigDirectories();
         $this->validateDatabaseConnection();
         $this->validateDatabaseCompatibility();
         $this->validateMigrations();
@@ -95,6 +96,65 @@ class ValidateSetupCommand extends Command
                     $this->info(sprintf('🔧 Attempting to publish %s...', $file));
                     $this->call('sp-laravel-api:setup');
                 }
+            }
+        }
+    }
+
+    private function validateRecordConfigDirectories(): void
+    {
+        $this->info('📁 Checking Record Config Directories...');
+
+        $tablesPath = config_path(RecordConfigService::tableConfigPath());
+        if (File::isDirectory($tablesPath)) {
+            $this->addResult('✅', 'Table config directory exists: ' . str_replace(base_path() . '/', '', $tablesPath), 'success');
+        } else {
+            $this->addResult('❌', 'Missing table config directory: ' . str_replace(base_path() . '/', '', $tablesPath), 'error');
+        }
+
+        $globalFunctionsPath = config_path('records/globalFunctions');
+        if (File::isDirectory($globalFunctionsPath)) {
+            $this->addResult('✅', 'Global function directory exists: ' . str_replace(base_path() . '/', '', $globalFunctionsPath), 'success');
+            $this->validateGlobalFunctionConfigFiles($globalFunctionsPath);
+        } else {
+            $this->addResult('⚠️', 'Missing global function directory: config/records/globalFunctions', 'warning');
+            $this->addResult('ℹ️', 'Create config/records/globalFunctions/*.php files or run: php artisan sp-laravel-api:setup', 'info');
+        }
+    }
+
+    private function validateGlobalFunctionConfigFiles(string $globalFunctionsPath): void
+    {
+        $files = File::allFiles($globalFunctionsPath);
+
+        foreach ($files as $file) {
+            if ($file->getExtension() !== 'php') {
+                continue;
+            }
+
+            $fullPath = $file->getPathname();
+            $relativePath = str_replace(base_path() . '/', '', $fullPath);
+
+            try {
+                $config = require $fullPath;
+            } catch (Exception $exception) {
+                $this->addResult('❌', sprintf('Invalid global function config %s: %s', $relativePath, $exception->getMessage()), 'error');
+                continue;
+            }
+
+            if (!is_array($config)) {
+                $this->addResult('❌', 'Global function config must return array: ' . $relativePath, 'error');
+                continue;
+            }
+
+            $group = pathinfo($file->getFilename(), PATHINFO_FILENAME);
+            $keysWithoutGroupPrefix = array_filter(
+                array_keys($config),
+                static fn(int|string $key): bool => is_string($key) && $key !== '' && !str_contains($key, '/')
+            );
+
+            if ($keysWithoutGroupPrefix !== []) {
+                $this->addResult('✅', 'Global function group "' . $group . '" will prefix endpoint keys in ' . $relativePath, 'success');
+            } else {
+                $this->addResult('✅', 'Global function config loaded: ' . $relativePath, 'success');
             }
         }
     }

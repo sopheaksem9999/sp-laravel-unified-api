@@ -3,7 +3,9 @@
 use Illuminate\Support\Facades\Route;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 use Sopheak\Core\Http\Controllers\CoreRecordController;
+use Sopheak\Core\Services\OpenApiService;
 use Sopheak\Core\Services\RecordConfigService;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
 /*
 |--------------------------------------------------------------------------
@@ -50,22 +52,13 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
 
     // OpenAPI Specification
     Route::get('docs/openapi', function () {
-        $filePath = storage_path('openapi-schema.json');
-
-        if (!file_exists($filePath)) {
+        try {
+            SchemaRegistryUtils::refresh();
+            $json = OpenApiService::generateInternal();
+        } catch (\Throwable $throwable) {
             return response()->json([
-                'error' => 'OpenAPI specification not found',
-                'message' => 'Please run "php artisan sp-laravel-api:openapi" to generate the specification'
-            ], RecordApiJsonResponseEnum::NOT_FOUND->value);
-        }
-
-        $content = file_get_contents($filePath);
-        $json = json_decode($content, true);
-
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            return response()->json([
-                'error' => 'Invalid OpenAPI specification',
-                'message' => 'The OpenAPI file contains invalid JSON'
+                'error' => 'Failed to generate OpenAPI specification',
+                'message' => $throwable->getMessage(),
             ], RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
 

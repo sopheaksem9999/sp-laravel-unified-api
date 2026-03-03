@@ -421,12 +421,15 @@ return [
 
     // Query caching (used by QueryCacheService)
     'cache' => [
-        'enabled' => env('CACHE_API', false),
+        'enabled' => env('SP_LARAVEL_API_CACHE_API', false),
         'ttl' => 3600,
         'prefix' => 'sp_laravel_api',
         'per_table' => [],
     ],
     
+    // Global RPC function configurations
+    'global_functions' => [],
+
     // Table configurations
     'tables' => [
         // Your table configurations here
@@ -436,19 +439,32 @@ return [
 
 #### Large Schemas (Many Tables)
 
-For applications with many tables, you can split the table configuration into multiple files and merge them in `config/record.php`. For example:
+For applications with many tables and global RPC functions, you can split configurations into multiple files and merge them in `config/record.php`. For example:
 
 ```php
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 use Sopheak\Core\Types\RecordTableType;
 
 $tables = [
     // Core tables defined inline
 ];
+$globalFunctions = [];
 
 $tablesDirectory = __DIR__ . '/records/tables';
+$globalFunctionsDirectory = __DIR__ . '/records/globalFunctions';
 
 if (is_dir($tablesDirectory)) {
-    foreach (glob($tablesDirectory . '/*.php') as $path) {
+    $directoryIterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($tablesDirectory)
+    );
+
+    foreach ($directoryIterator as $file) {
+        if (!$file->isFile() || $file->getExtension() !== 'php') {
+            continue;
+        }
+
+        $path = $file->getPathname();
         $config = require $path;
 
         if ($config instanceof RecordTableType) {
@@ -460,6 +476,38 @@ if (is_dir($tablesDirectory)) {
     }
 }
 
+if (is_dir($globalFunctionsDirectory)) {
+    $globalFunctionsDirectoryIterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($globalFunctionsDirectory)
+    );
+
+    foreach ($globalFunctionsDirectoryIterator as $file) {
+        if (!$file->isFile() || $file->getExtension() !== 'php') {
+            continue;
+        }
+
+        $path = $file->getPathname();
+        $config = require $path;
+        if (!is_array($config)) {
+            continue;
+        }
+
+        $group = pathinfo((string) $path, PATHINFO_FILENAME);
+        foreach ($config as $functionName => $functionConfig) {
+            if (!is_string($functionName) || $functionName === '') {
+                continue;
+            }
+
+            $normalizedFunctionName = ltrim($functionName, '/');
+            $prefixedFunctionName = str_contains($normalizedFunctionName, '/')
+                ? $normalizedFunctionName
+                : $group . '/' . $normalizedFunctionName;
+
+            $globalFunctions[$prefixedFunctionName] = $functionConfig;
+        }
+    }
+}
+
 return [
     'api_prefix' => 'api/v1',
     'enable_tenant_id' => false,
@@ -467,16 +515,18 @@ return [
     'tenant_header' => 'X-Tenant-ID',
     'max_depth' => 10,
     'cache' => [
-        'enabled' => env('CACHE_API', false),
+        'enabled' => env('SP_LARAVEL_API_CACHE_API', false),
         'ttl' => 3600,
         'prefix' => 'sp_laravel_api',
         'per_table' => [],
     ],
+    'global_functions' => $globalFunctions,
     'tables' => $tables,
 ];
 ```
 
 Each file under `config/records/tables` can return a single `RecordTableType` or an array of `[table_name => RecordTableType]`.
+Each file under `config/records/globalFunctions` must return an array. File name becomes group prefix for keys without `/` (example: `auth.php` + `login` => `auth/login`).
 
 ### Authentication Setup
 
@@ -726,9 +776,7 @@ php artisan route:clear
 ```bash
   # Clean old audit logs based on retention configuration
   php artisan sp-laravel-api:clean-audit-logs
-  # Generate OpenAPI 3 specification based on record configuration
-  php artisan sp-laravel-api:openapi
-  # Setup SP Laravel API package: publish configs and create record/audit configurations using config/record.php + config/records/tables/*.php
+  # Setup SP Laravel API package: publish configs and create record/audit configurations using config/record.php + config/records/tables/*.php + config/records/globalFunctions/*.php
   php artisan sp-laravel-api:setup
   # Create a RecordTableType config file under config/records/tables
   php artisan sp-laravel-api:record customers
@@ -1095,12 +1143,21 @@ Route::middleware('request.id')->group(function () {
 
 ## CLI Commands
 
-### Generate OpenAPI Specification
-```bash
-php artisan sp-laravel-api:openapi
+### OpenAPI Specification
+
+OpenAPI is generated dynamically from record configuration at request time:
+
+```text
+GET /{api_prefix}/docs/openapi
 ```
 
-Generates a comprehensive OpenAPI 3.0 specification for your API with the following features:
+Use the bundled Scalar page to browse the API documentation:
+
+```text
+GET /api-docs
+```
+
+The generated OpenAPI 3.0 schema includes:
 
 **Enhanced Schema Generation:**
 - **Full Schema**: Complete model schema with all properties
@@ -1120,9 +1177,7 @@ Generates a comprehensive OpenAPI 3.0 specification for your API with the follow
 - Includes relationship documentation
 - Supports custom table configurations
 
-**Output Options:**
-- Default: `storage/openapi-schema.json`
-- Configurable via `config('sp-laravel-api.openapi.output')`
+**Compatibility:**
 - Compatible with Swagger UI, Postman, and other OpenAPI tools
 
 **Example Generated Features:**

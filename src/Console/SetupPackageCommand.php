@@ -13,7 +13,7 @@ class SetupPackageCommand extends Command
 {
     protected $signature = 'sp-laravel-api:setup {--force : Overwrite existing configs}';
 
-    protected $description = 'Setup SP Laravel API package: publish configs and create record/audit configurations using config/record.php + config/records/tables/*.php.';
+    protected $description = 'Setup SP Laravel API package: publish configs and create record/audit configurations using config/record.php + config/records/tables/*.php + config/records/globalFunctions/*.php.';
 
     public function handle(): int
     {
@@ -41,7 +41,9 @@ class SetupPackageCommand extends Command
 
         try {
             $this->ensureDirectory('config/records/tables');
+            $this->ensureDirectory('config/records/globalFunctions');
             $created += $this->ensureFile('config/records/tables/README.md', $this->defaultRecordTablesReadme(), $force);
+            $created += $this->ensureFile('config/records/globalFunctions/README.md', $this->defaultRecordGlobalFunctionsReadme(), $force);
             $created += $this->ensureFile('config/record.php', $this->defaultRecordConfig(), $force);
             $created += $this->ensureFile('config/audit.php', $this->defaultAuditConfig(), $force);
             $created += $this->ensureAppServiceProviderRateLimiters();
@@ -58,7 +60,7 @@ class SetupPackageCommand extends Command
             $this->line('📋 Next steps:');
             $this->line('  1. Review and customize the generated configuration files');
             $this->line('  2. Set up your environment variables (.env file)');
-            $this->line('  3. Configure your database tables in config/record.php and config/records/tables/*.php');
+            $this->line('  3. Configure tables in config/records/tables and global functions in config/records/globalFunctions');
         }
 
         if (!$force && $created === 0) {
@@ -342,6 +344,41 @@ return [
 MD;
     }
 
+    private function defaultRecordGlobalFunctionsReadme(): string
+    {
+        return <<<'MD'
+# Record Global Function Configs
+
+Put global function config files in this folder.
+
+## Rules
+
+- Each `*.php` file must return an array of function configs.
+- File name is used as group prefix for API path.
+- Example: `auth.php` + key `login` => endpoint key `auth/login`.
+- If a key already contains `/`, the key is used as-is.
+
+## Example
+
+Create `config/records/globalFunctions/auth.php`:
+
+```php
+<?php
+
+use Sopheak\Core\Types\RecordFunctionType;
+
+return [
+    'login' => new RecordFunctionType(
+        httpMethod: ['POST'],
+        class: \App\Services\AuthService::class,
+        functionName: 'login',
+        description: 'Login',
+    ),
+];
+```
+MD;
+    }
+
     private function defaultRecordConfig(): string
     {
         return <<<'PHP'
@@ -349,6 +386,8 @@ MD;
 
 use Illuminate\Http\Request;
 use Illuminate\Contracts\Validation\Validator;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 use Sopheak\Core\Types\RecordBelongsToType;
 use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Types\RecordHasManyThroughType;
@@ -387,10 +426,25 @@ $tables = [
     ),
 ];
 
+$globalFunctions = [];
 $tablesDirectory = __DIR__ . '/records/tables';
+$globalFunctionsDirectory = __DIR__ . '/records/globalFunctions';
 
 if (is_dir($tablesDirectory)) {
-    foreach (glob($tablesDirectory . '/*.php') as $path) {
+    $directoryIterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($tablesDirectory)
+    );
+
+    foreach ($directoryIterator as $file) {
+        if (!$file->isFile()) {
+            continue;
+        }
+
+        if ($file->getExtension() !== 'php') {
+            continue;
+        }
+
+        $path = $file->getPathname();
         $config = require $path;
 
         if ($config instanceof RecordTableType) {
@@ -398,6 +452,44 @@ if (is_dir($tablesDirectory)) {
             $tables[$name] = $config;
         } elseif (is_array($config)) {
             $tables = array_merge($tables, $config);
+        }
+    }
+}
+
+if (is_dir($globalFunctionsDirectory)) {
+    $globalFunctionsDirectoryIterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($globalFunctionsDirectory)
+    );
+
+    foreach ($globalFunctionsDirectoryIterator as $file) {
+        if (!$file->isFile()) {
+            continue;
+        }
+
+        if ($file->getExtension() !== 'php') {
+            continue;
+        }
+
+        $path = $file->getPathname();
+        $config = require $path;
+
+        if (!is_array($config)) {
+            continue;
+        }
+
+        $group = pathinfo((string) $path, PATHINFO_FILENAME);
+
+        foreach ($config as $functionName => $functionConfig) {
+            if (!is_string($functionName) || $functionName === '') {
+                continue;
+            }
+
+            $normalizedFunctionName = ltrim($functionName, '/');
+            $prefixedFunctionName = str_contains($normalizedFunctionName, '/')
+                ? $normalizedFunctionName
+                : $group . '/' . $normalizedFunctionName;
+
+            $globalFunctions[$prefixedFunctionName] = $functionConfig;
         }
     }
 }
@@ -457,7 +549,7 @@ return [
     // Cache configuration
     'cache' => [
         // Enable/disable caching globally for the Records API
-        'enabled' => env('CACHE_API', false),
+        'enabled' => env('SP_LARAVEL_API_CACHE_API', false),
 
         // Cache TTL for query results (seconds)
         'ttl' => 3600,
@@ -495,6 +587,8 @@ return [
     'permission_separator' => ':', // separator for permission ex: view:invoice
     'restrict_to_own_records' => false, // limit queries to records created by the authenticated user
     'own_records_permission_prefix' => 'viewOwn', // example: viewOwn_invoice
+
+    'global_functions' => $globalFunctions,
 
     // Table configurations
     'tables' => $tables,

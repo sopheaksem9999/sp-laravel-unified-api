@@ -7,7 +7,6 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
 use Sopheak\Core\Console\CleanAuditLogsCommand;
-use Sopheak\Core\Console\GenerateOpenApiSpecCommand;
 use Sopheak\Core\Console\SyncRecordColumnsCommand;
 use Sopheak\Core\Console\GenerateRecordTablesFromDatabaseCommand;
 use Sopheak\Core\Console\MakeRecordTableCommand;
@@ -50,7 +49,6 @@ class CoreSpLaravelApiProvider extends ServiceProvider
 
         if ($this->app->runningInConsole()) {
             $commands = [
-                GenerateOpenApiSpecCommand::class,
                 SetupPackageCommand::class,
                 ValidateSetupCommand::class,
                 SyncRecordColumnsCommand::class,
