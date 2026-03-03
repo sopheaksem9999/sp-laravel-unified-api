@@ -137,6 +137,18 @@ class RecordCacheService
         }
     }
 
+    public function invalidateTableFunctionCache(string $table, string $functionName, mixed $tenantId, bool $tenantEnabled): void
+    {
+        $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
+        QueryCacheService::invalidateTableFunctionForTenant(table: $table, functionName: $functionName, tenantKey: $tenantKey);
+    }
+
+    public function invalidateGlobalFunctionCache(string $functionName, mixed $tenantId, bool $tenantEnabled): void
+    {
+        $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
+        QueryCacheService::invalidateGlobalFunctionForTenant(functionName: $functionName, tenantKey: $tenantKey);
+    }
+
     public function invalidateRecordCache(string $table, mixed $id, mixed $tenantId, bool $tenantEnabled): void
     {
         $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);

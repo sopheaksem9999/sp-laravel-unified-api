@@ -889,7 +889,7 @@ Defines a callable RPC endpoint config (table RPC or global RPC).
 - `class` (string, required): Handler class.
 - `functionName` (string, required): Method name on handler class.
 - `pmsName` (array|string|null, default: `null`): Permission(s). When `null`, the function is public (no permission check).
-- `disableCache` (bool, default: `true`): Disable caching for this function.
+- `disableCache` (bool, default: `false`): Disable caching for this function.
 - `cacheTTL` (?int, default: `null`): Custom cache TTL (seconds). When set, overrides the default cache TTL.
 - `clearCacheTables` (array|string|null, default: `null`): Tables to clear after successful write methods (`POST`, `PUT`, `PATCH`, `DELETE`). If omitted for table functions, the current table is cleared.
 - `description` (?string, default: `null`): Optional description.
@@ -903,7 +903,7 @@ $function = new RecordFunctionType(
     class: \App\Services\ReportService::class,
     functionName: 'generate',
     pmsName: 'view_report',
-    disableCache: true,
+    disableCache: false,
     clearCacheTables: ['reports'],
     description: 'Generate a report',
 );
@@ -2128,18 +2128,20 @@ Caching is only applied for `GET` requests and when `record.cache.enabled` is tr
 
 **Table functions**
 
-- Caching is disabled by default via `disableCache: true`.
+- Caching is enabled by default (`disableCache: false`).
 - Table cache can be disabled globally for a table using `record.cache.per_table[table] = false`.
 - Default TTL uses `record.cache.per_table_ttl[table]` when set; otherwise `record.cache.ttl`.
 - Set `cacheTTL` in the function config to override the computed TTL for this function.
+- For write methods (`POST`, `PUT`, `PATCH`, `DELETE`), table function cache for the executed function is invalidated automatically.
 - For write methods (`POST`, `PUT`, `PATCH`, `DELETE`), table functions automatically clear cache for the current table after a successful response. Use `clearCacheTables` to clear additional tables.
 
 **Global functions**
 
-- Caching is disabled by default via `disableCache: true`.
+- Caching is enabled by default (`disableCache: false`).
 - Default TTL uses `record.cache.ttl`.
 - Set `cacheTTL` in the function config to override the default TTL for this function.
-- For write methods (`POST`, `PUT`, `PATCH`, `DELETE`), global functions can clear table caches by setting `clearCacheTables`.
+- For write methods (`POST`, `PUT`, `PATCH`, `DELETE`), global function cache for the executed function is invalidated automatically.
+- Global functions can additionally clear table caches by setting `clearCacheTables`.
 
 **Manual cache clear**
 

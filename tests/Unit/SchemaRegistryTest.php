@@ -302,6 +302,23 @@ class SchemaRegistryTest extends TestCase
         $this->assertSame('keep', QueryCacheService::get('unrelated'));
     }
 
+    public function test_non_redis_invalidation_clears_global_function_tenant_cache(): void
+    {
+        Config::set('record.cache.enabled', true);
+        $store = Cache::getStore();
+        if ($store instanceof RedisStore) {
+            $this->markTestSkipped('Test only applies to non-Redis stores');
+        }
+
+        QueryCacheService::put('record_func_global:function:auth/login:tenant:missing:hash:abc', 'value', 600);
+        QueryCacheService::put('unrelated', 'keep', 600);
+
+        QueryCacheService::invalidateGlobalFunctionForTenant('auth/login', 'missing');
+
+        $this->assertNull(QueryCacheService::get('record_func_global:function:auth/login:tenant:missing:hash:abc'));
+        $this->assertSame('keep', QueryCacheService::get('unrelated'));
+    }
+
     public function test_get_table_columns_adds_composite_fields_for_pgsql(): void
     {
         DB::shouldReceive('getDriverName')

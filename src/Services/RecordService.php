@@ -553,13 +553,13 @@ class RecordService
             throw new Exception(sprintf("Function '%s' not found for table '%s'", $functionName, $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
-        $disableCache = true;
+        $disableCache = false;
         $functionCacheTtl = null;
         if ($functionConfig instanceof RecordFunctionType) {
             $disableCache = $functionConfig->disableCache;
             $functionCacheTtl = $functionConfig->cacheTTL;
         } elseif (is_array($functionConfig)) {
-            $disableCache = (bool) ($functionConfig['disableCache'] ?? true);
+            $disableCache = (bool) ($functionConfig['disableCache'] ?? false);
             $functionCacheTtl = isset($functionConfig['cacheTTL']) ? (int) $functionConfig['cacheTTL'] : null;
         }
 
@@ -589,6 +589,13 @@ class RecordService
 
         $method = strtoupper($request->method());
         if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true) && $response->getStatusCode() < 400) {
+            $this->cacheService()->invalidateTableFunctionCache(
+                table: $table,
+                functionName: $functionName,
+                tenantId: $tenantId,
+                tenantEnabled: $tenantEnabled
+            );
+
             $clearCacheTables = null;
             if ($functionConfig instanceof RecordFunctionType) {
                 $clearCacheTables = $functionConfig->clearCacheTables;
@@ -667,13 +674,13 @@ class RecordService
             throw new Exception(sprintf("Function '%s' not found", $functionName), RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
-        $disableCache = true;
+        $disableCache = false;
         $functionCacheTtl = null;
         if ($functionConfig instanceof RecordFunctionType) {
             $disableCache = $functionConfig->disableCache;
             $functionCacheTtl = $functionConfig->cacheTTL;
         } elseif (is_array($functionConfig)) {
-            $disableCache = (bool) ($functionConfig['disableCache'] ?? true);
+            $disableCache = (bool) ($functionConfig['disableCache'] ?? false);
             $functionCacheTtl = isset($functionConfig['cacheTTL']) ? (int) $functionConfig['cacheTTL'] : null;
         }
 
@@ -702,6 +709,12 @@ class RecordService
 
         $method = strtoupper($request->method());
         if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true) && $response->getStatusCode() < 400) {
+            $this->cacheService()->invalidateGlobalFunctionCache(
+                functionName: $functionName,
+                tenantId: $tenantId,
+                tenantEnabled: $tenantEnabled
+            );
+
             $clearCacheTables = null;
             if ($functionConfig instanceof RecordFunctionType) {
                 $clearCacheTables = $functionConfig->clearCacheTables;

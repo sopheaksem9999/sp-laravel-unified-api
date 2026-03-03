@@ -4,43 +4,24 @@ namespace Sopheak\Core\Services;
 
 use Sopheak\Core\Interfaces\RecordFunctionInterface;
 use Sopheak\Core\Types\RecordFunctionType;
-use Exception;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Constants\HttpErrorCodeConstant;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\File;
 
 class OpenApiService
 {
     /**
-     * Load OpenAPI 3.0 specification from internal JSON file.
-     * This method is for internal team use only - not exposed publicly.
+     * Load OpenAPI 3.0 specification dynamically from current configuration.
      *
      * @return array The OpenAPI specification
-     *
-     * @throws Exception If the specification file is not found or invalid
      */
     public static function load(): array
     {
-        $specPath = storage_path('openapi-v2-spec.json');
-
-        if (!File::exists($specPath)) {
-            throw new Exception('OpenAPI specification file not found. Run php artisan openapi:generate to create it.');
-        }
-
-        $content = File::get($specPath);
-        $spec = json_decode($content, true);
-
-        if (JSON_ERROR_NONE !== json_last_error()) {
-            throw new Exception('Invalid OpenAPI specification JSON: ' . json_last_error_msg());
-        }
-
-        return $spec;
+        return self::generateInternal();
     }
 
     /**
-     * Generate and save OpenAPI 3.0 specification for internal team use.
-     * This method creates a comprehensive specification with filter documentation.
+     * Generate OpenAPI 3.0 specification dynamically from runtime configuration.
      *
      * @return array The generated OpenAPI specification
      */
@@ -86,7 +67,7 @@ class OpenApiService
 
         $globalFunctions = RecordConfigService::globalFunctions();
 
-        $spec = [
+        return [
             'openapi' => '3.0.3',
             'info' => [
                 'title' => config('app.name') . ' – Internal Documentation',
@@ -329,18 +310,6 @@ Accepts an array of IDs or an array of objects with the primary key.
             ],
             'security' => [['bearerAuth' => []]],
         ];
-
-        // Save to internal storage
-        $specPath = storage_path('internal/openapi-v2-spec.json');
-        $directory = dirname($specPath);
-
-        if (!File::exists($directory)) {
-            File::makeDirectory($directory, 0755, true);
-        }
-
-        File::put($specPath, json_encode($spec, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-
-        return $spec;
     }
 
     private static function schemaName(string $table): string

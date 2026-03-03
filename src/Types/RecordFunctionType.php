@@ -30,7 +30,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  *     httpMethod: 'POST',
  *     class: 'App\\Services\\AuthService',
  *     functionName: 'login',
- *     disableCache: true,
+ *     disableCache: false,
  *     description: 'User login'
  * );
  *
@@ -40,7 +40,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  *     httpMethod: ['POST'],
  *     class: 'App\\Services\\CalculationService',
  *     functionName: 'calculateTotal',
- *     disableCache: true,
+ *     disableCache: false,
  *     description: 'Calculate total for given items'
  * );
  *
@@ -50,7 +50,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  *     httpMethod: 'GET',
  *     class: 'App\\Services\\StatusService',
  *     functionName: 'getStatus',
- *     disableCache: true,
+ *     disableCache: false,
  *     description: 'Get system status information'
  * );
  *
@@ -60,7 +60,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  *     httpMethod: ['GET', 'POST', 'PUT', 'DELETE'],
  *     class: 'App\\Services\\RecordManagementService',
  *     functionName: 'handleRequest',
- *     disableCache: true,
+ *     disableCache: false,
  *     description: 'Full CRUD operations for records'
  * );
  *
@@ -70,7 +70,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  *     httpMethod: ['POST'],
  *     class: 'App\\Http\\Controllers\\EmployeeRosterController',
  *     functionName: 'upsertEmployeeRosters',
- *     disableCache: true,
+ *     disableCache: false,
  *     description: 'Create or update employee rosters'
  * );
  * ```
@@ -94,7 +94,7 @@ class RecordFunctionType
         public string $functionName,
         public bool $isPublic = false,
         public array|string|null $pmsName = null,
-        public bool $disableCache = true,
+        public bool $disableCache = false,
         public ?int $cacheTTL = null,
         public ?string $description = null,
         public ?array $querySchema = null,
@@ -139,7 +139,7 @@ class RecordFunctionType
             functionName: $properties['functionName'] ?? throw new InvalidArgumentException('functionName is required'),
             isPublic: $properties['isPublic'] ?? false,
             pmsName: $properties['pmsName'] ?? null,
-            disableCache: $properties['disableCache'] ?? true,
+            disableCache: $properties['disableCache'] ?? false,
             cacheTTL: $properties['cacheTTL'] ?? null,
             description: $properties['description'] ?? null,
             querySchema: $properties['querySchema'] ?? null,
@@ -219,7 +219,7 @@ class RecordFunctionType
             functionName: $config['functionName'] ?? throw new InvalidArgumentException('functionName is required in config array'),
             isPublic: $config['isPublic'] ?? false,
             pmsName: $config['pmsName'] ?? null,
-            disableCache: $config['disableCache'] ?? true,
+            disableCache: $config['disableCache'] ?? false,
             cacheTTL: $config['cacheTTL'] ?? null,
             description: $config['description'] ?? null,
             querySchema: $config['querySchema'] ?? null,

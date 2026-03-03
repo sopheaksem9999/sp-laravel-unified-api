@@ -71,4 +71,19 @@ class OpenApiTest extends TestCase
         $this->assertArrayNotHasKey('/api/v2/rpc/auth/login', $spec['paths']);
         $this->assertSame(['RPC - Auth'], $spec['paths']['/api/v2/auth/login']['post']['tags']);
     }
+
+    /** @test */
+    public function it_generates_spec_without_writing_internal_openapi_file(): void
+    {
+        Config::set('app.url', 'http://localhost');
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.tables', []);
+        Config::set('record.global_functions', []);
+
+        $service = new OpenApiService();
+        $spec = $service->generateInternal();
+
+        $this->assertArrayHasKey('openapi', $spec);
+        $this->assertArrayHasKey('paths', $spec);
+    }
 }

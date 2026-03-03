@@ -220,6 +220,16 @@ class QueryCacheService
         return self::forgetByPrefix(sprintf('record_show:table:%s:id:%s:tenant:%s', $table, $id, $tenantKey));
     }
 
+    public static function invalidateTableFunctionForTenant(string $table, string $functionName, string $tenantKey): int
+    {
+        return self::forgetByPrefix(sprintf('record_func:table:%s:function:%s:tenant:%s', $table, $functionName, $tenantKey));
+    }
+
+    public static function invalidateGlobalFunctionForTenant(string $functionName, string $tenantKey): int
+    {
+        return self::forgetByPrefix(sprintf('record_func_global:function:%s:tenant:%s', $functionName, $tenantKey));
+    }
+
     private static function trackRecordCacheKey(string $key, string $cacheKey, ?int $ttl): void
     {
         if (Cache::getStore() instanceof RedisStore) {
@@ -231,7 +241,7 @@ class QueryCacheService
             return;
         }
 
-        $indexKey = self::recordCacheIndexKey($parsed['table']);
+        $indexKey = self::recordCacheIndexKey(scope: $parsed['scope'], name: $parsed['name']);
         $index = Cache::get($indexKey, []);
         if (!is_array($index)) {
             $index = [];
@@ -260,16 +270,24 @@ class QueryCacheService
             return 0;
         }
 
-        if (null !== $parsed['tenant']) {
-            return self::forgetByIndex($parsed['table'], $parsed['tenant']);
+        if ('global_function' === $parsed['scope']) {
+            if (null !== $parsed['tenant']) {
+                return self::forgetByIndex(scope: $parsed['scope'], name: $parsed['name'], tenantKey: $parsed['tenant']);
+            }
+
+            return self::forgetByTableIndex(scope: $parsed['scope'], name: $parsed['name']);
         }
 
-        return self::forgetByTableIndex($parsed['table']);
+        if (null !== $parsed['tenant']) {
+            return self::forgetByIndex(scope: $parsed['scope'], name: $parsed['name'], tenantKey: $parsed['tenant']);
+        }
+
+        return self::forgetByTableIndex(scope: $parsed['scope'], name: $parsed['name']);
     }
 
-    private static function forgetByIndex(string $table, string $tenantKey): int
+    private static function forgetByIndex(string $scope, string $name, string $tenantKey): int
     {
-        $indexKey = self::recordCacheIndexKey($table);
+        $indexKey = self::recordCacheIndexKey(scope: $scope, name: $name);
         $index = Cache::get($indexKey, []);
         if (!is_array($index) || [] === $index) {
             return 0;
@@ -297,9 +315,9 @@ class QueryCacheService
         return $deleted;
     }
 
-    private static function forgetByTableIndex(string $table): int
+    private static function forgetByTableIndex(string $scope, string $name): int
     {
-        $indexKey = self::recordCacheIndexKey($table);
+        $indexKey = self::recordCacheIndexKey(scope: $scope, name: $name);
         $index = Cache::get($indexKey, []);
         if (!is_array($index) || [] === $index) {
             return 0;
@@ -338,15 +356,19 @@ class QueryCacheService
     private static function parseRecordCacheKey(string $key): ?array
     {
         if (preg_match('/^record_index:table:([^:]+):tenant:([^:]+):hash:/', $key, $matches)) {
-            return ['table' => $matches[1], 'tenant' => $matches[2]];
+            return ['scope' => 'table', 'name' => $matches[1], 'tenant' => $matches[2]];
         }
 
         if (preg_match('/^record_show:table:([^:]+):id:[^:]+:tenant:([^:]+):select:/', $key, $matches)) {
-            return ['table' => $matches[1], 'tenant' => $matches[2]];
+            return ['scope' => 'table', 'name' => $matches[1], 'tenant' => $matches[2]];
         }
 
         if (preg_match('/^record_func:table:([^:]+):function:[^:]+:tenant:([^:]+):hash:/', $key, $matches)) {
-            return ['table' => $matches[1], 'tenant' => $matches[2]];
+            return ['scope' => 'table', 'name' => $matches[1], 'tenant' => $matches[2]];
+        }
+
+        if (preg_match('/^record_func_global:function:([^:]+):tenant:([^:]+):hash:/', $key, $matches)) {
+            return ['scope' => 'global_function', 'name' => $matches[1], 'tenant' => $matches[2]];
         }
 
         return null;
@@ -355,18 +377,26 @@ class QueryCacheService
     private static function parseRecordCachePattern(string $pattern): ?array
     {
         if (preg_match('/record_(?:index|show|func):table:([^:]+):.*tenant:([^:]+):/', $pattern, $matches)) {
-            return ['table' => $matches[1], 'tenant' => $matches[2]];
+            return ['scope' => 'table', 'name' => $matches[1], 'tenant' => $matches[2]];
         }
 
         if (preg_match('/record_(?:index|show|func):table:([^:]+):/', $pattern, $matches)) {
-            return ['table' => $matches[1], 'tenant' => null];
+            return ['scope' => 'table', 'name' => $matches[1], 'tenant' => null];
+        }
+
+        if (preg_match('/record_func_global:function:([^:]+):tenant:([^:]+):/', $pattern, $matches)) {
+            return ['scope' => 'global_function', 'name' => $matches[1], 'tenant' => $matches[2]];
+        }
+
+        if (preg_match('/record_func_global:function:([^:]+):/', $pattern, $matches)) {
+            return ['scope' => 'global_function', 'name' => $matches[1], 'tenant' => null];
         }
 
         return null;
     }
 
-    private static function recordCacheIndexKey(string $table): string
+    private static function recordCacheIndexKey(string $scope, string $name): string
     {
-        return self::getCachePrefix() . sprintf('record_cache_index:table:%s', $table);
+        return self::getCachePrefix() . sprintf('record_cache_index:%s:%s', $scope, $name);
     }
 }
