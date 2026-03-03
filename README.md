@@ -1191,7 +1191,9 @@ The generated OpenAPI 3.0 schema includes:
 php artisan sp-laravel-api:setup
 ```
 Publishes default configurations for:
-- `config/record.php` - Database table configurations and relationships
+- `config/record.php` - Dynamic table and global function loader configuration
+- `config/records/tables` - Per-table `RecordTableType` files
+- `config/records/globalFunctions` - Global RPC function group files
 - `config/audit.php` - Audit logging settings  
 - `config/sp-laravel-api.php` - Package settings (auth guard, OpenAPI output)
 

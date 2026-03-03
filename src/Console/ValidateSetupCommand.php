@@ -109,6 +109,10 @@ class ValidateSetupCommand extends Command
             $this->addResult('✅', 'Table config directory exists: ' . str_replace(base_path() . '/', '', $tablesPath), 'success');
         } else {
             $this->addResult('❌', 'Missing table config directory: ' . str_replace(base_path() . '/', '', $tablesPath), 'error');
+            if ($this->option('fix')) {
+                $this->info('🔧 Attempting to create missing record directories...');
+                $this->call('sp-laravel-api:setup', ['--force' => false]);
+            }
         }
 
         $globalFunctionsPath = config_path('records/globalFunctions');
@@ -118,6 +122,10 @@ class ValidateSetupCommand extends Command
         } else {
             $this->addResult('⚠️', 'Missing global function directory: config/records/globalFunctions', 'warning');
             $this->addResult('ℹ️', 'Create config/records/globalFunctions/*.php files or run: php artisan sp-laravel-api:setup', 'info');
+            if ($this->option('fix')) {
+                $this->info('🔧 Attempting to create missing global function directory...');
+                $this->call('sp-laravel-api:setup', ['--force' => false]);
+            }
         }
     }
 
