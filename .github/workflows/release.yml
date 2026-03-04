@@ -1,28 +1,39 @@
 name: Release
+
 on:
   push:
     branches:
       - main
+      - develop
+
 permissions:
   contents: write
+
 jobs:
-  release:
-    if: startsWith(github.ref, 'refs/heads/')
+
+  # ─────────────────────────────────────────────
+  # Stable release — triggered by push to main
+  # ─────────────────────────────────────────────
+  release-stable:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
+
       - name: Read version from composer.json
         id: read
         run: echo "version=$(jq -r .version composer.json)" >> $GITHUB_OUTPUT
+
       - name: Validate version
         run: |
           if [ -z "${{ steps.read.outputs.version }}" ] || [ "${{ steps.read.outputs.version }}" = "null" ]; then
             echo "composer.json version is missing"
             exit 1
           fi
+
       - name: Check if tag exists
         id: check
         run: |
@@ -31,6 +42,7 @@ jobs:
           else
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
+
       - name: Create tag
         if: steps.check.outputs.exists == 'false'
         run: |
@@ -38,6 +50,7 @@ jobs:
           git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
           git tag "${{ steps.read.outputs.version }}"
           git push origin "${{ steps.read.outputs.version }}"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: steps.check.outputs.exists == 'false'
@@ -45,3 +58,49 @@ jobs:
           tag_name: ${{ steps.read.outputs.version }}
           name: ${{ steps.read.outputs.version }}
           generate_release_notes: true
+          prerelease: false
+
+  # ─────────────────────────────────────────────
+  # Beta pre-release — triggered by push to develop
+  # Tag format: {version}-beta.{run_number}
+  # e.g. 0.3.93-beta.42
+  # ─────────────────────────────────────────────
+  release-beta:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Read base version from composer.json
+        id: read
+        run: echo "version=$(jq -r .version composer.json)" >> $GITHUB_OUTPUT
+
+      - name: Validate version
+        run: |
+          if [ -z "${{ steps.read.outputs.version }}" ] || [ "${{ steps.read.outputs.version }}" = "null" ]; then
+            echo "composer.json version is missing"
+            exit 1
+          fi
+
+      - name: Build beta tag
+        id: beta
+        run: |
+          echo "tag=${{ steps.read.outputs.version }}-beta.${{ github.run_number }}" >> $GITHUB_OUTPUT
+
+      - name: Create beta tag
+        run: |
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+          git tag "${{ steps.beta.outputs.tag }}"
+          git push origin "${{ steps.beta.outputs.tag }}"
+
+      - name: Create GitHub Pre-Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.beta.outputs.tag }}
+          name: ${{ steps.beta.outputs.tag }}
+          generate_release_notes: true
+          prerelease: true
