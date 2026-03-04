@@ -5,6 +5,7 @@ namespace Sopheak\Core\Services;
 use Sopheak\Core\Interfaces\RecordFunctionInterface;
 use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
+use Sopheak\Core\Utilities\RelationshipResolverUtils;
 use Sopheak\Core\Constants\HttpErrorCodeConstant;
 use Illuminate\Support\Arr;
 
@@ -18,6 +19,71 @@ class OpenApiService
     public static function load(): array
     {
         return self::generateInternal();
+    }
+
+    public static function generateLlmMdx(): string
+    {
+        $apiPrefix = trim(RecordConfigService::apiPrefix(), '/');
+        $rpcPrefix = trim(RecordConfigService::rpcPrefix(), '/');
+        $tenantHeader = RecordConfigService::tenantHeader();
+        $tenantColumn = RecordConfigService::tenantColumn();
+        $baseUrl = rtrim((string) config('app.url'), '/');
+
+        $openApiPath = '/' . $apiPrefix . '/docs/openapi.json';
+        $openApiUrl = $baseUrl !== '' ? $baseUrl . $openApiPath : $openApiPath;
+
+        $globalRpcPattern = $rpcPrefix === ''
+            ? '/' . $apiPrefix . '/{functionName}'
+            : '/' . $apiPrefix . '/' . $rpcPrefix . '/{functionName}';
+
+        $tableRpcPattern = $rpcPrefix === ''
+            ? '/' . $apiPrefix . '/{table}/{functionName}'
+            : '/' . $apiPrefix . '/{table}/' . $rpcPrefix . '/{functionName}';
+
+        $tableCount = count(RecordConfigService::getTableConfig());
+        $globalFunctionCount = count(RecordConfigService::globalFunctions());
+
+        return <<<MDX
+# SP Laravel API Agent Contract
+
+This API is private/internal. Prefer OpenAPI as the source of truth.
+
+## OpenAPI
+
+- Schema URL: {$openApiUrl}
+- Content-Type: application/vnd.oai.openapi+json
+- Auth: Bearer token
+- Tenant header: {$tenantHeader} (maps to {$tenantColumn})
+
+## Key Notes
+
+- OpenAPI schema is the only source of truth for modules, fields, and relationships.
+- Do not duplicate or hardcode relationship details from this MDX document.
+- Read relationship metadata from `paths` + `components.schemas` in OpenAPI.
+- If OpenAPI and any prose differ, always follow OpenAPI.
+
+## Endpoint Patterns
+
+- List: /{$apiPrefix}/{table}
+- Detail: /{$apiPrefix}/{table}/{id}
+- Create: POST /{$apiPrefix}/{table}
+- Update: PUT|PATCH /{$apiPrefix}/{table}/{id}
+- Delete: DELETE /{$apiPrefix}/{table}/{id}
+- Global RPC: {$globalRpcPattern}
+- Table RPC: {$tableRpcPattern}
+
+## Runtime Snapshot
+
+- Configured tables: {$tableCount}
+- Configured global functions: {$globalFunctionCount}
+
+## Agent Rules
+
+- Do not invent fields or endpoints.
+- Generate frontend types and API clients from OpenAPI schema URL.
+- Use error_code and message from API responses for UI handling.
+- Respect tenant header and auth on every request.
+MDX;
     }
 
     /**
@@ -70,7 +136,7 @@ class OpenApiService
         return [
             'openapi' => '3.0.3',
             'info' => [
-                'title' => config('app.name') . ' – Internal Documentation',
+                'title' => config('app.name') . ' - Internal Documentation',
                 'version' => '2.0.0',
                 'description' => '# API Documentation
 
@@ -191,6 +257,41 @@ Records are filtered by the `' . $tenantColumn . '` column.
 - **Relationships**: `select=id,name,customer:customers(id,name)` (include related data)
 - **Nested**: `select=id,items(id,name,product:products(*))` (deep relationships)
 - **Mixed**: `select=*,customer:customers(id,name),items(*)` (combine table and relationship columns)
+
+<h3 id="relationship-write-payload-guide">Relationship Write Payload Guide</h3>
+
+This section describes payload format for write endpoints (`POST`, `PUT`, `PATCH`) based on `RecordRelationshipsEnum`.
+
+| Enum Type | Payload Support | Payload Shape |
+|---|---|---|
+| `BELONGS_TO` | ✅ FK scalar only | `customer_id: 10` |
+| `HAS_MANY` | ✅ alias array | `items: [1, {"id": 2}, {"name": "Line A"}]` |
+| `BELONGS_TO_MANY` | ✅ alias array | `roles: [1, {"id": 2}]` |
+| `HAS_MANY_THROUGH` | ✅ alias array | `tasks: [3, {"id": 4}]` |
+| `MORPH_MANY` | ✅ alias array | `comments: [1, {"id": 2}]` |
+| `MORPH_TO_MANY` | ✅ alias array | `roles: [1, {"id": 2}]` |
+| `MORPH_BY_MANY` | ✅ alias array | `tags: [1, {"id": 2}]` |
+| `SPATIE_PERMISSION` | ✅ alias array | `roles: [1, {"id": 2}]` |
+| `HAS_ONE` | ⚠️ schema-dependent | Prefer scalar FK-style field |
+| `HAS_ONE_THROUGH` | ⚠️ not direct alias write | Use main table fields or custom function |
+| `MORPH_TO` | ⚠️ morph columns | `commentable_type`, `commentable_id` |
+| `MORPH_ONE` | ⚠️ schema-dependent | Prefer scalar FK-style field |
+
+**Write payload examples**
+```json
+{
+  "customer_id": 10,
+  "items": [
+    1,
+    {"id": 2},
+    {"name": "Line A", "qty": 1},
+    {"id": 5, "_delete": true}
+  ],
+  "roles": [1, {"id": 2}]
+}
+```
+
+Full relationship Public full examples: https://sp-laravel-api-docs.vercel.app/#/
 
 ### Ordering & Sorting
 - **Basic**: `sortby=name&order=asc` (sort by column)
@@ -518,7 +619,7 @@ Accepts an array of IDs or an array of objects with the primary key.
             $canUpsert = (bool) ($config->canUpsert ?? true);
 
             // Generate relationship description
-            $relationshipDescription = self::generateRelationshipDescription($config);
+            $relationshipDescription = self::generateRelationshipDescription($recordName, $config);
 
             // List & create (API endpoints use record name, but descriptions reference actual table)
             $basePath = '/' . $apiPrefix . '/' . $recordName;
@@ -1600,15 +1701,72 @@ Accepts an array of IDs or an array of objects with the primary key.
     /**
      * Generate relationship description for API documentation.
      */
-    private static function generateRelationshipDescription(mixed $config): string
+    private static function generateRelationshipDescription(string $recordName, mixed $config): string
     {
         if (empty($config->relationships)) {
             return '';
         }
 
-        $relationships = array_keys($config->relationships);
-        $relationshipList = implode(', ', $relationships);
+        $lines = [];
+        $arrayPayloadRows = [];
+        $fkRows = [];
 
-        return ' **Relationships:** ' . $relationshipList;
+        foreach (array_keys($config->relationships) as $alias) {
+            if (!is_string($alias)) {
+                continue;
+            }
+
+            if ('' === $alias) {
+                continue;
+            }
+
+            $resolved = RelationshipResolverUtils::resolveRelationship($recordName, $alias);
+            if (!is_array($resolved)) {
+                continue;
+            }
+
+            $type = (string) ($resolved['type'] ?? 'unknown');
+
+            if ('belongsTo' === $type) {
+                $foreignKey = (string) ($resolved['foreign_key'] ?? (rtrim($alias, 's') . '_id'));
+                $fkRows[] = sprintf('| `%s` | `%s` |', $alias, $foreignKey);
+                continue;
+            }
+
+            if (in_array($type, ['hasMany', 'belongsToMany', 'morphMany', 'morphToMany', 'morphByMany', 'hasManyThrough'], true)) {
+                $arrayPayloadRows[] = sprintf('| `%s` | `%s` | `array<id|object>` |', $alias, $type);
+            }
+        }
+
+        $lines[] = '**Relationship payload guide (write endpoints):**';
+        if ([] !== $arrayPayloadRows) {
+            $lines[] = '**Array relationship keys accepted in payload:**';
+            $lines[] = '| Alias | Type | Payload shape |';
+            $lines[] = '|---|---|---|';
+            $lines = array_merge($lines, $arrayPayloadRows);
+        } else {
+            $lines[] = '- Array relationship keys accepted in payload: _none_';
+        }
+
+        $lines[] = '';
+        if ([] !== $fkRows) {
+            $lines[] = '**FK relationship input (belongsTo):**';
+            $lines[] = '| Relationship alias | Use scalar FK field |';
+            $lines[] = '|---|---|';
+            $lines = array_merge($lines, $fkRows);
+        } else {
+            $lines[] = '- FK relationship input (belongsTo): _none_';
+        }
+
+        $lines[] = '';
+        $lines[] = '**Payload examples:**';
+        $lines[] = '- FK (belongsTo): `{"customer_id": 10}`';
+        $lines[] = '- hasMany: `{"items": [{"name":"Line A"},{"id": 15,"_delete": true}]}`';
+        $lines[] = '- belongsToMany/morphToMany: `{"roles": [1, {"id": 2}]}`';
+        $lines[] = '- Full relationship type examples: [Relationship Write Payload Guide](#relationship-write-payload-guide)';
+        $lines[] = '';
+        $lines[] = 'These rules align with docs/api-documentation.md relationship sections.';
+
+        return implode("\n", $lines);
     }
 }

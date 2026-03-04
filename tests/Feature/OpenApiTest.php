@@ -5,6 +5,9 @@ namespace Sopheak\Core\Tests\Feature;
 use Illuminate\Support\Facades\Config;
 use Sopheak\Core\Services\OpenApiService;
 use Sopheak\Core\Tests\TestCase;
+use Sopheak\Core\Types\RecordBelongsToType;
+use Sopheak\Core\Types\RecordHasManyType;
+use Sopheak\Core\Types\RecordTableType;
 
 class OpenApiTest extends TestCase
 {
@@ -85,5 +88,46 @@ class OpenApiTest extends TestCase
 
         $this->assertArrayHasKey('openapi', $spec);
         $this->assertArrayHasKey('paths', $spec);
+    }
+
+    /** @test */
+    public function it_documents_relationship_payload_shapes_clearly(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.tables', [
+            'invoices' => new RecordTableType(
+                table: 'invoices',
+                columns: [
+                    'id' => ['type' => 'bigint', 'nullable' => false],
+                    'customer_id' => ['type' => 'bigint', 'nullable' => true],
+                    'ref_number' => ['type' => 'varchar', 'nullable' => true],
+                ],
+                relationships: [
+                    'customer' => new RecordBelongsToType(table: 'customers', foreignKey: 'customer_id'),
+                    'items' => new RecordHasManyType(table: 'invoice_items', foreignKey: 'invoice_id'),
+                ],
+            ),
+            'customers' => new RecordTableType(
+                table: 'customers',
+                columns: ['id' => ['type' => 'bigint', 'nullable' => false]],
+            ),
+            'invoice_items' => new RecordTableType(
+                table: 'invoice_items',
+                columns: ['id' => ['type' => 'bigint', 'nullable' => false], 'invoice_id' => ['type' => 'bigint', 'nullable' => false]],
+            ),
+        ]);
+
+        $service = new OpenApiService();
+        $spec = $service->generateInternal();
+        $path = $spec['paths']['/api/v2/invoices'] ?? [];
+        $createDescription = $path['post']['description'] ?? ($path['get']['description'] ?? '');
+
+        $this->assertStringContainsString('Relationship payload guide', $createDescription);
+        $this->assertStringContainsString('`items`', $createDescription);
+        $this->assertStringContainsString('array<id|object>', $createDescription);
+        $this->assertStringContainsString('FK relationship input (belongsTo)', $createDescription);
+        $this->assertStringContainsString('`customer_id`', $createDescription);
+        $this->assertStringContainsString('Payload examples', $createDescription);
+        $this->assertStringContainsString('#relationship-write-payload-guide', $createDescription);
     }
 }

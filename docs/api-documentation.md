@@ -2,6 +2,8 @@
 
 This document provides comprehensive documentation for the SP Laravel API package endpoints, request/response formats, and usage examples.
 
+For full interactive examples, visit: https://sp-laravel-api-docs.vercel.app/#/
+
 ## Record CRUD API Documentation
 
 This section documents the record CRUD endpoints provided by this package, including request/response formats, filtering, pagination, and error handling.
@@ -410,6 +412,75 @@ Example usage:
 
 - `GET /api/v1/users?select=*,roles(*)`
 - `GET /api/v1/users?roles.name=eq.admin`
+
+### Relationship Write Payload Guide
+
+For `POST` / `PUT` / `PATCH`, relationship input is type-driven and should follow the config in `RecordTableType->relationships`.
+
+#### What can be sent in payload
+
+| Enum type (`RecordRelationshipsEnum`) | Payload support | Payload shape |
+|---|---|---|
+| `BELONGS_TO` | ✅ FK scalar only | `customer_id: 10` |
+| `HAS_MANY` | ✅ alias array | `items: [1, {"id": 2}, {"name": "Line A"}]` |
+| `BELONGS_TO_MANY` | ✅ alias array | `roles: [1, {"id": 2}]` |
+| `HAS_MANY_THROUGH` | ✅ alias array | `tasks: [3, {"id": 4}]` |
+| `MORPH_MANY` | ✅ alias array | `comments: [1, {"id": 2}]` |
+| `MORPH_TO_MANY` | ✅ alias array | `roles: [1, {"id": 2}]` |
+| `MORPH_BY_MANY` | ✅ alias array | `tags: [1, {"id": 2}]` |
+| `SPATIE_PERMISSION` | ✅ alias array | `roles: [1, {"id": 2}]` |
+| `HAS_ONE` | ⚠️ use FK style of your schema | Prefer scalar FK field in root payload |
+| `HAS_ONE_THROUGH` | ⚠️ not a direct write alias | Use main table fields / custom function |
+| `MORPH_TO` | ⚠️ use morph columns in root payload | `commentable_type`, `commentable_id` |
+| `MORPH_ONE` | ⚠️ use FK style of your schema | Prefer scalar FK field in root payload |
+
+#### FK-style examples (`BELONGS_TO`)
+
+```json
+{
+  "ref_number": "INV-1001",
+  "customer_id": 10
+}
+```
+
+Do not send:
+
+```json
+{
+  "customer": { "id": 10, "name": "Acme" }
+}
+```
+
+#### Many-type alias examples (`*Many`)
+
+```json
+{
+  "items": [
+    1,
+    { "id": 2 },
+    { "name": "Line A", "qty": 1 },
+    { "id": 5, "_delete": true }
+  ]
+}
+```
+
+#### Pivot-style examples (`BELONGS_TO_MANY`, `MORPH_TO_MANY`, `SPATIE_PERMISSION`)
+
+```json
+{
+  "roles": [
+    1,
+    { "id": 2 },
+    { "id": 3, "_delete": true }
+  ]
+}
+```
+
+#### Notes
+
+- Array relationship aliases are accepted only when declared in table `relationships` config.
+- For `BELONGS_TO`, the payload should use root FK scalar fields, not nested objects.
+- `_delete` / `_destroy` can be used on alias-array items where relationship handling supports detach/remove.
 
 ### Base Configuration
 

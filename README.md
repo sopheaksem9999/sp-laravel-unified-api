@@ -1149,7 +1149,13 @@ OpenAPI is generated dynamically from record configuration at request time:
 
 ```text
 GET /{api_prefix}/docs/openapi
+GET /{api_prefix}/docs/openapi.json
+GET /{api_prefix}/docs/llms.mdx
+GET /{api_prefix}/docs/llms.txt
 ```
+
+`/{api_prefix}/docs/openapi.json` is the recommended endpoint for AI agents and tools, returned with `application/vnd.oai.openapi+json`.
+`/{api_prefix}/docs/llms.mdx` (or `llms.txt`) provides an AI-oriented markdown contract that points to the OpenAPI schema and key endpoint patterns.
 
 Use the bundled Scalar page to browse the API documentation:
 

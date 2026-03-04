@@ -50,8 +50,7 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
         $globalFunctionWhere = '(?:' . implode('|', $escaped) . ')';
     }
 
-    // OpenAPI Specification
-    Route::get('docs/openapi', function () {
+    $openApiSchemaResponse = function () {
         try {
             SchemaRegistryUtils::refresh();
             $json = OpenApiService::generateInternal();
@@ -62,7 +61,20 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
             ], RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
 
-        return response()->json($json)->header('Content-Type', 'application/json');
+        return response()
+            ->json($json)
+            ->header('Content-Type', 'application/vnd.oai.openapi+json; charset=utf-8');
+    };
+
+    $llmsMdxResponse = fn() => response(OpenApiService::generateLlmMdx(), 200, [
+        'Content-Type' => 'text/markdown; charset=utf-8',
+    ]);
+
+    Route::prefix('docs')->group(function () use ($openApiSchemaResponse, $llmsMdxResponse): void {
+        Route::get('openapi', $openApiSchemaResponse);
+        Route::get('openapi.json', $openApiSchemaResponse);
+        Route::get('llms.mdx', $llmsMdxResponse);
+        Route::get('llms.txt', $llmsMdxResponse);
     });
 
     /*

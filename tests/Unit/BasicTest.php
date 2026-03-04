@@ -86,6 +86,48 @@ class BasicTest extends TestCase
     }
 
     /** @test */
+    public function it_serves_ai_friendly_openapi_json_endpoint(): void
+    {
+        $testResponse = $this->get('/api/docs/openapi.json');
+
+        $testResponse
+            ->assertStatus(200)
+            ->assertJsonStructure(['openapi', 'info', 'paths', 'components']);
+
+        $this->assertStringContainsString('application/vnd.oai.openapi+json', (string) $testResponse->headers->get('content-type'));
+    }
+
+    /** @test */
+    public function it_serves_docs_group_openapi_json_endpoint(): void
+    {
+        $testResponse = $this->get('/api/docs/openapi.json');
+
+        $testResponse
+            ->assertStatus(200)
+            ->assertJsonStructure(['openapi', 'info', 'paths', 'components']);
+    }
+
+    /** @test */
+    public function it_serves_llms_mdx_endpoint_for_ai_agents(): void
+    {
+        $testResponse = $this->get('/api/docs/llms.mdx');
+
+        $testResponse->assertStatus(200);
+        $this->assertStringContainsString('text/markdown', (string) $testResponse->headers->get('content-type'));
+        $this->assertStringContainsString('/api/docs/openapi.json', (string) $testResponse->getContent());
+    }
+
+    /** @test */
+    public function it_serves_docs_group_llms_mdx_endpoint_for_ai_agents(): void
+    {
+        $testResponse = $this->get('/api/docs/llms.mdx');
+
+        $testResponse->assertStatus(200);
+        $this->assertStringContainsString('text/markdown', (string) $testResponse->headers->get('content-type'));
+        $this->assertStringContainsString('/api/docs/openapi.json', (string) $testResponse->getContent());
+    }
+
+    /** @test */
     public function it_throws_when_table_trigger_class_does_not_exist(): void
     {
         $service = new RecordService();
