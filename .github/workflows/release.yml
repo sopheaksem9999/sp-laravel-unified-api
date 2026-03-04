@@ -23,14 +23,14 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Read version from composer.json
+      - name: Read version from VERSION file
         id: read
-        run: echo "version=$(jq -r .version composer.json)" >> $GITHUB_OUTPUT
+        run: echo "version=$(cat VERSION | tr -d '[:space:]')" >> $GITHUB_OUTPUT
 
       - name: Validate version
         run: |
-          if [ -z "${{ steps.read.outputs.version }}" ] || [ "${{ steps.read.outputs.version }}" = "null" ]; then
-            echo "composer.json version is missing"
+          if [ -z "${{ steps.read.outputs.version }}" ]; then
+            echo "VERSION file is missing or empty"
             exit 1
           fi
 
@@ -74,9 +74,9 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Read base version from composer.json
+      - name: Read base version from VERSION file
         id: read
-        run: echo "version=$(jq -r .version composer.json)" >> $GITHUB_OUTPUT
+        run: echo "version=$(cat VERSION | tr -d '[:space:]')" >> $GITHUB_OUTPUT
 
       - name: Validate version
         run: |
