@@ -23,9 +23,14 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Read version from VERSION file
+      - name: Read version from composer.json or VERSION
         id: read
-        run: echo "version=$(cat VERSION | tr -d '[:space:]')" >> $GITHUB_OUTPUT
+        run: |
+          version=$(php -r 'echo json_decode(file_get_contents("composer.json"), true)["version"] ?? "";')
+          if [ -z "$version" ] && [ -f VERSION ]; then
+            version=$(cat VERSION | tr -d '[:space:]')
+          fi
+          echo "version=$version" >> $GITHUB_OUTPUT
 
       - name: Validate version
         run: |
@@ -74,14 +79,19 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Read base version from VERSION file
+      - name: Read base version from composer.json or VERSION
         id: read
-        run: echo "version=$(cat VERSION | tr -d '[:space:]')" >> $GITHUB_OUTPUT
+        run: |
+          version=$(php -r 'echo json_decode(file_get_contents("composer.json"), true)["version"] ?? "";')
+          if [ -z "$version" ] && [ -f VERSION ]; then
+            version=$(cat VERSION | tr -d '[:space:]')
+          fi
+          echo "version=$version" >> $GITHUB_OUTPUT
 
       - name: Validate version
         run: |
           if [ -z "${{ steps.read.outputs.version }}" ] || [ "${{ steps.read.outputs.version }}" = "null" ]; then
-            echo "composer.json version is missing"
+            echo "Version is missing"
             exit 1
           fi
 
