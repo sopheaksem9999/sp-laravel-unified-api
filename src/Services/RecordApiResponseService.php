@@ -437,9 +437,9 @@ class RecordApiResponseService
     /**
      * Create a deleted response (204).
      */
-    public static function deleted(): JsonResponse
+    public static function deleted(mixed $data = null): JsonResponse
     {
-        return static::jsonResponse(null, RecordApiJsonResponseEnum::DELETED);
+        return static::jsonResponse($data ?? ['deleted' => true], RecordApiJsonResponseEnum::DELETED);
     }
 
     /**

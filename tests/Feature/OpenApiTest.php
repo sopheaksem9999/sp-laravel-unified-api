@@ -8,9 +8,16 @@ use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordBelongsToType;
 use Sopheak\Core\Types\RecordHasManyType;
 use Sopheak\Core\Types\RecordTableType;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
 class OpenApiTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        SchemaRegistryUtils::refresh();
+    }
+
     /** @test */
     public function it_generates_correct_server_url_without_duplicate_api_path(): void
     {

@@ -5,6 +5,7 @@ use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 use Sopheak\Core\Http\Controllers\CoreRecordController;
 use Sopheak\Core\Services\OpenApiService;
 use Sopheak\Core\Services\RecordConfigService;
+use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
 /*
@@ -30,8 +31,18 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
 Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'])->group(function (): void {
 
     $tableWhere = '[a-zA-Z0-9_\-]+';
-    $configuredTables = array_keys(RecordConfigService::getTableConfig());
-    $configuredTables = array_values(array_filter($configuredTables, static fn($value): bool => is_string($value) && $value !== ''));
+    $configuredTables = [];
+    foreach (SchemaRegistryUtils::get() as $configKey => $config) {
+        if (!($config instanceof RecordTableType)) {
+            continue;
+        }
+
+        foreach (SchemaRegistryUtils::tableAliases((string) $configKey, $config) as $alias) {
+            $configuredTables[] = $alias;
+        }
+    }
+
+    $configuredTables = array_values(array_unique(array_filter($configuredTables, static fn($value): bool => is_string($value) && $value !== '')));
     if (!empty($configuredTables)) {
         $escaped = array_map(static fn(string $table): string => preg_quote($table, '/'), $configuredTables);
         $tableWhere = '(?:' . implode('|', $escaped) . ')';
@@ -99,6 +110,21 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
  
     /*
     |--------------------------------------------------------------------------
+    | Table-specific RPC Functions
+    |--------------------------------------------------------------------------
+    */
+    if (!empty(RecordConfigService::rpcPrefix())) {
+        Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/' . RecordConfigService::rpcPrefix() . '/{functionName}', [CoreRecordController::class, 'executeTableFunction'])
+            ->where(['table' => $tableWhere, 'functionName' => '.*'])
+            ->middleware('throttle:api-functions');
+    } else {
+        Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/{functionName}', [CoreRecordController::class, 'executeTableFunction'])
+            ->where(['table' => $tableWhere, 'functionName' => '(?!\d+$).+'])
+            ->middleware('throttle:api-functions');
+    }
+
+    /*
+    |--------------------------------------------------------------------------
     | Standard CRUD Operations
     |--------------------------------------------------------------------------
     */
@@ -133,21 +159,4 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
     Route::post('{table}/bulk/update', [CoreRecordController::class, 'bulkRecordUpdate'])->where('table', $tableWhere)->middleware('throttle:api-writes');
     Route::post('{table}/bulk/delete', [CoreRecordController::class, 'bulkRecordDelete'])->where('table', $tableWhere)->middleware('throttle:api-writes');
     Route::post('{table}/bulk/upsert', [CoreRecordController::class, 'bulkRecordUpsert'])->where('table', $tableWhere)->middleware('throttle:api-writes');
-
-    /*
-    |--------------------------------------------------------------------------
-    | Table-specific RPC Functions
-    |--------------------------------------------------------------------------
-    */
-    if (!empty(RecordConfigService::rpcPrefix())) {
-        Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/' . RecordConfigService::rpcPrefix() . '/{functionName}', [CoreRecordController::class, 'executeTableFunction'])
-            ->where(['table' => $tableWhere, 'functionName' => '.*'])
-            ->middleware('throttle:api-functions');
-    } else {
-        Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/{functionName}', [CoreRecordController::class, 'executeTableFunction'])
-            ->where(['table' => $tableWhere, 'functionName' => '(?!\d+$).+'])
-            ->middleware('throttle:api-functions');
-    }
-
-
 });

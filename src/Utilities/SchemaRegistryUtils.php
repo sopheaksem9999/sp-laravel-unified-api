@@ -27,7 +27,23 @@ class SchemaRegistryUtils
 
         $tables = self::get();
 
-        return $tables[$tableName] ?? null;
+        if (isset($tables[$tableName]) && $tables[$tableName] instanceof RecordTableType) {
+            return $tables[$tableName];
+        }
+
+        foreach ($tables as $configKey => $config) {
+            if (!($config instanceof RecordTableType)) {
+                continue;
+            }
+
+            if (in_array($tableName, self::tableAliases((string) $configKey, $config), true)) {
+                self::$cache[$tableName] = $config;
+
+                return $config;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -151,6 +167,40 @@ class SchemaRegistryUtils
     public static function clearTableCache(string $tableName): void
     {
         unset(self::$cache[$tableName]);
+    }
+
+    /**
+     * @return array<string>
+     */
+    public static function tableAliases(string $configKey, RecordTableType $config): array
+    {
+        $aliases = [];
+
+        if ('' !== trim($configKey)) {
+            $aliases[] = trim($configKey);
+        }
+
+        if (is_string($config->table) && '' !== trim($config->table)) {
+            $aliases[] = trim($config->table);
+        }
+
+        if (is_string($config->pmsName) && '' !== trim($config->pmsName)) {
+            $aliases[] = trim($config->pmsName);
+        } elseif (is_array($config->pmsName)) {
+            foreach ($config->pmsName as $candidate) {
+                if (!is_string($candidate)) {
+                    continue;
+                }
+
+                if ('' === trim($candidate)) {
+                    continue;
+                }
+
+                $aliases[] = trim($candidate);
+            }
+        }
+
+        return array_values(array_unique($aliases));
     }
 
     /**
