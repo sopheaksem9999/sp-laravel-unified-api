@@ -39,6 +39,14 @@ trait HasCrudOperations
                 return $tenantError;
             }
 
+            $triggerParams = $this->recordService->executeGlobalTrigger(
+                hook: 'beforeRead',
+                params: [$request, $table, ['type' => 'index', RecordConfigService::tenantColumn() => $tenantId]]
+            );
+            if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
+                $request = $triggerParams[0];
+            }
+
             $result = $this->recordService->listRecords(request: $request, table: $table, tenantId: $tenantId);
 
             $data    = $result['data'];
@@ -54,6 +62,22 @@ trait HasCrudOperations
 
             $this->recordService->executeTableTrigger(
                 trigger: $tableSchema->afterRead ?? null,
+                params: [
+                    $request,
+                    $table,
+                    [
+                        'type'                                  => 'index',
+                        'filters'                               => $result['filters'] ?? [],
+                        'data'                                  => $data,
+                        'meta'                                  => $meta,
+                        RecordConfigService::tenantColumn()     => $tenantId,
+                        'response'                              => $response,
+                    ],
+                ]
+            );
+
+            $this->recordService->executeGlobalTrigger(
+                hook: 'afterRead',
                 params: [
                     $request,
                     $table,
@@ -96,6 +120,14 @@ trait HasCrudOperations
                 return $tenantError;
             }
 
+            $triggerParams = $this->recordService->executeGlobalTrigger(
+                hook: 'beforeRead',
+                params: [$request, $table, ['type' => 'show', 'id' => $id, RecordConfigService::tenantColumn() => $tenantId]]
+            );
+            if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
+                $request = $triggerParams[0];
+            }
+
             $result  = $this->recordService->getRecord(request: $request, table: $table, id: $id, tenantId: $tenantId);
             $record  = $result['data'];
             $request = $result['request'];
@@ -112,6 +144,21 @@ trait HasCrudOperations
 
             $this->recordService->executeTableTrigger(
                 trigger: $tableSchema->afterRead ?? null,
+                params: [
+                    $request,
+                    $table,
+                    [
+                        'type'                              => 'show',
+                        'id'                                => $id,
+                        RecordConfigService::tenantColumn() => $tenantId,
+                        'record'                            => $record,
+                        'response'                          => $response,
+                    ],
+                ]
+            );
+
+            $this->recordService->executeGlobalTrigger(
+                hook: 'afterRead',
                 params: [
                     $request,
                     $table,
@@ -152,6 +199,14 @@ trait HasCrudOperations
             [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
             if ($tenantError instanceof JsonResponse) {
                 return $tenantError;
+            }
+
+            $triggerParams = $this->recordService->executeGlobalTrigger(
+                hook: 'beforeCreate',
+                params: [$request, $table, [RecordConfigService::tenantColumn() => $tenantId]]
+            );
+            if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
+                $request = $triggerParams[0];
             }
 
             $triggerParams = $this->recordService->executeTableTrigger(
@@ -223,6 +278,14 @@ trait HasCrudOperations
             [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
             if ($tenantError instanceof JsonResponse) {
                 return $tenantError;
+            }
+
+            $triggerParams = $this->recordService->executeGlobalTrigger(
+                hook: 'beforeUpdate',
+                params: [$request, $table, ['id' => $id, RecordConfigService::tenantColumn() => $tenantId]]
+            );
+            if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
+                $request = $triggerParams[0];
             }
 
             $triggerParams = $this->recordService->executeTableTrigger(
@@ -299,6 +362,14 @@ trait HasCrudOperations
             [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
             if ($tenantError instanceof JsonResponse) {
                 return $tenantError;
+            }
+
+            $triggerParams = $this->recordService->executeGlobalTrigger(
+                hook: 'beforeDelete',
+                params: [$request, $table, ['id' => $id, RecordConfigService::tenantColumn() => $tenantId]]
+            );
+            if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
+                $request = $triggerParams[0];
             }
 
             $triggerParams = $this->recordService->executeTableTrigger(

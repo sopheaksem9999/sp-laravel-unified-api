@@ -156,6 +156,9 @@ return [
         // Example functions should be defined in your application's config/record.php
     ],
 
+    'global_triggers' => [
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Table Configurations

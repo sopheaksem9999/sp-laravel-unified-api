@@ -115,6 +115,11 @@ class RecordConfigService
         return (array) config('record.global_functions', []);
     }
 
+    public static function globalTriggers(): array
+    {
+        return (array) config('record.global_triggers', []);
+    }
+
     public static function getTableConfig(): array
     {
         return (array) config('record.tables', []);

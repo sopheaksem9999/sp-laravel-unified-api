@@ -718,6 +718,56 @@ return [
 ];
 ```
 
+### Global Triggers
+
+You can register global triggers that apply to all tables and run in addition to per-table triggers.
+
+```php
+use Sopheak\Core\Types\RecordTableTriggerType;
+
+return [
+    'global_triggers' => [
+        'beforeRead' => new RecordTableTriggerType(
+            class: \App\Record\Triggers\GlobalTriggers::class,
+            functionName: 'beforeRead'
+        ),
+        'afterRead' => new RecordTableTriggerType(
+            class: \App\Record\Triggers\GlobalTriggers::class,
+            functionName: 'afterRead'
+        ),
+        'beforeCreate' => new RecordTableTriggerType(
+            class: \App\Record\Triggers\GlobalTriggers::class,
+            functionName: 'beforeCreate'
+        ),
+        'afterCreate' => new RecordTableTriggerType(
+            class: \App\Record\Triggers\GlobalTriggers::class,
+            functionName: 'afterCreate'
+        ),
+        'beforeUpdate' => new RecordTableTriggerType(
+            class: \App\Record\Triggers\GlobalTriggers::class,
+            functionName: 'beforeUpdate'
+        ),
+        'afterUpdate' => new RecordTableTriggerType(
+            class: \App\Record\Triggers\GlobalTriggers::class,
+            functionName: 'afterUpdate'
+        ),
+        'beforeDelete' => new RecordTableTriggerType(
+            class: \App\Record\Triggers\GlobalTriggers::class,
+            functionName: 'beforeDelete'
+        ),
+        'afterDelete' => new RecordTableTriggerType(
+            class: \App\Record\Triggers\GlobalTriggers::class,
+            functionName: 'afterDelete'
+        ),
+    ],
+];
+```
+
+Order:
+
+- `before*` global triggers run before table-level `before*` triggers.
+- `after*` global triggers run after table-level `after*` triggers.
+
 Each trigger method is called with the following signature:
 
 ```php

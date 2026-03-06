@@ -171,6 +171,11 @@ trait HasBulkOperations
                         ]);
                     }
 
+                    $this->recordService->executeGlobalTrigger(
+                        hook: 'beforeCreate',
+                        params: [$request, $table, $item]
+                    );
+
                     $this->recordService->executeTableTrigger(
                         trigger: $tableSchema->beforeCreate ?? null,
                         params: [$request, $table, $item]
@@ -278,6 +283,11 @@ trait HasBulkOperations
 
                     $id = $item[$pk];
                     unset($item[$pk]);
+
+                    $this->recordService->executeGlobalTrigger(
+                        hook: 'beforeUpdate',
+                        params: [$request, $table, $id, $item]
+                    );
 
                     $this->recordService->executeTableTrigger(
                         trigger: $tableSchema->beforeUpdate ?? null,
@@ -395,6 +405,11 @@ trait HasBulkOperations
 
             return $this->withinTransaction(function () use ($request, $table, $idsToDelete, $tenantId, $tableSchema, $pk, &$deletedData, &$affected) {
                 foreach ($idsToDelete as $idToDelete) {
+                    $this->recordService->executeGlobalTrigger(
+                        hook: 'beforeDelete',
+                        params: [$request, $table, $idToDelete]
+                    );
+
                     $this->recordService->executeTableTrigger(
                         trigger: $tableSchema->beforeDelete ?? null,
                         params: [$request, $table, $idToDelete]

@@ -391,6 +391,21 @@ class RecordService
             ]);
         }
 
+        $globalTrigger = match ($operation) {
+            'create' => $this->globalTrigger('afterCreate'),
+            'update' => $this->globalTrigger('afterUpdate'),
+            'delete' => $this->globalTrigger('afterDelete'),
+            default => null
+        };
+
+        if ($globalTrigger) {
+            $this->executeTableTrigger($globalTrigger, [
+                $request,
+                $table,
+                $recordContext,
+            ]);
+        }
+
         // 2. Insert Audit Log
         if (!($tableSchema->disableAuditLog ?? false)) {
             $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
@@ -978,6 +993,18 @@ class RecordService
         }
 
         return $params;
+    }
+
+    public function executeGlobalTrigger(string $hook, array $params): array
+    {
+        return $this->executeTableTrigger($this->globalTrigger($hook), $params);
+    }
+
+    public function globalTrigger(string $hook): mixed
+    {
+        $triggers = RecordConfigService::globalTriggers();
+
+        return $triggers[$hook] ?? null;
     }
 
     private function resolveTableTriggers(mixed $trigger): array

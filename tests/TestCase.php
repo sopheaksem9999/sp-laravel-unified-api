@@ -34,6 +34,7 @@ class TestCase extends BaseTestCase
         $app['config']->set('record.api_prefix', 'api');
         $app['config']->set('record.enable_tenant_id', false);
         $app['config']->set('record.tables', []);
+        $app['config']->set('record.global_triggers', []);
         $app['config']->set('record.cache', [
             'enabled' => true,
             'default_ttl' => 3600,
