@@ -768,6 +768,35 @@ Order:
 - `before*` global triggers run before table-level `before*` triggers.
 - `after*` global triggers run after table-level `after*` triggers.
 
+### Default Validation (Schema-Based)
+
+You can enable automatic validation rules derived from table columns. This is optional and disabled by default.
+
+```php
+return [
+    'default_validation' => [
+        'enabled' => true,
+        'only_when_missing' => true,
+        'required' => true,
+        'types' => true,
+        'unique' => true,
+        'foreign_keys' => true,
+    ],
+];
+```
+
+Rules generated:
+
+- **required**: non-nullable columns without defaults (excluding system columns and tenant column)
+- **types**: basic mapping (`uuid`, `integer`, `numeric`, `boolean`, `date`, `string`, `array`)
+- **unique**: single-column unique indexes
+- **foreign_keys**: `exists:{table},{column}` based on DB constraints
+
+Notes:
+
+- Only applies on **create** and **update** endpoints (including bulk create/update).
+- When `only_when_missing` is `true`, table validators still take priority.
+
 Each trigger method is called with the following signature:
 
 ```php

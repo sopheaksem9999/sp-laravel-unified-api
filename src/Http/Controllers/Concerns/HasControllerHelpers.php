@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Http\Controllers\Concerns;
 
+use Throwable;
 use Exception;
 use RuntimeException;
 use Illuminate\Contracts\Validation\Validator as ValidatorContract;
@@ -37,9 +38,9 @@ trait HasControllerHelpers
             $result = $fn();
             DB::commit();
             return $result;
-        } catch (\Throwable $e) {
+        } catch (Throwable $throwable) {
             DB::rollBack();
-            throw $e;
+            throw $throwable;
         }
     }
 
@@ -52,6 +53,7 @@ trait HasControllerHelpers
         if (!$schema instanceof RecordTableType) {
             throw new RecordNotFoundException('Resource not available');
         }
+
         return $schema;
     }
 
@@ -218,6 +220,7 @@ trait HasControllerHelpers
                 if ($validator->fails()) {
                     return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $validator->errors()->toArray());
                 }
+
                 continue;
             }
 

@@ -120,6 +120,36 @@ class RecordConfigService
         return (array) config('record.global_triggers', []);
     }
 
+    public static function defaultValidationEnabled(): bool
+    {
+        return (bool) config('record.default_validation.enabled', true);
+    }
+
+    public static function defaultValidationOnlyWhenMissing(): bool
+    {
+        return (bool) config('record.default_validation.only_when_missing', true);
+    }
+
+    public static function defaultValidationIncludeRequired(): bool
+    {
+        return (bool) config('record.default_validation.required', true);
+    }
+
+    public static function defaultValidationIncludeTypes(): bool
+    {
+        return (bool) config('record.default_validation.types', true);
+    }
+
+    public static function defaultValidationIncludeUnique(): bool
+    {
+        return (bool) config('record.default_validation.unique', true);
+    }
+
+    public static function defaultValidationIncludeForeignKeys(): bool
+    {
+        return (bool) config('record.default_validation.foreign_keys', true);
+    }
+
     public static function getTableConfig(): array
     {
         return (array) config('record.tables', []);

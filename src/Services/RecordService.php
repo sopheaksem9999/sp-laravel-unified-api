@@ -255,42 +255,42 @@ class RecordService
 
         // Upsert requires update columns; exclude match columns, primary key and system timestamps
         $excludeColumns = array_merge($matchOn, [$pk, 'id', 'created_at', 'deleted_at']);
-        
+
         // If specific update columns are configured, use them. Otherwise, update all non-excluded columns.
         $updateColumns = array_values(array_diff(array_keys($item), $excludeColumns));
-        
+
         // Ensure we have something to update, otherwise upsert might fail or do nothing if all columns match
-        if (empty($updateColumns)) {
-             // If no columns to update, we might just return the existing record or do nothing.
-             // But DB::upsert expects at least one column to update if we want to update.
-             // If the intention is "insert if not exists, do nothing if exists", we can pass an empty array for update columns in some drivers, but Laravel's upsert expects columns.
-             // However, let's assume if there are no other columns, we touch updated_at if it exists.
-             if (array_key_exists('updated_at', $item)) {
-                 $updateColumns = ['updated_at'];
-             }
+        // If no columns to update, we might just return the existing record or do nothing.
+        // But DB::upsert expects at least one column to update if we want to update.
+        // If the intention is "insert if not exists, do nothing if exists", we can pass an empty array for update columns in some drivers, but Laravel's upsert expects columns.
+        // However, let's assume if there are no other columns, we touch updated_at if it exists.
+        if (empty($updateColumns) && array_key_exists('updated_at', $item)) {
+            $updateColumns = ['updated_at'];
         }
 
         DB::table($actualTableName)->upsert([$item], $matchOn, $updateColumns);
-        
+
         $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
         $cacheTenantId = $tenantEnabled ? $this->normalizeTenantId($tenantId) : null;
         $this->invalidateTableCache($table, $cacheTenantId, $tenantEnabled);
-        
+
         // Retrieve the ID - this is tricky with upsert as we don't always get the ID back easily across all drivers.
         // We might need to query it back using the matchOn columns.
         $query = DB::table($actualTableName);
         foreach ($matchOn as $col) {
             $query->where($col, $item[$col]);
         }
+
         if ($tenantEnabled) {
             $this->applyTenantFilter($query, $table, $tenantId);
         }
+
         $record = $query->first([$pk]);
         $id = $record ? $record->$pk : null;
 
         if ($id) {
             $this->invalidateRecordCache($table, $id, $cacheTenantId, $tenantEnabled);
-            
+
             // Trigger post-write logic (audit logs, triggers)
             // Determining if it was insert or update is hard with standard upsert.
             // We'll treat it as 'update' for now as it's the safer assumption for audit logs in upsert context,
@@ -336,6 +336,7 @@ class RecordService
             if ($tenantEnabled) {
                 $item[RecordConfigService::tenantColumn()] = $cacheTenantId;
             }
+
             $item = $this->applyTimestampsAndAuditFields($item, $tableSchema, true);
             $preparedItems[] = $item;
         }

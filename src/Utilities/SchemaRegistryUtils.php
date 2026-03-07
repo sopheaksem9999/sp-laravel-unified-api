@@ -16,6 +16,10 @@ class SchemaRegistryUtils
 {
     private static array $cache = [];
 
+    private static array $uniqueColumnsCache = [];
+
+    private static array $foreignKeysCache = [];
+
     /**
      * Get a specific table schema.
      */
@@ -129,6 +133,8 @@ class SchemaRegistryUtils
     public static function clearAllCache(): void
     {
         self::$cache = [];
+        self::$uniqueColumnsCache = [];
+        self::$foreignKeysCache = [];
         RelationshipResolverUtils::clearSchemaCache();
         QueryBuilderFiltersUtils::clearColumnCache();
     }
@@ -167,6 +173,7 @@ class SchemaRegistryUtils
     public static function clearTableCache(string $tableName): void
     {
         unset(self::$cache[$tableName]);
+        unset(self::$uniqueColumnsCache[$tableName], self::$foreignKeysCache[$tableName]);
     }
 
     /**
@@ -284,6 +291,143 @@ class SchemaRegistryUtils
 
             return [];
         }
+    }
+
+    /**
+     * @return array<string>
+     */
+    public static function getUniqueColumns(string $tableName): array
+    {
+        if (isset(self::$uniqueColumnsCache[$tableName])) {
+            return self::$uniqueColumnsCache[$tableName];
+        }
+
+        $driver = DB::getDriverName();
+        $columns = [];
+
+        try {
+            if ($driver === 'sqlite') {
+                $indexes = DB::select(sprintf('PRAGMA index_list(%s)', $tableName));
+                foreach ($indexes as $index) {
+                    if (empty($index->unique)) {
+                        continue;
+                    }
+
+                    $indexInfo = DB::select(sprintf('PRAGMA index_info(%s)', $index->name));
+                    if (count($indexInfo) === 1) {
+                        $columns[] = $indexInfo[0]->name;
+                    }
+                }
+            } elseif ($driver === 'pgsql') {
+                $columns = array_map(
+                    fn($row) => $row->column_name,
+                    DB::select(
+                        'select a.attname as column_name from pg_index i join pg_class t on t.oid = i.indrelid join pg_namespace n on n.oid = t.relnamespace join pg_attribute a on a.attrelid = t.oid and a.attnum = any(i.indkey) where t.relname = ? and n.nspname = current_schema() and i.indisunique = true and i.indisprimary = false and array_length(i.indkey, 1) = 1',
+                        [$tableName]
+                    )
+                );
+            } else {
+                $indexes = DB::select(sprintf('SHOW INDEX FROM `%s` WHERE Non_unique = 0', $tableName));
+                $grouped = [];
+                foreach ($indexes as $index) {
+                    $keyName = $index->Key_name ?? null;
+                    if (!is_string($keyName)) {
+                        continue;
+                    }
+
+                    if ('' === $keyName) {
+                        continue;
+                    }
+
+                    if ('PRIMARY' === $keyName) {
+                        continue;
+                    }
+
+                    $grouped[$keyName][] = $index->Column_name ?? null;
+                }
+
+                foreach ($grouped as $cols) {
+                    $cols = array_values(array_filter($cols, fn($col): bool => is_string($col) && '' !== $col));
+                    if (count($cols) === 1) {
+                        $columns[] = $cols[0];
+                    }
+                }
+            }
+        } catch (Exception $exception) {
+            Log::warning(sprintf('Failed to get unique columns for table %s: ', $tableName) . $exception->getMessage());
+        }
+
+        $columns = array_values(array_unique($columns));
+        self::$uniqueColumnsCache[$tableName] = $columns;
+
+        return $columns;
+    }
+
+    /**
+     * @return array<string,array{table:string,column:string}>
+     */
+    public static function getForeignKeys(string $tableName): array
+    {
+        if (isset(self::$foreignKeysCache[$tableName])) {
+            return self::$foreignKeysCache[$tableName];
+        }
+
+        $driver = DB::getDriverName();
+        $foreignKeys = [];
+
+        try {
+            if ($driver === 'sqlite') {
+                $rows = DB::select(sprintf('PRAGMA foreign_key_list(%s)', $tableName));
+                foreach ($rows as $row) {
+                    if (!isset($row->from, $row->table, $row->to)) {
+                        continue;
+                    }
+
+                    $foreignKeys[$row->from] = [
+                        'table' => $row->table,
+                        'column' => $row->to,
+                    ];
+                }
+            } elseif ($driver === 'pgsql') {
+                $rows = DB::select(
+                    'select kcu.column_name, ccu.table_name as foreign_table_name, ccu.column_name as foreign_column_name from information_schema.table_constraints tc join information_schema.key_column_usage kcu on tc.constraint_name = kcu.constraint_name and tc.table_schema = kcu.table_schema join information_schema.constraint_column_usage ccu on ccu.constraint_name = tc.constraint_name and ccu.table_schema = tc.table_schema where tc.constraint_type = ? and tc.table_schema = current_schema() and tc.table_name = ?',
+                    ['FOREIGN KEY', $tableName]
+                );
+
+                foreach ($rows as $row) {
+                    if (!isset($row->column_name, $row->foreign_table_name, $row->foreign_column_name)) {
+                        continue;
+                    }
+
+                    $foreignKeys[$row->column_name] = [
+                        'table' => $row->foreign_table_name,
+                        'column' => $row->foreign_column_name,
+                    ];
+                }
+            } else {
+                $rows = DB::select(
+                    'select column_name, referenced_table_name, referenced_column_name from information_schema.key_column_usage where table_schema = database() and table_name = ? and referenced_table_name is not null',
+                    [$tableName]
+                );
+
+                foreach ($rows as $row) {
+                    if (!isset($row->column_name, $row->referenced_table_name, $row->referenced_column_name)) {
+                        continue;
+                    }
+
+                    $foreignKeys[$row->column_name] = [
+                        'table' => $row->referenced_table_name,
+                        'column' => $row->referenced_column_name,
+                    ];
+                }
+            }
+        } catch (Exception $exception) {
+            Log::warning(sprintf('Failed to get foreign keys for table %s: ', $tableName) . $exception->getMessage());
+        }
+
+        self::$foreignKeysCache[$tableName] = $foreignKeys;
+
+        return $foreignKeys;
     }
 
     private static function getCompositeTypeFields(string $schema, string $typeName): array

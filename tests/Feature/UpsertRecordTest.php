@@ -43,7 +43,7 @@ class UpsertRecordTest extends TestCase
     }
 
     /** @test */
-    public function it_can_upsert_single_record_create()
+    public function it_can_upsert_single_record_create(): void
     {
         $payload = [
             'sku' => 'SKU-001',
@@ -58,7 +58,7 @@ class UpsertRecordTest extends TestCase
     }
 
     /** @test */
-    public function it_can_upsert_single_record_update()
+    public function it_can_upsert_single_record_update(): void
     {
         DB::table('products')->insert([
             'sku' => 'SKU-001',
@@ -82,7 +82,7 @@ class UpsertRecordTest extends TestCase
     }
 
     /** @test */
-    public function it_fails_upsert_without_match_on()
+    public function it_fails_upsert_without_match_on(): void
     {
         $payload = [
             'sku' => 'SKU-001',
@@ -96,7 +96,7 @@ class UpsertRecordTest extends TestCase
     }
 
     /** @test */
-    public function it_can_bulk_upsert_via_bulk_endpoint_mixed_operations()
+    public function it_can_bulk_upsert_via_bulk_endpoint_mixed_operations(): void
     {
         // Pre-existing
         DB::table('products')->insert([
@@ -134,7 +134,7 @@ class UpsertRecordTest extends TestCase
     }
 
     /** @test */
-    public function it_can_bulk_upsert_via_dedicated_endpoint()
+    public function it_can_bulk_upsert_via_dedicated_endpoint(): void
     {
          // Pre-existing
         DB::table('products')->insert([

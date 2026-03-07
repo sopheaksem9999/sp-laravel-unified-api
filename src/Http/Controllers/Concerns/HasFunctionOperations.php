@@ -29,10 +29,10 @@ trait HasFunctionOperations
             $this->authorizeAction($table, 'read');
 
             return $this->recordService->executeTableFunction($request, $table, $functionName);
-        } catch (Exception $e) {
+        } catch (Exception $exception) {
             return RecordApiResponseService::errorWrapped(
-                $e->getMessage(),
-                $e->getCode() ?: RecordApiJsonResponseEnum::SERVER_ERROR->value
+                $exception->getMessage(),
+                $exception->getCode() ?: RecordApiJsonResponseEnum::SERVER_ERROR->value
             );
         }
     }
@@ -45,10 +45,10 @@ trait HasFunctionOperations
     {
         try {
             return $this->recordService->executeGlobalFunction($request, $functionName);
-        } catch (Exception $e) {
+        } catch (Exception $exception) {
             return RecordApiResponseService::errorWrapped(
-                $e->getMessage(),
-                $e->getCode() ?: RecordApiJsonResponseEnum::SERVER_ERROR->value
+                $exception->getMessage(),
+                $exception->getCode() ?: RecordApiJsonResponseEnum::SERVER_ERROR->value
             );
         }
     }

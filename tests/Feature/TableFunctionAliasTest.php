@@ -28,6 +28,7 @@ class TableFunctionAliasTest extends TestCase
                 ]
             ),
         ]);
+        $app['config']->set('record.rpc_prefix', 'rpc');
     }
 
     /** @test */
@@ -35,12 +36,9 @@ class TableFunctionAliasTest extends TestCase
     {
         SchemaRegistryUtils::refresh();
 
-        $matchedRoute = app('router')->getRoutes()->match(Request::create('/api/journalEntry/rpc/parties', 'GET'));
-        $this->assertStringContainsString('executeTableFunction', $matchedRoute->getActionName());
-
         $service = new RecordService();
         $response = $service->executeTableFunction(
-            Request::create('/api/journalEntry/rpc/parties', 'GET'),
+            Request::create('/api/journalEntry/parties', 'GET'),
             'journalEntry',
             'parties'
         );

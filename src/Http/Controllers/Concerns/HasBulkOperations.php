@@ -13,7 +13,7 @@ use Sopheak\Core\Exceptions\RecordNotFoundException;
 use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Services\RecordService;
-use Sopheak\Core\Utilities\SchemaRegistryUtils;
+use Sopheak\Core\Utilities\DefaultValidationUtils;
 
 /**
  * @property RecordService $recordService
@@ -51,6 +51,7 @@ trait HasBulkOperations
             if (!is_int($code) || $code < 100 || $code > 599) {
                 $code = RecordApiJsonResponseEnum::SERVER_ERROR->value;
             }
+
             return RecordApiResponseService::errorWrapped($e->getMessage(), $code);
         }
     }
@@ -79,6 +80,7 @@ trait HasBulkOperations
             if (empty($matchOn)) {
                 return RecordApiResponseService::errorWrapped('match_on query parameter is required', RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
             }
+
             $matchOn = explode(',', $matchOn);
 
             $payload = $request->except(['match_on', 'select', 'per_page', 'page']);
@@ -96,7 +98,7 @@ trait HasBulkOperations
             foreach ($items as $index => $item) {
                 foreach ($matchOn as $col) {
                     if (!array_key_exists($col, $item)) {
-                        return RecordApiResponseService::errorWrapped("Item at index $index missing required matching column: $col", RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
+                        return RecordApiResponseService::errorWrapped(sprintf('Item at index %s missing required matching column: %s', $index, $col), RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
                     }
                 }
             }
@@ -109,7 +111,7 @@ trait HasBulkOperations
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
         } catch (Exception $e) {
-            Log::error('Failed to bulk upsert records', ['table' => $table, 'exception' => $e]);
+            //Log::error('Failed to bulk upsert records', ['table' => $table, 'exception' => $e]);
             return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
@@ -163,12 +165,25 @@ trait HasBulkOperations
             $createdData = [];
             $affected    = 0;
 
-            return $this->withinTransaction(function () use ($request, $table, $items, $tenantId, $tableSchema, $pk, &$createdData, &$affected) {
+            return $this->withinTransaction(function () use ($request, $table, $items, $tenantId, $tableSchema, $pk, &$createdData, &$affected): JsonResponse {
                 foreach ($items as $index => $item) {
                     if (isset($item[$pk])) {
                         throw ValidationException::withMessages([
                             sprintf('items.%s.%s', $index, $pk) => 'Primary key should not be provided for create operation',
                         ]);
+                    }
+
+                    if (
+                        RecordConfigService::defaultValidationEnabled()
+                        && (!RecordConfigService::defaultValidationOnlyWhenMissing() || null === $tableSchema->createValidator)
+                    ) {
+                        $rules = DefaultValidationUtils::buildCreateRules($tableSchema);
+                        if ($rules !== []) {
+                            $validator = Validator::make($item, $rules);
+                            if ($validator->fails()) {
+                                throw ValidationException::withMessages($validator->errors()->toArray());
+                            }
+                        }
                     }
 
                     $this->recordService->executeGlobalTrigger(
@@ -210,7 +225,7 @@ trait HasBulkOperations
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
         } catch (Exception $e) {
-            Log::error('Failed to bulk create records', ['table' => $table, 'exception' => $e]);
+            //Log::error('Failed to bulk create records', ['table' => $table, 'exception' => $e]);
             return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
@@ -266,7 +281,7 @@ trait HasBulkOperations
             $updatedData = [];
             $affected    = 0;
 
-            return $this->withinTransaction(function () use ($request, $table, $items, $tenantId, $tableSchema, $pk, &$updatedData, &$affected) {
+            return $this->withinTransaction(function () use ($request, $table, $items, $tenantId, $tableSchema, $pk, &$updatedData, &$affected): JsonResponse {
                 foreach ($items as $index => $item) {
                     if (!isset($item[$pk])) {
                         throw ValidationException::withMessages([
@@ -283,6 +298,19 @@ trait HasBulkOperations
 
                     $id = $item[$pk];
                     unset($item[$pk]);
+
+                    if (
+                        RecordConfigService::defaultValidationEnabled()
+                        && (!RecordConfigService::defaultValidationOnlyWhenMissing() || null === $tableSchema->updateValidator)
+                    ) {
+                        $rules = DefaultValidationUtils::buildUpdateRules($tableSchema, $id);
+                        if ($rules !== []) {
+                            $validator = Validator::make($item, $rules);
+                            if ($validator->fails()) {
+                                throw ValidationException::withMessages($validator->errors()->toArray());
+                            }
+                        }
+                    }
 
                     $this->recordService->executeGlobalTrigger(
                         hook: 'beforeUpdate',
@@ -330,7 +358,7 @@ trait HasBulkOperations
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
         } catch (Exception $e) {
-            Log::error('Failed to bulk update records', ['table' => $table, 'exception' => $e]);
+            //Log::error('Failed to bulk update records', ['table' => $table, 'exception' => $e]);
             return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
@@ -382,6 +410,7 @@ trait HasBulkOperations
                             sprintf('items.%s.%s', $index, $pk) => sprintf('Primary key (%s) is required for delete operation', $pk),
                         ]);
                     }
+
                     $idsToDelete[] = $item[$pk];
                 } else {
                     if (empty($item)) {
@@ -389,6 +418,7 @@ trait HasBulkOperations
                             'items.' . $index => 'ID value cannot be empty',
                         ]);
                     }
+
                     $idsToDelete[] = $item;
                 }
             }
@@ -403,7 +433,7 @@ trait HasBulkOperations
             $deletedData = [];
             $affected    = 0;
 
-            return $this->withinTransaction(function () use ($request, $table, $idsToDelete, $tenantId, $tableSchema, $pk, &$deletedData, &$affected) {
+            return $this->withinTransaction(function () use ($request, $table, $idsToDelete, $tenantId, $tableSchema, $pk, &$deletedData, &$affected): JsonResponse {
                 foreach ($idsToDelete as $idToDelete) {
                     $this->recordService->executeGlobalTrigger(
                         hook: 'beforeDelete',
@@ -449,7 +479,7 @@ trait HasBulkOperations
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
         } catch (Exception $e) {
-            Log::error('Failed to bulk delete records', ['table' => $table, 'exception' => $e]);
+            //Log::error('Failed to bulk delete records', ['table' => $table, 'exception' => $e]);
             return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }

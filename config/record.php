@@ -159,6 +159,15 @@ return [
     'global_triggers' => [
     ],
 
+    'default_validation' => [
+        'enabled' => false,
+        'only_when_missing' => true,
+        'required' => true,
+        'types' => true,
+        'unique' => true,
+        'foreign_keys' => true,
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Table Configurations
