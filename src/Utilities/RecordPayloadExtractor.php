@@ -2,8 +2,12 @@
 
 namespace Sopheak\Core\Utilities;
 
+use Sopheak\Core\Types\RecordTableType;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Sopheak\Core\Services\RecordConfigService;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
+use Sopheak\Core\Utilities\RecordUtils;
 
 final class RecordPayloadExtractor
 {
@@ -40,6 +44,11 @@ final class RecordPayloadExtractor
         mixed $classModel = null,
         ?callable $transform = null,
     ): array {
+        $tableSchema = null;
+        if (!empty($recordTable)) {
+            $tableSchema = SchemaRegistryUtils::getTable($recordTable);
+        }
+
         // get columns from record table
         if (!empty($recordTable)) {
             $table = config('record.tables.' . $recordTable);
@@ -67,7 +76,10 @@ final class RecordPayloadExtractor
             $hasField = false;
             $value = null;
 
-            if (is_array($request)) {
+            if (array_key_exists($field, $baseData)) {
+                $hasField = true;
+                $value = $baseData[$field];
+            } elseif (is_array($request)) {
                 if (array_key_exists($field, $request)) {
                     $hasField = true;
                     $value = $request[$field];
@@ -100,10 +112,45 @@ final class RecordPayloadExtractor
         }
 
         if ($hasChanges) {
-            $data['updated_at'] = TimeUtils::now();
+            $now = TimeUtils::now();
+            $data['updated_at'] = $now;
 
             if (!$isUpdate && !array_key_exists('created_at', $data)) {
-                $data['created_at'] = TimeUtils::now();
+                $data['created_at'] = $now;
+            }
+
+            if ($tableSchema instanceof RecordTableType) {
+                $user = auth('api')->user();
+                if ($isUpdate) {
+                    if ($user) {
+                        if (isset($tableSchema->columns['updated_by'])) {
+                            $data['updated_by'] = $user->id;
+                        } elseif (isset($tableSchema->columns['last_updated_by'])) {
+                            $data['last_updated_by'] = $user->id;
+                        }
+                    }
+                } else {
+                    if ($user && isset($tableSchema->columns['created_by'])) {
+                        $data['created_by'] = $user->id;
+                    }
+
+                    $tenantColumn = RecordConfigService::tenantColumn();
+                    if (
+                        RecordUtils::shouldApplyTenantId($tableSchema)
+                        && isset($tableSchema->columns[$tenantColumn])
+                        && !array_key_exists($tenantColumn, $data)
+                    ) {
+                        $tenantId = null;
+                        if ($request instanceof Request) {
+                            $tenantId = $request->header(RecordConfigService::tenantHeader());
+                        }
+
+                        $tenantId = RecordUtils::normalizeTenantId($tenantId);
+                        if (!RecordUtils::isTenantIdMissing($tenantId)) {
+                            $data[$tenantColumn] = $tenantId;
+                        }
+                    }
+                }
             }
         }
 

@@ -5,7 +5,6 @@ namespace Sopheak\Core\Http\Controllers\Concerns;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
@@ -97,7 +96,7 @@ trait HasCrudOperations
             return $response;
         } catch (RecordNotFoundException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
-        } catch (Exception $e) {
+        } catch (Exception) {
             //Log::error('Failed to list records', ['table' => $table, 'exception' => $e]);
             return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
@@ -177,7 +176,7 @@ trait HasCrudOperations
             return $response;
         } catch (RecordNotFoundException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
-        } catch (Exception $e) {
+        } catch (Exception) {
             //Log::error('Failed to retrieve record', ['table' => $table, 'id' => $id, 'exception' => $e]);
             return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
@@ -270,7 +269,7 @@ trait HasCrudOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
-        } catch (Exception $e) {
+        } catch (Exception) {
             //Log::error('Failed to create record', ['table' => $table, 'exception' => $e]);
             return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
@@ -368,7 +367,7 @@ trait HasCrudOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
-        } catch (Exception $e) {
+        } catch (Exception) {
             // //Log::error('Failed to update record', ['table' => $table, 'id' => $id, 'exception' => $e]);
             return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
@@ -448,7 +447,7 @@ trait HasCrudOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
-        } catch (Exception $e) {
+        } catch (Exception) {
             // //Log::error('Failed to delete record', ['table' => $table, 'id' => $id, 'exception' => $e]);
             return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
@@ -506,7 +505,7 @@ trait HasCrudOperations
             });
         } catch (RecordNotFoundException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
-        } catch (Exception $e) {
+        } catch (Exception) {
             // //Log::error('Failed to restore record', ['table' => $table, 'id' => $id, 'exception' => $e]);
             return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
@@ -562,7 +561,7 @@ trait HasCrudOperations
             });
         } catch (RecordNotFoundException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
-        } catch (Exception $e) {
+        } catch (Exception) {
             // //Log::error('Failed to force delete record', ['table' => $table, 'id' => $id, 'exception' => $e]);
             return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
@@ -611,7 +610,7 @@ trait HasCrudOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
-        } catch (Exception $e) {
+        } catch (Exception) {
             // //Log::error('Failed to upsert record', ['table' => $table, 'exception' => $e]);
             return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
