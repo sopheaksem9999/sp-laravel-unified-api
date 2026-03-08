@@ -538,9 +538,39 @@ Record endpoints use table-level access rules from `config/record.php`:
 ### Middleware Stack
 
 - `api` - API middleware group
-- `auth:{guard}` - Authentication (for routes that enforce middleware)
 - `request.id` - Request ID tracking for audit trails
 - Rate limiting with different throttles for different operation types
+- `record.route.middleware:{action}` - Dynamic middleware dispatcher resolved from `config/record.php` `middleware_map`
+
+### Middleware Map (Public / Auth / Auth+Subscription)
+
+Use `middleware_map` in `config/record.php` to apply middleware by endpoint group/action and per table.
+
+```php
+'middleware_map' => [
+    'default' => [
+        '*' => [],
+        'read' => [],
+        'write' => ['auth:sanctum'],
+        'function' => ['auth:sanctum'],
+    ],
+    'tables' => [
+        'customers' => [
+            'read' => [],
+        ],
+        'orders' => [
+            'write' => ['auth:sanctum', 'subscribed'],
+            'table_function' => ['auth:sanctum', 'subscribed'],
+        ],
+    ],
+],
+```
+
+How this matches common client requirements:
+
+- Public query route: keep `read` empty (or only safe middleware like throttling).
+- Auth-only route: use `write => ['auth:sanctum']` or per-action `create`, `update`, `delete`.
+- Auth + subscription route: add `subscribed` in table/action stack (e.g. `orders.write`).
 
 ### Table-Level Validation
 

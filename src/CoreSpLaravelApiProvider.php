@@ -12,6 +12,7 @@ use Sopheak\Core\Console\GenerateRecordTablesFromDatabaseCommand;
 use Sopheak\Core\Console\MakeRecordTableCommand;
 use Sopheak\Core\Console\SetupPackageCommand;
 use Sopheak\Core\Console\ValidateSetupCommand;
+use Sopheak\Core\Http\Middleware\RecordRouteMiddleware;
 use Sopheak\Core\Http\Middleware\RequestId;
 use Sopheak\Core\Services\AuditLogService;
 use Sopheak\Core\Services\QueryCacheService;
@@ -64,6 +65,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
         /** @var Router $router */
         $router = $this->app['router'];
         $router->aliasMiddleware('request.id', RequestId::class);
+        $router->aliasMiddleware('record.route.middleware', RecordRouteMiddleware::class);
 
         /**
          * @param Request     $request       HTTP request carrying query parameters.

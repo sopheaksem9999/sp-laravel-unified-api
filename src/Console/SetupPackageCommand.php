@@ -588,6 +588,18 @@ return [
     'restrict_to_own_records' => false, // limit queries to records created by the authenticated user
     'own_records_permission_prefix' => 'viewOwn', // example: viewOwn_invoice
 
+    // Config-driven middleware map (default + per-table overrides)
+    'middleware_map' => [
+        'default' => [
+            '*' => [],
+            'read' => [],
+            'write' => [],
+            'function' => [],
+        ],
+        'tables' => [
+        ],
+    ],
+
     'global_functions' => $globalFunctions,
 
     // Table configurations

@@ -110,6 +110,11 @@ class RecordConfigService
         return (string) config('record.own_records_permission_prefix', 'viewOwn');
     }
 
+    public static function middlewareMap(): array
+    {
+        return (array) config('record.middleware_map', []);
+    }
+
     public static function globalFunctions(): array
     {
         return (array) config('record.global_functions', []);

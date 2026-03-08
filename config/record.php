@@ -125,6 +125,52 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Config-Driven Middleware Map
+    |--------------------------------------------------------------------------
+    |
+    | Apply custom middleware stacks by endpoint action without editing package
+    | routes. The final stack for each request is merged in this order:
+    | 1) default["*"] 2) default[group] 3) default[action]
+    | 4) tables[{table}]["*"] 5) tables[{table}][group] 6) tables[{table}][action]
+    |
+    | Groups:
+    | - read: list, show
+    | - write: create, update, delete, restore, force_delete, upsert, bulk*
+    | - function: table_function, global_function
+    |
+    | Example use case:
+    | - public reads
+    | - authenticated writes
+    | - subscription required for specific table writes
+    |
+    | 'middleware_map' => [
+    |     'default' => [
+    |         'read' => [],
+    |         'write' => ['auth:sanctum'],
+    |         'function' => ['auth:sanctum'],
+    |     ],
+    |     'tables' => [
+    |         'bills' => [
+    |             'create' => ['auth:sanctum', 'subscribed'],
+    |             'update' => ['auth:sanctum', 'subscribed'],
+    |         ],
+    |     ],
+    | ],
+    |
+    */
+    'middleware_map' => [
+        'default' => [
+            '*' => [],
+            'read' => [],
+            'write' => [],
+            'function' => [],
+        ],
+        'tables' => [
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Global Custom Functions
     |--------------------------------------------------------------------------
     |

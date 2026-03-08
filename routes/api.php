@@ -98,12 +98,12 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
             Route::prefix(RecordConfigService::rpcPrefix())->group(function () use ($globalFunctionWhere): void {
                 Route::match(['get', 'post', 'put', 'patch', 'delete'], '{functionName}', [CoreRecordController::class, 'executeGlobalFunction'])
                     ->where('functionName', $globalFunctionWhere)
-                    ->middleware('throttle:api-functions');
+                    ->middleware(['throttle:api-functions', 'record.route.middleware:global_function']);
             });
         } else {
             Route::match(['get', 'post', 'put', 'patch', 'delete'], '{functionName}', [CoreRecordController::class, 'executeGlobalFunction'])
                 ->where('functionName', $globalFunctionWhere)
-                ->middleware('throttle:api-functions');
+                ->middleware(['throttle:api-functions', 'record.route.middleware:global_function']);
         }
     }
 
@@ -113,26 +113,26 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
     | Upsert Operations
     |--------------------------------------------------------------------------
     */
-    Route::post('{table}/upsert', [CoreRecordController::class, 'upsertRecord'])->where('table', $tableWhere)->middleware('throttle:api-writes');
+    Route::post('{table}/upsert', [CoreRecordController::class, 'upsertRecord'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:upsert']);
 
     /*
     |--------------------------------------------------------------------------
     | Advanced CRUD Operations
     |--------------------------------------------------------------------------
     */
-    Route::post('{table}/{id}/restore', [CoreRecordController::class, 'restoreRecord'])->where('table', $tableWhere)->middleware('throttle:api-writes');
-    Route::delete('{table}/{id}/force', [CoreRecordController::class, 'forceDeleteRecord'])->where('table', $tableWhere)->middleware('throttle:api-writes');
+    Route::post('{table}/{id}/restore', [CoreRecordController::class, 'restoreRecord'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:restore']);
+    Route::delete('{table}/{id}/force', [CoreRecordController::class, 'forceDeleteRecord'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:force_delete']);
 
     /*
     |--------------------------------------------------------------------------
     | Bulk Operations
     |--------------------------------------------------------------------------
     */
-    Route::post('{table}/bulk', [CoreRecordController::class, 'bulkRecord'])->where('table', $tableWhere)->middleware('throttle:api-writes');
-    Route::post('{table}/bulk/create', [CoreRecordController::class, 'bulkRecordCreate'])->where('table', $tableWhere)->middleware('throttle:api-writes');
-    Route::post('{table}/bulk/update', [CoreRecordController::class, 'bulkRecordUpdate'])->where('table', $tableWhere)->middleware('throttle:api-writes');
-    Route::post('{table}/bulk/delete', [CoreRecordController::class, 'bulkRecordDelete'])->where('table', $tableWhere)->middleware('throttle:api-writes');
-    Route::post('{table}/bulk/upsert', [CoreRecordController::class, 'bulkRecordUpsert'])->where('table', $tableWhere)->middleware('throttle:api-writes');
+    Route::post('{table}/bulk', [CoreRecordController::class, 'bulkRecord'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:bulk']);
+    Route::post('{table}/bulk/create', [CoreRecordController::class, 'bulkRecordCreate'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:bulk_create']);
+    Route::post('{table}/bulk/update', [CoreRecordController::class, 'bulkRecordUpdate'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:bulk_update']);
+    Route::post('{table}/bulk/delete', [CoreRecordController::class, 'bulkRecordDelete'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:bulk_delete']);
+    Route::post('{table}/bulk/upsert', [CoreRecordController::class, 'bulkRecordUpsert'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:bulk_upsert']);
 
     /*
     |--------------------------------------------------------------------------
@@ -142,11 +142,11 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
     if (!empty(RecordConfigService::rpcPrefix())) {
         Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/' . RecordConfigService::rpcPrefix() . '/{functionName}', [CoreRecordController::class, 'executeTableFunction'])
             ->where(['table' => $tableWhere, 'functionName' => '.*'])
-            ->middleware('throttle:api-functions');
+            ->middleware(['throttle:api-functions', 'record.route.middleware:table_function']);
     } else {
         Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/{functionName}', [CoreRecordController::class, 'executeTableFunction'])
             ->where(['table' => $tableWhere, 'functionName' => '(?!(?:upsert$|bulk(?:/|$)))(?!\d+$).+'])
-            ->middleware('throttle:api-functions');
+            ->middleware(['throttle:api-functions', 'record.route.middleware:table_function']);
     }
 
     /*
@@ -154,9 +154,9 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
     | Standard CRUD Operations
     |--------------------------------------------------------------------------
     */
-    Route::get('{table}', [CoreRecordController::class, 'listRecords'])->where('table', $tableWhere)->middleware('throttle:api-reads');
-    Route::get('{table}/{id}', [CoreRecordController::class, 'getRecordById'])->where('table', $tableWhere)->middleware('throttle:api-reads');
-    Route::post('{table}', [CoreRecordController::class, 'createRecord'])->where('table', $tableWhere)->middleware('throttle:api-writes');
-    Route::match(['put', 'patch'], '{table}/{id}', [CoreRecordController::class, 'updateRecord'])->where('table', $tableWhere)->middleware('throttle:api-writes');
-    Route::delete('{table}/{id}', [CoreRecordController::class, 'destroyRecord'])->where('table', $tableWhere)->middleware('throttle:api-writes');
+    Route::get('{table}', [CoreRecordController::class, 'listRecords'])->where('table', $tableWhere)->middleware(['throttle:api-reads', 'record.route.middleware:list']);
+    Route::get('{table}/{id}', [CoreRecordController::class, 'getRecordById'])->where('table', $tableWhere)->middleware(['throttle:api-reads', 'record.route.middleware:show']);
+    Route::post('{table}', [CoreRecordController::class, 'createRecord'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:create']);
+    Route::match(['put', 'patch'], '{table}/{id}', [CoreRecordController::class, 'updateRecord'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:update']);
+    Route::delete('{table}/{id}', [CoreRecordController::class, 'destroyRecord'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:delete']);
 });

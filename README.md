@@ -257,6 +257,40 @@ return [
 
 The package routes are loaded automatically by `Sopheak\Core\CoreServiceProvider` using this prefix. Record endpoints authorize per-table using `RecordTablePublic` and permissions; audit endpoints include read endpoints (and additional authenticated endpoints) under the same prefix.
 
+### Config-Driven Middleware Map (Client Use Case)
+
+You can apply different middleware stacks per route action and per table without editing package routes.
+
+```php
+// config/record.php
+'middleware_map' => [
+    'default' => [
+        '*' => [],
+        'read' => [],
+        'write' => ['auth:sanctum'],
+        'function' => ['auth:sanctum'],
+    ],
+    'tables' => [
+        // Public query routes
+        'customers' => [
+            'read' => [],
+        ],
+        // Auth + subscription routes
+        'bills' => [
+            'write' => ['auth:sanctum', 'subscribed'],
+            'table_function' => ['auth:sanctum', 'subscribed'],
+        ],
+    ],
+],
+```
+
+Action names available in the middleware map:
+- `list`, `show`
+- `create`, `update`, `delete`, `restore`, `force_delete`, `upsert`
+- `bulk`, `bulk_create`, `bulk_update`, `bulk_delete`, `bulk_upsert`
+- `table_function`, `global_function`
+- grouped keys: `read`, `write`, `function`, and wildcard `*`
+
 Alternatively, you can keep `config/record.php` focused on global options and define per-table configurations under `config/records/tables` using the Artisan helper:
 
 ### Table-Level Custom Audit Logger

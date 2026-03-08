@@ -246,6 +246,23 @@ If multi-tenant mode is enabled (`record.enable_tenant_id=true`) and the table i
 ```
 Records are filtered by the `' . $tenantColumn . '` column.
 
+## 🧩 Middleware Map (Public / Auth / Subscription)
+
+You can configure route middleware stacks per action and per table in `config/record.php` using `middleware_map`.
+
+```php
+"middleware_map" => [
+  "default" => [
+    "read" => [],
+    "write" => ["auth:sanctum"],
+  ],
+  "tables" => [
+    "customers" => ["read" => []],
+    "bills" => ["write" => ["auth:sanctum", "subscribed"]],
+  ],
+]
+```
+
 ## 🔧 Key Features
 
 ### Filtering & Search
