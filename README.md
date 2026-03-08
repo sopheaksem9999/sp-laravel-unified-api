@@ -1355,19 +1355,15 @@ class YourModel extends Model
 
 ### Filter Operators
 
-- `is.{value}` - Filter where column is null (e.g., `?name=is.null`)
-- `eq.{value}` - Filter where column equals value (e.g., `?name=eq.John`)
-- `neq.{value}` - Filter where column does not equal value (e.g., `?status=neq.inactive`)
-- `like.{value}` - Filter using LIKE operator (e.g., `?name=like.John`)
-- `gt.{value}` - Filter where column is greater than value (e.g., `?age=gt.18`)
-- `lt.{value}` - Filter where column is less than value (e.g., `?price=lt.100`)
-- `gte.{value}` - Filter where column is greater than or equal to value (e.g., `?score=gte.75`)
-- `lte.{value}` - Filter where column is less than or equal to value (e.g., `?price=lte.100`)
-- `in.{value}` - Filter where column is in a list of values (e.g., `?category=in.electronics,clothing`)
-- `contains.{value}` - Filter where column contains a substring (e.g., `?name=contains.john`)
-- `between.{value},{value}` - Filter where column is between values (e.g., `?date=between.2025-06-01,2025-06-20`)
-- `not_between.{value},{value}` - Filter where column is not between values
-- `compare.{field2}` - Compare two fields (e.g., `?total_amount=compare.neq.balance`)
+Supported syntax includes:
+- Standard filters: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `between`, `not_between`, `like`, `ilike`, `contains`, `starts_with`, `ends_with`, `regex`, `match`, `imatch`, date operators, and null/empty operators.
+- Grouped logic: `and=(...)`, `or=(...)`.
+- Advanced expression style: `not.<operator>` and `operator(any|all).{...}`.
+- List styles: both `id=in.(5,6,9)` and legacy `id=in.5,6,9`.
+- Driver guard: unsupported operators return `422` validation error with explicit message.
+
+For complete operator matrix, grouped logic examples, and driver compatibility details, see:
+- `docs/api-documentation.md` → **Filter Operators** and **Grouped Logic**.
 
 ### Example Usage
 

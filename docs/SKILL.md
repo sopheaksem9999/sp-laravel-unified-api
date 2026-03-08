@@ -240,7 +240,8 @@ Every `GET /{table}` supports out of the box:
 ```
 ?select=*,category(id,name),variants(*)   column selection + relationship embedding
 ?s=search term                             full-text search across indexed columns
-?status=eq.active&price=gte.100           filter operators (20+ types)
+?status=eq.active&price=gte.100           filter operators + grouped logic
+?vendor_id=eq.27&or=(balance_due.gt.0,id.eq.5) grouped OR/AND expressions
 ?sortby=price&order=desc                   sorting
 ?page=2&per_page=25                        pagination
 ?aggregate=count,sum:price&group_by=status aggregation + group by
@@ -252,6 +253,9 @@ Every `GET /{table}` supports out of the box:
 Queries are cached automatically per table. Invalidated on any write to that table.
 Disable per table: `disableCache: true`.
 RPC functions control cache TTL via `cacheTTL` and invalidation via `clearCacheTables`.
+
+Full filter/operator reference and compatibility notes:
+- `docs/api-documentation.md` (Filter Operators and Grouped Logic sections)
 
 ### 5. Zero-code multi-tenancy
 

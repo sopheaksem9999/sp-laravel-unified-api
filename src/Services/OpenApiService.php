@@ -146,7 +146,7 @@ A powerful, flexible API for accessing system data with advanced filtering, rela
 
 This API provides **unified access** to all tables through a single endpoint pattern:
 - **CRUD Operations**: Create, read, update, delete records
-- **Dynamic Filtering**: 25+ filter operators for precise data queries  
+- **Dynamic Filtering**: Extended operator set with grouped logical expressions  
 - **Relationship Embedding**: Load related data in a single request
 - **Bulk Operations**: Process multiple records efficiently
 - **Custom Functions**: Execute business logic via RPC endpoints
@@ -223,6 +223,12 @@ GET /' . $apiPrefix . '/customers?name=like.John
 GET /' . $apiPrefix . '/products?price=between.100,1000
 ```
 
+### Documentation References
+- Interactive package docs: https://sp-laravel-api-docs.vercel.app/#/
+- Runtime OpenAPI JSON: /' . $apiPrefix . '/docs/openapi.json
+- Runtime API docs UI: /' . $apiPrefix . '/docs
+- Full Markdown guide: docs/api-documentation.md
+
 ### Load Related Data
 ```bash
 # Get invoices with customer and items
@@ -244,12 +250,19 @@ Records are filtered by the `' . $tenantColumn . '` column.
 
 ### Filtering & Search
 - **Equality**: `eq` (equal), `neq` (not equal)
-- **Text Search**: `like`/`contains` (contains), `starts_with`, `ends_with`, `not_like`, `regex`
+- **Text Search**: `like`/`contains` (contains), `ilike`, `starts_with`, `ends_with`, `not_like`, `regex`, `match`, `imatch`
 - **Comparisons**: `gt` (greater than), `lt` (less than), `gte` (greater/equal), `lte` (less/equal)
 - **Lists**: `in` (value in list), `not_in` (value not in list), `between`, `not_between`
 - **Date Filters**: `date_eq`, `date_gt`, `date_lt`, `date_gte`, `date_lte`
 - **Null Checks**: `is` (is null), `is_not` (is not null), `empty` (null or empty), `not_empty`
-- **Advanced**: Column-to-column comparisons, lazy loading with `lazy=true`
+- **Advanced**: `not.<operator>` syntax, `any/all` modifiers (example: `name=like(any).{ACME,SHOP}`), grouped logic `and=(...)` and `or=(...)`
+- **Postgres Native**: `fts`, `plfts`, `phfts`, `wfts`, `cs`, `cd`, `ov`, `sl`, `sr`, `nxl`, `nxr`, `adj`
+- **Compatibility**: If an operator is not supported by the current database driver, API returns a validation error
+
+### Grouped Logic Examples
+- `vendor_id=eq.27&or=(balance_due.gt.0,id.eq.5)`
+- `vendor_id=eq.27&and=(or(balance_due.gt.0,id.eq.5),id.neq.2)`
+- `id=in.(5,6,9)` and legacy `id=in.5,6,9` are both supported
 
 ### Column Selection
 - **Basic**: `select=id,name,email` (specific columns)
@@ -291,7 +304,7 @@ This section describes payload format for write endpoints (`POST`, `PUT`, `PATCH
 }
 ```
 
-Full relationship Public full examples: https://sp-laravel-api-docs.vercel.app/#/
+Full relationship examples and payload guides: https://sp-laravel-api-docs.vercel.app/#/
 
 ### Ordering & Sorting
 - **Basic**: `sortby=name&order=asc` (sort by column)

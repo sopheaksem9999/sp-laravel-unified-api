@@ -205,15 +205,18 @@ Format: `?{column}={operator}.{value}` — multiple filters are ANDed.
 
 ### String Pattern
 | `like` | `?display_name=like.%John%` |
+| `ilike` | `?display_name=ilike.john` |
 | `not_like` | `?display_name=not_like.%test%` |
 | `contains` | `?display_name=contains.John` |
 | `starts_with` | `?ref_number=starts_with.INV` |
 | `ends_with` | `?email=ends_with.gmail.com` |
 | `regex` | `?ref_number=regex.^INV-[0-9]+` |
+| `match` / `imatch` | `?ref_number=imatch.^inv-[0-9]+` |
 
 ### List
 | `in` | `?status=in.draft,pending,approved` |
 | `not_in` | `?status=not_in.cancelled,void` |
+| `in` (parenthesized) | `?id=in.(5,6,9)` |
 
 ### Range
 | `between` | `?total_amount=between.100,10000` |
@@ -228,8 +231,26 @@ Format: `?{column}={operator}.{value}` — multiple filters are ANDed.
 ### Date (date only, ignores time)
 | `date_eq` `date_gt` `date_gte` `date_lt` `date_lte` | `?date=date_gte.2024-01-01` |
 
+### Advanced
+| Syntax | Example |
+|--------|---------|
+| `not.<operator>` | `?status=not.eq.archived` |
+| `any` / `all` | `?name=like(any).{ACME,SHOP}` |
+| grouped `or` | `?vendor_id=eq.27&or=(balance_due.gt.0,id.eq.5)` |
+| grouped nested | `?vendor_id=eq.27&and=(or(balance_due.gt.0,id.eq.5),id.neq.2)` |
+
+### PostgreSQL-only operators
+| Operator | Example |
+|----------|---------|
+| `fts` `plfts` `phfts` `wfts` | `?description=fts.invoice` |
+| `cs` `cd` `ov` `sl` `sr` `nxl` `nxr` `adj` | `?tags=cs.{a,b}` |
+
+If an operator is not supported by current DB driver, API returns `422`.
+
 ### Column Compare
 | `compare` | `?updated_at=compare.created_at` |
+
+Full details and complete examples: `docs/api-documentation.md` (`Filter Operators` and `Grouped Logic`).
 
 ---
 

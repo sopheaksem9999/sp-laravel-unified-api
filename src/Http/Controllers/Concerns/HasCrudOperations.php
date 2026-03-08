@@ -3,6 +3,7 @@
 namespace Sopheak\Core\Http\Controllers\Concerns;
 
 use Exception;
+use InvalidArgumentException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -96,6 +97,8 @@ trait HasCrudOperations
             return $response;
         } catch (RecordNotFoundException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
+        } catch (InvalidArgumentException $e) {
+            return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
         } catch (Exception) {
             //Log::error('Failed to list records', ['table' => $table, 'exception' => $e]);
             return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
