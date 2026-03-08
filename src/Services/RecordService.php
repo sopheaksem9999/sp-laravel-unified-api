@@ -23,6 +23,7 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Types\RecordTableTriggerType;
 use Sopheak\Core\Types\RecordTableType;
+use Sopheak\Core\Utilities\RecordPayloadExtractor;
 use Sopheak\Core\Types\RecordBelongsToType;
 use Sopheak\Core\Utilities\RecordUtils;
 
@@ -37,16 +38,7 @@ class RecordService
     {
         $tableSchema = SchemaRegistryUtils::getTable($table);
 
-        // Sanitize payload
-        $payloadMain = $this->sanitizePayload($payload, $tableSchema);
-
-        // Handle tenant ID
-        if ($this->shouldApplyTenantId($tableSchema)) {
-            $payloadMain[RecordConfigService::tenantColumn()] = $this->normalizeTenantId($tenantId);
-        }
-
-        // Apply timestamps and audit fields
-        $payloadMain = $this->applyTimestampsAndAuditFields($payloadMain, $tableSchema, false);
+        $payloadMain = $this->buildCrudPayload($payload, $tableSchema, $tenantId, false);
 
         // Resolve actual table name
         $actualTableName = $tableSchema->table ?? $table;
@@ -85,16 +77,7 @@ class RecordService
     {
         $tableSchema = SchemaRegistryUtils::getTable($table);
 
-        // Sanitize payload
-        $payloadMain = $this->sanitizePayload($payload, $tableSchema);
-
-        // Remove tenant ID from payload for update (security)
-        if ($this->shouldApplyTenantId($tableSchema)) {
-            unset($payloadMain[RecordConfigService::tenantColumn()]);
-        }
-
-        // Apply timestamps and audit fields
-        $payloadMain = $this->applyTimestampsAndAuditFields($payloadMain, $tableSchema, true);
+        $payloadMain = $this->buildCrudPayload($payload, $tableSchema, $tenantId, true);
 
         // Resolve actual table name
         $actualTableName = $tableSchema->table ?? $table;
@@ -1216,6 +1199,35 @@ class RecordService
         return RecordUtils::applyCompositeTypes(payload: $payload, columns: $meta->columns ?? []);
     }
 
+    private function buildCrudPayload(array $payload, object $tableSchema, mixed $tenantId, bool $isUpdate): array
+    {
+        $tenantColumn = RecordConfigService::tenantColumn();
+        $baseData = [];
+        if (!$isUpdate && $this->shouldApplyTenantId($tableSchema)) {
+            $baseData[$tenantColumn] = $this->normalizeTenantId($tenantId);
+        }
+
+        $extracted = RecordPayloadExtractor::fromArray(
+            data: $payload,
+            fields: array_keys($tableSchema->columns ?? []),
+            baseData: $baseData,
+            isUpdate: $isUpdate,
+            recordTableSchema: $tableSchema instanceof RecordTableType ? $tableSchema : null
+        );
+
+        $payloadMain = $this->sanitizePayload($extracted, $tableSchema);
+
+        if ($this->shouldApplyTenantId($tableSchema)) {
+            if ($isUpdate) {
+                unset($payloadMain[$tenantColumn]);
+            } else {
+                $payloadMain[$tenantColumn] = $this->normalizeTenantId($tenantId);
+            }
+        }
+
+        return $this->applyTimestampsAndAuditFields($payloadMain, $tableSchema, $isUpdate);
+    }
+
     public function applyTimestampsAndAuditFields(array $payload, object $tableSchema, bool $isUpdate = false): array
     {
         $user = auth('api')->user();
@@ -1372,6 +1384,7 @@ class RecordService
             $headers['X-Total-Count'] = (string) $total;
             $meta = ['total' => $total];
         } else {
+            $paginationRequested = $request->has('page') || $request->has('per_page');
             $maxPerPage = RecordConfigService::perPageMax();
             $perPage = max(1, min((int) $request->get('per_page', RecordConfigService::limitMax()), $maxPerPage));
 
@@ -1383,15 +1396,18 @@ class RecordService
 
             $headers['X-Total-Count'] = (string) $total;
             $lastPage = (int) ceil($total / $perPage);
-            $headers['X-Page'] = (string) $page;
-            $headers['X-Per-Page'] = (string) $perPage;
-            $headers['X-Total-Pages'] = (string) $lastPage;
-
-            $meta = [
-                'page' => $page,
-                'per_page' => $perPage,
-                'total' => $total,
-            ];
+            if ($paginationRequested) {
+                $headers['X-Page'] = (string) $page;
+                $headers['X-Per-Page'] = (string) $perPage;
+                $headers['X-Total-Pages'] = (string) $lastPage;
+                $meta = [
+                    'page' => $page,
+                    'per_page' => $perPage,
+                    'total' => $total,
+                ];
+            } else {
+                $meta = ['total' => $total];
+            }
         }
 
         if ($request->has('select')) {
@@ -1706,6 +1722,7 @@ class RecordService
             $headers['X-Total-Count'] = (string) $total;
             $meta = ['total' => $total];
         } else {
+            $paginationRequested = $request->has('page') || $request->has('per_page');
             $maxPerPage = RecordConfigService::perPageMax();
             $perPage = max(1, min((int) $request->get('per_page', RecordConfigService::limitMax()), $maxPerPage));
 
@@ -1716,15 +1733,18 @@ class RecordService
 
             $headers['X-Total-Count'] = (string) $total;
             $lastPage = (int) ceil($total / $perPage);
-            $headers['X-Page'] = (string) $page;
-            $headers['X-Per-Page'] = (string) $perPage;
-            $headers['X-Total-Pages'] = (string) $lastPage;
-
-            $meta = [
-                'page' => $page,
-                'per_page' => $perPage,
-                'total' => $total,
-            ];
+            if ($paginationRequested) {
+                $headers['X-Page'] = (string) $page;
+                $headers['X-Per-Page'] = (string) $perPage;
+                $headers['X-Total-Pages'] = (string) $lastPage;
+                $meta = [
+                    'page' => $page,
+                    'per_page' => $perPage,
+                    'total' => $total,
+                ];
+            } else {
+                $meta = ['total' => $total];
+            }
         }
 
         if ($request->has('select')) {

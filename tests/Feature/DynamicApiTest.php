@@ -114,6 +114,28 @@ class DynamicApiTest extends TestCase
     }
 
     /** @test */
+    public function it_hides_page_metadata_when_pagination_not_requested(): void
+    {
+        DB::table('users')->insert([
+            'name' => $this->faker->name,
+            'email' => $this->faker->unique()->safeEmail,
+            'password' => 'password123',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $response = $this->getJson('/api/users');
+
+        $response->assertStatus(200);
+
+        $meta = $response->json('meta');
+        $this->assertIsArray($meta);
+        $this->assertArrayNotHasKey('page', $meta);
+        $this->assertArrayNotHasKey('per_page', $meta);
+        $this->assertArrayHasKey('total', $meta);
+    }
+
+    /** @test */
     public function it_can_create_record_via_dynamic_api(): void
     {
         $userData = [

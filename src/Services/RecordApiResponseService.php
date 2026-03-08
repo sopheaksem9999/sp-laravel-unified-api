@@ -411,7 +411,7 @@ class RecordApiResponseService
      */
     public static function success(mixed $data = null): JsonResponse
     {
-        return static::jsonResponse($data, RecordApiJsonResponseEnum::SUCCESS);
+        return static::jsonResponse(data: $data, statusCode: RecordApiJsonResponseEnum::SUCCESS);
     }
 
     /**
@@ -421,7 +421,7 @@ class RecordApiResponseService
      */
     public static function created(mixed $data = null): JsonResponse
     {
-        return static::jsonResponse($data, RecordApiJsonResponseEnum::CREATED);
+        return static::jsonResponse(data: $data, statusCode: RecordApiJsonResponseEnum::CREATED);
     }
 
     /**
@@ -431,7 +431,7 @@ class RecordApiResponseService
      */
     public static function updated(mixed $data = null): JsonResponse
     {
-        return static::jsonResponse($data, RecordApiJsonResponseEnum::SUCCESS);
+        return static::jsonResponse(data: $data, statusCode: RecordApiJsonResponseEnum::SUCCESS);
     }
 
     /**
@@ -439,7 +439,7 @@ class RecordApiResponseService
      */
     public static function deleted(mixed $data = null): JsonResponse
     {
-        return static::jsonResponse($data ?? ['deleted' => true], RecordApiJsonResponseEnum::DELETED);
+        return static::jsonResponse(data: $data ?? ['deleted' => true], statusCode: RecordApiJsonResponseEnum::DELETED);
     }
 
     /**
@@ -452,7 +452,7 @@ class RecordApiResponseService
         string $message,
         RecordApiJsonResponseEnum $statusCode = RecordApiJsonResponseEnum::ERROR
     ): JsonResponse {
-        return static::jsonResponse(['errors' => $message], $statusCode);
+        return static::jsonResponse(data: ['errors' => $message], statusCode: $statusCode);
     }
 
     /**
@@ -471,7 +471,7 @@ class RecordApiResponseService
             $data = ['validation_errors' => ['message' => $errors]];
         }
 
-        return static::jsonResponse($data, RecordApiJsonResponseEnum::VALIDATION_ERROR);
+        return static::jsonResponse(data: $data, statusCode: RecordApiJsonResponseEnum::VALIDATION_ERROR);
     }
 
     /**
@@ -481,7 +481,7 @@ class RecordApiResponseService
      */
     public static function unauthorized(string $message = 'Unauthorized access'): JsonResponse
     {
-        return static::jsonResponse(['errors' => $message], RecordApiJsonResponseEnum::UNAUTHORIZED);
+        return static::jsonResponse(data: ['errors' => $message], statusCode: RecordApiJsonResponseEnum::UNAUTHORIZED);
     }
 
     /**
@@ -491,7 +491,7 @@ class RecordApiResponseService
      */
     public static function forbidden(string $message = 'Access forbidden'): JsonResponse
     {
-        return static::jsonResponse(['errors' => $message], RecordApiJsonResponseEnum::FORBIDDEN);
+        return static::jsonResponse(data: ['errors' => $message], statusCode: RecordApiJsonResponseEnum::FORBIDDEN);
     }
 
     /**
@@ -501,7 +501,7 @@ class RecordApiResponseService
      */
     public static function notFound(string $message = 'Resource not found'): JsonResponse
     {
-        return static::jsonResponse(['errors' => $message], RecordApiJsonResponseEnum::NOT_FOUND);
+        return static::jsonResponse(data: ['errors' => $message], statusCode: RecordApiJsonResponseEnum::NOT_FOUND);
     }
 
     /**
@@ -514,9 +514,16 @@ class RecordApiResponseService
     {
         $errorData = $data ?? ['errors' => $message];
 
-        return static::jsonResponse($errorData, RecordApiJsonResponseEnum::SERVER_ERROR);
+        return static::jsonResponse(data: $errorData, statusCode: RecordApiJsonResponseEnum::SERVER_ERROR);
     }
 
+    /**
+     * Recursively remove 'deleted_at' fields from arrays and objects.
+     *
+     * @param mixed $data The data to clean
+     *
+     * @return mixed The cleaned data
+     */
     public static function removeDeletedAtFields(mixed $data): mixed
     {
         if (null === $data) {

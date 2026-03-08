@@ -43,14 +43,26 @@ final class RecordPayloadExtractor
         string $recordTable = '',
         mixed $classModel = null,
         ?callable $transform = null,
+        ?RecordTableType $recordTableSchema = null,
     ): array {
-        $tableSchema = null;
-        if (!empty($recordTable)) {
+        $tableSchema = $recordTableSchema;
+        if (!$tableSchema && !empty($recordTable)) {
             $tableSchema = SchemaRegistryUtils::getTable($recordTable);
         }
 
         // get columns from record table
-        if (!empty($recordTable)) {
+        if ($tableSchema instanceof RecordTableType) {
+            if (isset($tableSchema->columns) && is_array($tableSchema->columns)) {
+                $fields = array_keys($tableSchema->columns);
+            }
+
+            if (isset($tableSchema->columnWriteDisabled) && is_array($tableSchema->columnWriteDisabled)) {
+                $fields = array_values(array_filter(
+                    $fields,
+                    static fn($field): bool => !in_array($field, $tableSchema->columnWriteDisabled, true)
+                ));
+            }
+        } elseif (!empty($recordTable)) {
             $table = config('record.tables.' . $recordTable);
 
             if (isset($table->columns) && is_array($table->columns)) {
@@ -165,6 +177,7 @@ final class RecordPayloadExtractor
         string $recordTable = '',
         mixed $classModel = null,
         ?callable $transform = null,
+        ?RecordTableType $recordTableSchema = null,
     ): array {
         return self::extract(
             request: $request,
@@ -174,6 +187,7 @@ final class RecordPayloadExtractor
             recordTable: $recordTable,
             classModel: $classModel,
             transform: $transform,
+            recordTableSchema: $recordTableSchema,
         );
     }
 
@@ -185,6 +199,7 @@ final class RecordPayloadExtractor
         string $recordTable = '',
         mixed $classModel = null,
         ?callable $transform = null,
+        ?RecordTableType $recordTableSchema = null,
     ): array {
         return self::extract(
             request: $data,
@@ -194,6 +209,7 @@ final class RecordPayloadExtractor
             recordTable: $recordTable,
             classModel: $classModel,
             transform: $transform,
+            recordTableSchema: $recordTableSchema,
         );
     }
 
@@ -204,6 +220,7 @@ final class RecordPayloadExtractor
         bool $isUpdate = true,
         string $recordTable = '',
         ?callable $transform = null,
+        ?RecordTableType $recordTableSchema = null,
     ): array {
         $source = method_exists($model, 'toArray') ? $model->toArray() : get_object_vars($model);
 
@@ -215,6 +232,7 @@ final class RecordPayloadExtractor
             recordTable: $recordTable,
             classModel: $model,
             transform: $transform,
+            recordTableSchema: $recordTableSchema,
         );
     }
 
@@ -226,6 +244,7 @@ final class RecordPayloadExtractor
         string $recordTable = '',
         mixed $classModel = null,
         ?callable $transform = null,
+        ?RecordTableType $recordTableSchema = null,
     ): array {
         return self::extract(
             request: $row,
@@ -235,6 +254,7 @@ final class RecordPayloadExtractor
             recordTable: $recordTable,
             classModel: $classModel,
             transform: $transform,
+            recordTableSchema: $recordTableSchema,
         );
     }
 
@@ -246,6 +266,7 @@ final class RecordPayloadExtractor
         string $recordTable = '',
         mixed $classModel = null,
         ?callable $transform = null,
+        ?RecordTableType $recordTableSchema = null,
     ): array {
         $body = $response->getData(true);
         $source = is_array($body) && array_key_exists('data', $body) ? $body['data'] : $body;
@@ -258,6 +279,7 @@ final class RecordPayloadExtractor
             recordTable: $recordTable,
             classModel: $classModel,
             transform: $transform,
+            recordTableSchema: $recordTableSchema,
         );
     }
 }
