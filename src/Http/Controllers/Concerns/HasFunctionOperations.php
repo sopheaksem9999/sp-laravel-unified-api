@@ -30,10 +30,12 @@ trait HasFunctionOperations
 
             return $this->recordService->executeTableFunction($request, $table, $functionName);
         } catch (Exception $exception) {
-            return RecordApiResponseService::errorWrapped(
-                $exception->getMessage(),
-                $exception->getCode() ?: RecordApiJsonResponseEnum::SERVER_ERROR->value
-            );
+            $status = $exception->getCode();
+            if (!is_int($status) || $status < 100 || $status > 599) {
+                $status = RecordApiJsonResponseEnum::SERVER_ERROR->value;
+            }
+
+            return RecordApiResponseService::errorFromException($exception, $exception->getMessage(), $status);
         }
     }
 
@@ -46,10 +48,12 @@ trait HasFunctionOperations
         try {
             return $this->recordService->executeGlobalFunction($request, $functionName);
         } catch (Exception $exception) {
-            return RecordApiResponseService::errorWrapped(
-                $exception->getMessage(),
-                $exception->getCode() ?: RecordApiJsonResponseEnum::SERVER_ERROR->value
-            );
+            $status = $exception->getCode();
+            if (!is_int($status) || $status < 100 || $status > 599) {
+                $status = RecordApiJsonResponseEnum::SERVER_ERROR->value;
+            }
+
+            return RecordApiResponseService::errorFromException($exception, $exception->getMessage(), $status);
         }
     }
 }

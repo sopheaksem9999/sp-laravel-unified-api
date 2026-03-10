@@ -1279,13 +1279,15 @@ Retrieve a paginated list of records with filtering, sorting, and relationship l
 
 **Debugging**
 
-- `X-Debug` (HTTP header, boolean) - When sent as `true`, `1`, `yes`, or `on`, responses include lazy-loading diagnostics:
+- `X-Debug` (HTTP header, boolean) - When sent as `true`, `1`, `yes`, or `on`, responses include lazy-loading diagnostics and error debug details:
   - `meta.debug.lazy_stats` with the output of `QueryBuilderFilters::getLazyStats()`:
     - `total_operations`
     - `executed_operations`
     - `pending_operations`
     - `cache_hits`
     - `cache_efficiency`
+  - on error responses, `meta.debug` may include exception context (`exception`, `exception_message`, `file`, `line`).
+- `record.debug` (config, boolean, default: `false`) also enables error debug details globally without needing `X-Debug`.
 
 **Filter Operators**
 Filters are usually passed as `{column}={operator}.{value}` (operators validated against the table schema). Some operators support a value-less shorthand form for `null`:

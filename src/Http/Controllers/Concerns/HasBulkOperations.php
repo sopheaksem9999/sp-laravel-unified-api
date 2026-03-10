@@ -51,7 +51,7 @@ trait HasBulkOperations
                 $code = RecordApiJsonResponseEnum::SERVER_ERROR->value;
             }
 
-            return RecordApiResponseService::errorWrapped($e->getMessage(), $code);
+            return RecordApiResponseService::errorFromException($e, $e->getMessage(), $code);
         }
     }
 
@@ -109,9 +109,8 @@ trait HasBulkOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
-        } catch (Exception) {
-            //Log::error('Failed to bulk upsert records', ['table' => $table, 'exception' => $e]);
-            return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
+        } catch (Exception $e) {
+            return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -223,9 +222,8 @@ trait HasBulkOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
-        } catch (Exception) {
-            //Log::error('Failed to bulk create records', ['table' => $table, 'exception' => $e]);
-            return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
+        } catch (Exception $e) {
+            return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -356,9 +354,8 @@ trait HasBulkOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
-        } catch (Exception) {
-            //Log::error('Failed to bulk update records', ['table' => $table, 'exception' => $e]);
-            return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
+        } catch (Exception $e) {
+            return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -477,9 +474,8 @@ trait HasBulkOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
-        } catch (Exception) {
-            //Log::error('Failed to bulk delete records', ['table' => $table, 'exception' => $e]);
-            return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
+        } catch (Exception $e) {
+            return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 }

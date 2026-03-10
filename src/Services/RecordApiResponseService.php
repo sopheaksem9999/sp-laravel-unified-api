@@ -3,11 +3,13 @@
 namespace Sopheak\Core\Services;
 
 use stdClass;
+use Throwable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\MessageBag;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 use Sopheak\Core\Constants\HttpErrorCodeConstant;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
@@ -380,7 +382,7 @@ class RecordApiResponseService
         ], $status, $headers);
     }
 
-    public static function errorWrapped(string $message, int $status = RecordApiJsonResponseEnum::ERROR->value, array $errors = [], ?int $error_code = null): JsonResponse
+    public static function errorWrapped(string $message, int $status = RecordApiJsonResponseEnum::ERROR->value, array $errors = [], ?int $error_code = null, ?array $debug = null): JsonResponse
     {
         $requestId = request()->attributes->get('request_id');
 
@@ -393,15 +395,70 @@ class RecordApiResponseService
             default => HttpErrorCodeConstant::GENERAL_ERROR,
         };
 
+        $meta = [
+            'request_id' => $requestId,
+        ];
+
+        if (is_array($debug) && [] !== $debug && self::shouldIncludeDebugDetails()) {
+            $meta['debug'] = $debug;
+        }
+
         return response()->json([
             'success' => false,
             'error_code' => $resolvedErrorCode,
             'message' => $message,
             'errors' => $errors,
-            'meta' => [
-                'request_id' => $requestId,
-            ],
+            'meta' => $meta,
         ], $status);
+    }
+
+    public static function errorFromException(Throwable $exception, string $message = 'An error occurred', int $status = RecordApiJsonResponseEnum::SERVER_ERROR->value, array $errors = [], ?int $error_code = null): JsonResponse
+    {
+        if (self::shouldIncludeDebugDetails()) {
+            Log::error('SP Laravel API exception', [
+                'message' => $exception->getMessage(),
+                'type' => $exception::class,
+                'code' => $exception->getCode(),
+                'file' => $exception->getFile(),
+                'line' => $exception->getLine(),
+                'request_id' => request()->attributes->get('request_id'),
+                'path' => request()->path(),
+                'method' => request()->method(),
+            ]);
+        }
+
+        $debug = null;
+        if (self::shouldIncludeDebugDetails()) {
+            $debug = [
+                'exception' => $exception::class,
+                'exception_code' => (int) $exception->getCode(),
+                'exception_message' => $exception->getMessage(),
+                'file' => basename($exception->getFile()),
+                'line' => $exception->getLine(),
+            ];
+        }
+
+        return self::errorWrapped(
+            message: $message,
+            status: $status,
+            errors: $errors,
+            error_code: $error_code,
+            debug: $debug
+        );
+    }
+
+    private static function shouldIncludeDebugDetails(): bool
+    {
+        if (RecordConfigService::debugEnabled()) {
+            return true;
+        }
+
+        $headerValue = request()->headers->get('X-Debug') ?? request()->headers->get('x-debug');
+        if (!is_string($headerValue)) {
+            return false;
+        }
+
+        return in_array(strtolower(trim($headerValue)), ['1', 'true', 'yes', 'on'], true);
     }
 
     /**

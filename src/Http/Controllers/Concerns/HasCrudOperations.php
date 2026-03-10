@@ -99,9 +99,8 @@ trait HasCrudOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (InvalidArgumentException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
-        } catch (Exception) {
-            //Log::error('Failed to list records', ['table' => $table, 'exception' => $e]);
-            return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
+        } catch (Exception $e) {
+            return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -179,9 +178,8 @@ trait HasCrudOperations
             return $response;
         } catch (RecordNotFoundException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
-        } catch (Exception) {
-            //Log::error('Failed to retrieve record', ['table' => $table, 'id' => $id, 'exception' => $e]);
-            return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
+        } catch (Exception $e) {
+            return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -272,9 +270,8 @@ trait HasCrudOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
-        } catch (Exception) {
-            //Log::error('Failed to create record', ['table' => $table, 'exception' => $e]);
-            return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
+        } catch (Exception $e) {
+            return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -370,9 +367,8 @@ trait HasCrudOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
-        } catch (Exception) {
-            // //Log::error('Failed to update record', ['table' => $table, 'id' => $id, 'exception' => $e]);
-            return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
+        } catch (Exception $e) {
+            return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -450,9 +446,8 @@ trait HasCrudOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
-        } catch (Exception) {
-            // //Log::error('Failed to delete record', ['table' => $table, 'id' => $id, 'exception' => $e]);
-            return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
+        } catch (Exception $e) {
+            return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -508,9 +503,8 @@ trait HasCrudOperations
             });
         } catch (RecordNotFoundException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
-        } catch (Exception) {
-            // //Log::error('Failed to restore record', ['table' => $table, 'id' => $id, 'exception' => $e]);
-            return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
+        } catch (Exception $e) {
+            return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -564,9 +558,8 @@ trait HasCrudOperations
             });
         } catch (RecordNotFoundException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
-        } catch (Exception) {
-            // //Log::error('Failed to force delete record', ['table' => $table, 'id' => $id, 'exception' => $e]);
-            return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
+        } catch (Exception $e) {
+            return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 
@@ -613,9 +606,8 @@ trait HasCrudOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
-        } catch (Exception) {
-            // //Log::error('Failed to upsert record', ['table' => $table, 'exception' => $e]);
-            return RecordApiResponseService::errorWrapped('An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
+        } catch (Exception $e) {
+            return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }
 }

@@ -583,6 +583,9 @@ return [
         'upsert' => false,  // upsert by primary key when provided
     ],
 
+    // Include debug details in API error responses.
+    'debug' => false,
+
     // permission 
     'permission_separator' => ':', // separator for permission ex: view:invoice
     'restrict_to_own_records' => false, // limit queries to records created by the authenticated user

@@ -2187,7 +2187,11 @@ class RecordService
 
             return RecordApiResponseService::successWrapped($result);
         } catch (Exception $exception) {
-            return RecordApiResponseService::errorWrapped(message: 'Function execution failed: ' . $exception->getMessage(), status: RecordApiJsonResponseEnum::SERVER_ERROR->value);
+            return RecordApiResponseService::errorFromException(
+                exception: $exception,
+                message: 'Function execution failed: ' . $exception->getMessage(),
+                status: RecordApiJsonResponseEnum::SERVER_ERROR->value
+            );
         }
     }
 

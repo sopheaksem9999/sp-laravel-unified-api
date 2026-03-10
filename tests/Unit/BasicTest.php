@@ -595,6 +595,43 @@ class BasicTest extends TestCase
         $this->assertTrue(PermissionUtils::isPublicAction('departments', 'read'));
         $this->assertTrue(PermissionUtils::isPublicAction('departments', 'create'));
     }
+
+    /** @test */
+    public function it_includes_error_debug_meta_when_x_debug_header_is_enabled(): void
+    {
+        Config::set('record.debug', false);
+
+        $request = Request::create('/api/test', 'GET', [], [], [], [
+            'HTTP_X_DEBUG' => 'true',
+        ]);
+        $request->attributes->set('request_id', 'req-debug-header');
+
+        $this->app->instance('request', $request);
+
+        $response = RecordApiResponseService::errorFromException(new Exception('Header debug error'));
+        $payload = $response->getData(true);
+
+        $this->assertSame(false, $payload['success']);
+        $this->assertSame('req-debug-header', $payload['meta']['request_id']);
+        $this->assertSame('Header debug error', $payload['meta']['debug']['exception_message'] ?? null);
+    }
+
+    /** @test */
+    public function it_hides_error_debug_meta_when_debug_is_disabled_and_no_header(): void
+    {
+        Config::set('record.debug', false);
+
+        $request = Request::create('/api/test', 'GET');
+        $request->attributes->set('request_id', 'req-no-debug');
+
+        $this->app->instance('request', $request);
+
+        $response = RecordApiResponseService::errorFromException(new Exception('No debug'));
+        $payload = $response->getData(true);
+
+        $this->assertSame(false, $payload['success']);
+        $this->assertArrayNotHasKey('debug', $payload['meta']);
+    }
 }
 
 class TestTriggerHandler

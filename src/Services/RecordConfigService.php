@@ -110,6 +110,11 @@ class RecordConfigService
         return (string) config('record.own_records_permission_prefix', 'viewOwn');
     }
 
+    public static function debugEnabled(): bool
+    {
+        return (bool) config('record.debug', false);
+    }
+
     public static function middlewareMap(): array
     {
         return (array) config('record.middleware_map', []);
