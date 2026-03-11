@@ -11,6 +11,7 @@ use Illuminate\Support\LazyCollection;
 use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Utilities\QueryBuilderFiltersUtils;
+use Sopheak\Core\Utilities\RecordUtils;
 use Sopheak\Core\Utilities\RelationshipResolverUtils;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
@@ -71,16 +72,18 @@ trait QueryHelpersTrait
         $this->normalizeSearchParameter($request);
         $isTenantEnabled = RecordConfigService::enableTenantId();
         $tenantColumn = RecordConfigService::tenantColumn();
-        $tenantHeader = RecordConfigService::tenantHeader();
-
+        
         $tableName = $builder->getModel()->getTable();
         $this->ensureSchemaForTable($tableName);
 
         // check if model has tenant_column
         $hasCompanyId = in_array($tenantColumn, $builder->getModel()->getFillable());
 
-        $commonQuery = $builder->when($isTenantEnabled && $hasCompanyId, function ($query) use ($request, $tenantColumn, $tenantHeader) {
-            $tenantId = $request->header($tenantHeader);
+        $commonQuery = $builder->when($isTenantEnabled && $hasCompanyId, function ($query) use ($request, $tenantColumn) {
+            $tenantId = RecordUtils::resolveTenantIdFromRequest($request);
+            if (RecordUtils::isTenantIdMissing($tenantId)) {
+                return $query;
+            }
 
             return $query->where($tenantColumn, $tenantId);
         });

@@ -1329,10 +1329,10 @@ class RecordService
             if (is_string($resolvedSource) && '' !== $resolvedSource) {
                 $context['tenant_source'] = $resolvedSource;
             }
-
+     
             $request->attributes->set(self::TENANT_ATTRIBUTE_KEY, $resolvedTenant);
         }
-
+    
         $guard = RecordConfigService::authGuard();
         $user = auth($guard)->user();
         $context['user'] = $user ? [
@@ -1385,24 +1385,28 @@ class RecordService
 
     private function resolveTenantFromRequestAttributes(Request $request): mixed
     {
-        $tenant = $request->attributes->get(self::TENANT_ATTRIBUTE_KEY);
-        if (!RecordUtils::isTenantIdMissing($tenant)) {
-            return $tenant;
-        }
-
-        $context = $request->attributes->get(self::REQUEST_CONTEXT_KEY);
-        if (is_array($context)) {
-            return $context['tenant_id'] ?? null;
-        }
-
-        return $tenant;
+        return RecordUtils::resolveTenantIdFromRequest($request);
     }
 
     public function applyTenantFilter(mixed $query, string $table, mixed $tenantId): void
     {
         $tenantId = $this->normalizeTenantId($tenantId);
         $schema = SchemaRegistryUtils::get();
-        if ($this->isTenantIdEnabled() && null !== $tenantId && '' !== $tenantId && ($schema[$table]->hasTenantId ?? false)) {
+        $tableSchema = $schema[$table] ?? null;
+        if (!$tableSchema) {
+            foreach ($schema as $candidate) {
+                if (!is_object($candidate)) {
+                    continue;
+                }
+
+                if (($candidate->table ?? null) === $table) {
+                    $tableSchema = $candidate;
+                    break;
+                }
+            }
+        }
+
+        if ($this->isTenantIdEnabled() && null !== $tenantId && '' !== $tenantId && (($tableSchema->hasTenantId ?? false))) {
             $query->where($table . '.' . RecordConfigService::tenantColumn(), $tenantId);
         }
     }
@@ -1762,6 +1766,9 @@ class RecordService
         $tableSchema = $customSchema ?? SchemaRegistryUtils::getTable($table);
         $actualTableName = $tableSchema->table ?? $table;
         $tenantId = $tanentColumn;
+        if ($tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema) && RecordUtils::isTenantIdMissing($tenantId)) {
+            $tenantId = RecordUtils::resolveTenantIdFromRequest($request);
+        }
 
         $filters = $request->except(['page', 'per_page', 'limit']);
         $includes = $request->query('select', []);

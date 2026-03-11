@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Utilities;
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use PDO;
 use Sopheak\Core\Services\RecordConfigService;
@@ -32,6 +33,26 @@ class RecordUtils
     public static function shouldApplyTenantId(object $tableSchema): bool
     {
         return self::isTenantIdEnabled() && (bool) ($tableSchema->hasTenantId ?? false);
+    }
+
+    public static function resolveTenantIdFromRequest(Request $request): mixed
+    {
+        $tenantId = $request->attributes->get('resolved_tenant_id');
+        if (!self::isTenantIdMissing($tenantId)) {
+            return self::normalizeTenantId($tenantId);
+        }
+
+        $requestContext = $request->attributes->get('record_context');
+        if (is_array($requestContext)) {
+            $tenantId = $requestContext['tenant_id'] ?? null;
+            if (!self::isTenantIdMissing($tenantId)) {
+                return self::normalizeTenantId($tenantId);
+            }
+        }
+
+        $tenantId = $request->header(RecordConfigService::tenantHeader());
+
+        return self::normalizeTenantId($tenantId);
     }
 
     public static function applyCompositeTypes(array $payload, array $columns): array

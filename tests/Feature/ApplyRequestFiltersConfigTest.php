@@ -199,6 +199,74 @@ class ApplyRequestFiltersConfigTest extends TestCase
         $this->assertCount(1, $result['data']);
         $this->assertEquals(3, $result['data'][0]->company_id);
     }
+
+    public function test_apply_request_filters_resolves_tenant_from_resolved_tenant_id_attribute(): void
+    {
+        Config::set('record.enable_tenant_id', true);
+        Config::set('record.tenant_column', 'company_id');
+
+        $config = new RecordTableType(
+            table: 'qht_subscriptions',
+            hasTenantId: true,
+            public: new RecordTablePublic(true, true),
+        );
+
+        $config->columns = [
+            'id' => ['type' => 'bigint'],
+            'company_id' => ['type' => 'bigint'],
+            'status' => ['type' => 'string'],
+        ];
+
+        SchemaRegistryUtils::refresh();
+        SchemaRegistryUtils::register('qht_subscriptions', $config);
+        QueryBuilderFiltersUtils::clearColumnCache();
+
+        $request = Request::create('/api/qht_subscriptions', 'GET', [
+            'sortby' => 'id',
+            'order' => 'asc',
+        ]);
+        $request->attributes->set('resolved_tenant_id', 3);
+
+        $result = RecordService::applyRequestFilters($request, $config);
+
+        $this->assertCount(1, $result['data']);
+        $this->assertEquals(3, $result['data'][0]->company_id);
+    }
+
+    public function test_apply_request_filters_resolves_tenant_from_header_for_backward_compatibility(): void
+    {
+        Config::set('record.enable_tenant_id', true);
+        Config::set('record.tenant_column', 'company_id');
+        Config::set('record.tenant_header', 'X-Tenant-ID');
+
+        $config = new RecordTableType(
+            table: 'qht_subscriptions',
+            hasTenantId: true,
+            public: new RecordTablePublic(true, true),
+        );
+
+        $config->columns = [
+            'id' => ['type' => 'bigint'],
+            'company_id' => ['type' => 'bigint'],
+            'status' => ['type' => 'string'],
+        ];
+
+        SchemaRegistryUtils::refresh();
+        SchemaRegistryUtils::register('qht_subscriptions', $config);
+        QueryBuilderFiltersUtils::clearColumnCache();
+
+        $request = Request::create('/api/qht_subscriptions', 'GET', [
+            'sortby' => 'id',
+            'order' => 'asc',
+        ], [], [], [
+            'HTTP_X_TENANT_ID' => '4',
+        ]);
+
+        $result = RecordService::applyRequestFilters($request, $config);
+
+        $this->assertCount(1, $result['data']);
+        $this->assertEquals(4, $result['data'][0]->company_id);
+    }
 }
 
 class QhtCategory extends Model

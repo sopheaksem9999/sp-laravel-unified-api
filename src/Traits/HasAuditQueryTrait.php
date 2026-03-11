@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 use Sopheak\Core\Constants\HttpErrorCodeConstant;
 use Sopheak\Core\Services\RecordConfigService;
+use Sopheak\Core\Utilities\RecordUtils;
 
 /**
  * Trait for controllers that expose audit query endpoints.
@@ -62,13 +63,12 @@ trait HasAuditQueryTrait
             return null;
         }
 
-        $tenantHeader = RecordConfigService::tenantHeader();
-        $tenantColumn = RecordConfigService::tenantColumn();
-        $request = request();
+        $tenantId = RecordUtils::resolveTenantIdFromRequest(request());
+        if (RecordUtils::isTenantIdMissing($tenantId)) {
+            return null;
+        }
 
-        return $request->header($tenantHeader)
-            ?? $request->input($tenantColumn)
-            ?? $request->input('tenant_id');
+        return (string) $tenantId;
     }
 
     /**
