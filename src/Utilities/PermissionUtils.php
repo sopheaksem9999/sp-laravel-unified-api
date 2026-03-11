@@ -18,7 +18,20 @@ class PermissionUtils
             return false;
         }
 
-        $public = $tables[$table]->public ?? false;
+        $tableConfig = $tables[$table];
+
+        $readActions = [RecordConstants::READ, RecordConstants::WRITE];
+        $writeActions = [RecordConstants::ACTION_CREATE, RecordConstants::ACTION_UPDATE, RecordConstants::ACTION_DELETE, RecordConstants::ACTION_RESTORE];
+
+        if (is_object($tableConfig) && in_array($action, $readActions, true) && property_exists($tableConfig, 'isAuthRead')) {
+            return !(bool) $tableConfig->isAuthRead;
+        }
+
+        if (is_object($tableConfig) && in_array($action, $writeActions, true) && property_exists($tableConfig, 'isAuthWrite')) {
+            return !(bool) $tableConfig->isAuthWrite;
+        }
+
+        $public = $tableConfig->public ?? false;
 
         // Entire resource public
         if (true === $public) {
@@ -29,10 +42,6 @@ class PermissionUtils
         if (!is_object($public) || !property_exists($public, RecordConstants::READ) || !property_exists($public, RecordConstants::WRITE)) {
             return false;
         }
-
-        // Grouped semantics: 'read' and 'write'
-        $readActions = [RecordConstants::READ, RecordConstants::WRITE];
-        $writeActions = [RecordConstants::ACTION_CREATE, RecordConstants::ACTION_UPDATE, RecordConstants::ACTION_DELETE, RecordConstants::ACTION_RESTORE];
 
         if (in_array($action, $readActions, true)) {
             return (bool) ($public->read ?? false);

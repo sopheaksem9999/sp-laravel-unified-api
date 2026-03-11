@@ -299,16 +299,13 @@ Create `config/records/tables/customers.php`:
 use Illuminate\Http\Request;
 use Illuminate\Contracts\Validation\Validator as ValidatorContract;
 use Illuminate\Support\Facades\Validator;
-use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordTableType;
 
 return new RecordTableType(
     pmsName: 'customer',
     table: 'customers',
-    public: new RecordTablePublic(
-        read: false,
-        write: false,
-    ),
+    isAuthRead: true,
+    isAuthWrite: true,
     relationships: [],
     softDeletes: true,
     hasTenantId: false,
@@ -327,14 +324,14 @@ Create `config/records/tables/core.php`:
 ```php
 <?php
 
-use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordTableType;
 
 return [
     'invoices' => new RecordTableType(
         pmsName: 'invoice',
         table: 'invoices',
-        public: new RecordTablePublic(read: false, write: false),
+        isAuthRead: true,
+        isAuthWrite: true,
         relationships: [],
         softDeletes: true,
         hasTenantId: false,
@@ -394,7 +391,6 @@ use Sopheak\Core\Types\RecordHasManyThroughType;
 use Sopheak\Core\Types\RecordHasManyType;
 use Sopheak\Core\Types\RecordMetaBelongsToManyType;
 use Sopheak\Core\Types\RecordSpatiePermissionType;
-use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordTableTriggerType;
 
@@ -402,10 +398,8 @@ $tables = [
     'users' => new RecordTableType(
         pmsName: 'user',
         table: 'users',
-        public: new RecordTablePublic(
-            read: false,
-            write: false
-        ),
+        isAuthRead: true,
+        isAuthWrite: true,
         relationships: [],
         functions: [],
         softDeletes: false,

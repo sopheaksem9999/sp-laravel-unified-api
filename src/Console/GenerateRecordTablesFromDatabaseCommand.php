@@ -189,16 +189,13 @@ class GenerateRecordTablesFromDatabaseCommand extends Command
 <?php
 
 use Sopheak\\Core\\Types\\RecordBelongsToType;
-use Sopheak\\Core\\Types\\RecordTablePublic;
 use Sopheak\\Core\\Types\\RecordTableType;
 
 return new RecordTableType(
     pmsName: {$pmsLiteral},
     table: {$tableLiteral},
-    public: new RecordTablePublic(
-        read: false,
-        write: false,
-    ),
+    isAuthRead: true,
+    isAuthWrite: true,
     relationships: {$relationshipsCode},
     functions: [],
     softDeletes: {$softDeletesLiteral},

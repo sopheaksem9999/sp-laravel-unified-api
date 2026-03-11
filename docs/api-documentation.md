@@ -572,6 +572,88 @@ How this matches common client requirements:
 - Auth-only route: use `write => ['auth:sanctum']` or per-action `create`, `update`, `delete`.
 - Auth + subscription route: add `subscribed` in table/action stack (e.g. `orders.write`).
 
+### Request Context in Hooks and Custom Audit
+
+Request context is available to hooks and custom audit callback via:
+
+- `$context['request_context']` in trigger/audit callback params
+- `request()->attributes->get('record_context')`
+
+Built-in `request_context` payload:
+
+- `tenant_id` (`string|int|null`)
+- `tenant_column` (`string`, usually `tenant_id`)
+- `tenant_source` (`attribute|header|null`)
+- `user` (`array|null`) with keys:
+  - `id` (`mixed`)
+  - `guard` (`string`)
+- `request_id` (`string|null`)
+- `table` (`string`)
+- `action` (`string|null`)
+
+Source priority behavior (built-in):
+
+- `attribute`: recommended for trusted middleware-populated tenant (`resolved_tenant_id`) or context tenant (`record_context.tenant_id`)
+- `header`: fallback to tenant header (`X-Tenant-ID` by default)
+
+Example middleware to set trusted tenant (`resolved_tenant_id`) and enrich `record_context`:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
+
+final class ResolveTenantContext
+{
+    public function handle(Request $request, Closure $next): Response
+    {
+        $tenantId = $request->user()?->tenant_id;
+
+        if ($tenantId !== null && $tenantId !== '') {
+            $request->attributes->set('resolved_tenant_id', $tenantId);
+        }
+
+        $context = $request->attributes->get('record_context', []);
+        if (!is_array($context)) {
+            $context = [];
+        }
+
+        $context['tenant_id'] = $tenantId;
+        $context['tenant_source'] = 'attribute';
+        $context['client_app'] = 'backoffice';
+        $request->attributes->set('record_context', $context);
+
+        return $next($request);
+    }
+}
+```
+
+Then register middleware in `record.middleware_map` for table/action route groups so CRUD/trigger flow can consume the context.
+
+Example trigger (`beforeCreate`) using context for auto value:
+
+```php
+public static function beforeCreate(\Illuminate\Http\Request $request, string $table, array $context): array
+{
+    $ctx = $context['request_context'] ?? $request->attributes->get('record_context', []);
+    $tenantId = $ctx['tenant_id'] ?? null;
+    $userId = $ctx['user']['id'] ?? null;
+
+    $payload = $request->all();
+    $payload['tenant_id'] = $tenantId;
+    $payload['created_by'] = $userId;
+    $request->replace($payload);
+
+    return [$request, $table, $context];
+}
+```
+
 ### Table-Level Validation
 
 Each table configured in `config/record.php` (or in per-table files under `config/record/tables`) can define event-specific validators using the `RecordTableType` configuration. Validators support:
@@ -873,6 +955,8 @@ new RecordTableType(
     canCreate: true,
     canUpdate: true,
     canDelete: true,
+    isAuthRead: true,
+    isAuthWrite: true,
     public: new RecordTablePublic(),
     relationships: [],
     functions: [],
@@ -908,9 +992,9 @@ new RecordTableType(
 
 #### Access Control & Endpoint Availability
 
-- `public` (RecordTablePublic, default: `new RecordTablePublic()`): Public access flags for grouped actions:
-  - `read`: Allows unauthenticated access to read actions (`read`, `view`).
-  - `write`: Allows unauthenticated access to write actions (`create`, `update`, `delete`, `restore`).
+- `isAuthRead` (bool, default: `true`): Auth requirement flag for read endpoints. `true` forces authentication, `false` makes read endpoints public.
+- `isAuthWrite` (bool, default: `true`): Auth requirement flag for write endpoints. `true` forces authentication, `false` makes write endpoints public.
+- `public` (RecordTablePublic|bool, legacy compatibility): Derived from `isAuthRead`/`isAuthWrite` for backward compatibility. New config should prefer auth flags directly.
 - `canRead` (bool, default: `true`): Enables/disables read endpoints for this table (list/show). When false, read routes respond as “not found”.
 - `canCreate` (bool, default: `true`): Enables/disables create endpoint.
 - `canUpdate` (bool, default: `true`): Enables/disables update and restore endpoints.
@@ -1030,7 +1114,7 @@ return [
 
 #### RecordTablePublic
 
-Public access flags for a table.
+Legacy public access flags for a table. New configurations should use `isAuthRead` and `isAuthWrite` on `RecordTableType`.
 
 - `read` (bool, default: `false`): Allows unauthenticated read actions (`read`, `view`).
 - `write` (bool, default: `false`): Allows unauthenticated write actions (`create`, `update`, `delete`, `restore`).

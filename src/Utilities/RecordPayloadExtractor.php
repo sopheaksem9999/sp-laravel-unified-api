@@ -154,7 +154,17 @@ final class RecordPayloadExtractor
                     ) {
                         $tenantId = null;
                         if ($request instanceof Request) {
-                            $tenantId = $request->header(RecordConfigService::tenantHeader());
+                            $tenantId = $request->attributes->get('resolved_tenant_id');
+                            if (RecordUtils::isTenantIdMissing($tenantId)) {
+                                $requestContext = $request->attributes->get('record_context');
+                                if (is_array($requestContext)) {
+                                    $tenantId = $requestContext['tenant_id'] ?? null;
+                                }
+                            }
+
+                            if (RecordUtils::isTenantIdMissing($tenantId)) {
+                                $tenantId = $request->header(RecordConfigService::tenantHeader());
+                            }
                         }
 
                         $tenantId = RecordUtils::normalizeTenantId($tenantId);

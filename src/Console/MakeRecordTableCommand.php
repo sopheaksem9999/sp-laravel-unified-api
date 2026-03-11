@@ -92,16 +92,13 @@ class MakeRecordTableCommand extends Command
         return <<<PHP
 <?php
 
-use Sopheak\\Core\\Types\\RecordTablePublic;
 use Sopheak\\Core\\Types\\RecordTableType;
 
 return new RecordTableType(
     pmsName: {$pmsLiteral},
     table: {$tableLiteral},
-    public: new RecordTablePublic(
-        read: false,
-        write: false,
-    ),
+    isAuthRead: true,
+    isAuthWrite: true,
     relationships: [],
     functions: [],
     softDeletes: {$softDeletesLiteral},

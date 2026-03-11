@@ -63,10 +63,16 @@ trait HasControllerHelpers
      */
     private function resolveTenantContext(Request $request, object $tableSchema): array
     {
-        $tenantId = $this->recordService->normalizeTenantId(
-            $request->header(RecordConfigService::tenantHeader())
+        $tenantId = $this->recordService->resolveTenantFromRequest($request, $tableSchema);
+        $this->recordService->attachRequestContext(
+            request: $request,
+            table: (string) ($request->route('table') ?? ''),
+            action: (string) ($request->route()?->getActionMethod() ?? ''),
+            tableSchema: $tableSchema,
+            tenantId: $tenantId
         );
         $error = $this->validateTenantIdRequired($tableSchema, $tenantId);
+
         return [$tenantId, $error];
     }
 

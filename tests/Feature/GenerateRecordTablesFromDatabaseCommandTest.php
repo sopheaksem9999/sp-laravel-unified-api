@@ -53,8 +53,9 @@ class GenerateRecordTablesFromDatabaseCommandTest extends TestCase
         $config = require $customersFile;
         $this->assertInstanceOf(RecordTableType::class, $config);
         $this->assertSame('customers', $config->table);
+        $this->assertTrue($config->isAuthRead);
+        $this->assertTrue($config->isAuthWrite);
 
         unlink($customersFile);
     }
 }
-

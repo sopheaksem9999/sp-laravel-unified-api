@@ -29,6 +29,12 @@ use Sopheak\Core\Utilities\RecordUtils;
 
 class RecordService
 {
+    private const REQUEST_CONTEXT_KEY = 'record_context';
+
+    private const TENANT_ATTRIBUTE_KEY = 'resolved_tenant_id';
+
+    private const TENANT_SOURCE_PRIORITY = ['attribute', 'header'];
+
     /**
      * Create a new record with all related processing.
      *
@@ -332,14 +338,14 @@ class RecordService
         $firstItem = $preparedItems[0];
         $excludeColumns = array_merge($matchOn, [$pk, 'id', 'created_at', 'deleted_at']);
         $updateColumns = array_values(array_diff(array_keys($firstItem), $excludeColumns));
-         if (empty($updateColumns) && array_key_exists('updated_at', $firstItem)) {
-             $updateColumns = ['updated_at'];
-         }
+        if (empty($updateColumns) && array_key_exists('updated_at', $firstItem)) {
+            $updateColumns = ['updated_at'];
+        }
 
         $affected = DB::table($actualTableName)->upsert($preparedItems, $matchOn, $updateColumns);
 
         $this->invalidateTableCache($table, $cacheTenantId, $tenantEnabled);
-        
+
         // We can't easily invalidate individual record caches or fire individual triggers for bulk upsert
         // without querying them all back. This is a trade-off for bulk performance.
 
@@ -429,6 +435,7 @@ class RecordService
                 'table' => $table,
                 'operation' => $operation,
                 'record_context' => $recordContext,
+                'request_context' => $this->getRequestContext($request),
             ];
 
             if (
@@ -969,6 +976,26 @@ class RecordService
 
     public function executeTableTrigger(mixed $trigger, array $params): array
     {
+        if (isset($params[0]) && $params[0] instanceof Request) {
+            $request = $params[0];
+            $table = isset($params[1]) && is_string($params[1]) ? $params[1] : '';
+            $triggerType = null;
+            if (isset($params[2]) && is_array($params[2])) {
+                $triggerType = $params[2]['type'] ?? null;
+            }
+
+            $request = $this->attachRequestContext(
+                request: $request,
+                table: $table,
+                action: is_string($triggerType) ? $triggerType : null
+            );
+            $params[0] = $request;
+
+            if (isset($params[2]) && is_array($params[2])) {
+                $params[2]['request_context'] = $this->getRequestContext($request);
+            }
+        }
+
         $triggers = $this->resolveTableTriggers($trigger);
 
         foreach ($triggers as $index => $item) {
@@ -1266,6 +1293,109 @@ class RecordService
     public function isTenantIdEnabled(): bool
     {
         return RecordUtils::isTenantIdEnabled();
+    }
+
+    public function resolveTenantFromRequest(Request $request, object $tableSchema): mixed
+    {
+        [$tenantId] = $this->resolveTenantFromRequestWithSource($request, $tableSchema);
+
+        return $tenantId;
+    }
+
+    public function attachRequestContext(Request $request, string $table = '', ?string $action = null, ?object $tableSchema = null, mixed $tenantId = null, array $extra = []): Request
+    {
+        $contextKey = self::REQUEST_CONTEXT_KEY;
+        $existing = $request->attributes->get($contextKey);
+        $context = is_array($existing) ? $existing : [];
+
+        $resolvedTenant = $tenantId;
+        $resolvedSource = null;
+
+        if (RecordUtils::isTenantIdMissing($resolvedTenant)) {
+            $resolvedTenant = $request->attributes->get(self::TENANT_ATTRIBUTE_KEY);
+            if (!RecordUtils::isTenantIdMissing($resolvedTenant)) {
+                $resolvedSource = 'attribute';
+            }
+        }
+
+        if (($tableSchema instanceof RecordTableType) && RecordUtils::isTenantIdMissing($resolvedTenant)) {
+            [$resolvedTenant, $resolvedSource] = $this->resolveTenantFromRequestWithSource($request, $tableSchema);
+        }
+
+        $resolvedTenant = $this->normalizeTenantId($resolvedTenant);
+        if (!RecordUtils::isTenantIdMissing($resolvedTenant)) {
+            $context['tenant_id'] = $resolvedTenant;
+            $context['tenant_column'] = RecordConfigService::tenantColumn();
+            if (is_string($resolvedSource) && '' !== $resolvedSource) {
+                $context['tenant_source'] = $resolvedSource;
+            }
+
+            $request->attributes->set(self::TENANT_ATTRIBUTE_KEY, $resolvedTenant);
+        }
+
+        $guard = RecordConfigService::authGuard();
+        $user = auth($guard)->user();
+        $context['user'] = $user ? [
+            'id' => $user->id ?? null,
+            'guard' => $guard,
+        ] : null;
+
+        $context['request_id'] = $request->attributes->get('request_id');
+        $context['table'] = $table !== '' ? $table : (string) ($request->route('table') ?? '');
+        $context['action'] = $action ?? (($context['action'] ?? null));
+
+        if ([] !== $extra) {
+            $context = array_merge($context, $extra);
+        }
+
+        $request->attributes->set($contextKey, $context);
+
+        return $request;
+    }
+
+    public function getRequestContext(Request $request): array
+    {
+        $context = $request->attributes->get(self::REQUEST_CONTEXT_KEY);
+
+        return is_array($context) ? $context : [];
+    }
+
+    private function resolveTenantFromRequestWithSource(Request $request, object $tableSchema): array
+    {
+        if (!$this->shouldApplyTenantId($tableSchema)) {
+            return [null, null];
+        }
+
+        foreach (self::TENANT_SOURCE_PRIORITY as $source) {
+            $source = strtolower((string) $source);
+            $candidate = match ($source) {
+                'attribute' => $this->resolveTenantFromRequestAttributes($request),
+                'header' => $request->header(RecordConfigService::tenantHeader()),
+                default => null,
+            };
+
+            $candidate = $this->normalizeTenantId($candidate);
+            if (!RecordUtils::isTenantIdMissing($candidate)) {
+                return [$candidate, $source];
+            }
+        }
+
+        return [null, null];
+    }
+
+    private function resolveTenantFromRequestAttributes(Request $request): mixed
+    {
+        $tenant = $request->attributes->get(self::TENANT_ATTRIBUTE_KEY);
+        if (!RecordUtils::isTenantIdMissing($tenant)) {
+            return $tenant;
+        }
+
+        $context = $request->attributes->get(self::REQUEST_CONTEXT_KEY);
+        if (is_array($context)) {
+            return $context['tenant_id'] ?? null;
+        }
+
+        return $tenant;
     }
 
     public function applyTenantFilter(mixed $query, string $table, mixed $tenantId): void

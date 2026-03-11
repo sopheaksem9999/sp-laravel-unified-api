@@ -34,8 +34,9 @@ class MakeRecordTableCommandTest extends TestCase
         $this->assertSame('customer', $config->pmsName);
         $this->assertFalse($config->hasTenantId);
         $this->assertFalse($config->softDeletes);
+        $this->assertTrue($config->isAuthRead);
+        $this->assertTrue($config->isAuthWrite);
 
         unlink($file);
     }
 }
-

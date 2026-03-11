@@ -61,28 +61,64 @@ class MiddlewareMapTest extends TestCase
     /** @test */
     public function it_supports_public_read_but_requires_auth_for_write_based_on_middleware_map(): void
     {
-        $this->getJson('/api/bills')->assertStatus(200);
+        $endpoint = $this->billsEndpoint();
 
-        $this->postJson('/api/bills', ['name' => 'No Auth'])->assertStatus(401);
+        $this->getJson($endpoint)->assertStatus(200);
 
-        $this->postJson('/api/bills', ['name' => 'With Auth'], ['Authorization' => 'Bearer demo-token'])
+        $this->postJson($endpoint, ['name' => 'No Auth'])->assertStatus(401);
+
+        $this->postJson($endpoint, ['name' => 'With Auth'], ['Authorization' => 'Bearer demo-token'])
             ->assertStatus(200);
     }
 
     /** @test */
     public function it_supports_auth_plus_subscription_for_specific_table_write_routes(): void
     {
+        $endpoint = $this->billsEndpoint();
+
         Config::set('record.middleware_map.tables.bills.write', ['test.require-subscription']);
 
-        $this->postJson('/api/bills', ['vendor_id' => 27], ['Authorization' => 'Bearer demo-token'])
+        $this->postJson($endpoint, ['vendor_id' => 27], ['Authorization' => 'Bearer demo-token'])
             ->assertStatus(402);
 
-        $this->postJson('/api/bills', ['vendor_id' => 27], [
+        $this->postJson($endpoint, ['vendor_id' => 27], [
             'Authorization' => 'Bearer demo-token',
             'X-Subscribed' => '1',
         ])->assertStatus(200);
     }
+
+    private function billsEndpoint(): string
+    {
+        $routes = $this->app['router']->getRoutes()->getRoutes();
+        $methodMap = [];
+        foreach ($routes as $route) {
+            $uri = $route->uri();
+            $methods = $route->methods();
+
+            if (!str_ends_with((string) $uri, '{table}')) {
+                continue;
+            }
+
+            if (str_contains((string) $uri, 'audit')) {
+                continue;
+            }
+
+            $key = (string) $uri;
+            $methodMap[$key] = array_unique(array_merge($methodMap[$key] ?? [], $methods));
+        }
+
+        foreach ($methodMap as $uri => $methods) {
+            if (in_array('GET', $methods, true) && in_array('POST', $methods, true)) {
+                return '/' . str_replace('{table}', 'bills', $uri);
+            }
+        }
+
+        $prefix = trim((string) config('record.api_prefix', 'api/v1'), '/');
+
+        return '/' . $prefix . '/bills';
+    }
 }
+
 
 class RequireAuthHeaderMiddleware
 {

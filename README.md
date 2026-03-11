@@ -180,7 +180,6 @@ Edit `config/record.php` to configure your database tables for the dynamic API. 
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordHasManyType;
 use Sopheak\Core\Types\RecordBelongsToType;
-use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordTableTriggerType;
 return [
     'api_prefix' => 'api/v1',
@@ -189,10 +188,8 @@ return [
         'users' => new RecordTableType(
             pmsName: 'user',
             table: 'users',
-            public: new RecordTablePublic(
-                read: false,
-                write: false,
-            ),
+            isAuthRead: true,
+            isAuthWrite: true,
             relationships: [
                 'posts' => new RecordHasManyType(
                     table: 'posts',
@@ -255,7 +252,7 @@ return [
 ];
 ```
 
-The package routes are loaded automatically by `Sopheak\Core\CoreServiceProvider` using this prefix. Record endpoints authorize per-table using `RecordTablePublic` and permissions; audit endpoints include read endpoints (and additional authenticated endpoints) under the same prefix.
+The package routes are loaded automatically by `Sopheak\Core\CoreServiceProvider` using this prefix. Record endpoints authorize per-table using `isAuthRead` / `isAuthWrite` and permissions; `public` remains as legacy compatibility and is derived from auth flags.
 
 ### Config-Driven Middleware Map (Client Use Case)
 
@@ -291,6 +288,50 @@ Action names available in the middleware map:
 - `table_function`, `global_function`
 - grouped keys: `read`, `write`, `function`, and wildcard `*`
 
+### Request Context for Hooks and Custom Audit
+
+Request context is built-in and always available for hooks and custom audit callbacks.
+Tenant resolution keeps backward compatibility:
+- first from request attribute `resolved_tenant_id` (or `record_context.tenant_id`)
+- then fallback to tenant header (`X-Tenant-ID` by default)
+
+Client middleware can set tenant before CRUD/controller logic:
+
+```php
+public function handle($request, \Closure $next)
+{
+    $request->attributes->set('resolved_tenant_id', $request->user()?->tenant_id);
+
+    return $next($request);
+}
+```
+
+Or set directly into request context:
+
+```php
+$request->attributes->set('record_context', [
+    'tenant_id' => $request->user()?->tenant_id,
+]);
+```
+
+Use context inside trigger:
+
+```php
+public static function beforeCreate(\Illuminate\Http\Request $request, string $table, array $context): array
+{
+    $requestContext = $context['request_context'] ?? $request->attributes->get('record_context', []);
+    $tenantId = $requestContext['tenant_id'] ?? null;
+    $userId = $requestContext['user']['id'] ?? null;
+
+    $payload = $request->all();
+    $payload['tenant_id'] = $tenantId;
+    $payload['created_by'] = $userId;
+    $request->replace($payload);
+
+    return [$request, $table, $context];
+}
+```
+
 Alternatively, you can keep `config/record.php` focused on global options and define per-table configurations under `config/records/tables` using the Artisan helper:
 
 ### Table-Level Custom Audit Logger
@@ -301,15 +342,12 @@ You can override the default audit logging behavior for a specific table by prov
 
 ```php
 use Sopheak\Core\Types\RecordTableType;
-use Sopheak\Core\Types\RecordTablePublic;
 
 return new RecordTableType(
     table: 'invoices',
     pmsName: 'invoice',
-    public: new RecordTablePublic(
-        read: true,
-        write: true,
-    ),
+    isAuthRead: false,
+    isAuthWrite: false,
     // String callback formats are supported...
     // customAuditLog: \App\Http\Controllers\InvoiceAuditLogger::class . '@handle',
 

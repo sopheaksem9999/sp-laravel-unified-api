@@ -16,7 +16,9 @@ use Closure;
  * @property bool              $softDeletes     Whether soft deletes are enabled for this table
  * @property bool              $disableAuditLog Whether audit logging is disabled for this table
  * @property bool              $disableCache    Whether query caching is disabled for this table
- * @property RecordTablePublic $public           Public configuration settings for the table
+ * @property bool              $isAuthRead      Whether read endpoints require authentication
+ * @property bool              $isAuthWrite     Whether write endpoints require authentication
+ * @property RecordTablePublic|bool $public      Legacy public configuration (derived from auth flags)
  * @property null|array        $relationships    Array of relationships with other tables
  * @property null|array        $functions        Array of function configurations
  * @property null|string       $primaryKey      The primary key column name (defaults to 'id')
@@ -39,7 +41,8 @@ use Closure;
  *     canCreate: true,
  *     canUpdate: true,
  *     canDelete: true,
- *     public: new RecordTablePublic(),
+ *     isAuthRead: true,
+ *     isAuthWrite: true,
  *     relationships: [
  *         'roles' => new RecordMetaBelongsToManyType(...),
  *         'profile' => new RecordHasOneType(...),
@@ -100,6 +103,8 @@ class RecordTableType
         public bool $canUpdate = true,
         public bool $canDelete = true,
         public bool $canUpsert = true,
+        public bool $isAuthRead = true,
+        public bool $isAuthWrite = true,
         public RecordTablePublic|bool $public = new RecordTablePublic(),
         public ?string $primaryKey = 'id',
         public ?array $columns = [],
@@ -121,7 +126,16 @@ class RecordTableType
         public RecordTableTriggerType|array|null $beforeDelete = null,
         public RecordTableTriggerType|array|null $afterDelete = null,
 
-    ) {}
+    ) {
+        if ($this->isAuthRead && $this->isAuthWrite && $this->hasLegacyPublicOverride($this->public)) {
+            $authFlags = $this->deriveAuthFlagsFromPublic($this->public);
+            $this->isAuthRead = $authFlags['read'];
+            $this->isAuthWrite = $authFlags['write'];
+            return;
+        }
+
+        $this->public = $this->derivePublicFromAuthFlags(publicConfig: $this->public, isAuthRead: $this->isAuthRead, isAuthWrite: $this->isAuthWrite);
+    }
 
     /**
      * Handle var_export() for configuration caching.
@@ -144,6 +158,8 @@ class RecordTableType
             canUpdate: $properties['canUpdate'] ?? ($legacyCanWrite ?? true),
             canDelete: $properties['canDelete'] ?? ($legacyCanWrite ?? true),
             canUpsert: $properties['canUpsert'] ?? ($legacyCanWrite ?? true),
+            isAuthRead: self::normalizeBool($properties['isAuthRead'] ?? ($properties['is_auth_read'] ?? true)),
+            isAuthWrite: self::normalizeBool($properties['isAuthWrite'] ?? ($properties['is_auth_write'] ?? true)),
             public: is_array($properties['public'] ?? null) ? RecordTablePublic::__set_state($properties['public']) : ($properties['public'] ?? new RecordTablePublic()),
             primaryKey: $properties['primaryKey'] ?? 'id',
             columns: $properties['columns'] ?? [],
@@ -165,5 +181,54 @@ class RecordTableType
             beforeDelete: $properties['beforeDelete'] ?? null,
             afterDelete: $properties['afterDelete'] ?? null,
         );
+    }
+
+    private function derivePublicFromAuthFlags(RecordTablePublic|bool $publicConfig, bool $isAuthRead, bool $isAuthWrite): RecordTablePublic
+    {
+        if (is_bool($publicConfig)) {
+            $defaultPublicRead = $publicConfig;
+            $defaultPublicWrite = $publicConfig;
+        } else {
+            $defaultPublicRead = (bool) ($publicConfig->read ?? false);
+            $defaultPublicWrite = (bool) ($publicConfig->write ?? false);
+        }
+
+        return new RecordTablePublic(
+            read: !$isAuthRead,
+            write: !$isAuthWrite,
+        );
+    }
+
+    private static function normalizeBool(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        return true;
+    }
+
+    private function hasLegacyPublicOverride(RecordTablePublic|bool $publicConfig): bool
+    {
+        if (is_bool($publicConfig)) {
+            return $publicConfig;
+        }
+
+        return (bool) ($publicConfig->read ?? false) || (bool) ($publicConfig->write ?? false);
+    }
+
+    private function deriveAuthFlagsFromPublic(RecordTablePublic|bool $publicConfig): array
+    {
+        if (is_bool($publicConfig)) {
+            return [
+                'read' => !$publicConfig,
+                'write' => !$publicConfig,
+            ];
+        }
+
+        return [
+            'read' => !(bool) ($publicConfig->read ?? false),
+            'write' => !(bool) ($publicConfig->write ?? false),
+        ];
     }
 }

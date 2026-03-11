@@ -26,6 +26,7 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Utilities\RecordUtils;
 use Sopheak\Core\Types\RecordTableType;
+use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordBelongsToType;
 use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Types\RecordTableTriggerType;
@@ -597,6 +598,45 @@ class BasicTest extends TestCase
     }
 
     /** @test */
+    public function it_supports_auth_flags_without_breaking_public_option(): void
+    {
+        Config::set('record.tables', [
+            'auth_required' => new RecordTableType(
+                table: 'auth_required',
+                pmsName: 'auth_required',
+                isAuthRead: true,
+                isAuthWrite: true,
+            ),
+            'public_access' => new RecordTableType(
+                table: 'public_access',
+                pmsName: 'public_access',
+                isAuthRead: false,
+                isAuthWrite: false,
+            ),
+        ]);
+
+        $this->assertFalse(PermissionUtils::isPublicAction('auth_required', 'read'));
+        $this->assertFalse(PermissionUtils::isPublicAction('auth_required', 'create'));
+        $this->assertTrue(PermissionUtils::isPublicAction('public_access', 'read'));
+        $this->assertTrue(PermissionUtils::isPublicAction('public_access', 'create'));
+    }
+
+    /** @test */
+    public function it_keeps_legacy_public_behavior_when_auth_flags_are_default_true(): void
+    {
+        Config::set('record.tables', [
+            'mixed_access' => new RecordTableType(
+                table: 'mixed_access',
+                pmsName: 'mixed_access',
+                public: new RecordTablePublic(read: true, write: false),
+            ),
+        ]);
+
+        $this->assertTrue(PermissionUtils::isPublicAction('mixed_access', 'read'));
+        $this->assertFalse(PermissionUtils::isPublicAction('mixed_access', 'create'));
+    }
+
+    /** @test */
     public function it_includes_error_debug_meta_when_x_debug_header_is_enabled(): void
     {
         Config::set('record.debug', false);
@@ -631,6 +671,80 @@ class BasicTest extends TestCase
 
         $this->assertSame(false, $payload['success']);
         $this->assertArrayNotHasKey('debug', $payload['meta']);
+    }
+
+    /** @test */
+    public function it_resolves_tenant_from_request_attribute_before_header(): void
+    {
+        Config::set('record.enable_tenant_id', true);
+
+        $service = new RecordService();
+        $schema = new RecordTableType(table: 'invoices', hasTenantId: true);
+        $request = Request::create('/api/invoices', 'GET', [], [], [], [
+            'HTTP_X_TENANT_ID' => 'header-tenant',
+        ]);
+        $request->attributes->set('resolved_tenant_id', 'attribute-tenant');
+
+        $tenantId = $service->resolveTenantFromRequest($request, $schema);
+
+        $this->assertSame('attribute-tenant', $tenantId);
+    }
+
+    /** @test */
+    public function it_resolves_tenant_from_request_context_before_header(): void
+    {
+        Config::set('record.enable_tenant_id', true);
+
+        $service = new RecordService();
+        $schema = new RecordTableType(table: 'invoices', hasTenantId: true);
+        $request = Request::create('/api/invoices', 'GET', [], [], [], [
+            'HTTP_X_TENANT_ID' => 'header-tenant',
+        ]);
+        $request->attributes->set('record_context', [
+            'tenant_id' => 'context-tenant',
+        ]);
+
+        $tenantId = $service->resolveTenantFromRequest($request, $schema);
+
+        $this->assertSame('context-tenant', $tenantId);
+    }
+
+    /** @test */
+    public function it_does_not_resolve_tenant_from_input_by_default(): void
+    {
+        Config::set('record.enable_tenant_id', true);
+
+        $service = new RecordService();
+        $schema = new RecordTableType(table: 'invoices', hasTenantId: true);
+        $request = Request::create('/api/invoices', 'POST', ['tenant_id' => 'input-tenant']);
+
+        $tenantId = $service->resolveTenantFromRequest($request, $schema);
+
+        $this->assertNull($tenantId);
+    }
+
+    /** @test */
+    public function it_injects_request_context_into_trigger_context(): void
+    {
+        $service = new RecordService();
+        $request = Request::create('/api/invoices', 'POST');
+        $request->attributes->set('request_id', 'req-trigger-context');
+        $request->attributes->set('resolved_tenant_id', 'ctx-tenant');
+
+        $params = $service->executeTableTrigger(
+            [
+                [
+                    'class' => TestTriggerContextHandler::class,
+                    'functionName' => 'handle',
+                ],
+            ],
+            [$request, 'invoices', ['type' => 'create']]
+        );
+
+        $this->assertInstanceOf(Request::class, $params[0]);
+        $this->assertSame('1', $params[0]->get('ctx_present'));
+        $this->assertSame('ctx-tenant', $params[0]->get('ctx_tenant'));
+        $this->assertSame('invoices', $params[0]->get('ctx_table'));
     }
 }
 
@@ -667,5 +781,19 @@ class TestTriggerResponseHandler
     public static function handle(Request $request, string $table, array $context): JsonResponse
     {
         return RecordApiResponseService::validationError(['message' => 'Not allowed']);
+    }
+}
+
+class TestTriggerContextHandler
+{
+    public static function handle(Request $request, string $table, array $context): array
+    {
+        $requestContext = $context['request_context'] ?? [];
+
+        return [
+            'ctx_present' => isset($context['request_context']) ? '1' : '0',
+            'ctx_tenant' => $requestContext['tenant_id'] ?? null,
+            'ctx_table' => $requestContext['table'] ?? null,
+        ];
     }
 }
