@@ -534,6 +534,34 @@ Record endpoints use table-level access rules from `config/record.php`:
 
 - If a table/action is configured as public (`RecordTablePublic`), the endpoint is accessible without authentication.
 - Otherwise, the controller requires an authenticated user from the guard configured in `config/sp-laravel-api.php` (`sp-laravel-api.auth.guard`, default: `api`) and checks permissions.
+- Permission checks support a custom authorization handler via `record.authorization`.
+
+Custom authorization handler (`record.authorization`) options:
+
+- `null` (default): use `Gate::forUser($user)->allows($permission)`
+- class-string: resolved from container and called as `handle($user, $permission, $table, $action): bool`
+- closure/callable: called as `fn($user, string $permission, string $table, string $action): bool`
+
+Example:
+
+```php
+// config/record.php
+'authorization' => \App\Security\RecordAuthorization::class,
+```
+
+```php
+<?php
+
+namespace App\Security;
+
+final class RecordAuthorization
+{
+    public function handle(mixed $user, string $permission, string $table, string $action): bool
+    {
+        return \Illuminate\Support\Facades\Gate::forUser($user)->allows($permission);
+    }
+}
+```
 
 ### Middleware Stack
 
