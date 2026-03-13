@@ -624,6 +624,14 @@ Source priority behavior (built-in):
 - `attribute`: recommended for trusted middleware-populated tenant (`resolved_tenant_id`) or context tenant (`record_context.tenant_id`)
 - `header`: fallback to tenant header (`X-Tenant-ID` by default)
 
+This same priority is also used by Eloquent trait filtering (`QueryHelpersTrait::scopeApplyRequestFilters`), so model queries remain aligned with dynamic CRUD tenant behavior.
+
+Tenant filtering in `QueryHelpersTrait` is applied when tenant mode is enabled and tenant column exists by any of:
+
+- model `fillable`
+- registered `RecordTableType` columns
+- database schema column check
+
 Example middleware to set trusted tenant (`resolved_tenant_id`) and enrich `record_context`:
 
 ```php
