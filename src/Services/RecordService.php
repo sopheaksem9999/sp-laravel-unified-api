@@ -1693,6 +1693,12 @@ class RecordService
         $data = RecordApiResponseService::removeDeletedAtFields($data);
         $data = RecordApiResponseService::removeHiddenFields($data, $table);
         $data = RecordApiResponseService::convertCompositeFields($data, $table);
+        if (!empty($tableSchema->attributes)) {
+            $requestedCols = $request->has('select')
+                ? RelationshipResolverUtils::getMainTableColumns($request->query('select'))
+                : [];
+            $data = RecordApiResponseService::applyAttributes($data, $table, $tableSchema->attributes, $requestedCols);
+        }
 
         if ($isCacheable && $cacheKey) {
             $cacheData = [
@@ -2031,6 +2037,12 @@ class RecordService
         $data = RecordApiResponseService::removeDeletedAtFields($data);
         $data = RecordApiResponseService::removeHiddenFields($data, $table);
         $data = RecordApiResponseService::convertCompositeFields($data, $table);
+        if ($tableSchema instanceof RecordTableType && !empty($tableSchema->attributes)) {
+            $requestedCols = $request->has('select')
+                ? RelationshipResolverUtils::getMainTableColumns($request->query('select'))
+                : [];
+            $data = RecordApiResponseService::applyAttributes($data, $table, $tableSchema->attributes, $requestedCols);
+        }
 
         if ($isCacheable && $cacheKey) {
             $cacheData = [
@@ -2111,8 +2123,15 @@ class RecordService
 
         if ($request->has('select')) {
             $mainCols = RelationshipResolverUtils::getMainTableColumns($request->query('select'));
-            if ([] !== $mainCols) {
-                $builder->addSelect($mainCols);
+            // Strip computed attribute keys — they are not real DB columns
+            if ([] !== $mainCols && !in_array('*', $mainCols, true)) {
+                $attributeKeys = array_keys($tableSchema->attributes ?? []);
+                $dbCols = $attributeKeys !== []
+                    ? array_values(array_diff($mainCols, $attributeKeys))
+                    : $mainCols;
+                if ([] !== $dbCols) {
+                    $builder->addSelect($dbCols);
+                }
             }
         }
 
@@ -2197,6 +2216,12 @@ class RecordService
 
         $record = RecordApiResponseService::removeDeletedAtFields($record);
         $record = RecordApiResponseService::convertCompositeFields($record, $table);
+        if (!empty($tableSchema->attributes)) {
+            $requestedCols = $request->has('select')
+                ? RelationshipResolverUtils::getMainTableColumns($request->query('select'))
+                : [];
+            $record = RecordApiResponseService::applyAttributes($record, $table, $tableSchema->attributes, $requestedCols);
+        }
 
         if ($this->isCacheableRequest($request, $table)) {
             $ttl = $this->calculateOptimalCacheTTL($table, 1, $request->has('select'));

@@ -127,6 +127,7 @@ class RecordTableType
         public RecordTableTriggerType|array|null $afterDelete = null,
         public bool $overrideTimestamps = false,
         public bool $overrideUserstamps = false,
+        public ?array $attributes = null,
     ) {
         if ($this->isAuthRead && $this->isAuthWrite && $this->hasLegacyPublicOverride($this->public)) {
             $authFlags = $this->deriveAuthFlagsFromPublic($this->public);
@@ -183,6 +184,7 @@ class RecordTableType
             afterDelete: $properties['afterDelete'] ?? null,
             overrideTimestamps: $properties['overrideTimestamps'] ?? false,
             overrideUserstamps: $properties['overrideUserstamps'] ?? false,
+            attributes: $properties['attributes'] ?? null,
         );
     }
 

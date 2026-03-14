@@ -281,6 +281,95 @@ class RecordApiResponseService
         return $data;
     }
 
+    /**
+     * Apply computed attributes to each row — only for fields present in $requestedCols.
+     * When $requestedCols is empty (no ?select= param), no attributes are resolved.
+     *
+     * Each entry in $attributes maps a field name to a callable resolver:
+     *   - Closure:        fn($row, $table) => value
+     *   - [Class, method] array
+     *   - 'Class@method'  string
+     *   - 'Class'         string — calls handle($row, $table)
+     *
+     * @param mixed    $data          Single record or sequential list of records
+     * @param string   $table         Table name
+     * @param array    $attributes    Map of field => callable
+     * @param string[] $requestedCols Columns from ?select= (only matching attributes are resolved)
+     */
+    public static function applyAttributes(mixed $data, string $table, array $attributes, array $requestedCols = []): mixed
+    {
+        if (null === $data || [] === $attributes || [] === $requestedCols) {
+            return $data;
+        }
+
+        // Only resolve attributes explicitly requested via ?select=
+        $appends = array_intersect_key($attributes, array_flip($requestedCols));
+
+        if ([] === $appends) {
+            return $data;
+        }
+
+        // Resolve all callables once
+        $resolvedAppends = [];
+        foreach ($appends as $field => $resolver) {
+            $callable = null;
+
+            if ($resolver instanceof \Closure) {
+                $callable = $resolver;
+            } elseif (is_array($resolver) && count($resolver) === 2) {
+                [$class, $method] = $resolver;
+                if (is_string($class) && class_exists($class)) {
+                    $callable = [app($class), $method];
+                } elseif (is_object($class)) {
+                    $callable = [$class, $method];
+                }
+            } elseif (is_string($resolver)) {
+                if (str_contains($resolver, '@')) {
+                    [$class, $method] = explode('@', $resolver, 2);
+                    if (class_exists($class)) {
+                        $callable = [app($class), $method];
+                    }
+                } elseif (class_exists($resolver)) {
+                    $instance = app($resolver);
+                    $callable = method_exists($instance, 'handle') ? [$instance, 'handle'] : null;
+                }
+            }
+
+            if (null !== $callable) {
+                $resolvedAppends[$field] = $callable;
+            }
+        }
+
+        if ([] === $resolvedAppends) {
+            return $data;
+        }
+
+        $applyToRow = static function (mixed $row) use ($table, $resolvedAppends): mixed {
+            $isObject = is_object($row);
+            foreach ($resolvedAppends as $field => $callable) {
+                $value = $callable($row, $table);
+                if ($isObject) {
+                    $row->{$field} = $value;
+                } else {
+                    $row[$field] = $value;
+                }
+            }
+            return $row;
+        };
+
+        // Sequential list
+        if (is_array($data) && !empty($data) && array_is_list($data)) {
+            return array_map($applyToRow, $data);
+        }
+
+        // Single record (array or object)
+        if (is_array($data) || is_object($data)) {
+            return $applyToRow($data);
+        }
+
+        return $data;
+    }
+
     private static function parseCompositeLiteral(string $literal): ?array
     {
         $value = trim($literal);
