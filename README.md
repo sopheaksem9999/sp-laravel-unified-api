@@ -448,6 +448,34 @@ use Sopheak\Core\Types\RecordTableType;
 
 Attribute keys are automatically excluded from the SQL `SELECT` to prevent "Unknown column" database errors.
 
+### Column Casts
+
+Add a `cast` key to any column definition to transform its raw DB value in the response. Opt-in per column — columns without `cast` are completely untouched. `null` values are always preserved.
+
+```php
+use App\Record\Casts\GlobalCasting;
+
+'products' => new RecordTableType(
+    table: 'products',
+    columns: [
+        'price'      => ['type' => 'decimal',  'cast' => 'float'],
+        'quantity'   => ['type' => 'integer',  'cast' => 'int'],
+        'is_active'  => ['type' => 'tinyint',  'cast' => 'bool'],
+        'metadata'   => ['type' => 'text',     'cast' => 'array'],   // JSON string → array
+        'score'      => ['type' => 'decimal',  'cast' => 'decimal:4'],
+        'created_at' => ['type' => 'datetime', 'cast' => 'datetime'], // ISO 8601
+        // static method cast
+        'is_cloud'   => ['type' => 'tinyint',  'cast' => [GlobalCasting::class, 'bool']],
+        // inline Closure
+        'status'     => ['type' => 'varchar',  'cast' => fn($v) => strtoupper($v)],
+    ],
+),
+```
+
+Built-in cast strings mirror Laravel model cast names: `int`, `integer`, `float`, `double`, `real`, `decimal`, `decimal:N`, `string`, `bool`, `boolean`, `array`, `json`, `object`, `date`, `datetime`, `timestamp`.
+
+Custom callable forms (all receive `($value, $column, $row)`): `Closure`, `[Class, 'method']` (static or instance), `'Class@method'`, `'ClassName'` (calls `->get($value, $column, $row)`).
+
 ### Step 8: Test Your Installation
 
 Test the dynamic API endpoints:
