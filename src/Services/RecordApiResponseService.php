@@ -282,6 +282,152 @@ class RecordApiResponseService
     }
 
     /**
+     * Apply column casts to response data — only for columns that have a 'cast' key defined.
+     * Columns without a 'cast' key are completely untouched. Null values are preserved as-is.
+     *
+     * Supported built-in cast strings (Laravel-compatible names):
+     *   int, integer, float, double, real, decimal, decimal:N,
+     *   string, bool, boolean, array, json, object, date, datetime, timestamp
+     *
+     * Custom cast forms:
+     *   - Closure:          fn($value, $column, $row) => mixed
+     *   - [Class, 'method'] static or instance call
+     *   - 'Class@method'    string
+     *   - 'ClassName'       calls ->get($value, $column, $row) on a new instance
+     *
+     * @param mixed $data    Single record, sequential list, Collection, or LengthAwarePaginator
+     * @param array $columns Column definitions from RecordTableType::$columns
+     */
+    public static function applyCasts(mixed $data, array $columns): mixed
+    {
+        if (null === $data || [] === $columns) {
+            return $data;
+        }
+
+        // Build cast map — skip columns with no 'cast' key and columns that have
+        // compositeFields (those are already handled by convertCompositeFields)
+        $castMap = [];
+        foreach ($columns as $col => $meta) {
+            if (!is_array($meta) || !array_key_exists('cast', $meta)) {
+                continue;
+            }
+            if (!empty($meta['compositeFields']) || !empty($meta['composite_fields'])) {
+                continue;
+            }
+            $castMap[(string) $col] = $meta['cast'];
+        }
+
+        if ([] === $castMap) {
+            return $data;
+        }
+
+        // Resolve custom callables once; leave built-in strings as descriptor arrays
+        $resolved = [];
+        foreach ($castMap as $col => $cast) {
+            if ($cast instanceof \Closure) {
+                $resolved[$col] = ['callable' => $cast];
+            } elseif (is_array($cast) && count($cast) === 2) {
+                [$class, $method] = $cast;
+                if (is_string($class) && class_exists($class)) {
+                    $resolved[$col] = ['callable' => [app($class), $method]];
+                } elseif (is_object($class)) {
+                    $resolved[$col] = ['callable' => [$class, $method]];
+                }
+            } elseif (is_string($cast)) {
+                if (str_contains($cast, '@')) {
+                    [$class, $method] = explode('@', $cast, 2);
+                    if (class_exists($class)) {
+                        $resolved[$col] = ['callable' => [app($class), $method]];
+                    }
+                } elseif (class_exists($cast)) {
+                    $resolved[$col] = ['callable' => [app($cast), 'get']];
+                } else {
+                    $resolved[$col] = ['builtin' => strtolower($cast)];
+                }
+            }
+        }
+
+        if ([] === $resolved) {
+            return $data;
+        }
+
+        $applyToRow = static function (mixed $row) use ($resolved): mixed {
+            $isObject = is_object($row);
+            foreach ($resolved as $col => $descriptor) {
+                if ($isObject) {
+                    if (!property_exists($row, $col)) {
+                        continue;
+                    }
+                    $value = $row->{$col};
+                } else {
+                    if (!array_key_exists($col, $row)) {
+                        continue;
+                    }
+                    $value = $row[$col];
+                }
+
+                if (null === $value) {
+                    continue;
+                }
+
+                if (isset($descriptor['callable'])) {
+                    $value = ($descriptor['callable'])($value, $col, $row);
+                } else {
+                    $cast = $descriptor['builtin'];
+                    $value = match (true) {
+                        $cast === 'int' || $cast === 'integer'                       => (int) $value,
+                        $cast === 'float' || $cast === 'double' || $cast === 'real' => (float) $value,
+                        str_starts_with($cast, 'decimal:')                          => number_format((float) $value, (int) substr($cast, 8), '.', ''),
+                        $cast === 'decimal'                                          => (float) $value,
+                        $cast === 'string'                                           => (string) $value,
+                        $cast === 'bool' || $cast === 'boolean'                     => (bool) $value,
+                        $cast === 'array' || $cast === 'json'                       => is_string($value) ? (json_decode($value, true) ?? $value) : (array) $value,
+                        $cast === 'object'                                           => is_string($value) ? (json_decode($value) ?? $value) : (object) $value,
+                        $cast === 'date'                                             => \Illuminate\Support\Carbon::parse($value)->toDateString(),
+                        $cast === 'datetime'                                         => \Illuminate\Support\Carbon::parse($value)->toISOString(),
+                        $cast === 'timestamp'                                        => \Illuminate\Support\Carbon::parse($value)->getTimestamp(),
+                        default                                                      => $value,
+                    };
+                }
+
+                if ($isObject) {
+                    $row->{$col} = $value;
+                } else {
+                    $row[$col] = $value;
+                }
+            }
+
+            return $row;
+        };
+
+        if ($data instanceof LengthAwarePaginator) {
+            $items = $data->getCollection()->map($applyToRow);
+
+            return new LengthAwarePaginator(
+                $items,
+                $data->total(),
+                $data->perPage(),
+                $data->currentPage(),
+                ['path' => request()->url(), 'pageName' => 'page']
+            );
+        }
+
+        if ($data instanceof Collection) {
+            return $data->map($applyToRow);
+        }
+
+        if (is_array($data) && !empty($data) && array_is_list($data)) {
+            return array_map($applyToRow, $data);
+        }
+
+        if (is_array($data) || is_object($data)) {
+            return $applyToRow($data);
+        }
+
+        return $data;
+    }
+
+    /**
      * Apply computed attributes to each row — only for fields present in $requestedCols.
      * When $requestedCols is empty (no ?select= param), no attributes are resolved.
      *
