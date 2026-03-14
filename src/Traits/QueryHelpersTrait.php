@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Collection;
 use Illuminate\Support\LazyCollection;
 use Sopheak\Core\Services\RecordConfigService;
@@ -76,10 +77,16 @@ trait QueryHelpersTrait
         $tableName = $builder->getModel()->getTable();
         $this->ensureSchemaForTable($tableName);
 
-        // check if model has tenant_column
-        $hasCompanyId = in_array($tenantColumn, $builder->getModel()->getFillable());
+        $configuredTable = RecordConfigService::table($tableName);
+        $configuredHasTenantId = (bool) ($configuredTable->hasTenantId ?? false);
+        $tableSchema = SchemaRegistryUtils::getTable($tableName);
+        $modelFillable = $builder->getModel()->getFillable();
+        $hasTenantColumn = in_array($tenantColumn, $modelFillable, true)
+            || ($tableSchema instanceof RecordTableType && isset($tableSchema->columns[$tenantColumn]))
+            || Schema::hasColumn($tableName, $tenantColumn);
+        $shouldApplyTenantFilter = $isTenantEnabled && ($configuredHasTenantId || $hasTenantColumn);
 
-        $commonQuery = $builder->when($isTenantEnabled && $hasCompanyId, function ($query) use ($request, $tenantColumn) {
+        $commonQuery = $builder->when($shouldApplyTenantFilter, function ($query) use ($request, $tenantColumn) {
             $tenantId = RecordUtils::resolveTenantIdFromRequest($request);
             if (RecordUtils::isTenantIdMissing($tenantId)) {
                 return $query;

@@ -254,6 +254,18 @@ return [
 
 The package routes are loaded automatically by `Sopheak\Core\CoreServiceProvider` using this prefix. Record endpoints authorize per-table using `isAuthRead` / `isAuthWrite` and permissions; `public` remains as legacy compatibility and is derived from auth flags.
 
+You can override permission evaluation by setting `record.authorization` in `config/record.php`:
+
+```php
+'authorization' => \App\Security\RecordAuthorization::class,
+```
+
+Handler contract:
+
+- class-string: container-resolved and must expose `handle($user, $permission, $table, $action): bool`
+- callable/closure: invoked as `fn($user, string $permission, string $table, string $action): bool`
+- `null`: fallback to default `Gate::forUser($user)->allows($permission)`
+
 ### Config-Driven Middleware Map (Client Use Case)
 
 You can apply different middleware stacks per route action and per table without editing package routes.
