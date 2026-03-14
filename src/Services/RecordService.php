@@ -2121,17 +2121,17 @@ class RecordService
             $builder->whereNull($actualTableName . '.deleted_at');
         }
 
+        $mainCols = [];
+        $dbMainCols = [];
         if ($request->has('select')) {
             $mainCols = RelationshipResolverUtils::getMainTableColumns($request->query('select'));
-            // Strip computed attribute keys — they are not real DB columns
-            if ([] !== $mainCols && !in_array('*', $mainCols, true)) {
-                $attributeKeys = array_keys($tableSchema->attributes ?? []);
-                $dbCols = $attributeKeys !== []
-                    ? array_values(array_diff($mainCols, $attributeKeys))
-                    : $mainCols;
-                if ([] !== $dbCols) {
-                    $builder->addSelect($dbCols);
-                }
+            // Build DB-safe column list: strip computed attribute keys (not real DB columns)
+            $attributeKeys = array_keys($tableSchema->attributes ?? []);
+            $dbMainCols = $attributeKeys !== []
+                ? array_values(array_diff($mainCols, $attributeKeys))
+                : $mainCols;
+            if ([] !== $dbMainCols && !in_array('*', $dbMainCols, true)) {
+                $builder->addSelect($dbMainCols);
             }
         }
 
@@ -2177,8 +2177,8 @@ class RecordService
 
             if ($useSubqueryOptimization && [] !== $includes) {
                 $optimizedBuilder = DB::table($actualTableName);
-                if ([] !== $mainCols) {
-                    $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $mainCols);
+                if ([] !== $dbMainCols) {
+                    $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $dbMainCols);
                     $optimizedBuilder->select($prefixedCols);
                 } else {
                     $optimizedBuilder->select($actualTableName . '.*');
