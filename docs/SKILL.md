@@ -62,6 +62,7 @@ The goal: adding a new API resource means adding one `RecordTableType` — never
 | Hide sensitive columns | `columnHiddens: [...]` in config | `makeHidden()` on model or manual unset |
 | Protect columns from being written | `columnWriteDisabled: [...]` in config | Unset fields in hooks or middleware |
 | Add computed fields to read responses | `attributes: [...]` on `RecordTableType` | Manual post-processing in controller |
+| Cast raw DB column values in responses | `cast` key in `columns` entry | Manual type coercion in hooks or controller |
 
 ---
 
@@ -345,6 +346,19 @@ new RecordTableType(
         'full_label' => [\App\Attributes\BrandAttribute::class, 'getFullLabel'],
         'logo_url'   => \App\Attributes\BrandAttribute::class . '@getLogoUrl',
         'is_premium' => fn($row, $table) => ($row->tier ?? null) === 'premium',
+    ],
+
+    // Column casts — transform raw DB values in responses (opt-in per column, null preserved)
+    // Built-ins: int, integer, float, double, real, decimal, decimal:N, string,
+    //            bool, boolean, array, json, object, date, datetime, timestamp
+    // Custom callable receives ($value, $column, $row):
+    //   Closure | [Class, 'method'] (static or instance) | 'Class@method' | 'ClassName'→get()
+    // columns without 'cast' are untouched; compositeFields columns are skipped
+    columns: [
+        'price'    => ['type' => 'decimal',  'cast' => 'float'],
+        'is_cloud' => ['type' => 'tinyint',  'cast' => [\App\Record\Casts\GlobalCasting::class, 'bool']],
+        'metadata' => ['type' => 'text',     'cast' => 'array'],
+        'status'   => ['type' => 'varchar',  'cast' => fn($v) => strtoupper($v)],
     ],
 
     // Composed config (detailed below)
