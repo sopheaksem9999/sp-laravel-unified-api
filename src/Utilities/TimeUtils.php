@@ -2,6 +2,10 @@
 
 namespace Sopheak\Core\Utilities;
 
+use Carbon\Month;
+use Carbon\WeekDay;
+use DateTimeInterface;
+use DateTimeZone;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -34,5 +38,9 @@ class TimeUtils
         }
 
         return now();
+    }
+
+    public static function parse(DateTimeInterface|WeekDay|Month|string|int|float|null $time, DateTimeZone|string|int|null $timezone = null) {
+        return Carbon::parse($time, $timezone);
     }
 }
