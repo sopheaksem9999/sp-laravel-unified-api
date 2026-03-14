@@ -328,10 +328,18 @@ class RecordApiResponseService
                 $resolved[$col] = ['callable' => $cast];
             } elseif (is_array($cast) && count($cast) === 2) {
                 [$class, $method] = $cast;
-                if (is_string($class) && class_exists($class)) {
-                    $resolved[$col] = ['callable' => [app($class), $method]];
-                } elseif (is_object($class)) {
-                    $resolved[$col] = ['callable' => [$class, $method]];
+                if (is_object($class)) {
+                    $callable = [$class, $method];
+                } elseif (is_string($class) && class_exists($class)) {
+                    // Prefer static call for simple utility classes; fall back to instance
+                    $callable = (is_callable([$class, $method]) && method_exists($class, $method))
+                        ? [$class, $method]
+                        : [app($class), $method];
+                } else {
+                    $callable = null;
+                }
+                if (null !== $callable && is_callable($callable)) {
+                    $resolved[$col] = ['callable' => $callable];
                 }
             } elseif (is_string($cast)) {
                 if (str_contains($cast, '@')) {
