@@ -1693,6 +1693,7 @@ class RecordService
         $data = RecordApiResponseService::removeDeletedAtFields($data);
         $data = RecordApiResponseService::removeHiddenFields($data, $table);
         $data = RecordApiResponseService::convertCompositeFields($data, $table);
+        $data = RecordApiResponseService::applyCasts($data, $tableSchema->columns ?? []);
         if (!empty($tableSchema->attributes)) {
             $requestedCols = $request->has('select')
                 ? RelationshipResolverUtils::getMainTableColumns($request->query('select'))
@@ -2037,6 +2038,7 @@ class RecordService
         $data = RecordApiResponseService::removeDeletedAtFields($data);
         $data = RecordApiResponseService::removeHiddenFields($data, $table);
         $data = RecordApiResponseService::convertCompositeFields($data, $table);
+        $data = RecordApiResponseService::applyCasts($data, $tableSchema instanceof RecordTableType ? ($tableSchema->columns ?? []) : []);
         if ($tableSchema instanceof RecordTableType && !empty($tableSchema->attributes)) {
             $requestedCols = $request->has('select')
                 ? RelationshipResolverUtils::getMainTableColumns($request->query('select'))
@@ -2216,6 +2218,7 @@ class RecordService
 
         $record = RecordApiResponseService::removeDeletedAtFields($record);
         $record = RecordApiResponseService::convertCompositeFields($record, $table);
+        $record = RecordApiResponseService::applyCasts($record, $tableSchema->columns ?? []);
         if (!empty($tableSchema->attributes)) {
             $requestedCols = $request->has('select')
                 ? RelationshipResolverUtils::getMainTableColumns($request->query('select'))
