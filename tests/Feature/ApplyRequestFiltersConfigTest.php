@@ -267,6 +267,70 @@ class ApplyRequestFiltersConfigTest extends TestCase
         $this->assertCount(1, $result['data']);
         $this->assertEquals(4, $result['data'][0]->company_id);
     }
+
+    public function test_query_helpers_trait_applies_tenant_filter_from_resolved_tenant_id_attribute(): void
+    {
+        Config::set('record.enable_tenant_id', true);
+        Config::set('record.tenant_column', 'company_id');
+
+        $request = Request::create('/api/qht_subscriptions', 'GET', [
+            'sortby' => 'id',
+            'order' => 'asc',
+        ]);
+        $request->attributes->set('resolved_tenant_id', 3);
+
+        $subscriptions = QhtSubscription::query()
+            ->applyRequestFilters($request)
+            ->get();
+
+        $this->assertCount(1, $subscriptions);
+        $this->assertSame(3, (int) $subscriptions->first()->company_id);
+    }
+
+    public function test_query_helpers_trait_applies_tenant_filter_from_header_for_backward_compatibility(): void
+    {
+        Config::set('record.enable_tenant_id', true);
+        Config::set('record.tenant_column', 'company_id');
+        Config::set('record.tenant_header', 'X-Tenant-ID');
+
+        $request = Request::create('/api/qht_subscriptions', 'GET', [
+            'sortby' => 'id',
+            'order' => 'asc',
+        ], [], [], [
+            'HTTP_X_TENANT_ID' => '4',
+        ]);
+
+        $subscriptions = QhtSubscription::query()
+            ->applyRequestFilters($request)
+            ->get();
+
+        $this->assertCount(1, $subscriptions);
+        $this->assertSame(4, (int) $subscriptions->first()->company_id);
+    }
+
+    public function test_query_helpers_trait_uses_table_config_has_tenant_id_when_fillable_is_empty(): void
+    {
+        Config::set('record.enable_tenant_id', true);
+        Config::set('record.tenant_column', 'company_id');
+        Config::set('record.tables.qht_subscriptions', new RecordTableType(
+            table: 'qht_subscriptions',
+            hasTenantId: true,
+            public: new RecordTablePublic(true, true),
+        ));
+
+        $request = Request::create('/api/qht_subscriptions', 'GET', [
+            'sortby' => 'id',
+            'order' => 'asc',
+        ]);
+        $request->attributes->set('resolved_tenant_id', 3);
+
+        $subscriptions = QhtSubscription::query()
+            ->applyRequestFilters($request)
+            ->get();
+
+        $this->assertCount(1, $subscriptions);
+        $this->assertSame(3, (int) $subscriptions->first()->company_id);
+    }
 }
 
 class QhtCategory extends Model
@@ -288,6 +352,17 @@ class QhtCategory extends Model
 class QhtItem extends Model
 {
     protected $table = 'qht_items';
+
+    protected $guarded = [];
+
+    public $timestamps = false;
+}
+
+class QhtSubscription extends Model
+{
+    use QueryHelpersTrait;
+
+    protected $table = 'qht_subscriptions';
 
     protected $guarded = [];
 
