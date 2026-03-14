@@ -1097,6 +1097,76 @@ GET /api/v1/brands?select=*,logo_url             → logo_url fires; * fetches a
 
 > **Note**: Attribute keys are not database columns. They are automatically excluded from the SQL `SELECT` to prevent "Unknown column" errors, while still being resolved and injected into the response after the query.
 
+#### Column Casts
+
+Each entry in `columns` accepts an optional `cast` key that transforms the raw DB value before it is returned in the response. Casting is **opt-in** — only columns with an explicit `cast` key are affected; all others pass through unchanged. `null` values are always preserved as-is.
+
+Supported built-in cast strings (Laravel-compatible names):
+
+| Cast | PHP transformation |
+|---|---|
+| `int` / `integer` | `(int) $value` |
+| `float` / `double` / `real` | `(float) $value` |
+| `decimal` | `(float) $value` |
+| `decimal:N` | `number_format((float) $value, N, '.', '')` |
+| `string` | `(string) $value` |
+| `bool` / `boolean` | `(bool) $value` |
+| `array` / `json` | `json_decode($value, true)` |
+| `object` | `json_decode($value)` |
+| `date` | `Carbon::parse($value)->toDateString()` |
+| `datetime` | `Carbon::parse($value)->toISOString()` |
+| `timestamp` | `Carbon::parse($value)->getTimestamp()` |
+
+Custom cast forms — the callable receives `($value, $column, $row)`:
+
+| Format | Example |
+|---|---|
+| Closure | `fn($v, $col, $row) => strtoupper($v)` |
+| `[Class, 'method']` array | `[GlobalCasting::class, 'bool']` — static or instance |
+| `'Class@method'` string | `'App\\Casts\\MoneyCast@get'` |
+| `'ClassName'` string | `MoneyCast::class` → calls `->get($value, $column, $row)` |
+
+> Static methods are preferred automatically — the implementation checks `is_callable([ClassName, method])` first before falling back to container instantiation.
+
+**Config example:**
+
+```php
+use App\Record\Casts\GlobalCasting;
+
+'brands' => new RecordTableType(
+    table: 'brands',
+    columns: [
+        'name'       => ['type' => 'varchar',  'nullable' => false],
+        'price'      => ['type' => 'decimal',  'cast' => 'float'],
+        'quantity'   => ['type' => 'integer',  'cast' => 'int'],
+        'is_active'  => ['type' => 'tinyint',  'cast' => 'bool'],
+        'metadata'   => ['type' => 'text',     'cast' => 'array'],
+        'score'      => ['type' => 'decimal',  'cast' => 'decimal:4'],
+        'created_at' => ['type' => 'datetime', 'cast' => 'datetime'],
+        // custom static method
+        'is_cloud'   => ['type' => 'tinyint',  'cast' => [GlobalCasting::class, 'bool']],
+        // inline Closure
+        'status'     => ['type' => 'varchar',  'cast' => fn($v) => strtoupper($v)],
+    ],
+),
+```
+
+**Custom cast class example** (static methods work; no interface required):
+
+```php
+namespace App\Record\Casts;
+
+class GlobalCasting
+{
+    public static function bool(mixed $value, string $column, mixed $row): bool
+    {
+        return (bool) $value;
+    }
+}
+```
+
+> **Note**: Columns that also define `compositeFields` are skipped by cast processing — composite type conversion takes precedence.
+
 #### Triggers
 
 - `beforeRead`, `afterRead`, `beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete` (`RecordTableTriggerType|array|null`, default: `null`): Lifecycle triggers. Each value can be:
