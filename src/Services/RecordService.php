@@ -1221,7 +1221,11 @@ class RecordService
             unset($payload[$column]);
         }
 
-        unset($payload['id'], $payload['deleted_at'], $payload['created_at'], $payload['updated_at']);
+        unset($payload['id']);
+        $overrideTimestamps = filter_var($meta->overrideTimestamps ?? false, FILTER_VALIDATE_BOOLEAN);
+        if (!$overrideTimestamps) {
+            unset($payload['deleted_at'], $payload['created_at'], $payload['updated_at']);
+        }
 
         return RecordUtils::applyCompositeTypes(payload: $payload, columns: $meta->columns ?? []);
     }
@@ -1259,21 +1263,46 @@ class RecordService
     {
         $user = auth('api')->user();
         $now = TimeUtils::now();
+        $overrideTimestamps = $tableSchema->overrideTimestamps ?? false;
+        $overrideUserstamps = $tableSchema->overrideUserstamps ?? false;
 
         if ($isUpdate) {
-            $payload['updated_at'] = $now;
+            if (!array_key_exists('updated_at', $payload) || !$overrideTimestamps) {
+                $payload['updated_at'] =  $now;
+            }
             if ($user) {
                 if (isset($tableSchema->columns['updated_by'])) {
-                    $payload['updated_by'] = $user->id;
+                    if (!array_key_exists('updated_by', $payload) || !$overrideUserstamps) {
+                        $payload['updated_by'] = $user->id;
+                    }
                 } elseif (isset($tableSchema->columns['last_updated_by'])) {
-                    $payload['last_updated_by'] = $user->id;
+                    if (!array_key_exists('last_updated_by', $payload) || !$overrideUserstamps) {
+                        $payload['last_updated_by'] = $user->id;
+                    }
                 }
             }
         } else {
-            $payload['created_at'] = $now;
-            $payload['updated_at'] = $now;
-            if ($user && isset($tableSchema->columns['created_by'])) {
-                $payload['created_by'] = $user->id;
+            if (!array_key_exists('created_at', $payload) || !$overrideTimestamps) {
+                $payload['created_at'] = $now;
+            }
+            if (!array_key_exists('updated_at', $payload) || !$overrideTimestamps) {
+                $payload['updated_at'] = $now;
+            }
+            if ($user) {
+                if (isset($tableSchema->columns['created_by'])) {
+                    if (!array_key_exists('created_by', $payload) || !$overrideUserstamps) {
+                        $payload['created_by'] = $user->id;
+                    }
+                }
+                if (isset($tableSchema->columns['updated_by'])) {
+                    if (!array_key_exists('updated_by', $payload) || !$overrideUserstamps) {
+                        $payload['updated_by'] = $user->id;
+                    }
+                } elseif (isset($tableSchema->columns['last_updated_by'])) {
+                    if (!array_key_exists('last_updated_by', $payload) || !$overrideUserstamps) {
+                        $payload['last_updated_by'] = $user->id;
+                    }
+                }
             }
         }
 
