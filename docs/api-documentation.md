@@ -1070,6 +1070,69 @@ Validator signature:
 fn(\Illuminate\Http\Request $request, ?int $id = null): \Illuminate\Contracts\Validation\Validator
 ```
 
+#### Computed Attributes
+
+- `attributes` (?array, default: `null`): Map of computed field name => callable resolver. Resolvers are **lazy** — they only execute when the field name is explicitly listed in the `?select=` query parameter. When no `?select=` is provided, or the field is not in the requested columns, the resolver is never called.
+
+Supported resolver formats:
+
+| Format | Example |
+|---|---|
+| Closure | `fn($row, $table) => value` |
+| `[Class, method]` array | `[BrandAttribute::class, 'getLogoUrl']` |
+| `'Class@method'` string | `BrandAttribute::class . '@getLogoUrl'` |
+| `'ClassName'` string | `BrandAttribute::class` → calls `handle($row, $table)` |
+
+The resolver class is resolved via the Laravel container (`app()`), so constructor injection works. `$row` is the raw DB row (`stdClass` in most cases).
+
+**Config example:**
+
+```php
+use Sopheak\Core\Types\RecordTableType;
+
+'brands' => new RecordTableType(
+    table: 'brands',
+    attributes: [
+        'full_label' => [\App\Attributes\BrandAttribute::class, 'getFullLabel'],
+        'logo_url'   => \App\Attributes\BrandAttribute::class . '@getLogoUrl',
+        'is_premium' => fn($row, $table) => ($row->tier ?? null) === 'premium',
+    ],
+),
+```
+
+**Attribute class example:**
+
+```php
+namespace App\Attributes;
+
+class BrandAttribute
+{
+    public function getFullLabel(mixed $row, string $table): string
+    {
+        return ($row->name ?? '') . ' (' . ($row->code ?? '') . ')';
+    }
+
+    public function getLogoUrl(mixed $row, string $table): ?string
+    {
+        $path = $row->logo_path ?? null;
+        return $path ? config('app.url') . '/storage/' . $path : null;
+    }
+}
+```
+
+**Requesting computed attributes via `?select=`:**
+
+```
+GET /api/v1/brands                               → no resolvers called
+GET /api/v1/brands?select=id,name                → no resolvers called
+GET /api/v1/brands?select=id,name,full_label     → only full_label resolver fires
+GET /api/v1/brands?select=id,full_label,logo_url → both resolvers fire
+GET /api/v1/brands/1?select=id,logo_url          → logo_url fires on single-record endpoint
+GET /api/v1/brands?select=*,logo_url             → logo_url fires; * fetches all DB columns
+```
+
+> **Note**: Attribute keys are not database columns. They are automatically excluded from the SQL `SELECT` to prevent "Unknown column" errors, while still being resolved and injected into the response after the query.
+
 #### Triggers
 
 - `beforeRead`, `afterRead`, `beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete` (`RecordTableTriggerType|array|null`, default: `null`): Lifecycle triggers. Each value can be:
