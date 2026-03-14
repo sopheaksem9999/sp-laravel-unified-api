@@ -40,7 +40,7 @@ class TimeUtils
         return now();
     }
 
-    public static function parse(DateTimeInterface|WeekDay|Month|string|int|float|null $time, DateTimeZone|string|int|null $timezone = null) {
+    public static function parse(DateTimeInterface|WeekDay|Month|string|int|float|null $time, DateTimeZone|string|int|null $timezone = null): Carbon {
         return Carbon::parse($time, $timezone);
     }
 }

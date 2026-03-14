@@ -126,7 +126,9 @@ final class RecordPayloadExtractor
         if ($hasChanges) {
             $now = TimeUtils::now();
             // allow overriding timestamps if explicitly provided, otherwise set them based on operation type
-            $data['updated_at'] =  !array_key_exists('updated_at', $request) ? $now : TimeUtils::parse($request['updated_at']);
+            $overrideTimestamps = $tableSchema->overrideTimestamps ?? false;
+            $overrideUserstamps = $tableSchema->overrideUserstamps ?? false;
+            $data['updated_at'] =  (!array_key_exists('updated_at', $request) || !$overrideTimestamps) ? $now : $request['updated_at'];
 
             // only set created_at if not update and not explicitly provided
             if (!$isUpdate && !array_key_exists('created_at', $data)) {
@@ -139,14 +141,14 @@ final class RecordPayloadExtractor
                     if ($user) {
                         // support both "updated_by" and "last_updated_by" conventions
                         if (isset($tableSchema->columns['updated_by'])) {
-                            $data['updated_by'] = !array_key_exists('updated_by', $request) ? $user->id : ($request['updated_by']);
+                            $data['updated_by'] = (!array_key_exists('updated_by', $request) || !$overrideUserstamps) ? $user->id : ($request['updated_by']);
                         } elseif (isset($tableSchema->columns['last_updated_by'])) {
-                            $data['last_updated_by'] = !array_key_exists('last_updated_by', $request) ? $user->id : ($request['last_updated_by']);
+                            $data['last_updated_by'] = (!array_key_exists('last_updated_by', $request) || !$overrideUserstamps) ? $user->id : ($request['last_updated_by']);
                         }
                     }
                 } else {
                     if ($user && isset($tableSchema->columns['created_by'])) {
-                        $data['created_by'] = !array_key_exists('created_by', $request) ? $user->id : ($request['created_by']);
+                        $data['created_by'] = (!array_key_exists('created_by', $request) || !$overrideUserstamps) ? $user->id : ($request['created_by']);
                     }
 
                     $tenantColumn = RecordConfigService::tenantColumn();
