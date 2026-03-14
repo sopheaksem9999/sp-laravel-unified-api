@@ -416,6 +416,38 @@ This generates `config/records/tables/customers.php` returning a `RecordTableTyp
 php artisan sp-laravel-api:sync-record-columns --force
 ```
 
+### Computed Attributes (Lazy Response Fields)
+
+You can attach computed fields to any table's read responses using the `attributes` property on `RecordTableType`. Resolvers are **lazy** — they only execute when the field key appears explicitly in `?select=`.
+
+```php
+use Sopheak\Core\Types\RecordTableType;
+
+'brands' => new RecordTableType(
+    table: 'brands',
+    attributes: [
+        // [Class, method] — class resolved via Laravel container
+        'full_label' => [\App\Attributes\BrandAttribute::class, 'getFullLabel'],
+        // 'Class@method' string
+        'logo_url'   => \App\Attributes\BrandAttribute::class . '@getLogoUrl',
+        // inline Closure
+        'is_premium' => fn($row, $table) => ($row->tier ?? null) === 'premium',
+    ],
+),
+```
+
+**Resolver receives** `($row, $table)` where `$row` is the raw DB row (`stdClass`) and `$table` is the table name string.
+
+| Request | Behaviour |
+|---|---|
+| `GET /api/v1/brands` | No resolvers called |
+| `GET /api/v1/brands?select=id,name` | No resolvers called |
+| `GET /api/v1/brands?select=id,full_label` | Only `full_label` resolver fires |
+| `GET /api/v1/brands?select=*,logo_url` | `logo_url` fires; `*` fetches all DB columns |
+| `GET /api/v1/brands/1?select=id,logo_url` | Works identically on single-record endpoint |
+
+Attribute keys are automatically excluded from the SQL `SELECT` to prevent "Unknown column" database errors.
+
 ### Step 8: Test Your Installation
 
 Test the dynamic API endpoints:

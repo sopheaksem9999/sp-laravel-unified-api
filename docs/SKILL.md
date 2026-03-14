@@ -61,6 +61,7 @@ The goal: adding a new API resource means adding one `RecordTableType` — never
 | Soft-delete + restore + force-delete | `softDeletes: true` on `RecordTableType` | Custom delete logic |
 | Hide sensitive columns | `columnHiddens: [...]` in config | `makeHidden()` on model or manual unset |
 | Protect columns from being written | `columnWriteDisabled: [...]` in config | Unset fields in hooks or middleware |
+| Add computed fields to read responses | `attributes: [...]` on `RecordTableType` | Manual post-processing in controller |
 
 ---
 
@@ -338,6 +339,13 @@ new RecordTableType(
     columnHiddens:       ['cost_price'],       // never returned in responses
     columnWriteDisabled: ['sku'],              // silently ignored on create/update
     columnIndexes:       ['name','description'], // included in full-text search
+
+    // Computed attributes — lazy, only resolved when field is in ?select=
+    attributes:          [
+        'full_label' => [\App\Attributes\BrandAttribute::class, 'getFullLabel'],
+        'logo_url'   => \App\Attributes\BrandAttribute::class . '@getLogoUrl',
+        'is_premium' => fn($row, $table) => ($row->tier ?? null) === 'premium',
+    ],
 
     // Composed config (detailed below)
     relationships:       [...],
