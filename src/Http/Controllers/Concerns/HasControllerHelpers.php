@@ -172,7 +172,12 @@ trait HasControllerHelpers
             }
         }
 
-        $perms = PermissionUtils::mapPermissions($table, $action);
+        // Use per-table custom permission map if defined
+        if ($tableSchema instanceof RecordTableType && is_array($tableSchema->permissions) && isset($tableSchema->permissions[$action])) {
+            $perms = (array) $tableSchema->permissions[$action];
+        } else {
+            $perms = PermissionUtils::mapPermissions($table, $action);
+        }
         $allowed = false;
         $authHandler = config('record.authorization');
         foreach ($perms as $perm) {
