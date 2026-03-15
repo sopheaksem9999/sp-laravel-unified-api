@@ -450,24 +450,24 @@ Attribute keys are automatically excluded from the SQL `SELECT` to prevent "Unkn
 
 ### Column Casts
 
-Add a `cast` key to any column definition to transform its raw DB value in the response. Opt-in per column — columns without `cast` are completely untouched. `null` values are always preserved.
+Use the top-level `casting` property on `RecordTableType` — a flat `[column => cast]` map, mirroring Laravel's `$casts` on Eloquent models. Only columns listed in `casting` are transformed; all others are untouched. `null` values are always preserved.
 
 ```php
 use App\Record\Casts\GlobalCasting;
 
 'products' => new RecordTableType(
     table: 'products',
-    columns: [
-        'price'      => ['type' => 'decimal',  'cast' => 'float'],
-        'quantity'   => ['type' => 'integer',  'cast' => 'int'],
-        'is_active'  => ['type' => 'tinyint',  'cast' => 'bool'],
-        'metadata'   => ['type' => 'text',     'cast' => 'array'],   // JSON string → array
-        'score'      => ['type' => 'decimal',  'cast' => 'decimal:4'],
-        'created_at' => ['type' => 'datetime', 'cast' => 'datetime'], // ISO 8601
+    casting: [
+        'price'      => 'float',
+        'quantity'   => 'int',
+        'is_active'  => 'bool',
+        'metadata'   => 'array',          // JSON string → array
+        'score'      => 'decimal:4',
+        'created_at' => 'datetime',       // ISO 8601
         // static method cast
-        'is_cloud'   => ['type' => 'tinyint',  'cast' => [GlobalCasting::class, 'bool']],
+        'is_cloud'   => [GlobalCasting::class, 'bool'],
         // inline Closure
-        'status'     => ['type' => 'varchar',  'cast' => fn($v) => strtoupper($v)],
+        'status'     => fn($v) => strtoupper($v),
     ],
 ),
 ```
