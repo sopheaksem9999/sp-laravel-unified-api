@@ -296,32 +296,30 @@ class RecordApiResponseService
      *   - 'ClassName'       calls ->get($value, $column, $row) on a new instance
      *
      * @param mixed $data    Single record, sequential list, Collection, or LengthAwarePaginator
-     * @param array $columns Column definitions from RecordTableType::$columns
+     * @param array $columns Column definitions from RecordTableType::$columns (used only to skip compositeFields columns)
+     * @param array $casting Top-level cast map from RecordTableType::$casting ([column => cast])
      */
-    public static function applyCasts(mixed $data, array $columns): mixed
+    public static function applyCasts(mixed $data, array $columns, array $casting = []): mixed
     {
-        if (null === $data || [] === $columns) {
+        if (null === $data || [] === $casting) {
             return $data;
         }
 
-        // Build cast map — skip columns with no 'cast' key and columns that have
-        // compositeFields (those are already handled by convertCompositeFields)
+        // Build cast map from top-level $casting only.
+        // Skip columns that also define compositeFields (already handled by convertCompositeFields).
         $castMap = [];
-        foreach ($columns as $col => $meta) {
-            if (!is_array($meta) || !array_key_exists('cast', $meta)) {
+        foreach ($casting as $col => $cast) {
+            $colStr = (string) $col;
+            $colMeta = $columns[$colStr] ?? null;
+            if (is_array($colMeta) && (!empty($colMeta['compositeFields']) || !empty($colMeta['composite_fields']))) {
                 continue;
             }
-            if (!empty($meta['compositeFields']) || !empty($meta['composite_fields'])) {
-                continue;
-            }
-            $castMap[(string) $col] = $meta['cast'];
+            $castMap[$colStr] = $cast;
         }
 
         if ([] === $castMap) {
             return $data;
         }
-
-        // Resolve custom callables once; leave built-in strings as descriptor arrays
         $resolved = [];
         foreach ($castMap as $col => $cast) {
             if ($cast instanceof \Closure) {

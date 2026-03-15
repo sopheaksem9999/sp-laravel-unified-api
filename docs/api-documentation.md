@@ -1099,7 +1099,7 @@ GET /api/v1/brands?select=*,logo_url             → logo_url fires; * fetches a
 
 #### Column Casts
 
-Each entry in `columns` accepts an optional `cast` key that transforms the raw DB value before it is returned in the response. Casting is **opt-in** — only columns with an explicit `cast` key are affected; all others pass through unchanged. `null` values are always preserved as-is.
+`RecordTableType` accepts a top-level `casting` property — a flat `[column => cast]` map that mirrors Laravel's `$casts` on Eloquent models. Casting is **opt-in** — only columns listed in `casting` are transformed; all others pass through unchanged. `null` values are always preserved as-is. Columns that use `compositeFields` are automatically skipped.
 
 Supported built-in cast strings (Laravel-compatible names):
 
@@ -1135,18 +1135,20 @@ use App\Record\Casts\GlobalCasting;
 
 'brands' => new RecordTableType(
     table: 'brands',
-    columns: [
-        'name'       => ['type' => 'varchar',  'nullable' => false],
-        'price'      => ['type' => 'decimal',  'cast' => 'float'],
-        'quantity'   => ['type' => 'integer',  'cast' => 'int'],
-        'is_active'  => ['type' => 'tinyint',  'cast' => 'bool'],
-        'metadata'   => ['type' => 'text',     'cast' => 'array'],
-        'score'      => ['type' => 'decimal',  'cast' => 'decimal:4'],
-        'created_at' => ['type' => 'datetime', 'cast' => 'datetime'],
+    casting: [
+        'price'      => 'float',
+        'quantity'   => 'int',
+        'is_active'  => 'bool',
+        'metadata'   => 'array',
+        'score'      => 'decimal:4',
+        'created_at' => 'datetime',
         // custom static method
-        'is_cloud'   => ['type' => 'tinyint',  'cast' => [GlobalCasting::class, 'bool']],
+        'is_cloud'   => [GlobalCasting::class, 'bool'],
         // inline Closure
-        'status'     => ['type' => 'varchar',  'cast' => fn($v) => strtoupper($v)],
+        'status'     => fn($v) => strtoupper($v),
+    ],
+    columns: [
+        'name' => ['type' => 'varchar', 'nullable' => false],
     ],
 ),
 ```

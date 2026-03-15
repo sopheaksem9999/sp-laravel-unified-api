@@ -1693,7 +1693,7 @@ class RecordService
         $data = RecordApiResponseService::removeDeletedAtFields($data);
         $data = RecordApiResponseService::removeHiddenFields($data, $table);
         $data = RecordApiResponseService::convertCompositeFields($data, $table);
-        $data = RecordApiResponseService::applyCasts($data, $tableSchema->columns ?? []);
+        $data = RecordApiResponseService::applyCasts($data, $tableSchema->columns ?? [], $tableSchema->casting ?? []);
         if (!empty($tableSchema->attributes)) {
             $requestedCols = $request->has('select')
                 ? RelationshipResolverUtils::getMainTableColumns($request->query('select'))
@@ -2038,7 +2038,7 @@ class RecordService
         $data = RecordApiResponseService::removeDeletedAtFields($data);
         $data = RecordApiResponseService::removeHiddenFields($data, $table);
         $data = RecordApiResponseService::convertCompositeFields($data, $table);
-        $data = RecordApiResponseService::applyCasts($data, $tableSchema instanceof RecordTableType ? ($tableSchema->columns ?? []) : []);
+        $data = RecordApiResponseService::applyCasts($data, $tableSchema instanceof RecordTableType ? ($tableSchema->columns ?? []) : [], $tableSchema instanceof RecordTableType ? ($tableSchema->casting ?? []) : []);
         if ($tableSchema instanceof RecordTableType && !empty($tableSchema->attributes)) {
             $requestedCols = $request->has('select')
                 ? RelationshipResolverUtils::getMainTableColumns($request->query('select'))
@@ -2218,7 +2218,7 @@ class RecordService
 
         $record = RecordApiResponseService::removeDeletedAtFields($record);
         $record = RecordApiResponseService::convertCompositeFields($record, $table);
-        $record = RecordApiResponseService::applyCasts($record, $tableSchema->columns ?? []);
+        $record = RecordApiResponseService::applyCasts($record, $tableSchema->columns ?? [], $tableSchema->casting ?? []);
         if (!empty($tableSchema->attributes)) {
             $requestedCols = $request->has('select')
                 ? RelationshipResolverUtils::getMainTableColumns($request->query('select'))

@@ -62,7 +62,7 @@ The goal: adding a new API resource means adding one `RecordTableType` — never
 | Hide sensitive columns | `columnHiddens: [...]` in config | `makeHidden()` on model or manual unset |
 | Protect columns from being written | `columnWriteDisabled: [...]` in config | Unset fields in hooks or middleware |
 | Add computed fields to read responses | `attributes: [...]` on `RecordTableType` | Manual post-processing in controller |
-| Cast raw DB column values in responses | `cast` key in `columns` entry | Manual type coercion in hooks or controller |
+| Cast raw DB column values in responses | `casting: [...]` on `RecordTableType` | Manual type coercion in hooks or controller |
 
 ---
 
@@ -348,18 +348,19 @@ new RecordTableType(
         'is_premium' => fn($row, $table) => ($row->tier ?? null) === 'premium',
     ],
 
-    // Column casts — transform raw DB values in responses (opt-in per column, null preserved)
+    // Column casts — top-level map mirroring Laravel's $casts on Eloquent models
     // Built-ins: int, integer, float, double, real, decimal, decimal:N, string,
     //            bool, boolean, array, json, object, date, datetime, timestamp
     // Custom callable receives ($value, $column, $row):
     //   Closure | [Class, 'method'] (static or instance) | 'Class@method' | 'ClassName'→get()
-    // columns without 'cast' are untouched; compositeFields columns are skipped
-    columns: [
-        'price'    => ['type' => 'decimal',  'cast' => 'float'],
-        'is_cloud' => ['type' => 'tinyint',  'cast' => [\App\Record\Casts\GlobalCasting::class, 'bool']],
-        'metadata' => ['type' => 'text',     'cast' => 'array'],
-        'status'   => ['type' => 'varchar',  'cast' => fn($v) => strtoupper($v)],
+    // Only listed columns are cast; null values preserved; compositeFields columns skipped
+    casting: [
+        'price'    => 'float',
+        'is_cloud' => [\App\Record\Casts\GlobalCasting::class, 'bool'],
+        'metadata' => 'array',
+        'status'   => fn($v) => strtoupper($v),
     ],
+    columns: [...],  // no 'cast' key needed inside column entries
 
     // Composed config (detailed below)
     relationships:       [...],
