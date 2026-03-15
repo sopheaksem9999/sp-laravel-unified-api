@@ -787,6 +787,28 @@ class User extends Authenticatable
 }
 ```
 
+#### Per-Table Custom Permission Names
+
+Instead of relying on the auto-generated `pmsName:action` pattern, you can declare exact permission names per action directly on `RecordTableType` using the `permissions` property:
+
+```php
+'items' => new RecordTableType(
+    table: 'items',
+    pmsName: 'item',  // fallback for any action not in the permissions map
+    permissions: [
+        'read'    => 'view_list_item',
+        'create'  => 'insert_new_item',
+        'update'  => 'update_existing_item',
+        'delete'  => 'remove_item',
+        'restore' => 'restore_item',
+    ],
+),
+```
+
+Partial overrides are supported — actions not listed fall back to the standard `pmsName`-based generation. Values can also be arrays for OR-logic: `'read' => ['view_item', 'admin_access']`.
+
+> **No breaking change**: `permissions: null` (the default) preserves identical behavior to previous versions.
+
 ## 🧪 Testing Instructions
 
 ### Running Package Tests
