@@ -2004,8 +2004,13 @@ class RecordService
                 if ([] !== $recordIds) {
                     $optimizedBuilder = DB::table($actualTableName);
                     $mainCols = RelationshipResolverUtils::getMainTableColumns($selectParam);
-                    if ([] !== $mainCols) {
-                        $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $mainCols);
+                    // Strip computed attribute keys — they are not real DB columns
+                    $attributeKeys = $tableSchema instanceof RecordTableType ? array_keys($tableSchema->attributes ?? []) : [];
+                    $dbMainCols = $attributeKeys !== []
+                        ? array_values(array_diff($mainCols, $attributeKeys))
+                        : $mainCols;
+                    if ([] !== $dbMainCols) {
+                        $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $dbMainCols);
                         $optimizedBuilder->select($prefixedCols);
                     } else {
                         $optimizedBuilder->select($actualTableName . '.*');

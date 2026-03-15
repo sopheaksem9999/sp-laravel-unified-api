@@ -57,6 +57,7 @@ The goal: adding a new API resource means adding one `RecordTableType` — never
 | Build a list endpoint (custom query) | `RecordService::applyRequestFilters()` or Builder macro | Manual pagination + response shaping |
 | Return a JSON response | `RecordApiResponseService` static methods | `response()->json()` directly |
 | Guard an endpoint by permission | `pmsName` on `RecordTableType` or `RecordFunctionType` | Route middleware `can:` or manual `Gate::check()` |
+| Override permission names per action | `permissions: [...]` on `RecordTableType` | Custom `authorization` handler in `config/record.php` |
 | Multi-tenant isolation | `hasTenantId: true` on `RecordTableType` | Manual `where('tenant_id', ...)` in hooks |
 | Soft-delete + restore + force-delete | `softDeletes: true` on `RecordTableType` | Custom delete logic |
 | Hide sensitive columns | `columnHiddens: [...]` in config | `makeHidden()` on model or manual unset |
@@ -361,6 +362,18 @@ new RecordTableType(
         'status'   => fn($v) => strtoupper($v),
     ],
     columns: [...],  // no 'cast' key needed inside column entries
+
+    // Per-table permission map — overrides pmsName-based auto-generated permissions per action.
+    // Keys: 'read', 'create', 'update', 'delete', 'restore'
+    // Values: string | string[] (any one matching permission grants access)
+    // Actions not listed fall back to standard pmsName + permission_separator mapping.
+    permissions: [
+        'read'    => 'view_list_item',
+        'create'  => 'insert_new_item',
+        'update'  => 'update_existing_item',
+        'delete'  => 'remove_item',
+        'restore' => 'restore_item',
+    ],
 
     // Composed config (detailed below)
     relationships:       [...],

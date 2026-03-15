@@ -1205,6 +1205,42 @@ class GlobalCasting
 
 > **Note**: Columns that also define `compositeFields` are skipped by cast processing — composite type conversion takes precedence.
 
+#### Per-Action Permission Map
+
+- `permissions` (?array, default: `null`): Per-table map that overrides the auto-generated `pmsName`-based permissions for specific actions. Only the actions listed in this map are affected — all other actions still fall back to the standard `PermissionUtils::mapPermissions()` logic using `pmsName` and `permission_separator`.
+
+Supported action keys:
+
+| Key | Applied by |
+|---|---|
+| `'read'` | `listRecords` (GET list) and `getRecordById` (GET single) |
+| `'create'` | `createRecord` and the create-check in `upsertRecord` |
+| `'update'` | `updateRecord` and the update-check in `upsertRecord` |
+| `'delete'` | `destroyRecord` and `forceDeleteRecord` |
+| `'restore'` | `restoreRecord` |
+
+The value for each action can be a single permission string or an array of strings. Any one matching permission grants access (same OR logic used by the standard permission resolver).
+
+**Config example:**
+
+```php
+'items' => new RecordTableType(
+    table: 'items',
+    pmsName: 'item',  // still used for actions not listed in permissions
+    permissions: [
+        'read'    => 'view_list_item',
+        'create'  => 'insert_new_item',
+        'update'  => 'update_existing_item',
+        'delete'  => 'remove_item',
+        'restore' => 'restore_item',
+        // partial overrides also work — e.g. only override 'read':
+        // 'read' => ['view_item', 'admin_access'],
+    ],
+),
+```
+
+> **Backward compatibility**: When `permissions` is `null` (the default), all actions use the existing `pmsName`-based permission generation unchanged.
+
 #### Triggers
 
 - `beforeRead`, `afterRead`, `beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete` (`RecordTableTriggerType|array|null`, default: `null`): Lifecycle triggers. Each value can be:
