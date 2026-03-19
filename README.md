@@ -471,6 +471,7 @@ use App\Record\Casts\GlobalCasting;
         'price' => ['type' => 'decimal(12,2)'],
     ],
     casting: [
+        // flat main-table casts
         'price'      => 'float',
         'quantity'   => 'int',
         'is_active'  => 'bool',
