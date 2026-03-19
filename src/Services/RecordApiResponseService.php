@@ -551,16 +551,33 @@ class RecordApiResponseService
             return ['callable' => [app($class), $method]];
         }
 
-        if (class_exists($cast)) {
-            return ['callable' => [app($cast), 'get']];
-        }
-
         $builtin = strtolower($cast);
         $allowedBuiltins = [
-            'int', 'integer', 'float', 'double', 'real', 'decimal', 'string',
-            'bool', 'boolean', 'array', 'json', 'object', 'date', 'datetime', 'timestamp',
+            'int',
+            'integer',
+            'float',
+            'double',
+            'real',
+            'decimal',
+            'string',
+            'bool',
+            'boolean',
+            'array',
+            'json',
+            'object',
+            'date',
+            'datetime',
+            'timestamp',
         ];
         if (!in_array($builtin, $allowedBuiltins, true) && !str_starts_with($builtin, 'decimal:')) {
+            if (class_exists($cast)) {
+                if (method_exists($cast, 'get')) {
+                    return ['callable' => [app($cast), 'get']];
+                }
+
+                throw new InvalidArgumentException(sprintf("Invalid cast class '%s' for column '%s' at %s: class must define method get()", $cast, $column, $source));
+            }
+
             throw new InvalidArgumentException(sprintf("Unsupported cast '%s' for column '%s' at %s", $cast, $column, $source));
         }
 

@@ -510,6 +510,32 @@ class BasicTest extends TestCase
     }
 
     /** @test */
+    public function it_treats_datetime_class_name_string_as_builtin_datetime_cast(): void
+    {
+        $row = [
+            'created_at' => '2026-01-20 10:11:12',
+        ];
+
+        $casted = RecordApiResponseService::applyCasts($row, [], [
+            'created_at' => 'DateTime',
+        ]);
+
+        $this->assertIsString($casted['created_at']);
+        $this->assertStringStartsWith('2026-01-20T10:11:12', $casted['created_at']);
+    }
+
+    /** @test */
+    public function it_throws_clear_error_when_cast_class_does_not_define_get_method(): void
+    {
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage("Invalid cast class 'DateTimeImmutable' for column 'created_at' at RecordTableType::casting.created_at: class must define method get()");
+
+        RecordApiResponseService::applyCasts(['created_at' => '2026-01-20 10:11:12'], [], [
+            'created_at' => 'DateTimeImmutable',
+        ]);
+    }
+
+    /** @test */
     public function it_exports_pgsql_defaults_without_escaped_single_quotes(): void
     {
         $command = new SyncRecordColumnsCommand();
