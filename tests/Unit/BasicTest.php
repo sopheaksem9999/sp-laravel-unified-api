@@ -10,6 +10,7 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use PDO;
 use Illuminate\Console\OutputStyle;
@@ -409,6 +410,132 @@ class BasicTest extends TestCase
     }
 
     /** @test */
+    public function it_auto_casts_common_numeric_and_boolean_column_types_from_string_values(): void
+    {
+        $row = [
+            'is_active' => '0',
+            'quantity' => '12',
+            'price' => '19.75',
+            'rating' => '4.5',
+        ];
+
+        $columns = [
+            'is_active' => ['type' => 'boolean'],
+            'quantity' => ['type' => 'bigint'],
+            'price' => ['type' => 'decimal(12,2)'],
+            'rating' => ['type' => 'double precision'],
+        ];
+
+        $casted = RecordApiResponseService::applyCasts($row, $columns);
+
+        $this->assertIsBool($casted['is_active']);
+        $this->assertFalse($casted['is_active']);
+        $this->assertIsInt($casted['quantity']);
+        $this->assertSame(12, $casted['quantity']);
+        $this->assertIsFloat($casted['price']);
+        $this->assertSame(19.75, $casted['price']);
+        $this->assertIsFloat($casted['rating']);
+        $this->assertSame(4.5, $casted['rating']);
+    }
+
+    /** @test */
+    public function it_allows_explicit_casting_to_override_inferred_column_type_casts(): void
+    {
+        $row = [
+            'quantity' => '12',
+            'is_active' => 'true',
+        ];
+
+        $columns = [
+            'quantity' => ['type' => 'integer'],
+            'is_active' => ['type' => 'bool'],
+        ];
+
+        $casted = RecordApiResponseService::applyCasts($row, $columns, [
+            'quantity' => fn($value): string => 'Q-' . $value,
+            'is_active' => 'string',
+        ]);
+
+        $this->assertSame('Q-12', $casted['quantity']);
+        $this->assertSame('true', $casted['is_active']);
+    }
+
+    /** @test */
+    public function it_uses_global_casting_when_table_casting_is_not_defined(): void
+    {
+        Config::set('record.casting', [
+            'quantity' => 'integer',
+        ]);
+
+        $row = [
+            'quantity' => '21',
+        ];
+
+        $casted = RecordApiResponseService::applyCasts($row, []);
+
+        $this->assertIsInt($casted['quantity']);
+        $this->assertSame(21, $casted['quantity']);
+    }
+
+    /** @test */
+    public function it_prioritizes_record_table_type_casting_over_global_casting(): void
+    {
+        Config::set('record.casting', [
+            'quantity' => 'integer',
+        ]);
+
+        $row = [
+            'quantity' => '21',
+        ];
+
+        $casted = RecordApiResponseService::applyCasts($row, [], [
+            'quantity' => 'string',
+        ]);
+
+        $this->assertIsString($casted['quantity']);
+        $this->assertSame('21', $casted['quantity']);
+    }
+
+    /** @test */
+    public function it_throws_clear_error_for_invalid_global_casting_configuration(): void
+    {
+        Config::set('record.casting', [
+            'quantity' => ['invalid'],
+        ]);
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage("Invalid cast definition for column 'quantity' at record.casting.quantity");
+
+        RecordApiResponseService::applyCasts(['quantity' => '21'], []);
+    }
+
+    /** @test */
+    public function it_treats_datetime_class_name_string_as_builtin_datetime_cast(): void
+    {
+        $row = [
+            'created_at' => '2026-01-20 10:11:12',
+        ];
+
+        $casted = RecordApiResponseService::applyCasts($row, [], [
+            'created_at' => 'DateTime',
+        ]);
+
+        $this->assertIsString($casted['created_at']);
+        $this->assertStringStartsWith('2026-01-20T10:11:12', $casted['created_at']);
+    }
+
+    /** @test */
+    public function it_throws_clear_error_when_cast_class_does_not_define_get_method(): void
+    {
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage("Invalid cast class 'DateTimeImmutable' for column 'created_at' at RecordTableType::casting.created_at: class must define method get()");
+
+        RecordApiResponseService::applyCasts(['created_at' => '2026-01-20 10:11:12'], [], [
+            'created_at' => 'DateTimeImmutable',
+        ]);
+    }
+
+    /** @test */
     public function it_exports_pgsql_defaults_without_escaped_single_quotes(): void
     {
         $command = new SyncRecordColumnsCommand();
@@ -640,6 +767,7 @@ class BasicTest extends TestCase
     public function it_includes_error_debug_meta_when_x_debug_header_is_enabled(): void
     {
         Config::set('record.debug', false);
+        Log::spy();
 
         $request = Request::create('/api/test', 'GET', [], [], [], [
             'HTTP_X_DEBUG' => 'true',
@@ -654,12 +782,14 @@ class BasicTest extends TestCase
         $this->assertSame(false, $payload['success']);
         $this->assertSame('req-debug-header', $payload['meta']['request_id']);
         $this->assertSame('Header debug error', $payload['meta']['debug']['exception_message'] ?? null);
+        Log::shouldHaveReceived('error')->once();
     }
 
     /** @test */
     public function it_hides_error_debug_meta_when_debug_is_disabled_and_no_header(): void
     {
         Config::set('record.debug', false);
+        Log::spy();
 
         $request = Request::create('/api/test', 'GET');
         $request->attributes->set('request_id', 'req-no-debug');
@@ -671,6 +801,26 @@ class BasicTest extends TestCase
 
         $this->assertSame(false, $payload['success']);
         $this->assertArrayNotHasKey('debug', $payload['meta']);
+        Log::shouldNotHaveReceived('error');
+    }
+
+    /** @test */
+    public function it_logs_error_wrapped_when_debug_is_enabled(): void
+    {
+        Config::set('record.debug', true);
+        Log::spy();
+
+        $request = Request::create('/api/test', 'POST');
+        $request->attributes->set('request_id', 'req-debug-log');
+
+        $this->app->instance('request', $request);
+
+        $response = RecordApiResponseService::errorWrapped('Wrapped error', 500, ['field' => ['invalid']]);
+        $payload = $response->getData(true);
+
+        $this->assertSame(false, $payload['success']);
+        $this->assertSame('req-debug-log', $payload['meta']['request_id']);
+        Log::shouldHaveReceived('error')->once();
     }
 
     /** @test */

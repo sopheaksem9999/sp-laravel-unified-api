@@ -119,8 +119,9 @@ return [
     ],
 
     // Include debug details in API error responses when enabled.
+    // Also writes error payloads/exceptions to Laravel log when enabled.
     // Can also be toggled per request with header: X-Debug: true
-    'debug' => false,
+    'debug' => env('SP_LARAVEL_API_DEBUG', false),
 
     // permission 
     'permission_separator' => ':', // separator for permission ex: view:invoice
@@ -207,6 +208,24 @@ return [
     ],
 
     'global_triggers' => [
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Global Column Casting
+    |--------------------------------------------------------------------------
+    |
+    | Define default response casts for all records using a flat map:
+    | [column_name => cast_rule].
+    |
+    | Priority:
+    | 1) RecordTableType::$casting (table-level)
+    | 2) record.casting (this global map)
+    | 3) columns[*].cast
+    | 4) inferred cast from columns[*].type / columns[*].udt_name
+    |
+    */
+    'casting' => [
     ],
 
     'default_validation' => [

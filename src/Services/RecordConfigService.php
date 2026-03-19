@@ -130,6 +130,11 @@ class RecordConfigService
         return (array) config('record.global_triggers', []);
     }
 
+    public static function globalCasting(): array
+    {
+        return (array) config('record.casting', []);
+    }
+
     public static function defaultValidationEnabled(): bool
     {
         return (bool) config('record.default_validation.enabled', true);

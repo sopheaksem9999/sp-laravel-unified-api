@@ -534,6 +534,34 @@ Record endpoints use table-level access rules from `config/record.php`:
 
 - If a table/action is configured as public (`RecordTablePublic`), the endpoint is accessible without authentication.
 - Otherwise, the controller requires an authenticated user from the guard configured in `config/sp-laravel-api.php` (`sp-laravel-api.auth.guard`, default: `api`) and checks permissions.
+- Permission checks support a custom authorization handler via `record.authorization`.
+
+Custom authorization handler (`record.authorization`) options:
+
+- `null` (default): use `Gate::forUser($user)->allows($permission)`
+- class-string: resolved from container and called as `handle($user, $permission, $table, $action): bool`
+- closure/callable: called as `fn($user, string $permission, string $table, string $action): bool`
+
+Example:
+
+```php
+// config/record.php
+'authorization' => \App\Security\RecordAuthorization::class,
+```
+
+```php
+<?php
+
+namespace App\Security;
+
+final class RecordAuthorization
+{
+    public function handle(mixed $user, string $permission, string $table, string $action): bool
+    {
+        return \Illuminate\Support\Facades\Gate::forUser($user)->allows($permission);
+    }
+}
+```
 
 ### Middleware Stack
 
@@ -595,6 +623,14 @@ Source priority behavior (built-in):
 
 - `attribute`: recommended for trusted middleware-populated tenant (`resolved_tenant_id`) or context tenant (`record_context.tenant_id`)
 - `header`: fallback to tenant header (`X-Tenant-ID` by default)
+
+This same priority is also used by Eloquent trait filtering (`QueryHelpersTrait::scopeApplyRequestFilters`), so model queries remain aligned with dynamic CRUD tenant behavior.
+
+Tenant filtering in `QueryHelpersTrait` is applied when tenant mode is enabled and tenant column exists by any of:
+
+- model `fillable`
+- registered `RecordTableType` columns
+- database schema column check
 
 Example middleware to set trusted tenant (`resolved_tenant_id`) and enrich `record_context`:
 
@@ -1135,11 +1171,29 @@ Custom cast forms — the callable receives `($value, $column, $row)`:
 ```php
 use App\Record\Casts\GlobalCasting;
 
+// config/record.php
+'casting' => [
+    'is_active' => 'bool',
+    'amount' => 'decimal:2',
+],
+
+// table config
 'brands' => new RecordTableType(
     table: 'brands',
+    columns: [
+        'is_active' => ['type' => 'boolean'],
+        'quantity' => ['type' => 'bigint'],
+        'price' => ['type' => 'decimal(12,2)'],
+        'name' => ['type' => 'varchar', 'nullable' => false],
+    ],
     casting: [
-        'price'      => 'float',
-        'quantity'   => 'int',
+        // explicit override (custom output format)
+        'price'      => fn($v) => number_format((float) $v, 2, '.', ''),
+        // overrides global record.casting['amount'] when table-level is defined
+        'amount'     => 'string',
+        // explicit override from inferred integer
+        'quantity'   => 'string',
+        // explicit override from inferred boolean
         'is_active'  => 'bool',
         'metadata'   => 'array',
         'score'      => 'decimal:4',
@@ -1148,9 +1202,6 @@ use App\Record\Casts\GlobalCasting;
         'is_cloud'   => [GlobalCasting::class, 'bool'],
         // inline Closure
         'status'     => fn($v) => strtoupper($v),
-    ],
-    columns: [
-        'name' => ['type' => 'varchar', 'nullable' => false],
     ],
 ),
 ```
@@ -1572,6 +1623,7 @@ Retrieve a paginated list of records with filtering, sorting, and relationship l
     - `cache_efficiency`
   - on error responses, `meta.debug` may include exception context (`exception`, `exception_message`, `file`, `line`).
 - `record.debug` (config, boolean, default: `false`) also enables error debug details globally without needing `X-Debug`.
+- When debug mode is enabled (via config or header), error responses are also written to Laravel log (`Log::error`) with request context and error metadata.
 
 **Filter Operators**
 Filters are usually passed as `{column}={operator}.{value}` (operators validated against the table schema). Some operators support a value-less shorthand form for `null`:
