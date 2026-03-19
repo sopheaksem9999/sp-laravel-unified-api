@@ -119,8 +119,9 @@ return [
     ],
 
     // Include debug details in API error responses when enabled.
+    // Also writes error payloads/exceptions to Laravel log when enabled.
     // Can also be toggled per request with header: X-Debug: true
-    'debug' => false,
+    'debug' => env('SP_LARAVEL_API_DEBUG', false),
 
     // permission 
     'permission_separator' => ':', // separator for permission ex: view:invoice

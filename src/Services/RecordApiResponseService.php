@@ -844,6 +844,19 @@ class RecordApiResponseService
             $meta['debug'] = $debug;
         }
 
+        if (self::shouldIncludeDebugDetails()) {
+            Log::error('SP Laravel API error response', [
+                'message' => $message,
+                'status' => $status,
+                'error_code' => $resolvedErrorCode,
+                'errors' => $errors,
+                'request_id' => $requestId,
+                'path' => request()->path(),
+                'method' => request()->method(),
+                'debug' => $debug,
+            ]);
+        }
+
         return response()->json([
             'success' => false,
             'error_code' => $resolvedErrorCode,
@@ -855,19 +868,6 @@ class RecordApiResponseService
 
     public static function errorFromException(Throwable $exception, string $message = 'An error occurred', int $status = RecordApiJsonResponseEnum::SERVER_ERROR->value, array $errors = [], ?int $error_code = null): JsonResponse
     {
-        if (self::shouldIncludeDebugDetails()) {
-            Log::error('SP Laravel API exception', [
-                'message' => $exception->getMessage(),
-                'type' => $exception::class,
-                'code' => $exception->getCode(),
-                'file' => $exception->getFile(),
-                'line' => $exception->getLine(),
-                'request_id' => request()->attributes->get('request_id'),
-                'path' => request()->path(),
-                'method' => request()->method(),
-            ]);
-        }
-
         $debug = null;
         if (self::shouldIncludeDebugDetails()) {
             $debug = [
