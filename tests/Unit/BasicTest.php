@@ -409,6 +409,106 @@ class BasicTest extends TestCase
     }
 
     /** @test */
+    public function it_auto_casts_common_numeric_and_boolean_column_types_from_string_values(): void
+    {
+        $row = [
+            'is_active' => '0',
+            'quantity' => '12',
+            'price' => '19.75',
+            'rating' => '4.5',
+        ];
+
+        $columns = [
+            'is_active' => ['type' => 'boolean'],
+            'quantity' => ['type' => 'bigint'],
+            'price' => ['type' => 'decimal(12,2)'],
+            'rating' => ['type' => 'double precision'],
+        ];
+
+        $casted = RecordApiResponseService::applyCasts($row, $columns);
+
+        $this->assertIsBool($casted['is_active']);
+        $this->assertFalse($casted['is_active']);
+        $this->assertIsInt($casted['quantity']);
+        $this->assertSame(12, $casted['quantity']);
+        $this->assertIsFloat($casted['price']);
+        $this->assertSame(19.75, $casted['price']);
+        $this->assertIsFloat($casted['rating']);
+        $this->assertSame(4.5, $casted['rating']);
+    }
+
+    /** @test */
+    public function it_allows_explicit_casting_to_override_inferred_column_type_casts(): void
+    {
+        $row = [
+            'quantity' => '12',
+            'is_active' => 'true',
+        ];
+
+        $columns = [
+            'quantity' => ['type' => 'integer'],
+            'is_active' => ['type' => 'bool'],
+        ];
+
+        $casted = RecordApiResponseService::applyCasts($row, $columns, [
+            'quantity' => fn($value): string => 'Q-' . $value,
+            'is_active' => 'string',
+        ]);
+
+        $this->assertSame('Q-12', $casted['quantity']);
+        $this->assertSame('true', $casted['is_active']);
+    }
+
+    /** @test */
+    public function it_uses_global_casting_when_table_casting_is_not_defined(): void
+    {
+        Config::set('record.casting', [
+            'quantity' => 'integer',
+        ]);
+
+        $row = [
+            'quantity' => '21',
+        ];
+
+        $casted = RecordApiResponseService::applyCasts($row, []);
+
+        $this->assertIsInt($casted['quantity']);
+        $this->assertSame(21, $casted['quantity']);
+    }
+
+    /** @test */
+    public function it_prioritizes_record_table_type_casting_over_global_casting(): void
+    {
+        Config::set('record.casting', [
+            'quantity' => 'integer',
+        ]);
+
+        $row = [
+            'quantity' => '21',
+        ];
+
+        $casted = RecordApiResponseService::applyCasts($row, [], [
+            'quantity' => 'string',
+        ]);
+
+        $this->assertIsString($casted['quantity']);
+        $this->assertSame('21', $casted['quantity']);
+    }
+
+    /** @test */
+    public function it_throws_clear_error_for_invalid_global_casting_configuration(): void
+    {
+        Config::set('record.casting', [
+            'quantity' => ['invalid'],
+        ]);
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage("Invalid cast definition for column 'quantity' at record.casting.quantity");
+
+        RecordApiResponseService::applyCasts(['quantity' => '21'], []);
+    }
+
+    /** @test */
     public function it_exports_pgsql_defaults_without_escaped_single_quotes(): void
     {
         $command = new SyncRecordColumnsCommand();

@@ -1135,7 +1135,20 @@ GET /api/v1/brands?select=*,logo_url             → logo_url fires; * fetches a
 
 #### Column Casts
 
-`RecordTableType` accepts a top-level `casting` property — a flat `[column => cast]` map that mirrors Laravel's `$casts` on Eloquent models. Casting is **opt-in** — only columns listed in `casting` are transformed; all others pass through unchanged. `null` values are always preserved as-is. Columns that use `compositeFields` are automatically skipped.
+`RecordTableType` supports response casting from two sources:
+
+- auto-inferred casts from `columns[*].type` / `columns[*].udt_name`
+- explicit top-level `casting` map (`[column => cast]`)
+- global `record.casting` map in `config/record.php` (`[column => cast]`)
+
+Precedence:
+
+- `RecordTableType::casting` (top-level) overrides everything
+- `record.casting` (global) overrides column-level and inferred casts
+- `columns[*].cast` overrides inferred type
+- inferred type is used as default when no explicit cast is provided
+
+`null` values are always preserved as-is. Columns that use `compositeFields` are automatically skipped.
 
 Supported built-in cast strings (Laravel-compatible names):
 
@@ -1169,11 +1182,29 @@ Custom cast forms — the callable receives `($value, $column, $row)`:
 ```php
 use App\Record\Casts\GlobalCasting;
 
+// config/record.php
+'casting' => [
+    'is_active' => 'bool',
+    'amount' => 'decimal:2',
+],
+
+// table config
 'brands' => new RecordTableType(
     table: 'brands',
+    columns: [
+        'is_active' => ['type' => 'boolean'],
+        'quantity' => ['type' => 'bigint'],
+        'price' => ['type' => 'decimal(12,2)'],
+        'name' => ['type' => 'varchar', 'nullable' => false],
+    ],
     casting: [
-        'price'      => 'float',
-        'quantity'   => 'int',
+        // explicit override (custom output format)
+        'price'      => fn($v) => number_format((float) $v, 2, '.', ''),
+        // overrides global record.casting['amount'] when table-level is defined
+        'amount'     => 'string',
+        // explicit override from inferred integer
+        'quantity'   => 'string',
+        // explicit override from inferred boolean
         'is_active'  => 'bool',
         'metadata'   => 'array',
         'score'      => 'decimal:4',
@@ -1182,9 +1213,6 @@ use App\Record\Casts\GlobalCasting;
         'is_cloud'   => [GlobalCasting::class, 'bool'],
         // inline Closure
         'status'     => fn($v) => strtoupper($v),
-    ],
-    columns: [
-        'name' => ['type' => 'varchar', 'nullable' => false],
     ],
 ),
 ```

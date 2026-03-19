@@ -178,6 +178,7 @@ trait HasControllerHelpers
         } else {
             $perms = PermissionUtils::mapPermissions($table, $action);
         }
+
         $allowed = false;
         $authHandler = config('record.authorization');
         foreach ($perms as $perm) {

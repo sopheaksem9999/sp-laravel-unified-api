@@ -450,16 +450,35 @@ Attribute keys are automatically excluded from the SQL `SELECT` to prevent "Unkn
 
 ### Column Casts
 
-Use the top-level `casting` property on `RecordTableType` — a flat `[column => cast]` map, mirroring Laravel's `$casts` on Eloquent models. Only columns listed in `casting` are transformed; all others are untouched. `null` values are always preserved.
+Casting supports defaults and overrides:
+
+- default auto-cast from `columns[*].type` / `columns[*].udt_name` (helps when DB drivers return strings for bool/int/float)
+- optional global `record.casting` map in `config/record.php` for cross-table defaults
+- optional `columns[*].cast` for per-column override
+- optional top-level `casting` for global explicit override
+
+Precedence: `RecordTableType::casting` > `record.casting` > `columns[*].cast` > inferred type. `null` values are preserved.
 
 ```php
 use App\Record\Casts\GlobalCasting;
 
+// config/record.php
+'casting' => [
+    'is_active' => 'bool',
+    'amount' => 'decimal:2',
+],
+
 'products' => new RecordTableType(
     table: 'products',
+    columns: [
+        'is_active' => ['type' => 'boolean'],
+        'quantity' => ['type' => 'bigint'],
+        'price' => ['type' => 'decimal(12,2)'],
+    ],
     casting: [
-        'price'      => 'float',
-        'quantity'   => 'int',
+        'price'      => fn($v) => number_format((float) $v, 2, '.', ''),
+        'amount'     => 'string',        // table-level overrides global record.casting
+        'quantity'   => 'string',
         'is_active'  => 'bool',
         'metadata'   => 'array',          // JSON string → array
         'score'      => 'decimal:4',
