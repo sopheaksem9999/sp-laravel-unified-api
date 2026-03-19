@@ -385,9 +385,9 @@ class RecordApiResponseService
                     $value = $row[$col];
                 }
 
-                if (null === $value) {
-                    continue;
-                }
+        if ([] === $flatResolved && [] === $relResolved) {
+            return $data;
+        }
 
                 $value = $applyCastValue($value, $col, $row, $descriptor);
 
