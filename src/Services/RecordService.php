@@ -1270,6 +1270,7 @@ class RecordService
             if (!array_key_exists('updated_at', $payload) || !$overrideTimestamps) {
                 $payload['updated_at'] =  $now;
             }
+
             if ($user) {
                 if (isset($tableSchema->columns['updated_by'])) {
                     if (!array_key_exists('updated_by', $payload) || !$overrideUserstamps) {
@@ -1285,15 +1286,16 @@ class RecordService
             if (!array_key_exists('created_at', $payload) || !$overrideTimestamps) {
                 $payload['created_at'] = $now;
             }
+
             if (!array_key_exists('updated_at', $payload) || !$overrideTimestamps) {
                 $payload['updated_at'] = $now;
             }
+
             if ($user) {
-                if (isset($tableSchema->columns['created_by'])) {
-                    if (!array_key_exists('created_by', $payload) || !$overrideUserstamps) {
-                        $payload['created_by'] = $user->id;
-                    }
+                if (isset($tableSchema->columns['created_by']) && (!array_key_exists('created_by', $payload) || !$overrideUserstamps)) {
+                    $payload['created_by'] = $user->id;
                 }
+
                 if (isset($tableSchema->columns['updated_by'])) {
                     if (!array_key_exists('updated_by', $payload) || !$overrideUserstamps) {
                         $payload['updated_by'] = $user->id;
