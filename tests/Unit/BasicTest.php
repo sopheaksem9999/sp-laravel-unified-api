@@ -10,6 +10,7 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use PDO;
 use Illuminate\Console\OutputStyle;
@@ -740,6 +741,7 @@ class BasicTest extends TestCase
     public function it_includes_error_debug_meta_when_x_debug_header_is_enabled(): void
     {
         Config::set('record.debug', false);
+        Log::spy();
 
         $request = Request::create('/api/test', 'GET', [], [], [], [
             'HTTP_X_DEBUG' => 'true',
@@ -754,12 +756,14 @@ class BasicTest extends TestCase
         $this->assertSame(false, $payload['success']);
         $this->assertSame('req-debug-header', $payload['meta']['request_id']);
         $this->assertSame('Header debug error', $payload['meta']['debug']['exception_message'] ?? null);
+        Log::shouldHaveReceived('error')->once();
     }
 
     /** @test */
     public function it_hides_error_debug_meta_when_debug_is_disabled_and_no_header(): void
     {
         Config::set('record.debug', false);
+        Log::spy();
 
         $request = Request::create('/api/test', 'GET');
         $request->attributes->set('request_id', 'req-no-debug');
@@ -771,6 +775,26 @@ class BasicTest extends TestCase
 
         $this->assertSame(false, $payload['success']);
         $this->assertArrayNotHasKey('debug', $payload['meta']);
+        Log::shouldNotHaveReceived('error');
+    }
+
+    /** @test */
+    public function it_logs_error_wrapped_when_debug_is_enabled(): void
+    {
+        Config::set('record.debug', true);
+        Log::spy();
+
+        $request = Request::create('/api/test', 'POST');
+        $request->attributes->set('request_id', 'req-debug-log');
+
+        $this->app->instance('request', $request);
+
+        $response = RecordApiResponseService::errorWrapped('Wrapped error', 500, ['field' => ['invalid']]);
+        $payload = $response->getData(true);
+
+        $this->assertSame(false, $payload['success']);
+        $this->assertSame('req-debug-log', $payload['meta']['request_id']);
+        Log::shouldHaveReceived('error')->once();
     }
 
     /** @test */

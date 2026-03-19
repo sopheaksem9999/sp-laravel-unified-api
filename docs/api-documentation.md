@@ -1607,6 +1607,7 @@ Retrieve a paginated list of records with filtering, sorting, and relationship l
     - `cache_efficiency`
   - on error responses, `meta.debug` may include exception context (`exception`, `exception_message`, `file`, `line`).
 - `record.debug` (config, boolean, default: `false`) also enables error debug details globally without needing `X-Debug`.
+- When debug mode is enabled (via config or header), error responses are also written to Laravel log (`Log::error`) with request context and error metadata.
 
 **Filter Operators**
 Filters are usually passed as `{column}={operator}.{value}` (operators validated against the table schema). Some operators support a value-less shorthand form for `null`:
