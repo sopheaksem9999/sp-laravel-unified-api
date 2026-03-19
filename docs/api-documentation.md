@@ -1135,20 +1135,9 @@ GET /api/v1/brands?select=*,logo_url             → logo_url fires; * fetches a
 
 #### Column Casts
 
-`RecordTableType` supports response casting from two sources:
+`RecordTableType` accepts a top-level `casting` property — a `[column => cast]` map that mirrors Laravel's `$casts` on Eloquent models. Casting is **opt-in** — only columns listed in `casting` are transformed; all others pass through unchanged. `null` values are always preserved as-is. Columns that use `compositeFields` are automatically skipped.
 
-- auto-inferred casts from `columns[*].type` / `columns[*].udt_name`
-- explicit top-level `casting` map (`[column => cast]`)
-- global `record.casting` map in `config/record.php` (`[column => cast]`)
-
-Precedence:
-
-- `RecordTableType::casting` (top-level) overrides everything
-- `record.casting` (global) overrides column-level and inferred casts
-- `columns[*].cast` overrides inferred type
-- inferred type is used as default when no explicit cast is provided
-
-`null` values are always preserved as-is. Columns that use `compositeFields` are automatically skipped.
+Flat keys target main-table columns. **Dot-notation keys** target columns inside eagerly-loaded relationships — `'relation.column'` casts `column` on every row of that relation, regardless of whether the relation is a single object (`belongsTo`/`hasOne`) or a collection (`hasMany`/`hasManyThrough`).
 
 Supported built-in cast strings (Laravel-compatible names):
 
@@ -1232,6 +1221,33 @@ class GlobalCasting
 ```
 
 > **Note**: Columns that also define `compositeFields` are skipped by cast processing — composite type conversion takes precedence.
+
+**Relationship (dot-notation) casting example:**
+
+```php
+'orders' => new RecordTableType(
+    table: 'orders',
+    casting: [
+        // flat main-table casts
+        'total'       => 'float',
+        'placed_at'   => 'datetime',
+
+        // hasMany — cast each item row
+        'items.price'    => 'float',
+        'items.qty'      => 'int',
+        'items.metadata' => 'array',
+
+        // belongsTo — cast the single related object
+        'customer.is_verified' => 'bool',
+        'customer.score'       => 'decimal:2',
+
+        // Closure on a relation column
+        'customer.tier' => fn($v) => strtoupper($v),
+    ],
+),
+```
+
+> The relation key (`items`, `customer`) must match the property name returned in the JSON response — i.e. the key used in `with()` / `$appends`. Nesting deeper than one level (e.g. `'order.items.price'`) is not supported; handle deeper nesting with a Closure on the intermediate relation.
 
 #### Per-Action Permission Map
 
