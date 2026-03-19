@@ -2,6 +2,9 @@
 
 namespace Sopheak\Core\Services;
 
+use Illuminate\Support\Carbon;
+use Closure;
+use InvalidArgumentException;
 use stdClass;
 use Throwable;
 use Illuminate\Http\JsonResponse;
@@ -17,6 +20,8 @@ use Sopheak\Core\Utilities\RelationshipResolverUtils;
 
 class RecordApiResponseService
 {
+    private static array $castResolverCache = [];
+
     /**
      * Create a simple JSON response for API v1 compatibility
      * Returns only data and status code to maintain backward compatibility.
@@ -301,57 +306,20 @@ class RecordApiResponseService
      */
     public static function applyCasts(mixed $data, array $columns, array $casting = []): mixed
     {
-        if (null === $data || [] === $casting) {
+        if (null === $data) {
             return $data;
         }
 
-        // Build cast map from top-level $casting only.
-        // Skip columns that also define compositeFields (already handled by convertCompositeFields).
-        $castMap = [];
-        foreach ($casting as $col => $cast) {
-            $colStr = (string) $col;
-            $colMeta = $columns[$colStr] ?? null;
-            if (is_array($colMeta) && (!empty($colMeta['compositeFields']) || !empty($colMeta['composite_fields']))) {
-                continue;
-            }
-            $castMap[$colStr] = $cast;
+        if (!is_array($casting)) {
+            throw new InvalidArgumentException('Invalid RecordTableType casting configuration: expected array map of [column => cast]');
         }
 
-        if ([] === $castMap) {
-            return $data;
+        $globalCasting = RecordConfigService::globalCasting();
+        if (!is_array($globalCasting)) {
+            throw new InvalidArgumentException('Invalid global casting configuration at record.casting: expected array map of [column => cast]');
         }
-        $resolved = [];
-        foreach ($castMap as $col => $cast) {
-            if ($cast instanceof \Closure) {
-                $resolved[$col] = ['callable' => $cast];
-            } elseif (is_array($cast) && count($cast) === 2) {
-                [$class, $method] = $cast;
-                if (is_object($class)) {
-                    $callable = [$class, $method];
-                } elseif (is_string($class) && class_exists($class)) {
-                    // Prefer static call for simple utility classes; fall back to instance
-                    $callable = (is_callable([$class, $method]) && method_exists($class, $method))
-                        ? [$class, $method]
-                        : [app($class), $method];
-                } else {
-                    $callable = null;
-                }
-                if (null !== $callable && is_callable($callable)) {
-                    $resolved[$col] = ['callable' => $callable];
-                }
-            } elseif (is_string($cast)) {
-                if (str_contains($cast, '@')) {
-                    [$class, $method] = explode('@', $cast, 2);
-                    if (class_exists($class)) {
-                        $resolved[$col] = ['callable' => [app($class), $method]];
-                    }
-                } elseif (class_exists($cast)) {
-                    $resolved[$col] = ['callable' => [app($cast), 'get']];
-                } else {
-                    $resolved[$col] = ['builtin' => strtolower($cast)];
-                }
-            }
-        }
+
+        $resolved = self::resolveCastDescriptors($columns, $globalCasting, $casting);
 
         if ([] === $resolved) {
             return $data;
@@ -364,11 +332,13 @@ class RecordApiResponseService
                     if (!property_exists($row, $col)) {
                         continue;
                     }
+
                     $value = $row->{$col};
                 } else {
                     if (!array_key_exists($col, $row)) {
                         continue;
                     }
+
                     $value = $row[$col];
                 }
 
@@ -382,16 +352,16 @@ class RecordApiResponseService
                     $cast = $descriptor['builtin'];
                     $value = match (true) {
                         $cast === 'int' || $cast === 'integer'                       => (int) $value,
-                        $cast === 'float' || $cast === 'double' || $cast === 'real' => (float) $value,
+                        in_array($cast, ['float', 'double', 'real'], true) => (float) $value,
                         str_starts_with($cast, 'decimal:')                          => number_format((float) $value, (int) substr($cast, 8), '.', ''),
                         $cast === 'decimal'                                          => (float) $value,
                         $cast === 'string'                                           => (string) $value,
-                        $cast === 'bool' || $cast === 'boolean'                     => (bool) $value,
+                        $cast === 'bool' || $cast === 'boolean'                     => self::castToBoolean($value),
                         $cast === 'array' || $cast === 'json'                       => is_string($value) ? (json_decode($value, true) ?? $value) : (array) $value,
                         $cast === 'object'                                           => is_string($value) ? (json_decode($value) ?? $value) : (object) $value,
-                        $cast === 'date'                                             => \Illuminate\Support\Carbon::parse($value)->toDateString(),
-                        $cast === 'datetime'                                         => \Illuminate\Support\Carbon::parse($value)->toISOString(),
-                        $cast === 'timestamp'                                        => \Illuminate\Support\Carbon::parse($value)->getTimestamp(),
+                        $cast === 'date'                                             => Carbon::parse($value)->toDateString(),
+                        $cast === 'datetime'                                         => Carbon::parse($value)->toISOString(),
+                        $cast === 'timestamp'                                        => Carbon::parse($value)->getTimestamp(),
                         default                                                      => $value,
                     };
                 }
@@ -433,6 +403,235 @@ class RecordApiResponseService
         return $data;
     }
 
+    private static function resolveCastDescriptors(array $columns, array $globalCasting, array $tableCasting): array
+    {
+        $cacheKey = self::buildCastResolverCacheKey($columns, $globalCasting, $tableCasting);
+        if (is_string($cacheKey) && isset(self::$castResolverCache[$cacheKey])) {
+            return self::$castResolverCache[$cacheKey];
+        }
+
+        $castMap = [];
+        foreach ($columns as $col => $meta) {
+            $colStr = (string) $col;
+            if (!is_array($meta)) {
+                continue;
+            }
+
+            if (!empty($meta['compositeFields'])) {
+                continue;
+            }
+
+            if (!empty($meta['composite_fields'])) {
+                continue;
+            }
+
+            if (array_key_exists('cast', $meta)) {
+                $castMap[$colStr] = [
+                    'rule' => $meta['cast'],
+                    'source' => sprintf('columns.%s.cast', $colStr),
+                ];
+                continue;
+            }
+
+            $inferred = self::inferBuiltinCastFromColumnMeta($meta);
+            if (null !== $inferred) {
+                $castMap[$colStr] = [
+                    'rule' => $inferred,
+                    'source' => sprintf('columns.%s.type', $colStr),
+                ];
+            }
+        }
+
+        foreach ($globalCasting as $col => $cast) {
+            $castMap[(string) $col] = [
+                'rule' => $cast,
+                'source' => "record.casting." . $col,
+            ];
+        }
+
+        foreach ($tableCasting as $col => $cast) {
+            $castMap[(string) $col] = [
+                'rule' => $cast,
+                'source' => "RecordTableType::casting." . $col,
+            ];
+        }
+
+        $resolved = [];
+        foreach ($castMap as $col => $entry) {
+            $resolved[$col] = self::resolveSingleCastDescriptor(
+                cast: $entry['rule'] ?? null,
+                column: $col,
+                source: $entry['source'] ?? 'unknown'
+            );
+        }
+
+        if (is_string($cacheKey)) {
+            self::$castResolverCache[$cacheKey] = $resolved;
+            if (count(self::$castResolverCache) > 100) {
+                array_shift(self::$castResolverCache);
+            }
+        }
+
+        return $resolved;
+    }
+
+    private static function buildCastResolverCacheKey(array $columns, array $globalCasting, array $tableCasting): ?string
+    {
+        $normalize = static function (array $casting): ?array {
+            $normalizedCasts = [];
+            foreach ($casting as $col => $cast) {
+                if (is_string($cast)) {
+                    $normalizedCasts[(string) $col] = 'str:' . $cast;
+                    continue;
+                }
+
+                if (is_array($cast) && count($cast) === 2 && is_string($cast[0]) && is_string($cast[1])) {
+                    $normalizedCasts[(string) $col] = 'arr:' . $cast[0] . '@' . $cast[1];
+                    continue;
+                }
+
+                return null;
+            }
+
+            return $normalizedCasts;
+        };
+
+        $normalizedGlobal = $normalize($globalCasting);
+        if (null === $normalizedGlobal) {
+            return null;
+        }
+
+        $normalizedTable = $normalize($tableCasting);
+        if (null === $normalizedTable) {
+            return null;
+        }
+
+        return md5(serialize([$columns, $normalizedGlobal, $normalizedTable]));
+    }
+
+    private static function resolveSingleCastDescriptor(mixed $cast, string $column, string $source): array
+    {
+        if ($cast instanceof Closure) {
+            return ['callable' => $cast];
+        }
+
+        if (is_array($cast) && count($cast) === 2) {
+            [$class, $method] = $cast;
+            if (is_object($class)) {
+                $callable = [$class, $method];
+            } elseif (is_string($class) && class_exists($class)) {
+                $callable = (is_callable([$class, $method]) && method_exists($class, $method))
+                    ? [$class, $method]
+                    : [app($class), $method];
+            } else {
+                $callable = null;
+            }
+
+            if (null !== $callable && is_callable($callable)) {
+                return ['callable' => $callable];
+            }
+
+            throw new InvalidArgumentException(sprintf("Invalid cast callable for column '%s' at %s", $column, $source));
+        }
+
+        if (!is_string($cast)) {
+            throw new InvalidArgumentException(sprintf("Invalid cast definition for column '%s' at %s: expected string|Closure|[Class,method]", $column, $source));
+        }
+
+        if (str_contains($cast, '@')) {
+            [$class, $method] = explode('@', $cast, 2);
+            if (!class_exists($class)) {
+                throw new InvalidArgumentException(sprintf("Invalid cast class '%s' for column '%s' at %s", $class, $column, $source));
+            }
+
+            if (!method_exists($class, $method)) {
+                throw new InvalidArgumentException(sprintf("Invalid cast method '%s' on class '%s' for column '%s' at %s", $method, $class, $column, $source));
+            }
+
+            return ['callable' => [app($class), $method]];
+        }
+
+        if (class_exists($cast)) {
+            return ['callable' => [app($cast), 'get']];
+        }
+
+        $builtin = strtolower($cast);
+        $allowedBuiltins = [
+            'int', 'integer', 'float', 'double', 'real', 'decimal', 'string',
+            'bool', 'boolean', 'array', 'json', 'object', 'date', 'datetime', 'timestamp',
+        ];
+        if (!in_array($builtin, $allowedBuiltins, true) && !str_starts_with($builtin, 'decimal:')) {
+            throw new InvalidArgumentException(sprintf("Unsupported cast '%s' for column '%s' at %s", $cast, $column, $source));
+        }
+
+        return ['builtin' => $builtin];
+    }
+
+    private static function inferBuiltinCastFromColumnMeta(array $meta): ?string
+    {
+        $type = strtolower((string) ($meta['type'] ?? $meta['data_type'] ?? ''));
+        $udtName = strtolower((string) ($meta['udt_name'] ?? ''));
+        $fullType = trim($type . ' ' . $udtName);
+
+        if (str_contains($fullType, 'bool')) {
+            return 'boolean';
+        }
+
+        if (str_contains($fullType, 'tinyint(1)')) {
+            return 'boolean';
+        }
+
+        if (str_contains($fullType, 'json')) {
+            return 'array';
+        }
+
+        if (str_contains($fullType, 'timestamp')) {
+            return 'datetime';
+        }
+
+        if (str_contains($fullType, 'datetime')) {
+            return 'datetime';
+        }
+
+        if ($type === 'date') {
+            return 'date';
+        }
+
+        if (str_contains($fullType, 'int') || in_array($udtName, ['int2', 'int4', 'int8', 'serial', 'bigserial'], true)) {
+            return 'integer';
+        }
+
+        if (str_contains($fullType, 'double') || str_contains($fullType, 'float') || str_contains($fullType, 'real')) {
+            return 'float';
+        }
+
+        if (str_contains($fullType, 'decimal') || str_contains($fullType, 'numeric')) {
+            return 'decimal';
+        }
+
+        return null;
+    }
+
+    private static function castToBoolean(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+            if (in_array($normalized, ['true', 't', 'yes', 'y', 'on', '1'], true)) {
+                return true;
+            }
+
+            if (in_array($normalized, ['false', 'f', 'no', 'n', 'off', '0', ''], true)) {
+                return false;
+            }
+        }
+
+        return (bool) $value;
+    }
+
     /**
      * Apply computed attributes to each row — only for fields present in $requestedCols.
      * When $requestedCols is empty (no ?select= param), no attributes are resolved.
@@ -466,7 +665,7 @@ class RecordApiResponseService
         foreach ($appends as $field => $resolver) {
             $callable = null;
 
-            if ($resolver instanceof \Closure) {
+            if ($resolver instanceof Closure) {
                 $callable = $resolver;
             } elseif (is_array($resolver) && count($resolver) === 2) {
                 [$class, $method] = $resolver;
@@ -506,6 +705,7 @@ class RecordApiResponseService
                     $row[$field] = $value;
                 }
             }
+
             return $row;
         };
 

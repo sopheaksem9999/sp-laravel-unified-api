@@ -209,6 +209,24 @@ return [
     'global_triggers' => [
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Global Column Casting
+    |--------------------------------------------------------------------------
+    |
+    | Define default response casts for all records using a flat map:
+    | [column_name => cast_rule].
+    |
+    | Priority:
+    | 1) RecordTableType::$casting (table-level)
+    | 2) record.casting (this global map)
+    | 3) columns[*].cast
+    | 4) inferred cast from columns[*].type / columns[*].udt_name
+    |
+    */
+    'casting' => [
+    ],
+
     'default_validation' => [
         'enabled' => false,
         'only_when_missing' => true,
