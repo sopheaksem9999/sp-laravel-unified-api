@@ -450,14 +450,9 @@ Attribute keys are automatically excluded from the SQL `SELECT` to prevent "Unkn
 
 ### Column Casts
 
-Casting supports defaults and overrides:
+Use the top-level `casting` property on `RecordTableType` — a `[column => cast]` map, mirroring Laravel's `$casts` on Eloquent models. Only columns listed in `casting` are transformed; all others are untouched. `null` values are always preserved.
 
-- default auto-cast from `columns[*].type` / `columns[*].udt_name` (helps when DB drivers return strings for bool/int/float)
-- optional global `record.casting` map in `config/record.php` for cross-table defaults
-- optional `columns[*].cast` for per-column override
-- optional top-level `casting` for global explicit override
-
-Precedence: `RecordTableType::casting` > `record.casting` > `columns[*].cast` > inferred type. `null` values are preserved.
+**Flat keys** target main-table columns. **Dot-notation keys** target columns inside eagerly-loaded relationships (`'relation.column'`), and work for both single-object relations (`belongsTo`/`hasOne`) and collection relations (`hasMany`/`hasManyThrough`).
 
 ```php
 use App\Record\Casts\GlobalCasting;
@@ -476,9 +471,9 @@ use App\Record\Casts\GlobalCasting;
         'price' => ['type' => 'decimal(12,2)'],
     ],
     casting: [
-        'price'      => fn($v) => number_format((float) $v, 2, '.', ''),
-        'amount'     => 'string',        // table-level overrides global record.casting
-        'quantity'   => 'string',
+        // flat main-table casts
+        'price'      => 'float',
+        'quantity'   => 'int',
         'is_active'  => 'bool',
         'metadata'   => 'array',          // JSON string → array
         'score'      => 'decimal:4',
@@ -487,6 +482,14 @@ use App\Record\Casts\GlobalCasting;
         'is_cloud'   => [GlobalCasting::class, 'bool'],
         // inline Closure
         'status'     => fn($v) => strtoupper($v),
+
+        // dot-notation: cast columns inside a hasMany relation
+        'variants.price'    => 'float',
+        'variants.qty'      => 'int',
+
+        // dot-notation: cast a column inside a belongsTo relation
+        'brand.is_active'   => 'bool',
+        'brand.founded_at'  => 'date',
     ],
 ),
 ```
