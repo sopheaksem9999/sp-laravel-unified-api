@@ -295,6 +295,10 @@ class RecordApiResponseService
      *   - 'Class@method'    string
      *   - 'ClassName'       calls ->get($value, $column, $row) on a new instance
      *
+     * Dot-notation keys cast relationship columns:
+     *   'items.price'  => 'float'  — casts price on each row of a hasMany relation
+     *   'brand.active' => 'bool'   — casts active on a belongsTo/hasOne relation
+     *
      * @param mixed $data    Single record, sequential list, Collection, or LengthAwarePaginator
      * @param array $columns Column definitions from RecordTableType::$columns (used only to skip compositeFields columns)
      * @param array $casting Top-level cast map from RecordTableType::$casting ([column => cast])
@@ -305,14 +309,15 @@ class RecordApiResponseService
             return $data;
         }
 
-        // Build cast map from top-level $casting only.
-        // Skip columns that also define compositeFields (already handled by convertCompositeFields).
+        // Build cast map. For flat (non-dot) keys, skip columns with compositeFields.
         $castMap = [];
         foreach ($casting as $col => $cast) {
             $colStr = (string) $col;
-            $colMeta = $columns[$colStr] ?? null;
-            if (is_array($colMeta) && (!empty($colMeta['compositeFields']) || !empty($colMeta['composite_fields']))) {
-                continue;
+            if (!str_contains($colStr, '.')) {
+                $colMeta = $columns[$colStr] ?? null;
+                if (is_array($colMeta) && (!empty($colMeta['compositeFields']) || !empty($colMeta['composite_fields']))) {
+                    continue;
+                }
             }
             $castMap[$colStr] = $cast;
         }
@@ -320,46 +325,91 @@ class RecordApiResponseService
         if ([] === $castMap) {
             return $data;
         }
-        $resolved = [];
-        foreach ($castMap as $col => $cast) {
+
+        // Resolve a cast definition to a descriptor array.
+        $resolveDescriptor = static function (mixed $cast): ?array {
             if ($cast instanceof \Closure) {
-                $resolved[$col] = ['callable' => $cast];
-            } elseif (is_array($cast) && count($cast) === 2) {
+                return ['callable' => $cast];
+            }
+            if (is_array($cast) && count($cast) === 2) {
                 [$class, $method] = $cast;
                 if (is_object($class)) {
                     $callable = [$class, $method];
                 } elseif (is_string($class) && class_exists($class)) {
-                    // Prefer static call for simple utility classes; fall back to instance
+                    // Prefer static call; fall back to container instance
                     $callable = (is_callable([$class, $method]) && method_exists($class, $method))
                         ? [$class, $method]
                         : [app($class), $method];
                 } else {
                     $callable = null;
                 }
-                if (null !== $callable && is_callable($callable)) {
-                    $resolved[$col] = ['callable' => $callable];
-                }
-            } elseif (is_string($cast)) {
+
+                return (null !== $callable && is_callable($callable)) ? ['callable' => $callable] : null;
+            }
+            if (is_string($cast)) {
                 if (str_contains($cast, '@')) {
                     [$class, $method] = explode('@', $cast, 2);
-                    if (class_exists($class)) {
-                        $resolved[$col] = ['callable' => [app($class), $method]];
-                    }
-                } elseif (class_exists($cast)) {
-                    $resolved[$col] = ['callable' => [app($cast), 'get']];
-                } else {
-                    $resolved[$col] = ['builtin' => strtolower($cast)];
+
+                    return class_exists($class) ? ['callable' => [app($class), $method]] : null;
                 }
+                if (class_exists($cast)) {
+                    return ['callable' => [app($cast), 'get']];
+                }
+
+                return ['builtin' => strtolower($cast)];
+            }
+
+            return null;
+        };
+
+        // Split into flat (main-table) and relational (dot-notation: 'relation.column') descriptors.
+        $flatResolved = [];
+        $relResolved  = [];
+        foreach ($castMap as $col => $cast) {
+            $descriptor = $resolveDescriptor($cast);
+            if (null === $descriptor) {
+                continue;
+            }
+            if (str_contains($col, '.')) {
+                [$relation, $relCol] = explode('.', $col, 2);
+                $relResolved[$relation][$relCol] = $descriptor;
+            } else {
+                $flatResolved[$col] = $descriptor;
             }
         }
 
-        if ([] === $resolved) {
+        if ([] === $flatResolved && [] === $relResolved) {
             return $data;
         }
 
-        $applyToRow = static function (mixed $row) use ($resolved): mixed {
+        // Apply a single descriptor to a scalar value.
+        $applyCastValue = static function (mixed $value, string $col, mixed $row, array $descriptor): mixed {
+            if (isset($descriptor['callable'])) {
+                return ($descriptor['callable'])($value, $col, $row);
+            }
+            $cast = $descriptor['builtin'];
+
+            return match (true) {
+                $cast === 'int' || $cast === 'integer'                       => (int) $value,
+                $cast === 'float' || $cast === 'double' || $cast === 'real' => (float) $value,
+                str_starts_with($cast, 'decimal:')                          => number_format((float) $value, (int) substr($cast, 8), '.', ''),
+                $cast === 'decimal'                                          => (float) $value,
+                $cast === 'string'                                           => (string) $value,
+                $cast === 'bool' || $cast === 'boolean'                     => (bool) $value,
+                $cast === 'array' || $cast === 'json'                       => is_string($value) ? (json_decode($value, true) ?? $value) : (array) $value,
+                $cast === 'object'                                           => is_string($value) ? (json_decode($value) ?? $value) : (object) $value,
+                $cast === 'date'                                             => \Illuminate\Support\Carbon::parse($value)->toDateString(),
+                $cast === 'datetime'                                         => \Illuminate\Support\Carbon::parse($value)->toISOString(),
+                $cast === 'timestamp'                                        => \Illuminate\Support\Carbon::parse($value)->getTimestamp(),
+                default                                                      => $value,
+            };
+        };
+
+        $applyToRow = static function (mixed $row) use ($flatResolved, $relResolved, $applyCastValue): mixed {
             $isObject = is_object($row);
-            foreach ($resolved as $col => $descriptor) {
+
+            // --- Flat (main-table) casts ---
+            foreach ($flatResolved as $col => $descriptor) {
                 if ($isObject) {
                     if (!property_exists($row, $col)) {
                         continue;
@@ -376,30 +426,78 @@ class RecordApiResponseService
                     continue;
                 }
 
-                if (isset($descriptor['callable'])) {
-                    $value = ($descriptor['callable'])($value, $col, $row);
-                } else {
-                    $cast = $descriptor['builtin'];
-                    $value = match (true) {
-                        $cast === 'int' || $cast === 'integer'                       => (int) $value,
-                        $cast === 'float' || $cast === 'double' || $cast === 'real' => (float) $value,
-                        str_starts_with($cast, 'decimal:')                          => number_format((float) $value, (int) substr($cast, 8), '.', ''),
-                        $cast === 'decimal'                                          => (float) $value,
-                        $cast === 'string'                                           => (string) $value,
-                        $cast === 'bool' || $cast === 'boolean'                     => (bool) $value,
-                        $cast === 'array' || $cast === 'json'                       => is_string($value) ? (json_decode($value, true) ?? $value) : (array) $value,
-                        $cast === 'object'                                           => is_string($value) ? (json_decode($value) ?? $value) : (object) $value,
-                        $cast === 'date'                                             => \Illuminate\Support\Carbon::parse($value)->toDateString(),
-                        $cast === 'datetime'                                         => \Illuminate\Support\Carbon::parse($value)->toISOString(),
-                        $cast === 'timestamp'                                        => \Illuminate\Support\Carbon::parse($value)->getTimestamp(),
-                        default                                                      => $value,
-                    };
-                }
+                $value = $applyCastValue($value, $col, $row, $descriptor);
 
                 if ($isObject) {
                     $row->{$col} = $value;
                 } else {
                     $row[$col] = $value;
+                }
+            }
+
+            // --- Relational casts (dot-notation: 'relation.column') ---
+            foreach ($relResolved as $relation => $colDescriptors) {
+                if ($isObject) {
+                    if (!property_exists($row, $relation)) {
+                        continue;
+                    }
+                    $relData = $row->{$relation};
+                } else {
+                    if (!array_key_exists($relation, $row)) {
+                        continue;
+                    }
+                    $relData = $row[$relation];
+                }
+
+                if (null === $relData) {
+                    continue;
+                }
+
+                $castRelRow = static function (mixed $relRow) use ($colDescriptors, $applyCastValue): mixed {
+                    $isRelObject = is_object($relRow);
+                    foreach ($colDescriptors as $col => $descriptor) {
+                        if ($isRelObject) {
+                            if (!property_exists($relRow, $col)) {
+                                continue;
+                            }
+                            $value = $relRow->{$col};
+                        } else {
+                            if (!array_key_exists($col, $relRow)) {
+                                continue;
+                            }
+                            $value = $relRow[$col];
+                        }
+
+                        if (null === $value) {
+                            continue;
+                        }
+
+                        $value = $applyCastValue($value, $col, $relRow, $descriptor);
+
+                        if ($isRelObject) {
+                            $relRow->{$col} = $value;
+                        } else {
+                            $relRow[$col] = $value;
+                        }
+                    }
+
+                    return $relRow;
+                };
+
+                // hasMany / hasManyThrough: sequential list
+                if (is_array($relData) && array_is_list($relData)) {
+                    $relData = array_map($castRelRow, $relData);
+                } elseif ($relData instanceof Collection) {
+                    $relData = $relData->map($castRelRow);
+                } else {
+                    // belongsTo / hasOne: single object
+                    $relData = $castRelRow($relData);
+                }
+
+                if ($isObject) {
+                    $row->{$relation} = $relData;
+                } else {
+                    $row[$relation] = $relData;
                 }
             }
 

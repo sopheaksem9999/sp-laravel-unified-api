@@ -438,7 +438,9 @@ Attribute keys are automatically excluded from the SQL `SELECT` to prevent "Unkn
 
 ### Column Casts
 
-Use the top-level `casting` property on `RecordTableType` — a flat `[column => cast]` map, mirroring Laravel's `$casts` on Eloquent models. Only columns listed in `casting` are transformed; all others are untouched. `null` values are always preserved.
+Use the top-level `casting` property on `RecordTableType` — a `[column => cast]` map, mirroring Laravel's `$casts` on Eloquent models. Only columns listed in `casting` are transformed; all others are untouched. `null` values are always preserved.
+
+**Flat keys** target main-table columns. **Dot-notation keys** target columns inside eagerly-loaded relationships (`'relation.column'`), and work for both single-object relations (`belongsTo`/`hasOne`) and collection relations (`hasMany`/`hasManyThrough`).
 
 ```php
 use App\Record\Casts\GlobalCasting;
@@ -446,6 +448,7 @@ use App\Record\Casts\GlobalCasting;
 'products' => new RecordTableType(
     table: 'products',
     casting: [
+        // flat main-table casts
         'price'      => 'float',
         'quantity'   => 'int',
         'is_active'  => 'bool',
@@ -456,6 +459,14 @@ use App\Record\Casts\GlobalCasting;
         'is_cloud'   => [GlobalCasting::class, 'bool'],
         // inline Closure
         'status'     => fn($v) => strtoupper($v),
+
+        // dot-notation: cast columns inside a hasMany relation
+        'variants.price'    => 'float',
+        'variants.qty'      => 'int',
+
+        // dot-notation: cast a column inside a belongsTo relation
+        'brand.is_active'   => 'bool',
+        'brand.founded_at'  => 'date',
     ],
 ),
 ```
