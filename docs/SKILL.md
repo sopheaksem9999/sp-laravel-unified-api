@@ -364,15 +364,17 @@ new RecordTableType(
     columns: [...],  // no 'cast' key needed inside column entries
 
     // Per-table permission map — overrides pmsName-based auto-generated permissions per action.
-    // Keys: 'read', 'create', 'update', 'delete', 'restore'
+    // Keys: 'read', 'create', 'update', 'delete', 'force_delete', 'restore'
     // Values: string | string[] (any one matching permission grants access)
     // Actions not listed fall back to standard pmsName + permission_separator mapping.
+    // Note: 'force_delete' is independent — it does NOT fall back to 'delete'.
     permissions: [
-        'read'    => 'view_list_item',
-        'create'  => 'insert_new_item',
-        'update'  => 'update_existing_item',
-        'delete'  => 'remove_item',
-        'restore' => 'restore_item',
+        'read'         => 'view_list_item',
+        'create'       => 'insert_new_item',
+        'update'       => 'update_existing_item',
+        'delete'       => 'remove_item',
+        'force_delete' => 'permanently_remove_item',
+        'restore'      => 'restore_item',
     ],
 
     // Composed config (detailed below)
@@ -389,6 +391,8 @@ new RecordTableType(
     afterUpdate:         fn(Request $request, string $table, mixed $record): void => ...,
     beforeDelete:        fn(Request $request, string $table, mixed $record): Request|array|null => ...,
     afterDelete:         fn(Request $request, string $table, mixed $record): void => ...,
+    beforeRestore:       fn(Request $request, string $table, mixed $record): Request|array|null => ...,
+    afterRestore:        fn(Request $request, string $table, mixed $record): void => ...,
     customAuditLog:      fn($event, $entityClass, array $data, $tenantId, $ctx): void => ...,
 );
 ```
@@ -543,8 +547,10 @@ updateValidator: fn($request, $id) => Validator::make($request->all(), [
 | `afterCreate`  | After INSERT           | `$record`   | `void`                  |
 | `beforeUpdate` | Before UPDATE          | `$record`   | `Request\|array\|null`  |
 | `afterUpdate`  | After UPDATE           | `$record`   | `void`                  |
-| `beforeDelete` | Before DELETE          | `$record`   | `Request\|array\|null`  |
-| `afterDelete`  | After DELETE           | `$record`   | `void`                  |
+| `beforeDelete`  | Before DELETE          | `$record`   | `Request\|array\|null`  |
+| `afterDelete`   | After DELETE           | `$record`   | `void`                  |
+| `beforeRestore` | Before RESTORE         | `$record`   | `Request\|array\|null`  |
+| `afterRestore`  | After RESTORE          | `$record`   | `void`                  |
 
 Signature: `fn(Request $request, string $table, ...$args): Request|array|null`
 

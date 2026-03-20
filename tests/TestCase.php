@@ -9,6 +9,8 @@ use Sopheak\Core\CoreSpLaravelApiProvider;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Schema\Blueprint;
 
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
+
 class TestCase extends BaseTestCase
 {
     protected function getPackageProviders($app)
@@ -20,6 +22,11 @@ class TestCase extends BaseTestCase
 
     protected function getEnvironmentSetUp($app): void
     {
+        // Clear static schema cache BEFORE the service provider boots and registers routes.
+        // This prevents stale table configs from a previous test from polluting the route
+        // $tableWhere regex built during this app's boot.
+        SchemaRegistryUtils::refresh();
+
         $app['config']->set('app.url', 'http://localhost');
         $app['config']->set('sp-laravel-api.auth.guard', 'api');
         $app['config']->set('auth.guards.api', [
@@ -51,6 +58,9 @@ class TestCase extends BaseTestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Clear static schema registry cache between tests to prevent cross-test contamination
+        SchemaRegistryUtils::refresh();
 
         // Define rate limiters used by routes to avoid missing limiter errors in tests
         RateLimiter::for('api-reads', fn() => Limit::perMinute(1000));
