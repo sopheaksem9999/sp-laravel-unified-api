@@ -123,6 +123,24 @@ class RecordService
     }
 
     /**
+     * Fetch a single raw record by ID without hooks, eager loading, or deleted_at filtering.
+     * Works for soft-deleted rows — needed by delete/restore triggers to pass the full row.
+     *
+     * @return object|null The raw DB row, or null if not found
+     */
+    public function fetchRawRecord(string $table, mixed $id, mixed $tenantId): ?object
+    {
+        $tableSchema     = SchemaRegistryUtils::getTable($table);
+        $actualTableName = $tableSchema->table ?? $table;
+        $pk              = $tableSchema->primaryKey ?? 'id';
+
+        $query = DB::table($actualTableName)->where($pk, $id);
+        $this->applyTenantFilter($query, $table, $tenantId);
+
+        return $query->first() ?: null;
+    }
+
+    /**
      * Delete a record with all related processing.
      *
      * @return array Returns ['id' => mixed, 'affected' => int]
@@ -367,10 +385,11 @@ class RecordService
 
         // 1. Execute Table Trigger
         $triggerConfig = match ($operation) {
-            'create' => $tableSchema->afterCreate ?? null,
-            'update' => $tableSchema->afterUpdate ?? null,
-            'delete' => $tableSchema->afterDelete ?? null,
-            default => null
+            'create'  => $tableSchema->afterCreate ?? null,
+            'update'  => $tableSchema->afterUpdate ?? null,
+            'delete'  => $tableSchema->afterDelete ?? null,
+            'restore' => $tableSchema->afterRestore ?? null,
+            default   => null
         };
 
         if ($triggerConfig) {
@@ -382,10 +401,11 @@ class RecordService
         }
 
         $globalTrigger = match ($operation) {
-            'create' => $this->globalTrigger('afterCreate'),
-            'update' => $this->globalTrigger('afterUpdate'),
-            'delete' => $this->globalTrigger('afterDelete'),
-            default => null
+            'create'  => $this->globalTrigger('afterCreate'),
+            'update'  => $this->globalTrigger('afterUpdate'),
+            'delete'  => $this->globalTrigger('afterDelete'),
+            'restore' => $this->globalTrigger('afterRestore'),
+            default   => null
         };
 
         if ($globalTrigger) {
@@ -400,10 +420,11 @@ class RecordService
         if (!($tableSchema->disableAuditLog ?? false)) {
             $entityClass = 'App\Models\\' . Str::studly(Str::singular($table));
             $event = match ($operation) {
-                'create' => AuditLogEventEnum::CREATED,
-                'update' => AuditLogEventEnum::UPDATED,
-                'delete' => AuditLogEventEnum::DELETED,
-                default => AuditLogEventEnum::UPDATED
+                'create'  => AuditLogEventEnum::CREATED,
+                'update'  => AuditLogEventEnum::UPDATED,
+                'delete'  => AuditLogEventEnum::DELETED,
+                'restore' => AuditLogEventEnum::UPDATED,
+                default   => AuditLogEventEnum::UPDATED
             };
 
             $auditData = $recordContext['response_data'] ?? $recordContext['payload'] ?? [];
