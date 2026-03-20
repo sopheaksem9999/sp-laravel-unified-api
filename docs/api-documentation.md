@@ -962,7 +962,10 @@ Additional arguments depend on the event/endpoint. Common patterns:
 - `afterRead` on list: `[$request, $table, ['type' => 'index', 'filters' => [...], 'data' => [...], 'meta' => [...], 'tenant_id' => mixed, 'response' => JsonResponse]]`
 - `beforeCreate` (single): `[$request, $table, ['tenant_id' => mixed]]`
 - `beforeUpdate` (single): `[$request, $table, ['id' => mixed, 'tenant_id' => mixed]]`
-- `beforeDelete` (single): `[$request, $table, ['id' => mixed, 'tenant_id' => mixed]]`
+- `beforeDelete` (single): `[$request, $table, ['id' => mixed, 'tenant_id' => mixed, 'record' => ?object]]`
+- `afterDelete` (single): `[$request, $table, ['id' => mixed, 'tenant_id' => mixed, 'record' => ?object, 'soft_deleted' => bool, 'response' => JsonResponse]]`
+- `beforeRestore` (single): `[$request, $table, ['id' => mixed, 'tenant_id' => mixed, 'record' => ?object]]`
+- `afterRestore` (single): `[$request, $table, ['id' => mixed, 'tenant_id' => mixed, 'record' => ?object, 'restored' => int, 'response' => JsonResponse]]`
 - Bulk endpoints may pass different params per item (e.g. `[$request, $table, $item]`, `[$request, $table, $id, $item]`, `[$request, $table, $id]`)
 
 Return values:
@@ -1260,7 +1263,8 @@ Supported action keys:
 | `'read'` | `listRecords` (GET list) and `getRecordById` (GET single) |
 | `'create'` | `createRecord` and the create-check in `upsertRecord` |
 | `'update'` | `updateRecord` and the update-check in `upsertRecord` |
-| `'delete'` | `destroyRecord` and `forceDeleteRecord` |
+| `'delete'` | `destroyRecord` (soft-delete) |
+| `'force_delete'` | `forceDeleteRecord` (permanent delete — independent, no fallback to `'delete'`) |
 | `'restore'` | `restoreRecord` |
 
 The value for each action can be a single permission string or an array of strings. Any one matching permission grants access (same OR logic used by the standard permission resolver).
@@ -1275,8 +1279,9 @@ The value for each action can be a single permission string or an array of strin
         'read'    => 'view_list_item',
         'create'  => 'insert_new_item',
         'update'  => 'update_existing_item',
-        'delete'  => 'remove_item',
-        'restore' => 'restore_item',
+        'delete'       => 'remove_item',
+        'force_delete' => 'permanently_remove_item',
+        'restore'      => 'restore_item',
         // partial overrides also work — e.g. only override 'read':
         // 'read' => ['view_item', 'admin_access'],
     ],
@@ -1287,7 +1292,7 @@ The value for each action can be a single permission string or an array of strin
 
 #### Triggers
 
-- `beforeRead`, `afterRead`, `beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete` (`RecordTableTriggerType|array|null`, default: `null`): Lifecycle triggers. Each value can be:
+- `beforeRead`, `afterRead`, `beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete`, `beforeRestore`, `afterRestore` (`RecordTableTriggerType|array|null`, default: `null`): Lifecycle triggers. Each value can be:
   - a `RecordTableTriggerType` instance,
   - a single array trigger config (`['class' => ..., 'functionName' => ..., 'description' => ...]`),
   - or an array of trigger configs to run sequentially.

@@ -175,6 +175,9 @@ trait HasControllerHelpers
         // Use per-table custom permission map if defined
         if ($tableSchema instanceof RecordTableType && is_array($tableSchema->permissions) && isset($tableSchema->permissions[$action])) {
             $perms = (array) $tableSchema->permissions[$action];
+        } elseif ($action === 'force_delete' && $tableSchema instanceof RecordTableType && is_array($tableSchema->permissions) && !isset($tableSchema->permissions['force_delete'])) {
+            // force_delete has no override — use mapPermissions with 'force_delete' action (independent, no fallback to 'delete')
+            $perms = PermissionUtils::mapPermissions($table, 'force_delete');
         } else {
             $perms = PermissionUtils::mapPermissions($table, $action);
         }
