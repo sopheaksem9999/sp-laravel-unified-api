@@ -314,69 +314,24 @@ class RecordApiResponseService
             return $data;
         }
 
-        // Build cast map. For flat (non-dot) keys, skip columns with compositeFields.
-        $castMap = [];
-        foreach ($casting as $col => $cast) {
-            $colStr = (string) $col;
-            if (!str_contains($colStr, '.')) {
-                $colMeta = $columns[$colStr] ?? null;
-                if (is_array($colMeta) && (!empty($colMeta['compositeFields']) || !empty($colMeta['composite_fields']))) {
-                    continue;
-                }
-            }
-            $castMap[$colStr] = $cast;
+        $globalCasting = config('record.casting', []);
+        if (!is_array($globalCasting)) {
+            $globalCasting = [];
         }
 
-        if ([] === $castMap) {
+        // Resolve all descriptors: type-inferred from columns, global config, and explicit table casting.
+        $allDescriptors = self::resolveCastDescriptors($columns, $globalCasting, $casting);
+
+        if ([] === $allDescriptors) {
             return $data;
         }
-
-        // Resolve a cast definition to a descriptor array.
-        $resolveDescriptor = static function (mixed $cast): ?array {
-            if ($cast instanceof \Closure) {
-                return ['callable' => $cast];
-            }
-            if (is_array($cast) && count($cast) === 2) {
-                [$class, $method] = $cast;
-                if (is_object($class)) {
-                    $callable = [$class, $method];
-                } elseif (is_string($class) && class_exists($class)) {
-                    // Prefer static call; fall back to container instance
-                    $callable = (is_callable([$class, $method]) && method_exists($class, $method))
-                        ? [$class, $method]
-                        : [app($class), $method];
-                } else {
-                    $callable = null;
-                }
-
-                return (null !== $callable && is_callable($callable)) ? ['callable' => $callable] : null;
-            }
-            if (is_string($cast)) {
-                if (str_contains($cast, '@')) {
-                    [$class, $method] = explode('@', $cast, 2);
-
-                    return class_exists($class) ? ['callable' => [app($class), $method]] : null;
-                }
-                if (class_exists($cast)) {
-                    return ['callable' => [app($cast), 'get']];
-                }
-
-                return ['builtin' => strtolower($cast)];
-            }
-
-            return null;
-        };
 
         // Split into flat (main-table) and relational (dot-notation: 'relation.column') descriptors.
         $flatResolved = [];
         $relResolved  = [];
-        foreach ($castMap as $col => $cast) {
-            $descriptor = $resolveDescriptor($cast);
-            if (null === $descriptor) {
-                continue;
-            }
-            if (str_contains($col, '.')) {
-                [$relation, $relCol] = explode('.', $col, 2);
+        foreach ($allDescriptors as $col => $descriptor) {
+            if (str_contains((string) $col, '.')) {
+                [$relation, $relCol] = explode('.', (string) $col, 2);
                 $relResolved[$relation][$relCol] = $descriptor;
             } else {
                 $flatResolved[$col] = $descriptor;
