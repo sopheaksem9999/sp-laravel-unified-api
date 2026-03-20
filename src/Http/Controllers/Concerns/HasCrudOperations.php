@@ -392,9 +392,11 @@ trait HasCrudOperations
                 return $tenantError;
             }
 
+            $record = $this->recordService->fetchRawRecord($table, $id, $tenantId);
+
             $triggerParams = $this->recordService->executeGlobalTrigger(
                 hook: 'beforeDelete',
-                params: [$request, $table, ['id' => $id, RecordConfigService::tenantColumn() => $tenantId]]
+                params: [$request, $table, ['id' => $id, RecordConfigService::tenantColumn() => $tenantId, 'record' => $record]]
             );
             if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
                 $request = $triggerParams[0];
@@ -402,7 +404,7 @@ trait HasCrudOperations
 
             $triggerParams = $this->recordService->executeTableTrigger(
                 trigger: $tableSchema->beforeDelete ?? null,
-                params: [$request, $table, ['id' => $id, RecordConfigService::tenantColumn() => $tenantId]]
+                params: [$request, $table, ['id' => $id, RecordConfigService::tenantColumn() => $tenantId, 'record' => $record]]
             );
             if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
                 $request = $triggerParams[0];
@@ -415,7 +417,7 @@ trait HasCrudOperations
                 }
             }
 
-            return $this->withinTransaction(function () use ($request, $table, $id, $tenantId, $tableSchema): JsonResponse {
+            return $this->withinTransaction(function () use ($request, $table, $id, $tenantId, $tableSchema, $record): JsonResponse {
                 $result   = $this->recordService->deleteRecord(table: $table, id: $id, tenantId: $tenantId);
                 $affected = $result['affected'];
 
@@ -436,6 +438,7 @@ trait HasCrudOperations
                         RecordConfigService::tenantColumn() => $tenantId,
                         'affected'                          => $affected,
                         'soft_deleted'                      => $tableSchema->softDeletes,
+                        'record'                            => $record,
                         'response'                          => $response,
                     ]
                 );
@@ -474,7 +477,25 @@ trait HasCrudOperations
                 return $tenantError;
             }
 
-            return $this->withinTransaction(function () use ($request, $table, $id, $tenantId, $tableSchema): JsonResponse {
+            $record = $this->recordService->fetchRawRecord($table, $id, $tenantId);
+
+            $triggerParams = $this->recordService->executeGlobalTrigger(
+                hook: 'beforeRestore',
+                params: [$request, $table, ['id' => $id, RecordConfigService::tenantColumn() => $tenantId, 'record' => $record]]
+            );
+            if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
+                $request = $triggerParams[0];
+            }
+
+            $triggerParams = $this->recordService->executeTableTrigger(
+                trigger: $tableSchema->beforeRestore ?? null,
+                params: [$request, $table, ['id' => $id, RecordConfigService::tenantColumn() => $tenantId, 'record' => $record]]
+            );
+            if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
+                $request = $triggerParams[0];
+            }
+
+            return $this->withinTransaction(function () use ($request, $table, $id, $tenantId, $tableSchema, $record): JsonResponse {
                 $result   = $this->recordService->restoreRecord(table: $table, id: $id, tenantId: $tenantId);
                 $affected = $result['restored'];
 
@@ -489,12 +510,12 @@ trait HasCrudOperations
                 $this->recordService->processPostWriteLogic(
                     request: $request,
                     table: $table,
-                    operation: 'update',
+                    operation: 'restore',
                     recordContext: [
                         'id'                                => $id,
-                        'payload'                           => [],
                         RecordConfigService::tenantColumn() => $tenantId,
                         'restored'                          => $affected,
+                        'record'                            => $record,
                         'response'                          => $response,
                     ]
                 );
@@ -520,7 +541,7 @@ trait HasCrudOperations
                 return $this->resourceNotAvailableResponse();
             }
 
-            $this->authorizeAction($table, 'delete');
+            $this->authorizeAction($table, 'force_delete');
             $this->resolveActualTableName($table);
 
             [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
@@ -528,7 +549,25 @@ trait HasCrudOperations
                 return $tenantError;
             }
 
-            return $this->withinTransaction(function () use ($request, $table, $id, $tenantId, $tableSchema): JsonResponse {
+            $record = $this->recordService->fetchRawRecord($table, $id, $tenantId);
+
+            $triggerParams = $this->recordService->executeGlobalTrigger(
+                hook: 'beforeDelete',
+                params: [$request, $table, ['id' => $id, RecordConfigService::tenantColumn() => $tenantId, 'record' => $record, 'force_delete' => true]]
+            );
+            if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
+                $request = $triggerParams[0];
+            }
+
+            $triggerParams = $this->recordService->executeTableTrigger(
+                trigger: $tableSchema->beforeDelete ?? null,
+                params: [$request, $table, ['id' => $id, RecordConfigService::tenantColumn() => $tenantId, 'record' => $record, 'force_delete' => true]]
+            );
+            if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
+                $request = $triggerParams[0];
+            }
+
+            return $this->withinTransaction(function () use ($request, $table, $id, $tenantId, $tableSchema, $record): JsonResponse {
                 $result  = $this->recordService->forceDeleteRecord($request, $table, $id, $tenantId);
                 $deleted = $result['deleted'];
 
@@ -549,6 +588,7 @@ trait HasCrudOperations
                         RecordConfigService::tenantColumn() => $tenantId,
                         'deleted'                           => $deleted,
                         'force_deleted'                     => true,
+                        'record'                            => $record,
                         'response_data'                     => ['id' => $id],
                         'response'                          => $response,
                     ]

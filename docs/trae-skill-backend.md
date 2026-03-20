@@ -386,8 +386,10 @@ updateValidator: fn($request, $id) => Validator::make($request->all(), [
 | `afterCreate`  | After INSERT      | `$record`  | `void`                 |
 | `beforeUpdate` | Before UPDATE     | `$record`  | `Request\|array\|null` |
 | `afterUpdate`  | After UPDATE      | `$record`  | `void`                 |
-| `beforeDelete` | Before DELETE     | `$record`  | `Request\|array\|null` |
-| `afterDelete`  | After DELETE      | `$record`  | `void`                 |
+| `beforeDelete`  | Before DELETE     | `$record`  | `Request\|array\|null` |
+| `afterDelete`   | After DELETE      | `$record`  | `void`                 |
+| `beforeRestore` | Before RESTORE    | `$record`  | `Request\|array\|null` |
+| `afterRestore`  | After RESTORE     | `$record`  | `void`                 |
 
 ---
 
