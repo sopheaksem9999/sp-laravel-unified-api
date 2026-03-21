@@ -21,6 +21,7 @@ use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Http\Controllers\CoreRecordController;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
+use Sopheak\Core\Utilities\RecordPayloadExtractor;
 use Sopheak\Core\Utilities\QueryBuilderFiltersUtils;
 use Sopheak\Core\Utilities\PermissionUtils;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
@@ -162,6 +163,38 @@ class BasicTest extends TestCase
         $response->assertJsonPath('success', false);
         $response->assertJsonPath('message', 'Unauthenticated');
         $response->assertJsonPath('error_code', 10000);
+    }
+
+    /** @test */
+    public function it_handles_request_input_in_record_payload_extractor_without_array_key_exists_type_error(): void
+    {
+        Config::set('record.tables', [
+            'companies' => new RecordTableType(
+                table: 'companies',
+                columns: [
+                    'name' => ['type' => 'string'],
+                    'updated_at' => ['type' => 'datetime'],
+                    'updated_by' => ['type' => 'integer'],
+                ],
+                isAuthRead: false,
+                isAuthWrite: false,
+                public: new RecordTablePublic(read: true, write: true),
+            ),
+        ]);
+        SchemaRegistryUtils::refresh();
+
+        $request = Request::create('/api/companies/1', 'PUT', [
+            'name' => 'ACME Co',
+        ]);
+
+        $data = RecordPayloadExtractor::fromRequest(
+            request: $request,
+            isUpdate: true,
+            recordTable: 'companies'
+        );
+
+        $this->assertSame('ACME Co', $data['name']);
+        $this->assertArrayHasKey('updated_at', $data);
     }
 
     /** @test */
