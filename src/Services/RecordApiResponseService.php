@@ -375,11 +375,13 @@ class RecordApiResponseService
                     if (!property_exists($row, $col)) {
                         continue;
                     }
+
                     $value = $row->{$col};
                 } else {
                     if (!array_key_exists($col, $row)) {
                         continue;
                     }
+
                     $value = $row[$col];
                 }
 
