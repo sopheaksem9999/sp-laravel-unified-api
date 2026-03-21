@@ -5,6 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="robots" content="noindex, nofollow, noarchive">
     <meta name="googlebot" content="noindex">
     <title>{{ env('APP_NAME', 'SP Laravel Unified') }} - API Docs</title>
@@ -161,9 +162,20 @@
             isPrivate: {{ config('record.api_docs.is_private', false) ? 'true' : 'false' }},
             accessTokenKey: @json((string) config('record.api_docs.access_token_key', 'access_token')),
             loginApi: @json((string) config('record.api_docs.login_api', '/api/login')),
+            email: @json((string) config('record.api_docs.email', '')),
             apiPrefix: @json(trim(config('record.api_prefix', 'api/v1'), '/')),
         };
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
         const tokenStorageKey = 'sp_api_docs_access_token';
+
+        function persistToken(token) {
+            localStorage.setItem(tokenStorageKey, token);
+            syncScalarAuthTokenUi(token);
+        }
+
+        function clearPersistedToken() {
+            localStorage.removeItem(tokenStorageKey);
+        }
 
         function extractAndPersistTokenFromPayload(payload) {
             const token = resolveTokenFromPayload(payload, docsSettings.accessTokenKey);
@@ -171,8 +183,7 @@
                 return false;
             }
 
-            localStorage.setItem(tokenStorageKey, token);
-            syncScalarAuthTokenUi(token);
+            persistToken(token);
             return true;
         }
 
@@ -220,7 +231,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             const token = localStorage.getItem(tokenStorageKey);
             if (!docsSettings.isPrivate) {
-                localStorage.removeItem(tokenStorageKey);
+                clearPersistedToken();
                 showDocsToolbar(false);
                 initializeScalar();
                 return;
@@ -238,7 +249,7 @@
         function initializeScalar() {
             const config = {
                 spec: {
-                    url: '{{ url(trim(config('record.api_prefix', 'api/v1'), '/') . '/docs/openapi.json') }}'
+                    url: '{{ url('/api-docs/openapi.json') }}'
                 },
                 "theme": "default",
                 "expandAllResponses": true,
@@ -309,8 +320,18 @@
                 return;
             }
             logoutBtn.onclick = function() {
-                localStorage.removeItem(tokenStorageKey);
-                window.location.reload();
+                if (docsSettings.isPrivate) {
+                    nativeFetch('{{ url('/api-docs/auth/logout') }}', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: {
+                            'X-CSRF-TOKEN': csrfToken,
+                            'Accept': 'application/json',
+                        },
+                    }).catch(() => ({}));
+                }
+                clearPersistedToken();
+                window.location.href = '{{ url('/api-docs') }}';
             };
         }
 
@@ -320,6 +341,8 @@
                 return;
             }
             const endpointInput = document.getElementById('auth-endpoint');
+            const usernameInput = document.getElementById('auth-username');
+            const passwordInput = document.getElementById('auth-password');
             if (endpointInput && !endpointInput.value.trim()) {
                 endpointInput.value = docsSettings.loginApi || '/api/login';
             }
@@ -328,8 +351,6 @@
                 event.preventDefault();
                 const submitButton = document.getElementById('auth-submit');
                 const errorEl = document.getElementById('auth-error');
-                const usernameInput = document.getElementById('auth-username');
-                const passwordInput = document.getElementById('auth-password');
                 errorEl.style.display = 'none';
                 errorEl.textContent = '';
                 submitButton.disabled = true;
@@ -340,13 +361,16 @@
                 const password = passwordInput instanceof HTMLInputElement ? passwordInput.value : '';
 
                 try {
-                    const response = await nativeFetch(endpoint, {
+                    const response = await nativeFetch('{{ url('/api-docs/auth/login') }}', {
                         method: 'POST',
+                        credentials: 'same-origin',
                         headers: {
                             'Content-Type': 'application/json',
                             'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken,
                         },
                         body: JSON.stringify({
+                            endpoint: endpoint,
                             email: username,
                             username: username,
                             password: password,
@@ -361,7 +385,7 @@
                             (payload && (payload.message || payload.error)) || 'Invalid login response: token not found.'
                         );
                     }
-                    localStorage.setItem(tokenStorageKey, token);
+                    persistToken(token);
                     document.getElementById('auth-shell').style.display = 'none';
                     document.getElementById('docs').style.display = 'block';
                     showDocsToolbar(true);

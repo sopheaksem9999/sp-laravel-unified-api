@@ -21,6 +21,7 @@ Use `config/record.php` to control visibility:
     'is_private' => env('SP_LARAVEL_API_DOCS_PRIVATE', false),
     'access_token_key' => 'access_token',
     'login_api' => '/v1/auth/login',
+    'email' => env('SP_LARAVEL_API_DOCS_EMAIL'),
 ],
 ```
 
@@ -29,8 +30,14 @@ Behavior:
 - If `api_docs` config is missing, docs stay public by default.
 - If `is_private=false`, `/api-docs` loads Scalar directly.
 - If `is_private=true`, `/api-docs` shows a custom login form first.
+- If `is_private=true`, Scalar uses secure web routes:
+  - `POST /api-docs/auth/login`
+  - `POST /api-docs/auth/logout`
+  - `GET /api-docs/openapi.json`
+- In private mode, API endpoints `/{api_prefix}/docs/openapi(.json)` and `/{api_prefix}/docs/llms.*` are hidden with `404` to avoid schema leakage.
 - `login_api` supports relative route or absolute URL, so each client project can point docs login to its own auth endpoint.
-- After successful login, token is extracted from response using `access_token_key` and attached as `Authorization: Bearer {token}` for docs API requests.
+- `access_token_key` controls token extraction key from login response payload.
+- `email` is optional and enforces a fixed docs login account.
 
 ### Query Filtering (applyRequestFilters macro)
 
