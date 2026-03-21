@@ -347,6 +347,7 @@ class RecordApiResponseService
             if (isset($descriptor['callable'])) {
                 return ($descriptor['callable'])($value, $col, $row);
             }
+
             $cast = $descriptor['builtin'];
 
             return match (true) {
@@ -401,11 +402,13 @@ class RecordApiResponseService
                     if (!property_exists($row, $relation)) {
                         continue;
                     }
+
                     $relData = $row->{$relation};
                 } else {
                     if (!array_key_exists($relation, $row)) {
                         continue;
                     }
+
                     $relData = $row[$relation];
                 }
 
@@ -420,11 +423,13 @@ class RecordApiResponseService
                             if (!property_exists($relRow, $col)) {
                                 continue;
                             }
+
                             $value = $relRow->{$col};
                         } else {
                             if (!array_key_exists($col, $relRow)) {
                                 continue;
                             }
+
                             $value = $relRow[$col];
                         }
 
@@ -715,26 +720,6 @@ class RecordApiResponseService
         }
 
         return null;
-    }
-
-    private static function castToBoolean(mixed $value): bool
-    {
-        if (is_bool($value)) {
-            return $value;
-        }
-
-        if (is_string($value)) {
-            $normalized = strtolower(trim($value));
-            if (in_array($normalized, ['true', 't', 'yes', 'y', 'on', '1'], true)) {
-                return true;
-            }
-
-            if (in_array($normalized, ['false', 'f', 'no', 'n', 'off', '0', ''], true)) {
-                return false;
-            }
-        }
-
-        return (bool) $value;
     }
 
     /**

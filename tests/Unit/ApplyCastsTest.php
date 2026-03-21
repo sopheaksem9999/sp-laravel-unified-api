@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Tests\Unit;
 
+use stdClass;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Sopheak\Core\Services\RecordApiResponseService;
@@ -36,12 +37,12 @@ class ApplyCastsTest extends TestCase
     // Helpers
     // -------------------------------------------------------------------------
 
-    private static function applyCasts(mixed $data, array $casting, array $columns = []): mixed
+    private function applyCasts(mixed $data, array $casting, array $columns = []): mixed
     {
         return RecordApiResponseService::applyCasts($data, $columns, $casting);
     }
 
-    private static function obj(array $attrs): object
+    private function obj(array $attrs): object
     {
         return (object) $attrs;
     }
@@ -52,13 +53,13 @@ class ApplyCastsTest extends TestCase
 
     public function test_returns_null_when_data_is_null(): void
     {
-        $this->assertNull(self::applyCasts(null, ['price' => 'float']));
+        $this->assertNull($this->applyCasts(null, ['price' => 'float']));
     }
 
     public function test_returns_data_unchanged_when_casting_is_empty(): void
     {
-        $row = self::obj(['price' => '9.99']);
-        $this->assertSame($row, self::applyCasts($row, []));
+        $row = $this->obj(['price' => '9.99']);
+        $this->assertSame($row, $this->applyCasts($row, []));
     }
 
     // -------------------------------------------------------------------------
@@ -67,92 +68,92 @@ class ApplyCastsTest extends TestCase
 
     public function test_int_cast(): void
     {
-        $result = self::applyCasts(['qty' => '42'], ['qty' => 'int']);
+        $result = $this->applyCasts(['qty' => '42'], ['qty' => 'int']);
         $this->assertSame(42, $result['qty']);
     }
 
     public function test_integer_alias_cast(): void
     {
-        $result = self::applyCasts(['qty' => '7'], ['qty' => 'integer']);
+        $result = $this->applyCasts(['qty' => '7'], ['qty' => 'integer']);
         $this->assertSame(7, $result['qty']);
     }
 
     public function test_float_cast(): void
     {
-        $result = self::applyCasts(['price' => '3.14'], ['price' => 'float']);
+        $result = $this->applyCasts(['price' => '3.14'], ['price' => 'float']);
         $this->assertSame(3.14, $result['price']);
     }
 
     public function test_double_alias_cast(): void
     {
-        $result = self::applyCasts(['val' => '1.5'], ['val' => 'double']);
+        $result = $this->applyCasts(['val' => '1.5'], ['val' => 'double']);
         $this->assertSame(1.5, $result['val']);
     }
 
     public function test_decimal_colon_cast(): void
     {
-        $result = self::applyCasts(['score' => '9.12345'], ['score' => 'decimal:3']);
+        $result = $this->applyCasts(['score' => '9.12345'], ['score' => 'decimal:3']);
         $this->assertSame('9.123', $result['score']);
     }
 
     public function test_decimal_plain_cast(): void
     {
-        $result = self::applyCasts(['val' => '7'], ['val' => 'decimal']);
+        $result = $this->applyCasts(['val' => '7'], ['val' => 'decimal']);
         $this->assertSame(7.0, $result['val']);
     }
 
     public function test_string_cast(): void
     {
-        $result = self::applyCasts(['code' => 123], ['code' => 'string']);
+        $result = $this->applyCasts(['code' => 123], ['code' => 'string']);
         $this->assertSame('123', $result['code']);
     }
 
     public function test_bool_cast_truthy(): void
     {
-        $result = self::applyCasts(['active' => 1], ['active' => 'bool']);
+        $result = $this->applyCasts(['active' => 1], ['active' => 'bool']);
         $this->assertTrue($result['active']);
     }
 
     public function test_boolean_cast_falsy(): void
     {
-        $result = self::applyCasts(['active' => 0], ['active' => 'boolean']);
+        $result = $this->applyCasts(['active' => 0], ['active' => 'boolean']);
         $this->assertFalse($result['active']);
     }
 
     public function test_array_cast_from_json_string(): void
     {
-        $result = self::applyCasts(['meta' => '{"a":1}'], ['meta' => 'array']);
+        $result = $this->applyCasts(['meta' => '{"a":1}'], ['meta' => 'array']);
         $this->assertSame(['a' => 1], $result['meta']);
     }
 
     public function test_json_alias_cast(): void
     {
-        $result = self::applyCasts(['meta' => '[1,2]'], ['meta' => 'json']);
+        $result = $this->applyCasts(['meta' => '[1,2]'], ['meta' => 'json']);
         $this->assertSame([1, 2], $result['meta']);
     }
 
     public function test_object_cast_from_json_string(): void
     {
-        $result = self::applyCasts(['cfg' => '{"x":1}'], ['cfg' => 'object']);
-        $this->assertInstanceOf(\stdClass::class, $result['cfg']);
+        $result = $this->applyCasts(['cfg' => '{"x":1}'], ['cfg' => 'object']);
+        $this->assertInstanceOf(stdClass::class, $result['cfg']);
         $this->assertSame(1, $result['cfg']->x);
     }
 
     public function test_date_cast(): void
     {
-        $result = self::applyCasts(['dob' => '1990-05-15 12:00:00'], ['dob' => 'date']);
+        $result = $this->applyCasts(['dob' => '1990-05-15 12:00:00'], ['dob' => 'date']);
         $this->assertSame('1990-05-15', $result['dob']);
     }
 
     public function test_datetime_cast(): void
     {
-        $result = self::applyCasts(['ts' => '2024-01-01 00:00:00'], ['ts' => 'datetime']);
+        $result = $this->applyCasts(['ts' => '2024-01-01 00:00:00'], ['ts' => 'datetime']);
         $this->assertStringStartsWith('2024-01-01', $result['ts']);
     }
 
     public function test_timestamp_cast(): void
     {
-        $result = self::applyCasts(['ts' => '2024-01-01 00:00:00 UTC'], ['ts' => 'timestamp']);
+        $result = $this->applyCasts(['ts' => '2024-01-01 00:00:00 UTC'], ['ts' => 'timestamp']);
         $this->assertIsInt($result['ts']);
     }
 
@@ -162,13 +163,13 @@ class ApplyCastsTest extends TestCase
 
     public function test_null_value_is_preserved(): void
     {
-        $result = self::applyCasts(['price' => null], ['price' => 'float']);
+        $result = $this->applyCasts(['price' => null], ['price' => 'float']);
         $this->assertNull($result['price']);
     }
 
     public function test_missing_column_is_skipped(): void
     {
-        $result = self::applyCasts(['name' => 'Foo'], ['price' => 'float']);
+        $result = $this->applyCasts(['name' => 'Foo'], ['price' => 'float']);
         $this->assertArrayNotHasKey('price', $result);
         $this->assertSame('Foo', $result['name']);
     }
@@ -179,25 +180,19 @@ class ApplyCastsTest extends TestCase
 
     public function test_closure_cast(): void
     {
-        $result = self::applyCasts(['name' => 'hello'], ['name' => fn($v) => strtoupper($v)]);
+        $result = $this->applyCasts(['name' => 'hello'], ['name' => strtoupper(...)]);
         $this->assertSame('HELLO', $result['name']);
     }
 
     public function test_class_method_array_cast(): void
     {
-        $result = self::applyCasts(
-            ['val' => '1'],
-            ['val' => [ApplyCastTestHelper::class, 'toInt']],
-        );
+        $result = $this->applyCasts(['val' => '1'], ['val' => ApplyCastTestHelper::toInt(...)]);
         $this->assertSame(1, $result['val']);
     }
 
     public function test_class_at_method_string_cast(): void
     {
-        $result = self::applyCasts(
-            ['val' => '2'],
-            ['val' => ApplyCastTestHelper::class . '@toInt'],
-        );
+        $result = $this->applyCasts(['val' => '2'], ['val' => ApplyCastTestHelper::class . '@toInt']);
         $this->assertSame(2, $result['val']);
     }
 
@@ -208,7 +203,7 @@ class ApplyCastsTest extends TestCase
     public function test_cast_applied_to_collection(): void
     {
         $collection = new Collection([['price' => '5.5'], ['price' => '10']]);
-        $result     = self::applyCasts($collection, ['price' => 'float']);
+        $result     = $this->applyCasts($collection, ['price' => 'float']);
         $this->assertSame(5.5, $result[0]['price']);
         $this->assertSame(10.0, $result[1]['price']);
     }
@@ -216,7 +211,7 @@ class ApplyCastsTest extends TestCase
     public function test_cast_applied_to_sequential_array(): void
     {
         $rows   = [['qty' => '3'], ['qty' => '7']];
-        $result = self::applyCasts($rows, ['qty' => 'int']);
+        $result = $this->applyCasts($rows, ['qty' => 'int']);
         $this->assertSame(3, $result[0]['qty']);
         $this->assertSame(7, $result[1]['qty']);
     }
@@ -228,7 +223,7 @@ class ApplyCastsTest extends TestCase
             1,
             15,
         );
-        $result = self::applyCasts($paginator, ['price' => 'float']);
+        $result = $this->applyCasts($paginator, ['price' => 'float']);
         $this->assertInstanceOf(LengthAwarePaginator::class, $result);
         $items = $result->items();
         $this->assertSame(9.99, $items[0]['price']);
@@ -240,11 +235,11 @@ class ApplyCastsTest extends TestCase
 
     public function test_belongs_to_has_one_object_cast(): void
     {
-        $row = self::obj([
+        $row = $this->obj([
             'id'    => 1,
-            'brand' => self::obj(['active' => 1, 'score' => '9.5']),
+            'brand' => $this->obj(['active' => 1, 'score' => '9.5']),
         ]);
-        $result = self::applyCasts($row, ['brand.active' => 'bool', 'brand.score' => 'float']);
+        $result = $this->applyCasts($row, ['brand.active' => 'bool', 'brand.score' => 'float']);
 
         $this->assertTrue($result->brand->active);
         $this->assertSame(9.5, $result->brand->score);
@@ -259,7 +254,7 @@ class ApplyCastsTest extends TestCase
                 ['price' => '20', 'qty' => '3'],
             ],
         ];
-        $result = self::applyCasts($row, ['items.price' => 'float', 'items.qty' => 'int']);
+        $result = $this->applyCasts($row, ['items.price' => 'float', 'items.qty' => 'int']);
 
         $this->assertSame(10.0, $result['items'][0]['price']);
         $this->assertSame(3, $result['items'][1]['qty']);
@@ -267,14 +262,14 @@ class ApplyCastsTest extends TestCase
 
     public function test_has_many_collection_cast(): void
     {
-        $row = self::obj([
+        $row = $this->obj([
             'id'    => 1,
             'items' => new Collection([
-                self::obj(['price' => '5']),
-                self::obj(['price' => '8']),
+                $this->obj(['price' => '5']),
+                $this->obj(['price' => '8']),
             ]),
         ]);
-        $result = self::applyCasts($row, ['items.price' => 'float']);
+        $result = $this->applyCasts($row, ['items.price' => 'float']);
 
         $this->assertInstanceOf(Collection::class, $result->items);
         $this->assertSame(5.0, $result->items[0]->price);
@@ -283,27 +278,27 @@ class ApplyCastsTest extends TestCase
 
     public function test_null_relation_is_preserved(): void
     {
-        $row    = self::obj(['id' => 1, 'brand' => null]);
-        $result = self::applyCasts($row, ['brand.active' => 'bool']);
+        $row    = $this->obj(['id' => 1, 'brand' => null]);
+        $result = $this->applyCasts($row, ['brand.active' => 'bool']);
 
         $this->assertNull($result->brand);
     }
 
     public function test_missing_relation_key_is_skipped(): void
     {
-        $row    = self::obj(['id' => 1]);
-        $result = self::applyCasts($row, ['brand.active' => 'bool']);
+        $row    = $this->obj(['id' => 1]);
+        $result = $this->applyCasts($row, ['brand.active' => 'bool']);
 
         $this->assertFalse(property_exists($result, 'brand'));
     }
 
     public function test_missing_column_inside_relation_is_skipped(): void
     {
-        $row = self::obj([
+        $row = $this->obj([
             'id'    => 1,
-            'brand' => self::obj(['name' => 'Foo']),
+            'brand' => $this->obj(['name' => 'Foo']),
         ]);
-        $result = self::applyCasts($row, ['brand.active' => 'bool']);
+        $result = $this->applyCasts($row, ['brand.active' => 'bool']);
 
         // 'active' was not present — brand object unchanged
         $this->assertFalse(property_exists($result->brand, 'active'));
@@ -312,22 +307,22 @@ class ApplyCastsTest extends TestCase
 
     public function test_null_column_inside_relation_is_preserved(): void
     {
-        $row = self::obj([
+        $row = $this->obj([
             'id'    => 1,
-            'brand' => self::obj(['active' => null]),
+            'brand' => $this->obj(['active' => null]),
         ]);
-        $result = self::applyCasts($row, ['brand.active' => 'bool']);
+        $result = $this->applyCasts($row, ['brand.active' => 'bool']);
 
         $this->assertNull($result->brand->active);
     }
 
     public function test_flat_and_relational_casts_combined(): void
     {
-        $row = self::obj([
+        $row = $this->obj([
             'price' => '19.99',
-            'brand' => self::obj(['active' => 1]),
+            'brand' => $this->obj(['active' => 1]),
         ]);
-        $result = self::applyCasts($row, ['price' => 'float', 'brand.active' => 'bool']);
+        $result = $this->applyCasts($row, ['price' => 'float', 'brand.active' => 'bool']);
 
         $this->assertSame(19.99, $result->price);
         $this->assertTrue($result->brand->active);
@@ -335,10 +330,10 @@ class ApplyCastsTest extends TestCase
 
     public function test_closure_cast_on_relation_column(): void
     {
-        $row = self::obj([
-            'brand' => self::obj(['name' => 'hello']),
+        $row = $this->obj([
+            'brand' => $this->obj(['name' => 'hello']),
         ]);
-        $result = self::applyCasts($row, ['brand.name' => fn($v) => strtoupper($v)]);
+        $result = $this->applyCasts($row, ['brand.name' => strtoupper(...)]);
 
         $this->assertSame('HELLO', $result->brand->name);
     }

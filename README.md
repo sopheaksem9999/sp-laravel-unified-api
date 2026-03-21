@@ -1350,6 +1350,21 @@ Use the bundled Scalar page to browse the API documentation:
 GET /api-docs
 ```
 
+Docs access mode is configurable via `config/record.php`:
+
+```php
+'api_docs' => [
+    'is_private' => env('SP_LARAVEL_API_DOCS_PRIVATE', false),
+    'access_token_key' => 'access_token',
+    'login_api' => '/v1/auth/login',
+],
+```
+
+- When `is_private=false` (or `api_docs` config is missing), `/api-docs` is public.
+- When `is_private=true`, `/api-docs` shows a login form and extracts token from login response using `access_token_key`.
+- `login_api` can be a relative path (`/v1/auth/login`) or absolute URL (`https://api.example.com/v1/auth/login`) based on client project routing.
+- Retrieved token is automatically attached as `Authorization: Bearer {token}` for docs API requests.
+
 The generated OpenAPI 3.0 schema includes:
 
 **Enhanced Schema Generation:**

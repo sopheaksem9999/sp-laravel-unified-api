@@ -8,6 +8,30 @@ For full interactive examples, visit: https://sp-laravel-api-docs.vercel.app/#/
 
 This section documents the record CRUD endpoints provided by this package, including request/response formats, filtering, pagination, and error handling.
 
+### API Docs Access Mode
+
+The bundled docs UI endpoint is:
+
+- `GET /api-docs`
+
+Use `config/record.php` to control visibility:
+
+```php
+'api_docs' => [
+    'is_private' => env('SP_LARAVEL_API_DOCS_PRIVATE', false),
+    'access_token_key' => 'access_token',
+    'login_api' => '/v1/auth/login',
+],
+```
+
+Behavior:
+
+- If `api_docs` config is missing, docs stay public by default.
+- If `is_private=false`, `/api-docs` loads Scalar directly.
+- If `is_private=true`, `/api-docs` shows a custom login form first.
+- `login_api` supports relative route or absolute URL, so each client project can point docs login to its own auth endpoint.
+- After successful login, token is extracted from response using `access_token_key` and attached as `Authorization: Bearer {token}` for docs API requests.
+
 ### Query Filtering (applyRequestFilters macro)
 
 The package extends Laravel's `Illuminate\Database\Query\Builder` with a macro `applyRequestFilters`. This is the same filtering/pagination mechanism used by the record CRUD endpoints when listing records.
