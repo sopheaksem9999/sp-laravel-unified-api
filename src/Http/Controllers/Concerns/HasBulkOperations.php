@@ -3,6 +3,7 @@
 namespace Sopheak\Core\Http\Controllers\Concerns;
 
 use Exception;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -45,6 +46,8 @@ trait HasBulkOperations
             return RecordApiResponseService::successWrapped($result['data'], $result['meta']);
         } catch (RecordNotFoundException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
+        } catch (HttpResponseException $e) {
+            return $e->getResponse();
         } catch (Exception $e) {
             $code = $e->getCode();
             if (!is_int($code) || $code < 100 || $code > 599) {
@@ -109,6 +112,8 @@ trait HasBulkOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
+        } catch (HttpResponseException $e) {
+            return $e->getResponse();
         } catch (Exception $e) {
             return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
@@ -222,6 +227,8 @@ trait HasBulkOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
+        } catch (HttpResponseException $e) {
+            return $e->getResponse();
         } catch (Exception $e) {
             return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
@@ -354,6 +361,8 @@ trait HasBulkOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
+        } catch (HttpResponseException $e) {
+            return $e->getResponse();
         } catch (Exception $e) {
             return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
@@ -474,6 +483,8 @@ trait HasBulkOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
+        } catch (HttpResponseException $e) {
+            return $e->getResponse();
         } catch (Exception $e) {
             return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }

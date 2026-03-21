@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
@@ -21,6 +22,7 @@ use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Http\Controllers\CoreRecordController;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
+use Sopheak\Core\Utilities\RecordPayloadExtractor;
 use Sopheak\Core\Utilities\QueryBuilderFiltersUtils;
 use Sopheak\Core\Utilities\PermissionUtils;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
@@ -127,6 +129,141 @@ class BasicTest extends TestCase
         $testResponse->assertStatus(200);
         $this->assertStringContainsString('text/markdown', (string) $testResponse->headers->get('content-type'));
         $this->assertStringContainsString('/api/docs/openapi.json', (string) $testResponse->getContent());
+    }
+
+    /** @test */
+    public function it_requires_bearer_token_for_docs_endpoints_when_api_docs_is_private(): void
+    {
+        Config::set('record.api_docs.is_private', true);
+
+        $this->get('/api/docs/openapi.json')->assertStatus(401);
+        $this->get('/api/docs/llms.mdx')->assertStatus(401);
+
+        $this->get('/api/docs/openapi.json', ['Authorization' => 'Bearer test-token'])->assertStatus(200);
+        $this->get('/api/docs/llms.mdx', ['Authorization' => 'Bearer test-token'])->assertStatus(200);
+    }
+
+    /** @test */
+    public function it_preserves_http_response_exception_payload_for_unauthenticated_requests(): void
+    {
+        Config::set('record.tables', [
+            'secure_items' => new RecordTableType(
+                table: 'secure_items',
+                isAuthRead: true,
+                public: new RecordTablePublic(read: false, write: false),
+                columns: [
+                    'id' => ['type' => 'integer'],
+                ],
+            ),
+        ]);
+        SchemaRegistryUtils::refresh();
+
+        $response = $this->get('/api/secure_items');
+
+        $response->assertStatus(401);
+        $response->assertJsonPath('success', false);
+        $response->assertJsonPath('message', 'Unauthenticated');
+        $response->assertJsonPath('error_code', 10000);
+    }
+
+    /** @test */
+    public function it_handles_request_input_in_record_payload_extractor_without_array_key_exists_type_error(): void
+    {
+        Config::set('record.tables', [
+            'companies' => new RecordTableType(
+                table: 'companies',
+                columns: [
+                    'name' => ['type' => 'string'],
+                    'updated_at' => ['type' => 'datetime'],
+                    'updated_by' => ['type' => 'integer'],
+                ],
+                isAuthRead: false,
+                isAuthWrite: false,
+                public: new RecordTablePublic(read: true, write: true),
+            ),
+        ]);
+        SchemaRegistryUtils::refresh();
+
+        $request = Request::create('/api/companies/1', 'PUT', [
+            'name' => 'ACME Co',
+        ]);
+
+        $data = RecordPayloadExtractor::fromRequest(
+            request: $request,
+            isUpdate: true,
+            recordTable: 'companies'
+        );
+
+        $this->assertSame('ACME Co', $data['name']);
+        $this->assertArrayHasKey('updated_at', $data);
+    }
+
+    /** @test */
+    public function it_auto_fills_created_by_created_by_id_updated_by_last_updated_by_and_last_updated_by_id_when_columns_exist(): void
+    {
+        auth('api')->setUser(new GenericUser(['id' => 77]));
+
+        $schema = new RecordTableType(
+            table: 'companies',
+            columns: [
+                'created_by' => ['type' => 'integer'],
+                'created_by_id' => ['type' => 'integer'],
+                'updated_by' => ['type' => 'integer'],
+                'last_updated_by' => ['type' => 'integer'],
+                'last_updated_by_id' => ['type' => 'integer'],
+                'updated_at' => ['type' => 'datetime'],
+            ],
+            overrideUserstamps: false,
+            overrideTimestamps: false
+        );
+
+        $service = new RecordService();
+
+        $createPayload = $service->applyTimestampsAndAuditFields([], $schema, false);
+        $this->assertSame(77, $createPayload['created_by']);
+        $this->assertSame(77, $createPayload['created_by_id']);
+        $this->assertSame(77, $createPayload['updated_by']);
+        $this->assertSame(77, $createPayload['last_updated_by']);
+        $this->assertSame(77, $createPayload['last_updated_by_id']);
+
+        $updatePayload = $service->applyTimestampsAndAuditFields([], $schema, true);
+        $this->assertSame(77, $updatePayload['created_by']);
+        $this->assertSame(77, $updatePayload['created_by_id']);
+        $this->assertSame(77, $updatePayload['updated_by']);
+        $this->assertSame(77, $updatePayload['last_updated_by']);
+        $this->assertSame(77, $updatePayload['last_updated_by_id']);
+    }
+
+    /** @test */
+    public function it_shows_private_docs_login_form_when_api_docs_is_private(): void
+    {
+        Config::set('record.api_docs.is_private', true);
+        Config::set('record.api_docs.access_token_key', 'access_token');
+        Config::set('record.api_docs.login_api', '/v1/auth/login');
+
+        $testResponse = $this->get('/api-docs');
+
+        $testResponse
+            ->assertStatus(200)
+            ->assertSee('API Docs Login')
+            ->assertSee('accessTokenKey')
+            ->assertSee('loginApi')
+            ->assertSee('extractAndPersistTokenFromPayload')
+            ->assertSee('shouldAttachAuthForUrl')
+            ->assertSee('syncScalarAuthTokenUi');
+    }
+
+    /** @test */
+    public function it_keeps_api_docs_public_when_api_docs_config_is_missing(): void
+    {
+        config()->offsetUnset('record.api_docs');
+
+        $testResponse = $this->get('/api-docs');
+
+        $testResponse
+            ->assertStatus(200)
+            ->assertDontSee('API Docs Login')
+            ->assertSee('Scalar.createApiReference');
     }
 
     /** @test */
@@ -507,6 +644,18 @@ class BasicTest extends TestCase
         $this->expectExceptionMessage("Invalid cast definition for column 'quantity' at record.casting.quantity");
 
         RecordApiResponseService::applyCasts(['quantity' => '21'], []);
+    }
+
+    /** @test */
+    public function it_falls_back_when_global_casting_config_is_not_array(): void
+    {
+        Config::set('record.casting', 'invalid');
+
+        $casted = RecordApiResponseService::applyCasts(['quantity' => '21'], [], [
+            'quantity' => 'int',
+        ]);
+
+        $this->assertSame(21, $casted['quantity']);
     }
 
     /** @test */

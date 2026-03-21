@@ -1293,13 +1293,9 @@ class RecordService
             }
 
             if ($user) {
-                if (isset($tableSchema->columns['updated_by'])) {
-                    if (!array_key_exists('updated_by', $payload) || !$overrideUserstamps) {
-                        $payload['updated_by'] = $user->id;
-                    }
-                } elseif (isset($tableSchema->columns['last_updated_by'])) {
-                    if (!array_key_exists('last_updated_by', $payload) || !$overrideUserstamps) {
-                        $payload['last_updated_by'] = $user->id;
+                foreach (['created_by', 'created_by_id', 'updated_by', 'last_updated_by', 'last_updated_by_id'] as $auditField) {
+                    if (isset($tableSchema->columns[$auditField]) && (!array_key_exists($auditField, $payload) || !$overrideUserstamps)) {
+                        $payload[$auditField] = $user->id;
                     }
                 }
             }
@@ -1313,17 +1309,9 @@ class RecordService
             }
 
             if ($user) {
-                if (isset($tableSchema->columns['created_by']) && (!array_key_exists('created_by', $payload) || !$overrideUserstamps)) {
-                    $payload['created_by'] = $user->id;
-                }
-
-                if (isset($tableSchema->columns['updated_by'])) {
-                    if (!array_key_exists('updated_by', $payload) || !$overrideUserstamps) {
-                        $payload['updated_by'] = $user->id;
-                    }
-                } elseif (isset($tableSchema->columns['last_updated_by'])) {
-                    if (!array_key_exists('last_updated_by', $payload) || !$overrideUserstamps) {
-                        $payload['last_updated_by'] = $user->id;
+                foreach (['created_by', 'created_by_id', 'updated_by', 'last_updated_by', 'last_updated_by_id'] as $auditField) {
+                    if (isset($tableSchema->columns[$auditField]) && (!array_key_exists($auditField, $payload) || !$overrideUserstamps)) {
+                        $payload[$auditField] = $user->id;
                     }
                 }
             }

@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Http\Request;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 use Sopheak\Core\Http\Controllers\CoreRecordController;
 use Sopheak\Core\Services\OpenApiService;
@@ -61,7 +62,29 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
         $globalFunctionWhere = '(?:' . implode('|', $escaped) . ')';
     }
 
-    $openApiSchemaResponse = function () {
+    $requirePrivateDocsAuth = static function (Request $request) {
+        if (!(bool) config('record.api_docs.is_private', false)) {
+            return null;
+        }
+
+        $token = $request->bearerToken();
+        if (is_string($token) && trim($token) !== '') {
+            return null;
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Unauthorized',
+            'error_code' => 10002,
+        ], RecordApiJsonResponseEnum::UNAUTHORIZED->value);
+    };
+
+    $openApiSchemaResponse = function (Request $request) use ($requirePrivateDocsAuth) {
+        $unauthorizedResponse = $requirePrivateDocsAuth($request);
+        if (null !== $unauthorizedResponse) {
+            return $unauthorizedResponse;
+        }
+
         try {
             SchemaRegistryUtils::refresh();
             $json = OpenApiService::generateInternal();
@@ -77,9 +100,16 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
             ->header('Content-Type', 'application/vnd.oai.openapi+json; charset=utf-8');
     };
 
-    $llmsMdxResponse = fn() => response(OpenApiService::generateLlmMdx(), 200, [
-        'Content-Type' => 'text/markdown; charset=utf-8',
-    ]);
+    $llmsMdxResponse = function (Request $request) use ($requirePrivateDocsAuth) {
+        $unauthorizedResponse = $requirePrivateDocsAuth($request);
+        if (null !== $unauthorizedResponse) {
+            return $unauthorizedResponse;
+        }
+
+        return response(OpenApiService::generateLlmMdx(), 200, [
+            'Content-Type' => 'text/markdown; charset=utf-8',
+        ]);
+    };
 
     Route::prefix('docs')->group(function () use ($openApiSchemaResponse, $llmsMdxResponse): void {
         Route::get('openapi', $openApiSchemaResponse);
