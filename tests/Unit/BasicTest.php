@@ -199,13 +199,14 @@ class BasicTest extends TestCase
     }
 
     /** @test */
-    public function it_auto_fills_created_by_id_updated_by_last_updated_by_and_last_updated_by_id_when_columns_exist(): void
+    public function it_auto_fills_created_by_created_by_id_updated_by_last_updated_by_and_last_updated_by_id_when_columns_exist(): void
     {
         auth('api')->setUser(new GenericUser(['id' => 77]));
 
         $schema = new RecordTableType(
             table: 'companies',
             columns: [
+                'created_by' => ['type' => 'integer'],
                 'created_by_id' => ['type' => 'integer'],
                 'updated_by' => ['type' => 'integer'],
                 'last_updated_by' => ['type' => 'integer'],
@@ -219,12 +220,14 @@ class BasicTest extends TestCase
         $service = new RecordService();
 
         $createPayload = $service->applyTimestampsAndAuditFields([], $schema, false);
+        $this->assertSame(77, $createPayload['created_by']);
         $this->assertSame(77, $createPayload['created_by_id']);
         $this->assertSame(77, $createPayload['updated_by']);
         $this->assertSame(77, $createPayload['last_updated_by']);
         $this->assertSame(77, $createPayload['last_updated_by_id']);
 
         $updatePayload = $service->applyTimestampsAndAuditFields([], $schema, true);
+        $this->assertSame(77, $updatePayload['created_by']);
         $this->assertSame(77, $updatePayload['created_by_id']);
         $this->assertSame(77, $updatePayload['updated_by']);
         $this->assertSame(77, $updatePayload['last_updated_by']);
