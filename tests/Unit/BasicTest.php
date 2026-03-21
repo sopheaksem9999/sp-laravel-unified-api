@@ -647,6 +647,18 @@ class BasicTest extends TestCase
     }
 
     /** @test */
+    public function it_falls_back_when_global_casting_config_is_not_array(): void
+    {
+        Config::set('record.casting', 'invalid');
+
+        $casted = RecordApiResponseService::applyCasts(['quantity' => '21'], [], [
+            'quantity' => 'int',
+        ]);
+
+        $this->assertSame(21, $casted['quantity']);
+    }
+
+    /** @test */
     public function it_treats_datetime_class_name_string_as_builtin_datetime_cast(): void
     {
         $row = [
