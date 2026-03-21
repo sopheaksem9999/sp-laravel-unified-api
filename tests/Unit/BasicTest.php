@@ -130,6 +130,50 @@ class BasicTest extends TestCase
     }
 
     /** @test */
+    public function it_requires_bearer_token_for_docs_endpoints_when_api_docs_is_private(): void
+    {
+        Config::set('record.api_docs.is_private', true);
+
+        $this->get('/api/docs/openapi.json')->assertStatus(401);
+        $this->get('/api/docs/llms.mdx')->assertStatus(401);
+
+        $this->get('/api/docs/openapi.json', ['Authorization' => 'Bearer test-token'])->assertStatus(200);
+        $this->get('/api/docs/llms.mdx', ['Authorization' => 'Bearer test-token'])->assertStatus(200);
+    }
+
+    /** @test */
+    public function it_shows_private_docs_login_form_when_api_docs_is_private(): void
+    {
+        Config::set('record.api_docs.is_private', true);
+        Config::set('record.api_docs.access_token_key', 'access_token');
+        Config::set('record.api_docs.login_api', '/v1/auth/login');
+
+        $testResponse = $this->get('/api-docs');
+
+        $testResponse
+            ->assertStatus(200)
+            ->assertSee('API Docs Login')
+            ->assertSee('accessTokenKey')
+            ->assertSee('loginApi')
+            ->assertSee('extractAndPersistTokenFromPayload')
+            ->assertSee('shouldAttachAuthForUrl')
+            ->assertSee('syncScalarAuthTokenUi');
+    }
+
+    /** @test */
+    public function it_keeps_api_docs_public_when_api_docs_config_is_missing(): void
+    {
+        config()->offsetUnset('record.api_docs');
+
+        $testResponse = $this->get('/api-docs');
+
+        $testResponse
+            ->assertStatus(200)
+            ->assertDontSee('API Docs Login')
+            ->assertSee('Scalar.createApiReference');
+    }
+
+    /** @test */
     public function it_throws_when_table_trigger_class_does_not_exist(): void
     {
         $service = new RecordService();
