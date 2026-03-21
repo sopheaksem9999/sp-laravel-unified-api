@@ -1293,13 +1293,24 @@ class RecordService
             }
 
             if ($user) {
+                if (isset($tableSchema->columns['created_by_id'])) {
+                    if (!array_key_exists('created_by_id', $payload) || !$overrideUserstamps) {
+                        $payload['created_by_id'] = $user->id;
+                    }
+                }
                 if (isset($tableSchema->columns['updated_by'])) {
                     if (!array_key_exists('updated_by', $payload) || !$overrideUserstamps) {
                         $payload['updated_by'] = $user->id;
                     }
-                } elseif (isset($tableSchema->columns['last_updated_by'])) {
+                }
+                if (isset($tableSchema->columns['last_updated_by'])) {
                     if (!array_key_exists('last_updated_by', $payload) || !$overrideUserstamps) {
                         $payload['last_updated_by'] = $user->id;
+                    }
+                }
+                if (isset($tableSchema->columns['last_updated_by_id'])) {
+                    if (!array_key_exists('last_updated_by_id', $payload) || !$overrideUserstamps) {
+                        $payload['last_updated_by_id'] = $user->id;
                     }
                 }
             }
@@ -1316,14 +1327,23 @@ class RecordService
                 if (isset($tableSchema->columns['created_by']) && (!array_key_exists('created_by', $payload) || !$overrideUserstamps)) {
                     $payload['created_by'] = $user->id;
                 }
+                if (isset($tableSchema->columns['created_by_id']) && (!array_key_exists('created_by_id', $payload) || !$overrideUserstamps)) {
+                    $payload['created_by_id'] = $user->id;
+                }
 
                 if (isset($tableSchema->columns['updated_by'])) {
                     if (!array_key_exists('updated_by', $payload) || !$overrideUserstamps) {
                         $payload['updated_by'] = $user->id;
                     }
-                } elseif (isset($tableSchema->columns['last_updated_by'])) {
+                }
+                if (isset($tableSchema->columns['last_updated_by'])) {
                     if (!array_key_exists('last_updated_by', $payload) || !$overrideUserstamps) {
                         $payload['last_updated_by'] = $user->id;
+                    }
+                }
+                if (isset($tableSchema->columns['last_updated_by_id'])) {
+                    if (!array_key_exists('last_updated_by_id', $payload) || !$overrideUserstamps) {
+                        $payload['last_updated_by_id'] = $user->id;
                     }
                 }
             }

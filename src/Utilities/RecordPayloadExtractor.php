@@ -133,29 +133,41 @@ final class RecordPayloadExtractor
             $updatedAtVal = null;
             $hasCreatedBy = false;
             $createdByVal = null;
+            $hasCreatedById = false;
+            $createdByIdVal = null;
             $hasUpdatedBy = false;
             $updatedByVal = null;
             $hasLastUpdatedBy = false;
             $lastUpdatedByVal = null;
+            $hasLastUpdatedById = false;
+            $lastUpdatedByIdVal = null;
 
             if (is_array($request)) {
                 $hasUpdatedAt = array_key_exists('updated_at', $request);
                 $updatedAtVal = $hasUpdatedAt ? $request['updated_at'] : null;
                 $hasCreatedBy = array_key_exists('created_by', $request);
                 $createdByVal = $hasCreatedBy ? $request['created_by'] : null;
+                $hasCreatedById = array_key_exists('created_by_id', $request);
+                $createdByIdVal = $hasCreatedById ? $request['created_by_id'] : null;
                 $hasUpdatedBy = array_key_exists('updated_by', $request);
                 $updatedByVal = $hasUpdatedBy ? $request['updated_by'] : null;
                 $hasLastUpdatedBy = array_key_exists('last_updated_by', $request);
                 $lastUpdatedByVal = $hasLastUpdatedBy ? $request['last_updated_by'] : null;
+                $hasLastUpdatedById = array_key_exists('last_updated_by_id', $request);
+                $lastUpdatedByIdVal = $hasLastUpdatedById ? $request['last_updated_by_id'] : null;
             } elseif ($request instanceof Request) {
                 $hasUpdatedAt = $request->has('updated_at');
                 $updatedAtVal = $hasUpdatedAt ? $request->input('updated_at') : null;
                 $hasCreatedBy = $request->has('created_by');
                 $createdByVal = $hasCreatedBy ? $request->input('created_by') : null;
+                $hasCreatedById = $request->has('created_by_id');
+                $createdByIdVal = $hasCreatedById ? $request->input('created_by_id') : null;
                 $hasUpdatedBy = $request->has('updated_by');
                 $updatedByVal = $hasUpdatedBy ? $request->input('updated_by') : null;
                 $hasLastUpdatedBy = $request->has('last_updated_by');
                 $lastUpdatedByVal = $hasLastUpdatedBy ? $request->input('last_updated_by') : null;
+                $hasLastUpdatedById = $request->has('last_updated_by_id');
+                $lastUpdatedByIdVal = $hasLastUpdatedById ? $request->input('last_updated_by_id') : null;
             }
 
             $data['updated_at'] = (!$hasUpdatedAt || !$overrideTimestamps) ? $now : $updatedAtVal;
@@ -169,16 +181,31 @@ final class RecordPayloadExtractor
                 $user = auth('api')->user();
                 if ($isUpdate) {
                     if ($user) {
-                        // support both "updated_by" and "last_updated_by" conventions
                         if (isset($tableSchema->columns['updated_by'])) {
                             $data['updated_by'] = (!$hasUpdatedBy || !$overrideUserstamps) ? $user->id : $updatedByVal;
-                        } elseif (isset($tableSchema->columns['last_updated_by'])) {
+                        }
+                        if (isset($tableSchema->columns['last_updated_by'])) {
                             $data['last_updated_by'] = (!$hasLastUpdatedBy || !$overrideUserstamps) ? $user->id : $lastUpdatedByVal;
+                        }
+                        if (isset($tableSchema->columns['last_updated_by_id'])) {
+                            $data['last_updated_by_id'] = (!$hasLastUpdatedById || !$overrideUserstamps) ? $user->id : $lastUpdatedByIdVal;
                         }
                     }
                 } else {
                     if ($user && isset($tableSchema->columns['created_by'])) {
                         $data['created_by'] = (!$hasCreatedBy || !$overrideUserstamps) ? $user->id : $createdByVal;
+                    }
+                    if ($user && isset($tableSchema->columns['created_by_id'])) {
+                        $data['created_by_id'] = (!$hasCreatedById || !$overrideUserstamps) ? $user->id : $createdByIdVal;
+                    }
+                    if ($user && isset($tableSchema->columns['updated_by'])) {
+                        $data['updated_by'] = (!$hasUpdatedBy || !$overrideUserstamps) ? $user->id : $updatedByVal;
+                    }
+                    if ($user && isset($tableSchema->columns['last_updated_by'])) {
+                        $data['last_updated_by'] = (!$hasLastUpdatedBy || !$overrideUserstamps) ? $user->id : $lastUpdatedByVal;
+                    }
+                    if ($user && isset($tableSchema->columns['last_updated_by_id'])) {
+                        $data['last_updated_by_id'] = (!$hasLastUpdatedById || !$overrideUserstamps) ? $user->id : $lastUpdatedByIdVal;
                     }
 
                     $tenantColumn = RecordConfigService::tenantColumn();
