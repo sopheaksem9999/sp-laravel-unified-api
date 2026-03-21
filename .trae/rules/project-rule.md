@@ -13,7 +13,6 @@
 
 # Key Commands
 - `composer analyse -- --memory-limit=1G`
-- `composer format-check`
 - `composer test`
 - `vendor/bin/phpunit`
 - `php artisan sp-laravel-api:record {name}`
@@ -47,4 +46,5 @@
 - Add/update tests for every behavior change in core flow (tenant, auth, filters, permission, triggers, response wrapper).
 - Update docs when behavior changes (`README.md`, `docs/api-documentation.md`).
 - Keep strict typing and PSR-12 style.
+- Do **not** run `composer format-check`.
 - Do **not** run code format/lint/test just for editing this large AI context rule file under `.trae/rules/`; treat it as documentation context content.

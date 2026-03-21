@@ -287,8 +287,13 @@ class RecordApiResponseService
     }
 
     /**
-     * Apply column casts to response data — only for columns that have a 'cast' key defined.
-     * Columns without a 'cast' key are completely untouched. Null values are preserved as-is.
+     * Apply column casts to response data.
+     * Cast resolution priority:
+     *   1) RecordTableType::$casting (table-level)
+     *   2) record.casting (global config)
+     *   3) columns[*].cast
+     *   4) inferred cast from columns[*].type / columns[*].udt_name
+     * Null values are preserved as-is.
      *
      * Supported built-in cast strings (Laravel-compatible names):
      *   int, integer, float, double, real, decimal, decimal:N,
@@ -314,12 +319,11 @@ class RecordApiResponseService
             return $data;
         }
 
-        $globalCasting = config('record.casting', []);
-        if (!is_array($globalCasting)) {
+        $globalCasting = RecordConfigService::globalCasting();
+        if (!is_array($globalCasting) || array_is_list($globalCasting)) {
             $globalCasting = [];
         }
 
-        // Resolve all descriptors: type-inferred from columns, global config, and explicit table casting.
         $allDescriptors = self::resolveCastDescriptors($columns, $globalCasting, $casting);
 
         if ([] === $allDescriptors) {
@@ -345,22 +349,27 @@ class RecordApiResponseService
         // Apply a single descriptor to a scalar value.
         $applyCastValue = static function (mixed $value, string $col, mixed $row, array $descriptor): mixed {
             if (isset($descriptor['callable'])) {
-                return ($descriptor['callable'])($value, $col, $row);
+                try {
+                    return ($descriptor['callable'])($value, $col, $row);
+                } catch (\ArgumentCountError) {
+                    return ($descriptor['callable'])($value);
+                }
             }
+
             $cast = $descriptor['builtin'];
 
             return match (true) {
                 $cast === 'int' || $cast === 'integer'                       => (int) $value,
-                $cast === 'float' || $cast === 'double' || $cast === 'real' => (float) $value,
+                in_array($cast, ['float', 'double', 'real'], true) => (float) $value,
                 str_starts_with($cast, 'decimal:')                          => number_format((float) $value, (int) substr($cast, 8), '.', ''),
                 $cast === 'decimal'                                          => (float) $value,
                 $cast === 'string'                                           => (string) $value,
-                $cast === 'bool' || $cast === 'boolean'                     => (bool) $value,
+                $cast === 'bool' || $cast === 'boolean'                     => self::castToBoolean($value),
                 $cast === 'array' || $cast === 'json'                       => is_string($value) ? (json_decode($value, true) ?? $value) : (array) $value,
                 $cast === 'object'                                           => is_string($value) ? (json_decode($value) ?? $value) : (object) $value,
-                $cast === 'date'                                             => \Illuminate\Support\Carbon::parse($value)->toDateString(),
-                $cast === 'datetime'                                         => \Illuminate\Support\Carbon::parse($value)->toISOString(),
-                $cast === 'timestamp'                                        => \Illuminate\Support\Carbon::parse($value)->getTimestamp(),
+                $cast === 'date'                                             => Carbon::parse($value)->toDateString(),
+                $cast === 'datetime'                                         => Carbon::parse($value)->toISOString(),
+                $cast === 'timestamp'                                        => Carbon::parse($value)->getTimestamp(),
                 default                                                      => $value,
             };
         };
@@ -391,7 +400,7 @@ class RecordApiResponseService
                 $value = $applyCastValue($value, $col, $row, $descriptor);
 
                 if ($isObject) {
-                    $row->{$col} = $value;
+                    $row->{$relation} = $relData;
                 } else {
                     $row[$col] = $value;
                 }
@@ -403,11 +412,13 @@ class RecordApiResponseService
                     if (!property_exists($row, $relation)) {
                         continue;
                     }
+
                     $relData = $row->{$relation};
                 } else {
                     if (!array_key_exists($relation, $row)) {
                         continue;
                     }
+
                     $relData = $row[$relation];
                 }
 
@@ -422,11 +433,13 @@ class RecordApiResponseService
                             if (!property_exists($relRow, $col)) {
                                 continue;
                             }
+
                             $value = $relRow->{$col};
                         } else {
                             if (!array_key_exists($col, $relRow)) {
                                 continue;
                             }
+
                             $value = $relRow[$col];
                         }
 
@@ -730,7 +743,6 @@ class RecordApiResponseService
             if (in_array($normalized, ['true', 't', 'yes', 'y', 'on', '1'], true)) {
                 return true;
             }
-
             if (in_array($normalized, ['false', 'f', 'no', 'n', 'off', '0', ''], true)) {
                 return false;
             }

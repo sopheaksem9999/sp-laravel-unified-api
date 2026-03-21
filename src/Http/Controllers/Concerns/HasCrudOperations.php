@@ -4,6 +4,7 @@ namespace Sopheak\Core\Http\Controllers\Concerns;
 
 use Exception;
 use InvalidArgumentException;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -99,6 +100,8 @@ trait HasCrudOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (InvalidArgumentException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
+        } catch (HttpResponseException $e) {
+            return $e->getResponse();
         } catch (Exception $e) {
             return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
@@ -178,6 +181,8 @@ trait HasCrudOperations
             return $response;
         } catch (RecordNotFoundException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
+        } catch (HttpResponseException $e) {
+            return $e->getResponse();
         } catch (Exception $e) {
             return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
@@ -270,6 +275,8 @@ trait HasCrudOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
+        } catch (HttpResponseException $e) {
+            return $e->getResponse();
         } catch (Exception $e) {
             return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
@@ -367,6 +374,8 @@ trait HasCrudOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
+        } catch (HttpResponseException $e) {
+            return $e->getResponse();
         } catch (Exception $e) {
             return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
@@ -449,6 +458,8 @@ trait HasCrudOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
+        } catch (HttpResponseException $e) {
+            return $e->getResponse();
         } catch (Exception $e) {
             return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
@@ -524,6 +535,8 @@ trait HasCrudOperations
             });
         } catch (RecordNotFoundException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
+        } catch (HttpResponseException $e) {
+            return $e->getResponse();
         } catch (Exception $e) {
             return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
@@ -598,6 +611,8 @@ trait HasCrudOperations
             });
         } catch (RecordNotFoundException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
+        } catch (HttpResponseException $e) {
+            return $e->getResponse();
         } catch (Exception $e) {
             return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
@@ -646,6 +661,8 @@ trait HasCrudOperations
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
+        } catch (HttpResponseException $e) {
+            return $e->getResponse();
         } catch (Exception $e) {
             return RecordApiResponseService::errorFromException($e, 'An error occurred', RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
