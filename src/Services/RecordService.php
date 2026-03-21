@@ -1293,7 +1293,7 @@ class RecordService
             }
 
             if ($user) {
-                foreach (['created_by_id', 'updated_by', 'last_updated_by', 'last_updated_by_id'] as $auditField) {
+                foreach (['created_by', 'created_by_id', 'updated_by', 'last_updated_by', 'last_updated_by_id'] as $auditField) {
                     if (isset($tableSchema->columns[$auditField]) && (!array_key_exists($auditField, $payload) || !$overrideUserstamps)) {
                         $payload[$auditField] = $user->id;
                     }
