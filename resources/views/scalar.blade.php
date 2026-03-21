@@ -164,18 +164,6 @@
             apiPrefix: @json(trim(config('record.api_prefix', 'api/v1'), '/')),
         };
         const tokenStorageKey = 'sp_api_docs_access_token';
-        const normalizedApiPrefix = String(docsSettings.apiPrefix || '').replace(/^\/+|\/+$/g, '');
-
-        function shouldAttachAuthForUrl(urlLike) {
-            const resolvedUrl = typeof urlLike === 'string' ? urlLike : (urlLike?.url || '');
-            const absoluteUrl = new URL(resolvedUrl, window.location.origin);
-            if (absoluteUrl.origin !== window.location.origin) {
-                return false;
-            }
-
-            const prefixPath = normalizedApiPrefix ? '/' + normalizedApiPrefix + '/' : '/';
-            return absoluteUrl.pathname.startsWith(prefixPath) || absoluteUrl.pathname.startsWith('/api/');
-        }
 
         function extractAndPersistTokenFromPayload(payload) {
             const token = resolveTokenFromPayload(payload, docsSettings.accessTokenKey);
@@ -227,67 +215,7 @@
             }
         }
 
-        async function syncTokenFromResponse(response) {
-            try {
-                const contentType = response.headers.get('content-type') || '';
-                if (!contentType.toLowerCase().includes('application/json')) {
-                    return;
-                }
-                const payload = await response.clone().json();
-                extractAndPersistTokenFromPayload(payload);
-            } catch (_error) {
-            }
-        }
-
         const nativeFetch = window.fetch.bind(window);
-        window.fetch = async function(input, init = {}) {
-            const token = localStorage.getItem(tokenStorageKey);
-            let nextInit = init;
-
-            if (token && shouldAttachAuthForUrl(input)) {
-                const headers = new Headers(init.headers || (typeof input !== 'string' ? input.headers : undefined) || {});
-                if (!headers.has('Authorization')) {
-                    headers.set('Authorization', 'Bearer ' + token);
-                }
-                nextInit = {
-                    ...init,
-                    headers,
-                };
-            }
-
-            const response = await nativeFetch(input, nextInit);
-            await syncTokenFromResponse(response);
-
-            return response;
-        };
-
-        const originalXhrOpen = XMLHttpRequest.prototype.open;
-        const originalXhrSend = XMLHttpRequest.prototype.send;
-        XMLHttpRequest.prototype.open = function(method, url, async, user, password) {
-            this.__spDocsUrl = url;
-            return originalXhrOpen.call(this, method, url, async, user, password);
-        };
-        XMLHttpRequest.prototype.send = function(body) {
-            const token = localStorage.getItem(tokenStorageKey);
-            if (token && shouldAttachAuthForUrl(this.__spDocsUrl)) {
-                try {
-                    this.setRequestHeader('Authorization', 'Bearer ' + token);
-                } catch (_error) {
-                }
-            }
-            this.addEventListener('load', function() {
-                try {
-                    const responseText = typeof this.responseText === 'string' ? this.responseText : '';
-                    if (!responseText) {
-                        return;
-                    }
-                    const payload = JSON.parse(responseText);
-                    extractAndPersistTokenFromPayload(payload);
-                } catch (_error) {
-                }
-            });
-            return originalXhrSend.call(this, body);
-        };
 
         document.addEventListener('DOMContentLoaded', function() {
             const token = localStorage.getItem(tokenStorageKey);

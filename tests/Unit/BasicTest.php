@@ -249,8 +249,9 @@ class BasicTest extends TestCase
             ->assertSee('accessTokenKey')
             ->assertSee('loginApi')
             ->assertSee('extractAndPersistTokenFromPayload')
-            ->assertSee('shouldAttachAuthForUrl')
-            ->assertSee('syncScalarAuthTokenUi');
+            ->assertSee('syncScalarAuthTokenUi')
+            ->assertDontSee('XMLHttpRequest.prototype.send')
+            ->assertDontSee('window.fetch = async function');
     }
 
     /** @test */

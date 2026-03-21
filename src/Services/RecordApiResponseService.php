@@ -400,7 +400,7 @@ class RecordApiResponseService
                 $value = $applyCastValue($value, $col, $row, $descriptor);
 
                 if ($isObject) {
-                    $row->{$relation} = $relData;
+                    $row->{$col} = $value;
                 } else {
                     $row[$col] = $value;
                 }
