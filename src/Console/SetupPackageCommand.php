@@ -531,11 +531,13 @@ return [
     | - Absolute URL: https://api.example.com/v1/auth/login
     | - access_token_key: token key in login response payload
     | - login_api: client project login route/URL used by docs login form
+    | - email: optional fixed docs account email enforced by docs login proxy
     */
     'api_docs' => [
         'is_private' => env('SP_LARAVEL_API_DOCS_PRIVATE', false),
         'access_token_key' => 'access_token',
         'login_api' => '/v1/auth/login',
+        'email' => env('SP_LARAVEL_API_DOCS_EMAIL'),
     ],
 
     /*

@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use PDO;
@@ -132,15 +133,39 @@ class BasicTest extends TestCase
     }
 
     /** @test */
-    public function it_requires_bearer_token_for_docs_endpoints_when_api_docs_is_private(): void
+    public function it_hides_api_docs_api_endpoints_when_api_docs_is_private(): void
+    {
+        Config::set('record.api_docs.is_private', true);
+        Config::set('record.api_docs.access_token_key', 'access_token');
+
+        $this->get('/api/docs/openapi.json')->assertStatus(404);
+        $this->get('/api/docs/llms.mdx')->assertStatus(404);
+    }
+
+    /** @test */
+    public function it_requires_docs_session_for_web_openapi_endpoint_when_api_docs_is_private(): void
     {
         Config::set('record.api_docs.is_private', true);
 
-        $this->get('/api/docs/openapi.json')->assertStatus(401);
-        $this->get('/api/docs/llms.mdx')->assertStatus(401);
+        $this->get('/api-docs/openapi.json')->assertStatus(401);
+        $this->withSession(['sp_api_docs_access_token' => 'test-token'])
+            ->get('/api-docs/openapi.json')
+            ->assertStatus(200);
+    }
 
-        $this->get('/api/docs/openapi.json', ['Authorization' => 'Bearer test-token'])->assertStatus(200);
-        $this->get('/api/docs/llms.mdx', ['Authorization' => 'Bearer test-token'])->assertStatus(200);
+    /** @test */
+    public function it_rejects_scalar_login_when_api_docs_email_is_configured_and_username_does_not_match(): void
+    {
+        Config::set('record.api_docs.email', 'admin@example.com');
+        Http::fake();
+
+        $this->postJson('/api-docs/auth/login', [
+            'endpoint' => '/v1/auth/login',
+            'username' => 'user@example.com',
+            'password' => 'secret',
+        ])->assertStatus(401);
+
+        Http::assertNothingSent();
     }
 
     /** @test */

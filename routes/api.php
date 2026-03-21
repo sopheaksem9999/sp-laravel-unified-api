@@ -62,27 +62,12 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
         $globalFunctionWhere = '(?:' . implode('|', $escaped) . ')';
     }
 
-    $requirePrivateDocsAuth = static function (Request $request) {
-        if (!(bool) config('record.api_docs.is_private', false)) {
-            return null;
-        }
-
-        $token = $request->bearerToken();
-        if (is_string($token) && trim($token) !== '') {
-            return null;
-        }
-
-        return response()->json([
-            'success' => false,
-            'message' => 'Unauthorized',
-            'error_code' => 10002,
-        ], RecordApiJsonResponseEnum::UNAUTHORIZED->value);
-    };
-
-    $openApiSchemaResponse = function (Request $request) use ($requirePrivateDocsAuth) {
-        $unauthorizedResponse = $requirePrivateDocsAuth($request);
-        if (null !== $unauthorizedResponse) {
-            return $unauthorizedResponse;
+    $openApiSchemaResponse = function (Request $request) {
+        if ((bool) config('record.api_docs.is_private', false)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Not Found',
+            ], RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         try {
@@ -100,10 +85,12 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
             ->header('Content-Type', 'application/vnd.oai.openapi+json; charset=utf-8');
     };
 
-    $llmsMdxResponse = function (Request $request) use ($requirePrivateDocsAuth) {
-        $unauthorizedResponse = $requirePrivateDocsAuth($request);
-        if (null !== $unauthorizedResponse) {
-            return $unauthorizedResponse;
+    $llmsMdxResponse = function (Request $request) {
+        if ((bool) config('record.api_docs.is_private', false)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Not Found',
+            ], RecordApiJsonResponseEnum::NOT_FOUND->value);
         }
 
         return response(OpenApiService::generateLlmMdx(), 200, [
