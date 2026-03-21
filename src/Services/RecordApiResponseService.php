@@ -314,8 +314,8 @@ class RecordApiResponseService
             return $data;
         }
 
-        $globalCasting = config('record.casting', []);
-        if (!is_array($globalCasting)) {
+        $globalCasting = RecordConfigService::globalCasting();
+        if (!is_array($globalCasting) || array_is_list($globalCasting)) {
             $globalCasting = [];
         }
 
