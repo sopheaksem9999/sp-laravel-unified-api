@@ -287,8 +287,13 @@ class RecordApiResponseService
     }
 
     /**
-     * Apply column casts to response data — only for columns that have a 'cast' key defined.
-     * Columns without a 'cast' key are completely untouched. Null values are preserved as-is.
+     * Apply column casts to response data.
+     * Cast resolution priority:
+     *   1) RecordTableType::$casting (table-level)
+     *   2) record.casting (global config)
+     *   3) columns[*].cast
+     *   4) inferred cast from columns[*].type / columns[*].udt_name
+     * Null values are preserved as-is.
      *
      * Supported built-in cast strings (Laravel-compatible names):
      *   int, integer, float, double, real, decimal, decimal:N,
@@ -319,7 +324,6 @@ class RecordApiResponseService
             $globalCasting = [];
         }
 
-        // Resolve all descriptors: type-inferred from columns, global config, and explicit table casting.
         $allDescriptors = self::resolveCastDescriptors($columns, $globalCasting, $casting);
 
         if ([] === $allDescriptors) {
@@ -345,7 +349,11 @@ class RecordApiResponseService
         // Apply a single descriptor to a scalar value.
         $applyCastValue = static function (mixed $value, string $col, mixed $row, array $descriptor): mixed {
             if (isset($descriptor['callable'])) {
-                return ($descriptor['callable'])($value, $col, $row);
+                try {
+                    return ($descriptor['callable'])($value, $col, $row);
+                } catch (\ArgumentCountError) {
+                    return ($descriptor['callable'])($value);
+                }
             }
 
             $cast = $descriptor['builtin'];
@@ -385,9 +393,9 @@ class RecordApiResponseService
                     $value = $row[$col];
                 }
 
-        if ([] === $flatResolved && [] === $relResolved) {
-            return $data;
-        }
+                if (null === $value) {
+                    continue;
+                }
 
                 $value = $applyCastValue($value, $col, $row, $descriptor);
 
