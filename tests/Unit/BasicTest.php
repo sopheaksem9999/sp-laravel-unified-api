@@ -142,6 +142,29 @@ class BasicTest extends TestCase
     }
 
     /** @test */
+    public function it_preserves_http_response_exception_payload_for_unauthenticated_requests(): void
+    {
+        Config::set('record.tables', [
+            'secure_items' => new RecordTableType(
+                table: 'secure_items',
+                isAuthRead: true,
+                public: new RecordTablePublic(read: false, write: false),
+                columns: [
+                    'id' => ['type' => 'integer'],
+                ],
+            ),
+        ]);
+        SchemaRegistryUtils::refresh();
+
+        $response = $this->get('/api/secure_items');
+
+        $response->assertStatus(401);
+        $response->assertJsonPath('success', false);
+        $response->assertJsonPath('message', 'Unauthenticated');
+        $response->assertJsonPath('error_code', 10000);
+    }
+
+    /** @test */
     public function it_shows_private_docs_login_form_when_api_docs_is_private(): void
     {
         Config::set('record.api_docs.is_private', true);

@@ -724,6 +724,25 @@ class RecordApiResponseService
         return null;
     }
 
+    private static function castToBoolean(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_string($value)) {
+            $normalized = strtolower(trim($value));
+            if (in_array($normalized, ['true', 't', 'yes', 'y', 'on', '1'], true)) {
+                return true;
+            }
+            if (in_array($normalized, ['false', 'f', 'no', 'n', 'off', '0', ''], true)) {
+                return false;
+            }
+        }
+
+        return (bool) $value;
+    }
+
     /**
      * Apply computed attributes to each row — only for fields present in $requestedCols.
      * When $requestedCols is empty (no ?select= param), no attributes are resolved.
