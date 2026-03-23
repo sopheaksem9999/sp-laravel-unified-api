@@ -8,6 +8,37 @@ For full interactive examples, visit: https://sp-laravel-api-docs.vercel.app/#/
 
 This section documents the record CRUD endpoints provided by this package, including request/response formats, filtering, pagination, and error handling.
 
+### API Docs Access Mode
+
+The bundled docs UI endpoint is:
+
+- `GET /api-docs`
+
+Use `config/record.php` to control visibility:
+
+```php
+'api_docs' => [
+    'is_private' => env('SP_LARAVEL_API_DOCS_PRIVATE', false),
+    'access_token_key' => 'access_token',
+    'login_api' => '/v1/auth/login',
+    'email' => env('SP_LARAVEL_API_DOCS_EMAIL'),
+],
+```
+
+Behavior:
+
+- If `api_docs` config is missing, docs stay public by default.
+- If `is_private=false`, `/api-docs` loads Scalar directly.
+- If `is_private=true`, `/api-docs` shows a custom login form first.
+- If `is_private=true`, Scalar uses secure web routes:
+  - `POST /api-docs/auth/login`
+  - `POST /api-docs/auth/logout`
+  - `GET /api-docs/openapi.json`
+- In private mode, API endpoints `/{api_prefix}/docs/openapi(.json)` and `/{api_prefix}/docs/llms.*` are hidden with `404` to avoid schema leakage.
+- `login_api` supports relative route or absolute URL, so each client project can point docs login to its own auth endpoint.
+- `access_token_key` controls token extraction key from login response payload.
+- `email` is optional and enforces a fixed docs login account.
+
 ### Query Filtering (applyRequestFilters macro)
 
 The package extends Laravel's `Illuminate\Database\Query\Builder` with a macro `applyRequestFilters`. This is the same filtering/pagination mechanism used by the record CRUD endpoints when listing records.
@@ -1051,7 +1082,7 @@ new RecordTableType(
 
 #### Schema & Search Metadata
 
-- `columns` (?array, default: `[]`): Column metadata map. In normal usage this is populated at runtime from the database schema; leaving it empty is expected. It is used to whitelist payload fields and to detect audit columns like `created_by` / `updated_by`.
+- `columns` (?array, default: `[]`): Column metadata map. In normal usage this is populated at runtime from the database schema; leaving it empty is expected. It is used to whitelist payload fields and to detect audit columns like `created_by`, `created_by_id`, `updated_by`, `last_updated_by`, and `last_updated_by_id`.
 - `columnHiddens` (?array, default: `[]`): List of column names to always hide from API responses. This is applied recursively to nested relationships as well. Hidden columns are removed even if their value is `null`.
 - `columnWriteDisabled` (?array, default: `[]`): List of column names that are not writable via API payloads (create, update, upsert, and nested relationship writes). These columns are stripped from incoming payloads even if provided by the client.
 - `columnIndexes` (?array, default: `[]`): Declares full-text index column sets for search optimization. Format: a list of column name arrays, e.g. `[['name', 'description'], ['content']]`.

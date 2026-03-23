@@ -21,7 +21,9 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
 class DeleteHookSpy
 {
     public static array $calls = [];
+
     public static ?object $capturedRecord = null;
+
     public static ?array $capturedContext = null;
 
     public static function reset(): void
@@ -112,7 +114,7 @@ class DeleteHooksTest extends TestCase
 
         $id = $this->seedOrder();
 
-        $this->deleteJson("/api/orders/{$id}")->assertStatus(200);
+        $this->deleteJson('/api/orders/' . $id)->assertStatus(200);
 
         $this->assertContains('beforeDelete', DeleteHookSpy::$calls);
         $record = DeleteHookSpy::$capturedRecord;
@@ -139,7 +141,7 @@ class DeleteHooksTest extends TestCase
 
         $id = $this->seedOrder();
 
-        $this->deleteJson("/api/orders/{$id}")->assertStatus(200);
+        $this->deleteJson('/api/orders/' . $id)->assertStatus(200);
 
         $this->assertContains('afterDelete', DeleteHookSpy::$calls);
         $ctx = DeleteHookSpy::$capturedContext;
@@ -165,7 +167,7 @@ class DeleteHooksTest extends TestCase
 
         $id = $this->seedOrder();
 
-        $this->deleteJson("/api/orders/{$id}")->assertStatus(200);
+        $this->deleteJson('/api/orders/' . $id)->assertStatus(200);
 
         $this->assertContains('beforeDelete', DeleteHookSpy::$calls);
         $this->assertSoftDeleted('orders', ['id' => $id]);
@@ -187,7 +189,7 @@ class DeleteHooksTest extends TestCase
 
         $id = $this->seedOrder();
 
-        $this->deleteJson("/api/orders/{$id}/force")->assertStatus(200);
+        $this->deleteJson(sprintf('/api/orders/%d/force', $id))->assertStatus(200);
 
         $this->assertContains('beforeDelete', DeleteHookSpy::$calls);
         $ctx = DeleteHookSpy::$capturedContext;
@@ -209,7 +211,7 @@ class DeleteHooksTest extends TestCase
         $this->registerTable();
         $id = $this->seedOrder();
 
-        $this->deleteJson("/api/orders/{$id}/force")->assertStatus(200);
+        $this->deleteJson(sprintf('/api/orders/%d/force', $id))->assertStatus(200);
 
         $this->assertDatabaseMissing('orders', ['id' => $id]);
     }
@@ -229,7 +231,7 @@ class DeleteHooksTest extends TestCase
         ]);
 
         $id = $this->seedOrder();
-        $this->deleteJson("/api/orders/{$id}")->assertStatus(200);
+        $this->deleteJson('/api/orders/' . $id)->assertStatus(200);
 
         $this->assertContains('afterDelete', DeleteHookSpy::$calls);
         $this->assertSoftDeleted('orders', ['id' => $id]);

@@ -1342,14 +1342,34 @@ GET /{api_prefix}/docs/llms.mdx
 GET /{api_prefix}/docs/llms.txt
 ```
 
-`/{api_prefix}/docs/openapi.json` is the recommended endpoint for AI agents and tools, returned with `application/vnd.oai.openapi+json`.
+`/{api_prefix}/docs/openapi.json` is the recommended machine endpoint for public docs mode, returned with `application/vnd.oai.openapi+json`.
 `/{api_prefix}/docs/llms.mdx` (or `llms.txt`) provides an AI-oriented markdown contract that points to the OpenAPI schema and key endpoint patterns.
 
 Use the bundled Scalar page to browse the API documentation:
 
 ```text
 GET /api-docs
+GET /api-docs/openapi.json
 ```
+
+Docs access mode is configurable via `config/record.php`:
+
+```php
+'api_docs' => [
+    'is_private' => env('SP_LARAVEL_API_DOCS_PRIVATE', false),
+    'access_token_key' => 'access_token',
+    'login_api' => '/v1/auth/login',
+    'email' => env('SP_LARAVEL_API_DOCS_EMAIL'),
+],
+```
+
+- When `is_private=false` (or `api_docs` config is missing), `/api-docs` is public.
+- When `is_private=true`, `/api-docs` shows a login form and logs in through internal proxy route `/api-docs/auth/login`.
+- In private mode, schema is served from `/api-docs/openapi.json` and requires docs session token.
+- In private mode, API docs routes under `/{api_prefix}/docs/*` return `404` to prevent anonymous schema leakage.
+- `login_api` can be a relative path (`/v1/auth/login`) or absolute URL (`https://api.example.com/v1/auth/login`) based on client project routing.
+- `access_token_key` controls how token is extracted from login response payload.
+- `email` (optional) enforces a fixed docs login account for additional protection.
 
 The generated OpenAPI 3.0 schema includes:
 
