@@ -6,7 +6,10 @@ use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Pipeline\Pipeline;
 use Illuminate\Routing\Router;
+use Sopheak\Core\Interfaces\RecordFunctionInterface;
 use Sopheak\Core\Services\RecordConfigService;
+use Sopheak\Core\Types\RecordFunctionType;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Symfony\Component\HttpFoundation\Response;
 
 class RecordRouteMiddleware
@@ -36,6 +39,18 @@ class RecordRouteMiddleware
             $tableMap = is_array($tableMaps[$table] ?? null) ? $tableMaps[$table] : [];
         }
 
+        // Per-function middleware: if set on the function, it replaces middleware_map entirely.
+        // Only applies to function actions; all other actions fall through to the map below.
+        if ('global_function' === $action || 'table_function' === $action) {
+            $functionName = (string) ($request->route('functionName') ?? '');
+            $functionType = $this->resolveFunctionConfig($action, $table, $functionName);
+            if (null !== $functionType && null !== $functionType->middleware) {
+                return $this->sanitizeMiddlewares(
+                    $this->normalizeMiddlewares($functionType->middleware)
+                );
+            }
+        }
+
         $middlewares = array_merge(
             $this->resolveMapForAction($globalMap, $action),
             $this->resolveMapForAction($tableMap, $action)
@@ -53,6 +68,61 @@ class RecordRouteMiddleware
             $this->normalizeMiddlewares($map[$group] ?? []),
             $this->normalizeMiddlewares($map[$action] ?? [])
         );
+    }
+
+    private function resolveFunctionConfig(string $action, string $table, string $functionName): ?RecordFunctionType
+    {
+        if ('global_function' !== $action && 'table_function' !== $action) {
+            return null;
+        }
+
+        // $table is unused for global_function. For table_function with empty $table,
+        // getTable() returns null and the registry falls back to [], causing a map fallback.
+        /** @var array<string, mixed> $registry */
+        $registry = 'global_function' === $action
+            ? RecordConfigService::globalFunctions()
+            : (SchemaRegistryUtils::getTable($table)?->functions ?? []);
+
+        $raw = null;
+
+        // Step 1: exact match
+        if (isset($registry[$functionName])) {
+            $raw = $registry[$functionName];
+        } else {
+            // Step 2: pattern match — e.g. config key 'order/{id}' matches request value 'order/42'
+            foreach ($registry as $configuredKey => $config) {
+                $pattern = preg_replace('/\{[^}]+\}/', '(\d+)', (string) $configuredKey);
+                $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/';
+
+                if (preg_match($pattern, $functionName)) {
+                    $raw = $config;
+                    break;
+                }
+            }
+        }
+
+        if (null === $raw) {
+            return null;
+        }
+
+        // Step 3: resolve to RecordFunctionType.
+        // Most commonly $raw is already a RecordFunctionType instance (direct construction).
+        if ($raw instanceof RecordFunctionType) {
+            return $raw;
+        }
+
+        if (is_string($raw) && class_exists($raw)) {
+            $instance = new $raw();
+            if ($instance instanceof RecordFunctionInterface) {
+                return $instance->toFunctionType();
+            }
+            if ($instance instanceof RecordFunctionType) {
+                return $instance;
+            }
+        }
+
+        // Plain-array configs fall through to middleware_map (not supported by this feature)
+        return null;
     }
 
     private function resolveActionGroup(string $action): string
