@@ -21,7 +21,9 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
 class RestoreHookSpy
 {
     public static array $calls = [];
+
     public static ?array $capturedBeforeCtx = null;
+
     public static ?array $capturedAfterCtx  = null;
 
     public static function reset(): void
@@ -83,9 +85,9 @@ class RestoreHooksTest extends TestCase
                 table: 'invoices',
                 softDeletes: true,
                 public: new RecordTablePublic(read: true, write: true),
+                afterUpdate: $triggers['afterUpdate'] ?? null,
                 beforeRestore: $triggers['beforeRestore'] ?? null,
                 afterRestore: $triggers['afterRestore'] ?? null,
-                afterUpdate: $triggers['afterUpdate'] ?? null,
             ),
         ]);
         SchemaRegistryUtils::refresh();
@@ -119,7 +121,7 @@ class RestoreHooksTest extends TestCase
 
         $id = $this->seedDeletedInvoice();
 
-        $this->postJson("/api/invoices/{$id}/restore")->assertStatus(200);
+        $this->postJson(sprintf('/api/invoices/%d/restore', $id))->assertStatus(200);
 
         $this->assertContains('beforeRestore', RestoreHookSpy::$calls);
         $ctx = RestoreHookSpy::$capturedBeforeCtx;
@@ -148,7 +150,7 @@ class RestoreHooksTest extends TestCase
 
         $id = $this->seedDeletedInvoice();
 
-        $this->postJson("/api/invoices/{$id}/restore")->assertStatus(200);
+        $this->postJson(sprintf('/api/invoices/%d/restore', $id))->assertStatus(200);
 
         $this->assertContains('afterRestore', RestoreHookSpy::$calls);
         $ctx = RestoreHookSpy::$capturedAfterCtx;
@@ -176,7 +178,7 @@ class RestoreHooksTest extends TestCase
 
         $id = $this->seedDeletedInvoice();
 
-        $this->postJson("/api/invoices/{$id}/restore")->assertStatus(200);
+        $this->postJson(sprintf('/api/invoices/%d/restore', $id))->assertStatus(200);
 
         $this->assertContains('beforeRestore', RestoreHookSpy::$calls);
         $row = DB::table('invoices')->find($id);
@@ -204,7 +206,7 @@ class RestoreHooksTest extends TestCase
 
         $id = $this->seedDeletedInvoice();
 
-        $this->postJson("/api/invoices/{$id}/restore")->assertStatus(200);
+        $this->postJson(sprintf('/api/invoices/%d/restore', $id))->assertStatus(200);
 
         $this->assertSame(['beforeRestore', 'afterRestore'], RestoreHookSpy::$calls);
     }
@@ -229,7 +231,7 @@ class RestoreHooksTest extends TestCase
 
         $id = $this->seedDeletedInvoice();
 
-        $this->postJson("/api/invoices/{$id}/restore")->assertStatus(200);
+        $this->postJson(sprintf('/api/invoices/%d/restore', $id))->assertStatus(200);
 
         $this->assertNotContains('afterUpdate', RestoreHookSpy::$calls, 'afterUpdate should NOT be called on restore');
         $this->assertContains('afterRestore', RestoreHookSpy::$calls, 'afterRestore should be called on restore');
@@ -251,7 +253,7 @@ class RestoreHooksTest extends TestCase
 
         $id = $this->seedDeletedInvoice();
 
-        $this->postJson("/api/invoices/{$id}/restore")->assertStatus(200);
+        $this->postJson(sprintf('/api/invoices/%d/restore', $id))->assertStatus(200);
 
         $ctx = RestoreHookSpy::$capturedBeforeCtx;
         $this->assertNotNull($ctx);
@@ -271,7 +273,7 @@ class RestoreHooksTest extends TestCase
         $this->registerTable();
         $id = $this->seedDeletedInvoice();
 
-        $this->postJson("/api/invoices/{$id}/restore")->assertStatus(200);
+        $this->postJson(sprintf('/api/invoices/%d/restore', $id))->assertStatus(200);
 
         $row = DB::table('invoices')->find($id);
         $this->assertNotNull($row);
