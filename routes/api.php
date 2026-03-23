@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Http\Request;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 use Sopheak\Core\Http\Controllers\CoreRecordController;
 use Sopheak\Core\Services\OpenApiService;
@@ -61,7 +62,14 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
         $globalFunctionWhere = '(?:' . implode('|', $escaped) . ')';
     }
 
-    $openApiSchemaResponse = function () {
+    $openApiSchemaResponse = function (Request $request) {
+        if ((bool) config('record.api_docs.is_private', false)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Not Found',
+            ], RecordApiJsonResponseEnum::NOT_FOUND->value);
+        }
+
         try {
             SchemaRegistryUtils::refresh();
             $json = OpenApiService::generateInternal();
@@ -77,9 +85,18 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
             ->header('Content-Type', 'application/vnd.oai.openapi+json; charset=utf-8');
     };
 
-    $llmsMdxResponse = fn() => response(OpenApiService::generateLlmMdx(), 200, [
-        'Content-Type' => 'text/markdown; charset=utf-8',
-    ]);
+    $llmsMdxResponse = function (Request $request) {
+        if ((bool) config('record.api_docs.is_private', false)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Not Found',
+            ], RecordApiJsonResponseEnum::NOT_FOUND->value);
+        }
+
+        return response(OpenApiService::generateLlmMdx(), 200, [
+            'Content-Type' => 'text/markdown; charset=utf-8',
+        ]);
+    };
 
     Route::prefix('docs')->group(function () use ($openApiSchemaResponse, $llmsMdxResponse): void {
         Route::get('openapi', $openApiSchemaResponse);
