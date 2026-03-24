@@ -5,15 +5,15 @@
   "license": "proprietary",
   "version": "0.4.34",
   "require": {
-    "php": "^8.2|^8.3|^8.4",
-    "laravel/framework": "^12.0",
+    "php": "^8.2|^8.3|^8.4|^8.5",
+    "laravel/framework": "^12.0|^13.0",
     "nesbot/carbon": "^2.0|^3.0"
   },
   "require-dev": {
     "friendsofphp/php-cs-fixer": "^3.92",
     "larastan/larastan": "^3.0",
     "phpstan/phpstan": "2.1.32",
-    "orchestra/testbench": "^10.0",
+    "orchestra/testbench": "^10.0|^11.0",
     "phpunit/phpunit": "^10.0|^11.0",
     "rector/rector": "^2.0"
   },
