@@ -7,7 +7,11 @@ on:
       - develop
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
 
@@ -17,11 +21,25 @@ jobs:
   release-stable:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
         with:
           fetch-depth: 0
           fetch-tags: true
+          persist-credentials: false
+
+      - name: Security guard (block known webshell signatures)
+        run: |
+          if git ls-files | grep -E '(^|/)d1337\.php$' >/dev/null 2>&1; then
+            echo "Blocked: suspicious file d1337.php detected in repository."
+            exit 1
+          fi
+          if git grep -nE 'error_reporting\(0\)|gzinflate\(|base64_decode\(|shell_exec\(' -- '*.php' >/dev/null 2>&1; then
+            echo "Blocked: suspicious PHP signature detected."
+            exit 1
+          fi
 
       - name: Read version from composer.json or VERSION
         id: read
@@ -50,20 +68,23 @@ jobs:
 
       - name: Create tag
         if: steps.check.outputs.exists == 'false'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           git config user.name "${GITHUB_ACTOR}"
           git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
           git tag "${{ steps.read.outputs.version }}"
-          git push origin "${{ steps.read.outputs.version }}"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${{ steps.read.outputs.version }}"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
         if: steps.check.outputs.exists == 'false'
-        with:
-          tag_name: ${{ steps.read.outputs.version }}
-          name: ${{ steps.read.outputs.version }}
-          generate_release_notes: true
-          prerelease: false
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.read.outputs.version }}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${{ steps.read.outputs.version }}" \
+            --generate-notes
 
   # ─────────────────────────────────────────────
   # Beta pre-release — triggered by push to develop
@@ -73,11 +94,25 @@ jobs:
   release-beta:
     if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
         with:
           fetch-depth: 0
           fetch-tags: true
+          persist-credentials: false
+
+      - name: Security guard (block known webshell signatures)
+        run: |
+          if git ls-files | grep -E '(^|/)d1337\.php$' >/dev/null 2>&1; then
+            echo "Blocked: suspicious file d1337.php detected in repository."
+            exit 1
+          fi
+          if git grep -nE 'error_reporting\(0\)|gzinflate\(|base64_decode\(|shell_exec\(' -- '*.php' >/dev/null 2>&1; then
+            echo "Blocked: suspicious PHP signature detected."
+            exit 1
+          fi
 
       - name: Read base version from composer.json or VERSION
         id: read
@@ -101,16 +136,20 @@ jobs:
           echo "tag=${{ steps.read.outputs.version }}-beta.${{ github.run_number }}" >> $GITHUB_OUTPUT
 
       - name: Create beta tag
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           git config user.name "${GITHUB_ACTOR}"
           git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
           git tag "${{ steps.beta.outputs.tag }}"
-          git push origin "${{ steps.beta.outputs.tag }}"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${{ steps.beta.outputs.tag }}"
 
       - name: Create GitHub Pre-Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.beta.outputs.tag }}
-          name: ${{ steps.beta.outputs.tag }}
-          generate_release_notes: true
-          prerelease: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.beta.outputs.tag }}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${{ steps.beta.outputs.tag }}" \
+            --generate-notes \
+            --prerelease
