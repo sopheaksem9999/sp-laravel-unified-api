@@ -1,0 +1,141 @@
+name: Security
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+
+jobs:
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 1. Secret scanning — finds accidentally committed tokens, keys, passwords
+  #    Tool: gitleaks (free, open source)
+  #    Catches: GitHub PATs, AWS keys, private keys, API tokens, passwords
+  # ─────────────────────────────────────────────────────────────────────────────
+  scan-secrets:
+    name: Secret Scanning (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 2. Dependency vulnerability check — finds CVEs in composer packages
+  #    Tool: local-php-security-checker (by Symfony/fabpot, free)
+  #    Catches: known CVEs in packages listed in composer.lock
+  # ─────────────────────────────────────────────────────────────────────────────
+  scan-dependencies:
+    name: Dependency CVE Check (composer.lock)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+        with:
+          persist-credentials: false
+
+      - name: Check composer.lock exists
+        run: |
+          if [ ! -f composer.lock ]; then
+            echo "::warning::composer.lock not found — skipping CVE check. Commit composer.lock to enable this scan."
+            exit 0
+          fi
+
+      - name: Run PHP security checker
+        run: |
+          curl -fsSL https://github.com/fabpot/local-php-security-checker/releases/download/v2.0.6/local-php-security-checker_2.0.6_linux_amd64 \
+            -o /usr/local/bin/security-checker
+          chmod +x /usr/local/bin/security-checker
+          security-checker security:check composer.lock
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 3. Static Application Security Testing (SAST) for PHP
+  #    Tool: Semgrep (free for open source, has PHP ruleset)
+  #    Catches: SQL injection, XSS, command injection, path traversal,
+  #             insecure deserialization, hardcoded secrets in code logic
+  # ─────────────────────────────────────────────────────────────────────────────
+  scan-sast:
+    name: SAST — PHP Code (Semgrep)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+        with:
+          persist-credentials: false
+
+      - name: Run Semgrep
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: >-
+            p/php
+            p/laravel
+            p/secrets
+            p/owasp-top-ten
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # 4. File system audit — catches suspicious files before they reach main
+  #    Checks: webshell filenames, PHP in upload dirs, executable scripts added
+  # ─────────────────────────────────────────────────────────────────────────────
+  scan-files:
+    name: File Audit (suspicious files)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+        with:
+          persist-credentials: false
+
+      - name: Check for PHP webshell signatures
+        run: |
+          set -euo pipefail
+          PATTERN='eval\(base64_decode\(|eval\(gzinflate\(|eval\(gzuncompress\(|eval\(gzdeflate\(|eval\(str_rot13\('
+          PATTERN="${PATTERN}|preg_replace\([^,]*/e[^,]*,"
+          PATTERN="${PATTERN}|assert\(\$_(GET|POST|REQUEST|COOKIE|SERVER)"
+          PATTERN="${PATTERN}|shell_exec\(\$_(GET|POST|REQUEST|COOKIE|SERVER)"
+          PATTERN="${PATTERN}|system\(\$_(GET|POST|REQUEST|COOKIE|SERVER)"
+          PATTERN="${PATTERN}|passthru\(\$_(GET|POST|REQUEST|COOKIE|SERVER)"
+          PATTERN="${PATTERN}|exec\(\$_(GET|POST|REQUEST|COOKIE|SERVER)"
+          PATTERN="${PATTERN}|proc_open\(\$_(GET|POST|REQUEST|COOKIE|SERVER)"
+          PATTERN="${PATTERN}|error_reporting\(0\)"
+          if git grep -nE "$PATTERN" -- '*.php' 2>/dev/null; then
+            echo "::error::BLOCKED — PHP webshell signature detected."
+            exit 1
+          fi
+          echo "PHP webshell check passed."
+
+      - name: Check for suspicious PHP filenames
+        run: |
+          set -euo pipefail
+          if git ls-files | grep -qE '(^|/)[a-f0-9]{4,}\.php$'; then
+            echo "::error::BLOCKED — PHP file with hex/hash name detected:"
+            git ls-files | grep -E '(^|/)[a-f0-9]{4,}\.php$'
+            exit 1
+          fi
+          if git ls-files | grep -qiE '/(upload|uploads|tmp|temp|cache)/[^/]+\.php$'; then
+            echo "::error::BLOCKED — PHP file inside upload/temp/cache directory:"
+            git ls-files | grep -iE '/(upload|uploads|tmp|temp|cache)/[^/]+\.php$'
+            exit 1
+          fi
+          echo "Filename check passed."
+
+      - name: Check for dangerous shell patterns
+        run: |
+          set -euo pipefail
+          if git grep -nE 'curl[^|#]*\|(bash|sh)|wget[^|#]*\|(bash|sh)' -- '*.sh' 2>/dev/null; then
+            echo "::error::BLOCKED — curl/wget pipe-to-shell in shell scripts."
+            exit 1
+          fi
+          echo "Shell pattern check passed."
