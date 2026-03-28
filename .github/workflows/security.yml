@@ -47,19 +47,22 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check composer.lock exists
-        run: |
-          if [ ! -f composer.lock ]; then
-            echo "::warning::composer.lock not found — skipping CVE check. Commit composer.lock to enable this scan."
-            exit 0
-          fi
-
       - name: Run PHP security checker
+        # hashFiles() returns empty string when the file does not exist —
+        # skips this step entirely instead of failing with a misleading error.
+        if: hashFiles('composer.lock') != ''
         run: |
+          set -euo pipefail
           curl -fsSL https://github.com/fabpot/local-php-security-checker/releases/download/v2.0.6/local-php-security-checker_2.0.6_linux_amd64 \
             -o /usr/local/bin/security-checker
           chmod +x /usr/local/bin/security-checker
           security-checker security:check composer.lock
+
+      - name: No composer.lock found
+        if: hashFiles('composer.lock') == ''
+        run: |
+          echo "::warning::composer.lock not found — CVE dependency scan skipped."
+          echo "Commit composer.lock to your repository to enable this check."
 
   # ─────────────────────────────────────────────────────────────────────────────
   # 3. Static Application Security Testing (SAST) for PHP
