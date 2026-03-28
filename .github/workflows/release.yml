@@ -1,7 +1,12 @@
 name: Release
 
+# Runs only after the Security workflow completes on main or develop.
+# If any security check failed, both release jobs are skipped automatically.
 on:
-  push:
+  workflow_run:
+    workflows: ["Security"]
+    types:
+      - completed
     branches:
       - main
       - develop
@@ -10,113 +15,27 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: true
 
 jobs:
-
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Shared security scan — runs before any release logic
-  # Blocks the workflow if anything suspicious is detected in the repository.
-  # ─────────────────────────────────────────────────────────────────────────────
-  security-scan:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
-        with:
-          fetch-depth: 2
-          persist-credentials: false
-
-      - name: "Guard 1 — PHP webshell signatures"
-        run: |
-          set -euo pipefail
-          # Catches eval-obfuscation chains, user-input-to-exec calls, and error suppression
-          # used by virtually every PHP webshell in the wild.
-          PATTERN='eval\(base64_decode\(|eval\(gzinflate\(|eval\(gzuncompress\(|eval\(gzdeflate\(|eval\(str_rot13\('
-          PATTERN="${PATTERN}|preg_replace\([^,]*/e[^,]*,"
-          PATTERN="${PATTERN}|assert\(\$_(GET|POST|REQUEST|COOKIE|SERVER)"
-          PATTERN="${PATTERN}|shell_exec\(\$_(GET|POST|REQUEST|COOKIE|SERVER)"
-          PATTERN="${PATTERN}|system\(\$_(GET|POST|REQUEST|COOKIE|SERVER)"
-          PATTERN="${PATTERN}|passthru\(\$_(GET|POST|REQUEST|COOKIE|SERVER)"
-          PATTERN="${PATTERN}|exec\(\$_(GET|POST|REQUEST|COOKIE|SERVER)"
-          PATTERN="${PATTERN}|popen\(\$_(GET|POST|REQUEST|COOKIE|SERVER)"
-          PATTERN="${PATTERN}|proc_open\(\$_(GET|POST|REQUEST|COOKIE|SERVER)"
-          PATTERN="${PATTERN}|error_reporting\(0\)"
-          if git grep -nE "$PATTERN" -- '*.php' 2>/dev/null; then
-            echo "::error::BLOCKED — PHP webshell signature detected (see matches above)."
-            exit 1
-          fi
-          echo "PHP webshell check passed."
-
-      - name: "Guard 2 — Suspicious PHP filenames"
-        run: |
-          set -euo pipefail
-          # Block PHP files with hex/hash-style names (e.g. d1337.php, a3f9bc12.php)
-          # — a common pattern for dropped webshells.
-          if git ls-files | grep -qE '(^|/)[a-f0-9]{4,}\.php$'; then
-            echo "::error::BLOCKED — PHP file with hex/hash name detected:"
-            git ls-files | grep -E '(^|/)[a-f0-9]{4,}\.php$'
-            exit 1
-          fi
-          # Block PHP files inside upload / temp / cache directories
-          if git ls-files | grep -qiE '/(upload|uploads|tmp|temp|cache)/[^/]+\.php$'; then
-            echo "::error::BLOCKED — PHP file inside upload/temp/cache directory:"
-            git ls-files | grep -iE '/(upload|uploads|tmp|temp|cache)/[^/]+\.php$'
-            exit 1
-          fi
-          echo "PHP filename check passed."
-
-      - name: "Guard 3 — Dangerous shell patterns"
-        run: |
-          set -euo pipefail
-          # Block curl/wget piped directly to a shell interpreter in .sh files.
-          if git grep -nE 'curl[^|#]*\|(bash|sh)|wget[^|#]*\|(bash|sh)' -- '*.sh' 2>/dev/null; then
-            echo "::error::BLOCKED — curl/wget pipe-to-shell detected in shell scripts."
-            exit 1
-          fi
-          echo "Shell pattern check passed."
-
-      - name: "Guard 4 — Hardcoded secrets and credentials"
-        run: |
-          set -euo pipefail
-          # Detect common secret formats: PEM private keys, GitHub tokens, AWS access keys.
-          PATTERN='-----BEGIN (RSA|EC|OPENSSH|PGP|DSA) PRIVATE KEY'
-          PATTERN="${PATTERN}|ghp_[A-Za-z0-9]{36}"
-          PATTERN="${PATTERN}|ghs_[A-Za-z0-9]{36}"
-          PATTERN="${PATTERN}|github_pat_[A-Za-z0-9_]{82}"
-          PATTERN="${PATTERN}|AKIA[0-9A-Z]{16}"
-          if git grep -nE "$PATTERN" 2>/dev/null; then
-            echo "::error::BLOCKED — Possible secret or private key committed (see matches above)."
-            exit 1
-          fi
-          echo "Secrets check passed."
-
-      - name: "Guard 5 — Workflow modification notice"
-        run: |
-          set -euo pipefail
-          # Not a blocker, but emit a visible warning when a workflow file is changed
-          # so it gets extra attention during review.
-          PARENT=$(git rev-parse HEAD~1 2>/dev/null || echo "")
-          if [ -n "$PARENT" ] && git diff --name-only "$PARENT" HEAD | grep -qE '^\.github/workflows/'; then
-            echo "::warning::A GitHub Actions workflow file was modified in this push — review it carefully before merging."
-            git diff --name-only "$PARENT" HEAD | grep -E '^\.github/workflows/'
-          fi
-          echo "Workflow change check done."
 
   # ─────────────────────────────────────────────
   # Stable release — triggered by push to main
   # ─────────────────────────────────────────────
   release-stable:
-    needs: security-scan
-    if: github.ref == 'refs/heads/main'
+    # Only run when security passed AND the push was to main
+    if: |
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
         with:
+          # Check out the exact commit that security.yml scanned
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
           fetch-tags: true
           persist-credentials: false
@@ -175,14 +94,18 @@ jobs:
   # e.g. 0.3.93-beta.42
   # ─────────────────────────────────────────────
   release-beta:
-    needs: security-scan
-    if: github.ref == 'refs/heads/develop'
+    # Only run when security passed AND the push was to develop
+    if: |
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'develop'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
         with:
+          # Check out the exact commit that security.yml scanned
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
           fetch-tags: true
           persist-credentials: false
