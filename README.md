@@ -38,6 +38,11 @@ curl -X GET http://your-app.test/api/v1/users
 - **🧹 Audit Log Cleanup**: CLI command for cleaning old audit logs based on retention policy
 - **🏢 Multi-Tenant Ready**: Built-in support for tenant isolation
 - **🔧 Configuration Publishing**: Easy setup with sensible defaults
+- **🔀 Bulk Operations Toggle**: Enable/disable all bulk endpoints via a single config flag (`record.bulk_operations`)
+- **🗑️ Soft Delete Query Shortcuts**: `?with_trashed=true` on list/show endpoints; `?force=true` on delete for inline permanent removal
+- **📡 Real-Time Broadcast Events**: Opt-in `RecordMutated` broadcast event on every mutation — filterable per table via `disableBroadcast`
+- **📤 OpenAPI Export Command**: `php artisan sp-laravel-api:export-openapi` — export the live schema to JSON or YAML
+- **🏷️ PHP 8.3 Attribute-Based Config**: `#[RecordTable]` and `#[RecordRelationship]` attributes for model-co-located table configuration with auto-discovery
 
 ## 📚 Documentation
 
@@ -593,6 +598,15 @@ return [
         'per_table' => [],
     ],
     
+    // Bulk operations endpoints (set false to disable all /bulk/* routes)
+    'bulk_operations' => env('SP_BULK_OPERATIONS', true),
+
+    // Broadcast a RecordMutated event after every successful mutation
+    'broadcast_events' => env('SP_BROADCAST_EVENTS', false),
+
+    // Optional: only broadcast for these tables (empty = all tables)
+    'broadcast_tables' => [],
+
     // Global RPC function configurations
     'global_functions' => [],
 
@@ -1431,6 +1445,30 @@ php artisan sp-laravel-api:clean-audit-logs --force --days=30
 php artisan sp-laravel-api:clean-audit-logs --batch-size=500
 ```
 
+### Export OpenAPI Schema
+```bash
+# Export schema to JSON (default path from sp-laravel-api.openapi.output)
+php artisan sp-laravel-api:export-openapi
+
+# Pretty-printed JSON
+php artisan sp-laravel-api:export-openapi --pretty
+
+# Export as YAML
+php artisan sp-laravel-api:export-openapi --format=yaml --output=docs/openapi.yaml
+```
+
+### List Registered Tables
+```bash
+# List all tables (file-based + attribute-discovered)
+php artisan sp-laravel-api:list-tables
+
+# Only file-based
+php artisan sp-laravel-api:list-tables --source=file
+
+# Only attribute-discovered (requires SP_ATTRIBUTE_DISCOVERY=true)
+php artisan sp-laravel-api:list-tables --source=attributes
+```
+
 ## API Endpoints
 
 The package automatically registers RESTful API routes for dynamic database operations. The route prefix is configurable via `config('record.api_prefix')` (default: `api/v1`).
@@ -1500,6 +1538,12 @@ return [
             ],
         ],
     ],
+
+    // PHP 8 Attribute-based table discovery
+    'attribute_discovery' => [
+        'enabled' => env('SP_ATTRIBUTE_DISCOVERY', false),
+        'paths'   => ['app/Models'],
+    ],
 ];
 ```
 
@@ -1516,6 +1560,38 @@ return [
     // Table-specific configurations...
 ];
 ```
+
+## PHP 8 Attribute-Based Table Config
+
+Instead of (or alongside) file-based `RecordTableType` definitions, you can annotate Eloquent models directly:
+
+```php
+use Sopheak\Core\Attributes\RecordTable;
+use Sopheak\Core\Attributes\RecordRelationship;
+
+#[RecordTable(
+    pmsName: 'invoice',
+    table: 'invoices',
+    hasTenantId: true,
+    softDeletes: true,
+    isAuthRead: true,
+    isAuthWrite: true,
+)]
+#[RecordRelationship(name: 'customer', type: 'belongs_to', foreignKey: 'customer_id', relatedTable: 'customers')]
+#[RecordRelationship(name: 'items',    type: 'has_many',   foreignKey: 'invoice_id',  relatedTable: 'invoice_items')]
+class Invoice extends Model { }
+```
+
+Enable discovery in `config/sp-laravel-api.php` (or set `SP_ATTRIBUTE_DISCOVERY=true`):
+
+```php
+'attribute_discovery' => [
+    'enabled' => env('SP_ATTRIBUTE_DISCOVERY', false),
+    'paths'   => ['app/Models'],
+],
+```
+
+File-based config always takes precedence over attribute-discovered tables.
 
 ## Example Controller
 ```php

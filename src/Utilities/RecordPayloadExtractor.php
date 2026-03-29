@@ -184,9 +184,11 @@ final class RecordPayloadExtractor
                         if (isset($tableSchema->columns['updated_by'])) {
                             $data['updated_by'] = (!$hasUpdatedBy || !$overrideUserstamps) ? $user->id : $updatedByVal;
                         }
+
                         if (isset($tableSchema->columns['last_updated_by'])) {
                             $data['last_updated_by'] = (!$hasLastUpdatedBy || !$overrideUserstamps) ? $user->id : $lastUpdatedByVal;
                         }
+
                         if (isset($tableSchema->columns['last_updated_by_id'])) {
                             $data['last_updated_by_id'] = (!$hasLastUpdatedById || !$overrideUserstamps) ? $user->id : $lastUpdatedByIdVal;
                         }
@@ -195,15 +197,19 @@ final class RecordPayloadExtractor
                     if ($user && isset($tableSchema->columns['created_by'])) {
                         $data['created_by'] = (!$hasCreatedBy || !$overrideUserstamps) ? $user->id : $createdByVal;
                     }
+
                     if ($user && isset($tableSchema->columns['created_by_id'])) {
                         $data['created_by_id'] = (!$hasCreatedById || !$overrideUserstamps) ? $user->id : $createdByIdVal;
                     }
+
                     if ($user && isset($tableSchema->columns['updated_by'])) {
                         $data['updated_by'] = (!$hasUpdatedBy || !$overrideUserstamps) ? $user->id : $updatedByVal;
                     }
+
                     if ($user && isset($tableSchema->columns['last_updated_by'])) {
                         $data['last_updated_by'] = (!$hasLastUpdatedBy || !$overrideUserstamps) ? $user->id : $lastUpdatedByVal;
                     }
+
                     if ($user && isset($tableSchema->columns['last_updated_by_id'])) {
                         $data['last_updated_by_id'] = (!$hasLastUpdatedById || !$overrideUserstamps) ? $user->id : $lastUpdatedByIdVal;
                     }

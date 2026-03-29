@@ -51,6 +51,26 @@ class RecordConfigService
         return (int) config('record.bulk_max', 1000);
     }
 
+    public static function bulkOperationsEnabled(): bool
+    {
+        return (bool) config('record.bulk_operations', true);
+    }
+
+    public static function broadcastEventsEnabled(): bool
+    {
+        return (bool) config('record.broadcast_events', false);
+    }
+
+    /**
+     * Tables that should broadcast mutations. Empty = all tables.
+     *
+     * @return string[]
+     */
+    public static function broadcastTables(): array
+    {
+        return (array) config('record.broadcast_tables', []);
+    }
+
     public static function cacheEnabled(): bool
     {
         return (bool) config('record.cache.enabled', false);

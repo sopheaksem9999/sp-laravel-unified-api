@@ -184,13 +184,14 @@ trait HasControllerHelpers
 
         $allowed = false;
         $authHandler = config('record.authorization');
+        $gate = $authHandler === null ? Gate::forUser($user) : null;
         foreach ($perms as $perm) {
             if ($authHandler !== null) {
                 $granted = is_string($authHandler)
                     ? (bool) app($authHandler)->handle($user, $perm, $table, $action)
                     : (bool) $authHandler($user, $perm, $table, $action);
             } else {
-                $granted = Gate::forUser($user)->allows($perm);
+                $granted = $gate->allows($perm);
             }
 
             if ($granted) {

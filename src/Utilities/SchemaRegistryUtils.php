@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Utilities;
 
+use Throwable;
 use Sopheak\Core\Interfaces\RecordResourceInterface;
 use stdClass;
 use Exception;
@@ -10,6 +11,7 @@ use Sopheak\Core\Utilities\RelationshipResolverUtils;
 use Sopheak\Core\Utilities\QueryBuilderFiltersUtils;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Sopheak\Core\Services\AttributeDiscoveryService;
 use Sopheak\Core\Services\RecordConfigService;
 
 class SchemaRegistryUtils
@@ -91,6 +93,31 @@ class SchemaRegistryUtils
             $config->hasTenantId ??= true;
 
             $registry[$tableName] = $config;
+        }
+
+        // Merge attribute-discovered tables; file-based config always wins on conflict.
+        if ((bool) config('sp-laravel-api.attribute_discovery.enabled', false)) {
+            try {
+                $attributeTables = AttributeDiscoveryService::discover();
+            } catch (Throwable) {
+                $attributeTables = [];
+            }
+
+            foreach ($attributeTables as $tableName => $config) {
+                if (isset($registry[$tableName])) {
+                    // File-based config takes precedence — skip attribute entry
+                    continue;
+                }
+
+                $actualTableName = $config->table ?? $tableName;
+                if (empty($config->columns)) {
+                    $config->columns = self::getTableColumns($actualTableName);
+                }
+
+                $config->primaryKey ??= 'id';
+
+                $registry[$tableName] = $config;
+            }
         }
 
         self::$cache = $registry;

@@ -383,9 +383,15 @@ trait HasCrudOperations
 
     /**
      * Delete a record by ID.
+     *
+     * Supports `?force=true` to bypass soft-delete and permanently remove the record.
      */
     public function destroyRecord(Request $request, string $table, string $id): JsonResponse
     {
+        if ($request->boolean('force')) {
+            return $this->forceDeleteRecord($request, $table, $id);
+        }
+
         try {
             $tableSchema = $this->resolveSchemaOrFail($table);
 

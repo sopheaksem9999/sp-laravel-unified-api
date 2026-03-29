@@ -44,7 +44,7 @@ class RecordRouteMiddleware
         if ('global_function' === $action || 'table_function' === $action) {
             $functionName = (string) ($request->route('functionName') ?? '');
             $functionType = $this->resolveFunctionConfig($action, $table, $functionName);
-            if (null !== $functionType && null !== $functionType->middleware) {
+            if ($functionType instanceof RecordFunctionType && null !== $functionType->middleware) {
                 return $this->sanitizeMiddlewares(
                     $this->normalizeMiddlewares($functionType->middleware)
                 );
@@ -116,6 +116,7 @@ class RecordRouteMiddleware
             if ($instance instanceof RecordFunctionInterface) {
                 return $instance->toFunctionType();
             }
+
             if ($instance instanceof RecordFunctionType) {
                 return $instance;
             }

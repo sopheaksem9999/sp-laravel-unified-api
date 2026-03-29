@@ -145,11 +145,13 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
     | Bulk Operations
     |--------------------------------------------------------------------------
     */
-    Route::post('{table}/bulk', [CoreRecordController::class, 'bulkRecord'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:bulk']);
-    Route::post('{table}/bulk/create', [CoreRecordController::class, 'bulkRecordCreate'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:bulk_create']);
-    Route::post('{table}/bulk/update', [CoreRecordController::class, 'bulkRecordUpdate'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:bulk_update']);
-    Route::post('{table}/bulk/delete', [CoreRecordController::class, 'bulkRecordDelete'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:bulk_delete']);
-    Route::post('{table}/bulk/upsert', [CoreRecordController::class, 'bulkRecordUpsert'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:bulk_upsert']);
+    if (RecordConfigService::bulkOperationsEnabled()) {
+        Route::post('{table}/bulk', [CoreRecordController::class, 'bulkRecord'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:bulk']);
+        Route::post('{table}/bulk/create', [CoreRecordController::class, 'bulkRecordCreate'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:bulk_create']);
+        Route::post('{table}/bulk/update', [CoreRecordController::class, 'bulkRecordUpdate'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:bulk_update']);
+        Route::post('{table}/bulk/delete', [CoreRecordController::class, 'bulkRecordDelete'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:bulk_delete']);
+        Route::post('{table}/bulk/upsert', [CoreRecordController::class, 'bulkRecordUpsert'])->where('table', $tableWhere)->middleware(['throttle:api-writes', 'record.route.middleware:bulk_upsert']);
+    }
 
     /*
     |--------------------------------------------------------------------------

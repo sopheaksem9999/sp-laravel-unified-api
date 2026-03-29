@@ -7,7 +7,6 @@ use Sopheak\Core\Enums\AuditLogEventEnum;
 use Sopheak\Core\Jobs\AuditLogJob;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Sopheak\Core\Services\RecordConfigService;
@@ -131,7 +130,7 @@ class AuditLogService
             'new_data' => is_array($data['new_data']) ? json_encode($data['new_data'], JSON_PRETTY_PRINT) : $data['new_data'],
             'recap' => $data['recap'] ?? '',
             'subject' => $data['subject'] ?? '',
-            'user_id' => $data['user_id'] ?? Auth::id(),
+            'user_id' => $data['user_id'] ?? auth(RecordConfigService::authGuard())->id(),
             'entity_type' => $tableName,
             'entity_id' => $data['entity_id'],
             'entity_name' => $tableName,
@@ -167,8 +166,9 @@ class AuditLogService
     public static function getAuditMetadata(array $changedFields = [], array $oldData = [], array $newData = [], ?string $entityType = null, mixed $entityId = null, ?string $event = null, ?string $tenantId = null): array
     {
         $currentTime = now()->toISOString();
-        $userId = Auth::id();
-        $userName = Auth::user()?->name ?? 'Unknown';
+        $guard = RecordConfigService::authGuard();
+        $userId = auth($guard)->id();
+        $userName = auth($guard)->user()?->name ?? 'Unknown';
         $isCreateEvent = strtolower((string) $event) === AuditLogEventEnum::CREATED->value;
         $tableName = null !== $entityType ? static::getTableNameFromEntityType($entityType) : null;
         $lookupEntityType = $tableName ?? $entityType;
