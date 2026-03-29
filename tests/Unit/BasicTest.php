@@ -197,14 +197,14 @@ class BasicTest extends TestCase
         Config::set('record.tables', [
             'companies' => new RecordTableType(
                 table: 'companies',
+                isAuthRead: false,
+                isAuthWrite: false,
+                public: new RecordTablePublic(read: true, write: true),
                 columns: [
                     'name' => ['type' => 'string'],
                     'updated_at' => ['type' => 'datetime'],
                     'updated_by' => ['type' => 'integer'],
                 ],
-                isAuthRead: false,
-                isAuthWrite: false,
-                public: new RecordTablePublic(read: true, write: true),
             ),
         ]);
         SchemaRegistryUtils::refresh();
@@ -238,8 +238,8 @@ class BasicTest extends TestCase
                 'last_updated_by_id' => ['type' => 'integer'],
                 'updated_at' => ['type' => 'datetime'],
             ],
-            overrideUserstamps: false,
-            overrideTimestamps: false
+            overrideTimestamps: false,
+            overrideUserstamps: false
         );
 
         $service = new RecordService();

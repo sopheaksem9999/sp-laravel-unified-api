@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Services;
 
+use ArgumentCountError;
 use Illuminate\Support\Carbon;
 use Closure;
 use InvalidArgumentException;
@@ -320,7 +321,7 @@ class RecordApiResponseService
         }
 
         $globalCasting = RecordConfigService::globalCasting();
-        if (!is_array($globalCasting) || array_is_list($globalCasting)) {
+        if (array_is_list($globalCasting)) {
             $globalCasting = [];
         }
 
@@ -351,7 +352,7 @@ class RecordApiResponseService
             if (isset($descriptor['callable'])) {
                 try {
                     return ($descriptor['callable'])($value, $col, $row);
-                } catch (\ArgumentCountError) {
+                } catch (ArgumentCountError) {
                     return ($descriptor['callable'])($value);
                 }
             }
@@ -743,6 +744,7 @@ class RecordApiResponseService
             if (in_array($normalized, ['true', 't', 'yes', 'y', 'on', '1'], true)) {
                 return true;
             }
+
             if (in_array($normalized, ['false', 'f', 'no', 'n', 'off', '0', ''], true)) {
                 return false;
             }

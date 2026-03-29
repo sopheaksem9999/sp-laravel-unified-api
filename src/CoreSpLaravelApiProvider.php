@@ -7,10 +7,12 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
 use Sopheak\Core\Console\CleanAuditLogsCommand;
-use Sopheak\Core\Console\SyncRecordColumnsCommand;
+use Sopheak\Core\Console\ExportOpenApiCommand;
 use Sopheak\Core\Console\GenerateRecordTablesFromDatabaseCommand;
+use Sopheak\Core\Console\ListTablesCommand;
 use Sopheak\Core\Console\MakeRecordTableCommand;
 use Sopheak\Core\Console\SetupPackageCommand;
+use Sopheak\Core\Console\SyncRecordColumnsCommand;
 use Sopheak\Core\Console\ValidateSetupCommand;
 use Sopheak\Core\Http\Middleware\RecordRouteMiddleware;
 use Sopheak\Core\Http\Middleware\RequestId;
@@ -56,6 +58,8 @@ class CoreSpLaravelApiProvider extends ServiceProvider
                 CleanAuditLogsCommand::class,
                 MakeRecordTableCommand::class,
                 GenerateRecordTablesFromDatabaseCommand::class,
+                ExportOpenApiCommand::class,
+                ListTablesCommand::class,
             ];
 
             $commands = array_values(array_filter($commands, class_exists(...)));

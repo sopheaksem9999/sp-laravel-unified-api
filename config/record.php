@@ -81,6 +81,25 @@ return [
     // Maximum items per bulk operation
     'bulk_max' => 1000,
 
+    // Enable or disable bulk operation endpoints (POST /bulk, /bulk/create, /bulk/update, /bulk/delete, /bulk/upsert)
+    'bulk_operations' => env('SP_BULK_OPERATIONS', true),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Real-Time Broadcast Events
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, a RecordMutated event is fired after each successful
+    | create/update/delete on a private per-tenant channel:
+    |   private-tenant.{tenantId}
+    |
+    | broadcast_tables: empty array = broadcast all tables.
+    |                   Named array = only those tables are broadcast.
+    |
+    */
+    'broadcast_events' => env('SP_BROADCAST_EVENTS', false),
+    'broadcast_tables' => [], // e.g. ['invoices', 'tasks']
+
     // Cache configuration
     'cache' => [
         // Enable/disable caching globally for the Records API

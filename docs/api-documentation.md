@@ -1021,6 +1021,7 @@ new RecordTableType(
     softDeletes: false,
     disableAuditLog: false,
     disableCache: false,
+    disableBroadcast: false,
     canRead: true,
     canCreate: true,
     canUpdate: true,
@@ -1078,6 +1079,7 @@ new RecordTableType(
 
 - `disableCache` (bool, default: `false`): Disables query caching for this table (even if `record.cache.enabled` is true).
 - `disableAuditLog` (bool, default: `false`): Disables audit log inserts for create/update/delete on this table.
+- `disableBroadcast` (bool, default: `false`): Suppresses `RecordMutated` broadcast events for this table even when `record.broadcast_events` is globally enabled. Useful for high-volume tables where real-time broadcasting is not needed.
 - `auditLogFn` (?string, default: `null`): Reserved for custom audit log behavior; not used by the current runtime.
 
 #### Schema & Search Metadata
@@ -1639,6 +1641,7 @@ Retrieve a paginated list of records with filtering, sorting, and relationship l
 
 - `distinct` (boolean) - Apply SQL `DISTINCT` to the main query.
 - `only_trashed` (boolean) - For soft-deleted tables, return only rows where `deleted_at` is not null.
+- `with_trashed` (boolean) - For soft-deleted tables, include soft-deleted rows alongside active rows. Takes precedence over the default exclusion of deleted records.
 - `aggregate` (string) - One or more aggregate expressions (comma-separated):
   - Supported functions: `count`, `sum`, `avg`, `min`, `max`.
   - Syntax:
@@ -1786,6 +1789,7 @@ Retrieve a single record by its primary key.
 
 - `select` (string) - Select main columns and include relationships using parentheses syntax
   - Example: `?select=*,customer(*),items(*,product(*))`
+- `with_trashed` (boolean) - For soft-deleted tables, fetch the record even if it has been soft-deleted.
 
 #### Example Request
 
@@ -2006,9 +2010,12 @@ If an `updateValidator` is defined for the target table, the request is validate
 
 ```http
 DELETE /{api_prefix}/{table}/{id}
+DELETE /{api_prefix}/{table}/{id}?force=true
 ```
 
 Delete a record (soft delete if enabled, otherwise hard delete).
+
+Adding `?force=true` is a shortcut that permanently deletes the record regardless of soft-delete configuration — identical in behavior to the dedicated `DELETE /{api_prefix}/{table}/{id}/force` endpoint. Useful when you want to conditionally force-delete without changing the URL path.
 
 If a `deleteValidator` is defined for the target table, the request is validated (typically against the ID and context) before the record is deleted. Validation failures return `422` with error details.
 
@@ -2282,6 +2289,8 @@ curl --location --request PUT 'http://127.0.0.1:8000/api/v1/invoices/123' \
 ### Bulk Operations
 
 Bulk operations allow you to perform Create, Update, or Delete actions on multiple records in a single HTTP request. This is significantly more efficient than sending individual requests for large datasets.
+
+> **Opt-in flag:** Bulk routes are registered only when `record.bulk_operations` is `true` (the default). Set `SP_BULK_OPERATIONS=false` in your `.env` to disable all bulk endpoints entirely.
 
 For performance considerations and best practices when using bulk operations, please refer to the [Performance & Scalability](performance.md) guide.
 
@@ -2777,6 +2786,189 @@ public function update(Request $request, RecordCacheService $cacheService)
     return response()->json(['ok' => true]);
 }
 ```
+
+### Broadcast Events (Real-Time Mutations)
+
+When `record.broadcast_events` is enabled, the package fires a `RecordMutated` event over Laravel's broadcasting system after every successful mutation (create, update, upsert, delete, restore, force-delete, bulk).
+
+#### Enabling Broadcasting
+
+```php
+// config/record.php
+'broadcast_events' => env('SP_BROADCAST_EVENTS', false),
+
+// Optional: restrict to specific tables (empty = all tables)
+'broadcast_tables' => ['invoices', 'payments'],
+```
+
+Set `SP_BROADCAST_EVENTS=true` in your `.env`. Configure your broadcast driver (`BROADCAST_DRIVER`) as usual — Pusher, Soketi, Reverb, etc.
+
+#### Event Details
+
+| Property | Value |
+|---|---|
+| Class | `Sopheak\Core\Events\RecordMutated` |
+| Interface | `Illuminate\Contracts\Broadcasting\ShouldBroadcast` |
+| Channel | `private-tenant.{tenantId}` (falls back to `private-tenant.global`) |
+| Event name | `{table}.{action}` — e.g. `invoices.created`, `payments.deleted` |
+
+#### Broadcast Payload
+
+```json
+{
+  "table": "invoices",
+  "action": "created",
+  "record": { "id": 42, "status": "draft", ... },
+  "tenant_id": "tenant_abc",
+  "timestamp": "2026-03-29T10:00:00.000000Z"
+}
+```
+
+`action` is one of: `created`, `updated`, `upserted`, `deleted`, `restored`, `force_deleted`.
+
+#### Per-Table Opt-Out
+
+```php
+new RecordTableType(
+    table: 'audit_snapshots',
+    disableBroadcast: true,  // never broadcast this table
+);
+```
+
+#### Authorization
+
+Private channels use standard Laravel channel authorization. Register the channel in `routes/channels.php`:
+
+```php
+Broadcast::channel('tenant.{tenantId}', function ($user, $tenantId) {
+    return (int) $user->tenant_id === (int) $tenantId;
+});
+```
+
+> **Note:** Broadcasting failures are silently swallowed so they never break the HTTP response.
+
+---
+
+### OpenAPI Export Command
+
+Export the package-generated OpenAPI 3.0 schema to a local file.
+
+```bash
+php artisan sp-laravel-api:export-openapi
+```
+
+#### Options
+
+| Option | Default | Description |
+|---|---|---|
+| `--output` | `openapi-schema.json` (from `sp-laravel-api.openapi.output`) | Output file path (relative to project root) |
+| `--format` | `json` | Output format: `json` or `yaml` |
+| `--pretty` | `false` | Pretty-print JSON output |
+
+#### Examples
+
+```bash
+# Export as JSON
+php artisan sp-laravel-api:export-openapi
+
+# Export as pretty-printed JSON
+php artisan sp-laravel-api:export-openapi --pretty
+
+# Export as YAML to a custom path
+php artisan sp-laravel-api:export-openapi --format=yaml --output=docs/openapi.yaml
+
+# JSON to a specific path
+php artisan sp-laravel-api:export-openapi --output=public/api-schema.json --pretty
+```
+
+The default output path is configurable via `config/sp-laravel-api.php`:
+
+```php
+'openapi' => [
+    'output' => 'openapi-schema.json',
+],
+```
+
+The command uses the same `OpenApiService::generateInternal()` that powers the runtime `/docs/openapi.json` endpoint, so the exported file is always consistent with the live API schema.
+
+---
+
+### PHP 8.3 Attribute-Based Config
+
+As an alternative to file-based `RecordTableType` configuration, you can annotate Eloquent models directly with PHP 8 attributes. This keeps table configuration co-located with the model class.
+
+#### Enabling Discovery
+
+```php
+// config/sp-laravel-api.php
+'attribute_discovery' => [
+    'enabled' => env('SP_ATTRIBUTE_DISCOVERY', false),
+    'paths'   => ['app/Models'],
+],
+```
+
+Set `SP_ATTRIBUTE_DISCOVERY=true` in your `.env`.
+
+> File-based config (config/record.php and config/records/tables/) **always takes precedence** over attribute-discovered tables. Attribute discovery only fills in tables that have no file-based entry.
+
+#### `#[RecordTable]` Attribute
+
+```php
+use Sopheak\Core\Attributes\RecordTable;
+use Sopheak\Core\Attributes\RecordRelationship;
+
+#[RecordTable(
+    pmsName: 'invoice',
+    table: 'invoices',
+    hasTenantId: true,
+    softDeletes: true,
+    isAuthRead: true,
+    isAuthWrite: true,
+    canRead: true,
+    canCreate: true,
+    canUpdate: true,
+    canDelete: true,
+    canUpsert: true,
+    disableAuditLog: false,
+    disableCache: false,
+    disableBroadcast: false,
+)]
+#[RecordRelationship(
+    name: 'customer',
+    type: 'belongs_to',
+    foreignKey: 'customer_id',
+    relatedTable: 'customers',
+)]
+#[RecordRelationship(
+    name: 'items',
+    type: 'has_many',
+    foreignKey: 'invoice_id',
+    relatedTable: 'invoice_items',
+)]
+class Invoice extends Model
+{
+    // ...
+}
+```
+
+All parameters from `RecordTableType` are available as named arguments on `#[RecordTable]`. `#[RecordRelationship]` is repeatable and maps to the relationship types supported by the package.
+
+#### Listing Discovered Tables
+
+```bash
+# All tables (file-based + attribute-discovered)
+php artisan sp-laravel-api:list-tables
+
+# Only file-based tables
+php artisan sp-laravel-api:list-tables --source=file
+
+# Only attribute-discovered tables
+php artisan sp-laravel-api:list-tables --source=attributes
+```
+
+Output columns: `Key`, `Table`, `PMS Name`, `Auth R/W`, `Soft Del`, `Tenant`, `Source`, `Note` (where `Note` shows `⚠ overridden by file` for attribute tables that are shadowed by a file-based entry).
+
+---
 
 ### Error Responses
 

@@ -205,6 +205,7 @@ class RpcRequireTokenMiddleware
         if (!$request->hasHeader('X-Token')) {
             return response()->json(['message' => 'Token required'], 401);
         }
+
         return $next($request);
     }
 }
@@ -216,6 +217,7 @@ class RpcRequirePlanMiddleware
         if (!$request->hasHeader('X-Plan')) {
             return response()->json(['message' => 'Plan required'], 402);
         }
+
         return $next($request);
     }
 }

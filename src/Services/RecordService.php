@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Services;
 
+use Sopheak\Core\Events\RecordMutated;
 use Exception;
 use Sopheak\Core\Interfaces\RecordFunctionInterface;
 use Throwable;
@@ -481,6 +482,66 @@ class RecordService
                 recap: '',
                 tenantId: $tenantId
             );
+        }
+
+        // 3. Fire broadcast event (opt-in via record.broadcast_events)
+        $this->fireBroadcastEvent($table, $operation, $recordContext, $tableSchema);
+    }
+
+    /**
+     * Fire a RecordMutated broadcast event when broadcasting is enabled.
+     */
+    private function fireBroadcastEvent(string $table, string $operation, array $recordContext, ?RecordTableType $tableSchema): void
+    {
+        if (!RecordConfigService::broadcastEventsEnabled()) {
+            return;
+        }
+
+        if ($tableSchema instanceof RecordTableType && $tableSchema->disableBroadcast) {
+            return;
+        }
+
+        $allowedTables = RecordConfigService::broadcastTables();
+        if (!empty($allowedTables) && !in_array($table, $allowedTables, true)) {
+            return;
+        }
+
+        $action = match ($operation) {
+            'create'  => 'created',
+            'update'  => 'updated',
+            'delete'  => 'deleted',
+            'restore' => 'restored',
+            default   => $operation,
+        };
+
+        $record = [];
+        if (isset($recordContext['response']) && $recordContext['response'] instanceof JsonResponse) {
+            $data = $recordContext['response']->getData();
+            $decoded = json_decode(json_encode($data->data ?? $data), true);
+            if (is_array($decoded)) {
+                $record = $decoded;
+            }
+        } elseif (isset($recordContext['payload']) && is_array($recordContext['payload'])) {
+            $record = $recordContext['payload'];
+        }
+
+        if (isset($recordContext['id']) && !isset($record['id'])) {
+            $record['id'] = $recordContext['id'];
+        }
+
+        $tenantId = $recordContext[RecordConfigService::tenantColumn()] ?? null;
+
+        try {
+            RecordMutated::dispatch(
+                $table,
+                $action,
+                $record,
+                $tenantId,
+                TimeUtils::now()->toISOString(),
+            );
+        } catch (Throwable) {
+            // Never let a broadcast failure break the HTTP response
+            
         }
     }
 
@@ -1529,7 +1590,7 @@ class RecordService
         if ($tableSchema->softDeletes) {
             if ($request->boolean('only_trashed')) {
                 $builder->whereNotNull($actualTableName . '.deleted_at');
-            } else {
+            } elseif (!$request->boolean('with_trashed')) {
                 $builder->whereNull($actualTableName . '.deleted_at');
             }
         }
@@ -1866,7 +1927,7 @@ class RecordService
             if ($tableSchema instanceof RecordTableType && $tableSchema->softDeletes) {
                 if ($request->boolean('only_trashed')) {
                     $builder->whereNotNull($actualTableName . '.deleted_at');
-                } else {
+                } elseif (!$request->boolean('with_trashed')) {
                     $builder->whereNull($actualTableName . '.deleted_at');
                 }
             }
@@ -1876,7 +1937,7 @@ class RecordService
             if ($tableSchema instanceof RecordTableType && $tableSchema->softDeletes) {
                 if ($request->boolean('only_trashed')) {
                     $builder->whereNotNull($actualTableName . '.deleted_at');
-                } else {
+                } elseif (!$request->boolean('with_trashed')) {
                     $builder->whereNull($actualTableName . '.deleted_at');
                 }
             }
@@ -2140,7 +2201,7 @@ class RecordService
         $builder = DB::table($actualTableName);
         $this->applyTenantFilter($builder, $actualTableName, $tenantId);
 
-        if ($tableSchema->softDeletes) {
+        if ($tableSchema->softDeletes && !$request->boolean('with_trashed')) {
             $builder->whereNull($actualTableName . '.deleted_at');
         }
 
@@ -2285,9 +2346,10 @@ class RecordService
             if (null !== $pmsName && '' !== $pmsName && [] !== $pmsName) {
                 $permissions = is_array($pmsName) ? $pmsName : [$pmsName];
                 $hasPermission = false;
+                $gate = Gate::forUser($user);
 
                 foreach ($permissions as $permission) {
-                    if (Gate::forUser($user)->allows($permission)) {
+                    if ($gate->allows($permission)) {
                         $hasPermission = true;
 
                         break;
