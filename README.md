@@ -1507,6 +1507,48 @@ The package automatically registers RESTful API routes for dynamic database oper
 - `GET|POST|PUT|PATCH|DELETE /{prefix}/rpc/{functionName}` - Execute global functions
 - `GET|POST|PUT|PATCH|DELETE /{prefix}/{table}/rpc/{functionName}` - Execute table-specific functions
 
+### Internal API Methods (Business Logic)
+The package provides internal methods that allow developers to execute CRUD operations directly from their business logic (e.g., inside custom controllers or jobs) using the exact same dynamic query syntax as the REST API.
+
+- `RecordService::executeGetByFilter(string $table, array|string $queryParams, ...)` - Fetch multiple records
+- `RecordService::executeGetById(string $table, mixed $id, array|string $queryParams, ...)` - Fetch a single record
+- `RecordService::executeCreate(string $table, array $payload, array|string $queryParams, ...)` - Create and return loaded record
+- `RecordService::executeUpdate(string $table, mixed $id, array $payload, array|string $queryParams, ...)` - Update and return loaded record
+- `RecordService::executeDelete(string $table, mixed $id, array|string $queryParams, ...)` - Delete and return record before deletion
+
+**Example Usage in a Controller:**
+```php
+use Sopheak\Core\Services\RecordService;
+
+class InvoiceController extends Controller
+{
+    public function processInvoice($id)
+    {
+        // 1. Fetch an invoice with its customer and items loaded
+        $invoice = RecordService::executeGetById('invoices', $id, [
+            'select' => '*,customer(*),items(*)'
+        ]);
+
+        // 2. Update the invoice status and get the updated record back with relationships
+        $updatedInvoice = RecordService::executeUpdate('invoices', $id, 
+            ['status' => 'processed'], 
+            'select=*,customer(*)' // You can also pass query params as a string
+        );
+
+        // 3. Create a new log entry and get it back
+        $log = RecordService::executeCreate('invoice_logs', 
+            ['invoice_id' => $id, 'action' => 'processed'],
+            ['select' => '*']
+        );
+
+        return response()->json([
+            'invoice' => $updatedInvoice,
+            'log' => $log
+        ]);
+    }
+}
+```
+
 ## Configuration
 
 ### Publishing Configuration Files
