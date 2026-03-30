@@ -878,7 +878,7 @@ class RecordService
 
                     $result = $this->createRecord(table: $table, payload: $item,  tenantId: $tenantId);
                     if (!is_array($result) || !array_key_exists('id', $result)) {
-                        throw new \RuntimeException("Failed to create record or retrieve inserted ID for table: {$table}");
+                        throw new \RuntimeException("Failed to create record in bulk operation for table: {$table}");
                     }
                     $insertId = $result['id'];
                     $recordResult = $this->getRecord($request, $table, $insertId, $tenantId);
@@ -1556,9 +1556,9 @@ class RecordService
             $includes = explode(',', $includes);
         }
 
-        $page = max((int) $request->get('page', 1), 1);
-        $perPage = $request->has('per_page') ? max(1, min((int) $request->get('per_page', 25), RecordConfigService::perPageMax())) : null;
-        $limit = $request->has('limit') ? max(1, min((int) $request->get('limit'), RecordConfigService::limitMax())) : RecordConfigService::limitMax();
+        $page = max((int) $request->input('page', 1), 1);
+        $perPage = $request->has('per_page') ? max(1, min((int) $request->input('per_page', 25), RecordConfigService::perPageMax())) : null;
+        $limit = $request->has('limit') ? max(1, min((int) $request->input('limit'), RecordConfigService::limitMax())) : RecordConfigService::limitMax();
 
         $isCacheable = $this->isCacheableRequest(request: $request, table: $table);
         $cacheKey = null;
@@ -1616,7 +1616,7 @@ class RecordService
             $meta = $aggregateResult['meta'];
             $headers = $aggregateResult['headers'];
         } elseif ($request->has('limit') && !$request->has('per_page')) {
-            $limit = max(1, min((int) $request->get('limit'), RecordConfigService::limitMax()));
+            $limit = max(1, min((int) $request->input('limit'), RecordConfigService::limitMax()));
             $data = $builder->limit($limit)->get()->all();
             $total = count($data);
             $headers['X-Total-Count'] = (string) $total;
@@ -1624,9 +1624,9 @@ class RecordService
         } else {
             $paginationRequested = $request->has('page') || $request->has('per_page');
             $maxPerPage = RecordConfigService::perPageMax();
-            $perPage = max(1, min((int) $request->get('per_page', RecordConfigService::limitMax()), $maxPerPage));
+            $perPage = max(1, min((int) $request->input('per_page', RecordConfigService::limitMax()), $maxPerPage));
 
-            $page = max((int) $request->get('page', 1), 1);
+            $page = max((int) $request->input('page', 1), 1);
             $countQuery = clone $builder;
             $total = $countQuery->count();
 
@@ -2020,7 +2020,7 @@ class RecordService
      *
      * @param Request                        $request        The HTTP request object.
      * @param Builder|RecordTableType|string $tableOrBuilder The table name, query builder, or table config.
-     * @param null|string                    $tanentColumn   The tenant column name (optional).
+     * @param mixed                          $tenantId       Optional tenant ID value for multi-tenant scoping.
      * @param bool                           $isArray        Whether to return the result as a flat array of rows.
      * @param string                         $orderBy        Default column to use for ordering when no sortby is provided.
      *
@@ -2101,9 +2101,9 @@ class RecordService
             $includes = explode(',', $includes);
         }
 
-        $page = max((int) $request->get('page', 1), 1);
-        $perPage = $request->has('per_page') ? max(1, min((int) $request->get('per_page', 25), RecordConfigService::perPageMax())) : null;
-        $limit = $request->has('limit') ? max(1, min((int) $request->get('limit'), RecordConfigService::limitMax())) : RecordConfigService::limitMax();
+        $page = max((int) $request->input('page', 1), 1);
+        $perPage = $request->has('per_page') ? max(1, min((int) $request->input('per_page', 25), RecordConfigService::perPageMax())) : null;
+        $limit = $request->has('limit') ? max(1, min((int) $request->input('limit'), RecordConfigService::limitMax())) : RecordConfigService::limitMax();
 
         // Disable cache if using builder as we can't easily key the builder state
         $isCacheable = !$builder && $service->isCacheableRequest($request, $table);
@@ -2178,7 +2178,7 @@ class RecordService
             $meta = $aggregateResult['meta'];
             $headers = $aggregateResult['headers'];
         } elseif ($request->has('limit') && !$request->has('per_page')) {
-            $limit = max(1, min((int) $request->get('limit'), RecordConfigService::limitMax()));
+            $limit = max(1, min((int) $request->input('limit'), RecordConfigService::limitMax()));
             $data = $builder->limit($limit)->get()->all();
             $total = count($data);
             $headers['X-Total-Count'] = (string) $total;
@@ -2186,9 +2186,9 @@ class RecordService
         } else {
             $paginationRequested = $request->has('page') || $request->has('per_page');
             $maxPerPage = RecordConfigService::perPageMax();
-            $perPage = max(1, min((int) $request->get('per_page', RecordConfigService::limitMax()), $maxPerPage));
+            $perPage = max(1, min((int) $request->input('per_page', RecordConfigService::limitMax()), $maxPerPage));
 
-            $page = max((int) $request->get('page', 1), 1);
+            $page = max((int) $request->input('page', 1), 1);
             $countQuery = clone $builder;
             $total = $countQuery->count();
             $data = $builder->forPage($page, $perPage)->get()->all();
