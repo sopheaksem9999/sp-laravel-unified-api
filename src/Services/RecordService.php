@@ -877,6 +877,9 @@ class RecordService
                     $this->executeTableTrigger($tableSchema->beforeCreate ?? null, [$request, $table, $item]);
 
                     $result = $this->createRecord(table: $table, payload: $item,  tenantId: $tenantId);
+                    if (!is_array($result) || !array_key_exists('id', $result)) {
+                        throw new \RuntimeException("Failed to create record or retrieve inserted ID for table: {$table}");
+                    }
                     $insertId = $result['id'];
                     $recordResult = $this->getRecord($request, $table, $insertId, $tenantId);
                     $createdData[] = $recordResult['data'];
@@ -1897,6 +1900,10 @@ class RecordService
 
         $result = $service->createRecord($table, $payload, $tenantId);
         
+        if (!is_array($result) || !array_key_exists('id', $result)) {
+            throw new \RuntimeException("Failed to create record or retrieve inserted ID for table: {$table}");
+        }
+        
         return self::executeGetById($table, $result['id'], $queryParams, $tenantId);
     }
 
@@ -2026,7 +2033,7 @@ class RecordService
      *     cursor_meta: mixed
      * }
      */
-    public static function applyRequestFilters(Request $request, Builder|RecordTableType|string $tableOrBuilder, ?string $tanentColumn = '', bool $isArray = true, string $orderBy = 'id'): array
+    public static function applyRequestFilters(Request $request, Builder|RecordTableType|string $tableOrBuilder, mixed $tenantId = null, bool $isArray = true, string $orderBy = 'id'): array
     {
         $service = app(self::class);
         $builder = null;
@@ -2083,7 +2090,7 @@ class RecordService
 
         $tableSchema = $customSchema ?? SchemaRegistryUtils::getTable($table);
         $actualTableName = $tableSchema->table ?? $table;
-        $tenantId = $tanentColumn;
+        
         if ($tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema) && RecordUtils::isTenantIdMissing($tenantId)) {
             $tenantId = RecordUtils::resolveTenantIdFromRequest($request);
         }
@@ -2107,7 +2114,7 @@ class RecordService
             $cacheFilters = $filters;
             $cacheFilters['tenant_enabled'] = $tenantEnabled;
             if ($tenantEnabled) {
-                $cacheFilters[RecordConfigService::tenantColumn()] = $tanentColumn;
+                $cacheFilters[RecordConfigService::tenantColumn()] = $tenantId;
             }
 
             $cacheKey = $service->generateOptimizedCacheKey(

@@ -75,7 +75,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
          * @param Request     $request       HTTP request carrying query parameters.
          * @param bool        $isArray       When true, shape results as an array on the client side.
          * @param string      $orderBy       Default column to sort by when sortby is not provided.
-         * @param string|null $tenantColumn  Optional tenant column value for multi-tenant scoping.
+         * @param mixed       $tenantId      Optional tenant ID value for multi-tenant scoping.
          *
          * @return array{
          *     data: mixed,
@@ -86,9 +86,9 @@ class CoreSpLaravelApiProvider extends ServiceProvider
          *     cursor_meta: mixed
          * }
          */
-        Builder::macro('applyRequestFilters', function (Request $request, bool $isArray = true, string $orderBy = 'id', ?string $tenantColumn = ''): array {
+        Builder::macro('applyRequestFilters', function (Request $request, bool $isArray = true, string $orderBy = 'id', mixed $tenantId = null): array {
             /** @var Builder $this */
-            return RecordService::applyRequestFilters($request, $this, $tenantColumn, $isArray, $orderBy);
+            return RecordService::applyRequestFilters($request, $this, $tenantId, $isArray, $orderBy);
         });
     }
 }
