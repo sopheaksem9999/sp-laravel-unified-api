@@ -1804,6 +1804,211 @@ class RecordService
     }
 
     /**
+     * Execute a dynamic query against a table using an array or query string of parameters.
+     * This allows developers to fetch data in business logic using REST API syntax.
+     *
+     * @param string $table The table name
+     * @param array|string $queryParams The query parameters (e.g., ['select' => '*,category(*)'] or 'select=*,category(*)&status=active')
+     * @param mixed $tenantId Optional tenant ID
+     * @param bool $isArray Whether to return the result as a flat array of rows
+     * @param string $orderBy Default column to use for ordering
+     * @return array The query results (data, meta, etc.)
+     */
+    public static function executeGetByFilter(string $table, array|string $queryParams = [], mixed $tenantId = null, bool $isArray = true, string $orderBy = 'id'): array
+    {
+        if (is_string($queryParams)) {
+            parse_str($queryParams, $parsedParams);
+            $queryParams = $parsedParams;
+        }
+
+        $request = new Request($queryParams);
+        
+        if ($tenantId !== null) {
+            $request->attributes->set('resolved_tenant_id', $tenantId);
+        }
+
+        return self::applyRequestFilters($request, $table, $tenantId, $isArray, $orderBy);
+    }
+
+    /**
+     * Get a single record by ID with dynamic query parameters (like select for relationships).
+     *
+     * @param string $table The table name
+     * @param mixed $id The primary key value
+     * @param array|string $queryParams The query parameters (e.g., ['select' => '*,category(*)'])
+     * @param mixed $tenantId Optional tenant ID
+     * @return array The query results (data, meta, etc.)
+     */
+    public static function executeGetById(string $table, mixed $id, array|string $queryParams = [], mixed $tenantId = null): array
+    {
+        if (is_string($queryParams)) {
+            parse_str($queryParams, $parsedParams);
+            $queryParams = $parsedParams;
+        }
+
+        $schema = SchemaRegistryUtils::get();
+        $tableSchema = $schema[$table] ?? null;
+        $pk = $tableSchema->primaryKey ?? 'id';
+
+        // Add the ID filter to the query parameters
+        $queryParams[$pk] = $id;
+
+        $request = new Request($queryParams);
+        
+        if ($tenantId !== null) {
+            $request->attributes->set('resolved_tenant_id', $tenantId);
+        }
+
+        return self::applyRequestFilters($request, $table, $tenantId, false);
+    }
+
+    /**
+     * Create a record and return it fully loaded with relationships (including those from the payload).
+     *
+     * @param string $table The table name
+     * @param array $payload The data to insert (can include nested relationships)
+     * @param array|string $queryParams The query parameters (e.g., ['select' => '*,category(*)'])
+     * @param mixed $tenantId Optional tenant ID
+     * @return array The query results (data, meta, etc.)
+     */
+    public static function executeCreate(string $table, array $payload, array|string $queryParams = [], mixed $tenantId = null): array
+    {
+        $service = app(self::class);
+        
+        // Extract relationship keys from payload to automatically include them
+        $includes = [];
+        foreach ($payload as $key => $value) {
+            if (is_array($value) && RelationshipResolverUtils::resolveRelationship($table, $key)) {
+                $includes[] = $key . '(*)';
+            }
+        }
+        
+        if (is_string($queryParams)) {
+            parse_str($queryParams, $parsedParams);
+            $queryParams = $parsedParams;
+        }
+        
+        // Merge payload relationships into select query param
+        if (!empty($includes)) {
+            $existingSelect = $queryParams['select'] ?? '';
+            $selectArray = $existingSelect ? explode(',', (string) $existingSelect) : ['*'];
+            $queryParams['select'] = implode(',', array_unique(array_merge($selectArray, $includes)));
+        }
+
+        $result = $service->createRecord($table, $payload, $tenantId);
+        
+        return self::executeGetById($table, $result['id'], $queryParams, $tenantId);
+    }
+
+    /**
+     * Update a record and return it fully loaded with relationships (including those from the payload).
+     *
+     * @param string $table The table name
+     * @param mixed $id The primary key value
+     * @param array $payload The data to update (can include nested relationships)
+     * @param array|string $queryParams The query parameters (e.g., ['select' => '*,category(*)'])
+     * @param mixed $tenantId Optional tenant ID
+     * @return array The query results (data, meta, etc.)
+     */
+    public static function executeUpdate(string $table, mixed $id, array $payload, array|string $queryParams = [], mixed $tenantId = null): array
+    {
+        $service = app(self::class);
+        
+        // Extract relationship keys from payload to automatically include them
+        $includes = [];
+        foreach ($payload as $key => $value) {
+            if (is_array($value) && RelationshipResolverUtils::resolveRelationship($table, $key)) {
+                $includes[] = $key . '(*)';
+            }
+        }
+        
+        if (is_string($queryParams)) {
+            parse_str($queryParams, $parsedParams);
+            $queryParams = $parsedParams;
+        }
+        
+        // Merge payload relationships into select query param
+        if (!empty($includes)) {
+            $existingSelect = $queryParams['select'] ?? '';
+            $selectArray = $existingSelect ? explode(',', (string) $existingSelect) : ['*'];
+            $queryParams['select'] = implode(',', array_unique(array_merge($selectArray, $includes)));
+        }
+
+        $service->updateRecord($table, $id, $payload, $tenantId);
+        
+        return self::executeGetById($table, $id, $queryParams, $tenantId);
+    }
+
+    /**
+     * Delete a record and return it fully loaded with relationships.
+     *
+     * @param string $table The table name
+     * @param mixed $id The primary key value
+     * @param array|string $queryParams The query parameters (e.g., ['select' => '*,category(*)'])
+     * @param mixed $tenantId Optional tenant ID
+     * @return array The query results (data, meta, etc.) containing the record before deletion
+     */
+    public static function executeDelete(string $table, mixed $id, array|string $queryParams = [], mixed $tenantId = null): array
+    {
+        $service = app(self::class);
+        
+        if (is_string($queryParams)) {
+            parse_str($queryParams, $parsedParams);
+            $queryParams = $parsedParams;
+        }
+        
+        // Fetch the record before deleting it
+        $record = self::executeGetById($table, $id, $queryParams, $tenantId);
+        
+        $service->deleteRecord($table, $id, $tenantId);
+        
+        return $record;
+    }
+
+    /**
+     * Build a query builder instance based on dynamic query parameters.
+     * Note: This applies filters and sorting, but does NOT apply 'select' relationships
+     * since relationships are processed after the main query execution.
+     *
+     * @param string $table The table name
+     * @param array|string $queryParams The query parameters
+     * @param mixed $tenantId Optional tenant ID
+     */
+    public function buildQuery(string $table, array|string $queryParams = [], mixed $tenantId = null): Builder
+    {
+        if (is_string($queryParams)) {
+            parse_str($queryParams, $parsedParams);
+            $queryParams = $parsedParams;
+        }
+
+        $request = new Request($queryParams);
+        
+        $schema = SchemaRegistryUtils::get();
+        $tableSchema = $schema[$table] ?? null;
+        $actualTableName = $tableSchema->table ?? $table;
+
+        $builder = DB::table($actualTableName);
+
+        $this->applyTenantFilter($builder, $actualTableName, $tenantId);
+
+        if ($tableSchema && $tableSchema->softDeletes) {
+            if ($request->boolean('only_trashed')) {
+                $builder->whereNotNull($actualTableName . '.deleted_at');
+            } elseif (!$request->boolean('with_trashed')) {
+                $builder->whereNull($actualTableName . '.deleted_at');
+            }
+        }
+
+        if ($request->boolean('distinct')) {
+            $builder->distinct();
+        }
+
+        QueryBuilderFiltersUtils::apply($builder, $request, $actualTableName, $tableSchema->primaryKey ?? 'id');
+
+        return $builder;
+    }
+
+    /**
      * Helper method to handle common record query logic.
      *
      * @param Request                        $request        The HTTP request object.
