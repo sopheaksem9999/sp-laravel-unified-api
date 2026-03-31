@@ -11,6 +11,8 @@ use ReflectionClass;
 use ReflectionException;
 use Sopheak\Core\Attributes\RecordRelationship;
 use Sopheak\Core\Attributes\RecordTable;
+use Sopheak\Core\Attributes\RecordTrigger;
+use Sopheak\Core\Types\RecordTableTriggerType;
 use Sopheak\Core\Types\RecordTableType;
 use Illuminate\Support\Str;
 
@@ -195,6 +197,7 @@ class AttributeDiscoveryService
     private static function buildTableType(ReflectionClass $reflection, RecordTable $attr, string $tableKey): RecordTableType
     {
         $relationships = self::collectRelationships($reflection);
+        $triggers = self::collectTriggers($reflection);
 
         $pmsName = $attr->pmsName ?? Str::snake($reflection->getShortName());
 
@@ -215,6 +218,16 @@ class AttributeDiscoveryService
             isAuthWrite: $attr->isAuthWrite,
             primaryKey: $attr->primaryKey,
             relationships: $relationships,
+            beforeRead: $triggers['beforeRead'] ?? null,
+            afterRead: $triggers['afterRead'] ?? null,
+            beforeCreate: $triggers['beforeCreate'] ?? null,
+            afterCreate: $triggers['afterCreate'] ?? null,
+            beforeUpdate: $triggers['beforeUpdate'] ?? null,
+            afterUpdate: $triggers['afterUpdate'] ?? null,
+            beforeDelete: $triggers['beforeDelete'] ?? null,
+            afterDelete: $triggers['afterDelete'] ?? null,
+            beforeRestore: $triggers['beforeRestore'] ?? null,
+            afterRestore: $triggers['afterRestore'] ?? null,
         );
     }
 
@@ -274,5 +287,36 @@ class AttributeDiscoveryService
         }
 
         return $relationships;
+    }
+
+    /**
+     * Collect all #[RecordTrigger] attributes from the class methods and group them by hook.
+     *
+     * @return array<string, array<RecordTableTriggerType>>
+     */
+    private static function collectTriggers(ReflectionClass $reflection): array
+    {
+        $triggers = [];
+
+        foreach ($reflection->getMethods() as $method) {
+            foreach ($method->getAttributes(RecordTrigger::class) as $attrRef) {
+                /** @var RecordTrigger $triggerAttr */
+                $triggerAttr = $attrRef->newInstance();
+
+                $hook = $triggerAttr->hook;
+                
+                if (!isset($triggers[$hook])) {
+                    $triggers[$hook] = [];
+                }
+
+                $triggers[$hook][] = new RecordTableTriggerType(
+                    class: $reflection->getName(),
+                    functionName: $method->getName(),
+                    description: $triggerAttr->description
+                );
+            }
+        }
+
+        return $triggers;
     }
 }

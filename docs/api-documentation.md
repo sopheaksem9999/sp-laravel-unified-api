@@ -223,6 +223,130 @@ Route definition (routes/api.php):
        └── Pipeline::through($middlewares)->then($next)
 ```
 
+## Recommended Folder Structure
+
+When integrating the `sp-laravel-api` package into a client project, you can organize your application code in two main ways: **Layer-Based** (separated by type) or **Module-Based** (grouped by domain). Both are fully supported by the package.
+
+### Option 1: Module-Based Structure (Separated by File)
+
+This is the standard approach where files are grouped by their domain (e.g., User, Invoice), but separated by their technical responsibility (Triggers, Validators, Functions).
+
+```text
+project-root/
+├── app/
+│   └── Record/                      
+│       ├── Invoice/                 # Invoice Module
+│       │   ├── InvoiceFunctions.php # Custom RPC function classes
+│       │   ├── InvoiceTriggers.php  # Lifecycle hooks
+│       │   └── InvoiceValidators.php# Custom validation logic
+│       │
+│       └── User/                    # User Module
+│           ├── UserFunctions.php    
+│           ├── UserTriggers.php     
+│           └── UserValidators.php   
+```
+
+**Pros:**
+- Clear separation of concerns (validation logic doesn't mix with lifecycle hooks).
+- Keeps individual classes smaller and more focused.
+- High cohesion within the domain (everything related to "User" is in the `User/` folder).
+
+**Cons:**
+- You have to manage multiple files for a single domain.
+
+---
+
+### Option 2: Module-Based Structure (Single Handler Class)
+
+If you prefer keeping all logic for a specific table/domain together in a single file, you can combine Triggers, Validators, and Functions into a single "Handler" class.
+
+```text
+project-root/
+├── app/
+│   └── Record/                      
+│       ├── Invoice/                 
+│       │   └── InvoiceHandler.php   # Contains Triggers, Validators, and Functions
+│       └── User/                    
+│           └── UserHandler.php      # Contains Triggers, Validators, and Functions
+```
+
+**Example of a combined Handler class:**
+
+```php
+namespace App\Record\User;
+
+use Illuminate\Http\Request;
+use Sopheak\Core\Attributes\RecordTrigger;
+use Sopheak\Core\Attributes\RecordValidator;
+
+class UserHandler
+{
+    // --- VALIDATORS ---
+    #[RecordValidator('create')]
+    public static function createValidator(): array
+    {
+        return [
+            'email' => 'required|email|unique:users',
+            'password' => 'required|min:8',
+        ];
+    }
+
+    // --- TRIGGERS ---
+    #[RecordTrigger('beforeCreate')]
+    public static function hashPassword(Request $request, string $table, array $context): array
+    {
+        $payload = $request->all();
+        $payload['password'] = bcrypt($payload['password']);
+        return $payload;
+    }
+
+    // --- FUNCTIONS (RPC) ---
+    public static function resetPassword(Request $request, string $table, array $context): array
+    {
+        // Custom RPC logic...
+        return ['status' => 'success'];
+    }
+}
+```
+
+**Registering the combined class in `config/records/tables/users.php`:**
+
+```php
+use Sopheak\Core\Types\RecordTableType;
+use App\Record\User\UserHandler;
+
+return new RecordTableType(
+    // ...
+    triggers: [
+        UserHandler::class, // Auto-discovers both #[RecordTrigger] and #[RecordValidator] methods!
+    ],
+    functions: [
+        // ... register RPC functions pointing to UserHandler::class
+    ]
+);
+```
+
+**Pros:**
+- **High Cohesion:** Everything related to the "User" table is in one single file.
+- **Faster Development:** No need to jump between multiple files when building a feature.
+- **Easier to maintain:** If you delete the "User" feature, you just delete one file.
+
+**Cons:**
+- The class can become very large (a "God Class") if the table has complex validation, many triggers, and several RPC functions.
+- Mixing validation arrays with complex business logic in the same file can feel cluttered to some developers.
+
+---
+
+### Directory Breakdown (For both approaches)
+
+1. **`config/records/tables/`**: 
+   Instead of putting all table configurations in the main `config/record.php` file, split them into individual files inside this directory. The package automatically discovers and merges them. Each file should return a single `RecordTableType` instance.
+
+2. **`app/Record/{Domain}/`**:
+   Store all your domain-specific logic here (e.g., `app/Record/User/`). Whether you split them into `UserTriggers.php` and `UserValidators.php` or combine them into `UserHandler.php`, keeping them grouped by domain makes the project much easier to navigate as it grows.
+
+---
+
 ## Record CRUD API Documentation
 
 This section documents the record CRUD endpoints provided by this package, including request/response formats, filtering, pagination, and error handling.
@@ -1031,6 +1155,58 @@ final class RecordValidator
 
 If a validator fails, the API returns a `422 Validation Error` with the standard error format described in the **Error Responses** section.
 
+### Using PHP Attributes for Validators
+
+Instead of passing arrays or closures directly in `config/record.php`, you can use the `#[RecordValidator]` attribute inside your validator or handler classes.
+
+**1. Create the Validator Class:**
+
+```php
+namespace App\Record\User;
+
+use Sopheak\Core\Attributes\RecordValidator;
+
+class UserValidators
+{
+    #[RecordValidator('create')]
+    public static function createRules(): array
+    {
+        return [
+            'email' => 'required|email|unique:users',
+            'password' => 'required|min:8',
+        ];
+    }
+
+    #[RecordValidator('update')]
+    public static function updateRules(): array
+    {
+        return [
+            'email' => 'sometimes|email',
+        ];
+    }
+}
+```
+
+**2. Register the Class in `RecordTableType`:**
+
+You can pass the class name as a string to the validator properties, or include it in the `triggers` array (which scans for both triggers and validators).
+
+```php
+use Sopheak\Core\Types\RecordTableType;
+use App\Record\User\UserValidators;
+
+return [
+    'users' => new RecordTableType(
+        // Option A: Explicitly assign the class
+        createValidator: UserValidators::class,
+        updateValidator: UserValidators::class,
+        
+        // Option B: Let the package auto-discover it via the triggers array
+        // triggers: [UserValidators::class],
+    ),
+];
+```
+
 ### Table-Level Triggers
 
 In addition to validators, you can configure lifecycle triggers per table using `RecordTableTriggerType`. Triggers allow you to run custom code before and after core CRUD operations.
@@ -1201,6 +1377,142 @@ Each trigger method is called with the following signature:
 public static function someTrigger(Request $request, string $table, mixed ...$args): Request|array|null
 ```
 
+Example trigger class:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace App\Record\Triggers;
+
+use Illuminate\Http\Request;
+
+final class UserTriggers
+{
+    /**
+     * beforeRead
+     * Context: ['type' => 'index'|'show', 'tenant_id' => mixed, 'id' => mixed (if show)]
+     * Use for: Forcing filters (e.g., auto-adding company_id), forcing relationships to load.
+     */
+    public static function beforeRead(Request $request, string $table, array $context): Request
+    {
+        // Example: Auto-add a filter for specific tables
+        if (in_array($table, ['employees', 'invoices'])) {
+            $companyId = auth()->user()->company_id ?? 1;
+            $request->query->set('company_id', 'eq.' . $companyId);
+        }
+        return $request;
+    }
+
+    /**
+     * afterRead
+     * Context: ['type' => 'index'|'show', 'tenant_id' => mixed, 'data' => array, 'meta' => array, 'response' => JsonResponse]
+     * Use for: Logging views, dispatching analytics events.
+     */
+    public static function afterRead(Request $request, string $table, array $context): void
+    {
+        // Example: Log that a user viewed a record
+    }
+
+    /**
+     * beforeCreate
+     * Context: ['tenant_id' => mixed] (or the item payload in bulk operations)
+     * Use for: Setting default values, hashing passwords.
+     */
+    public static function beforeCreate(Request $request, string $table, array $context): array
+    {
+        // Example: Auto-assign a default role if not provided
+        $payload = $request->all();
+        if (empty($payload['role'])) {
+            $payload['role'] = 'customer';
+        }
+        
+        // Return array to merge into the request input
+        return $payload;
+    }
+
+    /**
+     * afterCreate
+     * Context: ['id' => mixed, 'payload' => array, 'tenant_id' => mixed, 'response' => array]
+     * Use for: Sending welcome emails, creating default related records.
+     */
+    public static function afterCreate(Request $request, string $table, array $context): void
+    {
+        // Example: Send welcome email after user creation
+        $user = $context['record'] ?? null;
+        if ($user) {
+            // \Mail::to($user->email)->send(new WelcomeEmail($user));
+        }
+    }
+
+    /**
+     * beforeUpdate
+     * Context: ['id' => mixed, 'tenant_id' => mixed] (or the item payload in bulk operations)
+     * Use for: Preventing updates to protected columns.
+     */
+    public static function beforeUpdate(Request $request, string $table, array $context): array
+    {
+        $payload = $request->all();
+        unset($payload['is_admin']); // Prevent users from making themselves admin
+        return $payload;
+    }
+
+    /**
+     * afterUpdate
+     * Context: ['id' => mixed, 'payload' => array, 'tenant_id' => mixed, 'updated' => int, 'response' => array]
+     * Use for: Clearing external caches, sending notifications.
+     */
+    public static function afterUpdate(Request $request, string $table, array $context): void
+    {
+        // Example: Clear Redis cache
+    }
+
+    /**
+     * beforeDelete
+     * Context: ['id' => mixed, 'tenant_id' => mixed, 'record' => ?object]
+     * Use for: Preventing deletion of critical records.
+     */
+    public static function beforeDelete(Request $request, string $table, array $context): void
+    {
+        $record = $context['record'] ?? null;
+        if ($record && $record->is_system_default) {
+            abort(403, 'Cannot delete system default records.');
+        }
+    }
+
+    /**
+     * **afterDelete**
+     * Context: ['id' => mixed, 'tenant_id' => mixed, 'record' => ?object, 'soft_deleted' => bool, 'response' => JsonResponse]
+     * Use for: Deleting related files (e.g., S3), cleaning up orphaned records.
+     */
+    public static function afterDelete(Request $request, string $table, array $context): void
+    {
+        // Example: Delete avatar from S3
+    }
+
+    /**
+     * beforeRestore
+     * Context: ['id' => mixed, 'tenant_id' => mixed, 'record' => ?object]
+     * Use for: Checking permissions before restoring a soft-deleted record.
+     */
+    public static function beforeRestore(Request $request, string $table, array $context): void
+    {
+        // Example: Check if user can restore
+    }
+
+    /**
+     * afterRestore
+     * Context: ['id' => mixed, 'tenant_id' => mixed, 'record' => ?object, 'restored' => int, 'response' => JsonResponse]
+     * Use for: Re-indexing the record in a search engine.
+     */
+    public static function afterRestore(Request $request, string $table, array $context): void
+    {
+        // Example: Re-index in Algolia
+    }
+}
+```
+
 Triggers are invoked with `call_user_func_array([$class, $method], $params)` where `$params` always starts with:
 
 - `Request $request`
@@ -1225,6 +1537,59 @@ Return values:
 - Return `null` / no return to leave the request unchanged
 
 Trigger handlers are strict: invalid trigger config, missing class/method, or any runtime error will abort the request and surface as an API error response. Use validators when you want user-friendly `422` validation errors.
+
+### Using PHP Attributes in Trigger Classes (Recommended)
+
+Instead of manually mapping every hook in `RecordTableType`, you can use the `#[RecordTrigger]` attribute inside your dedicated trigger classes. This allows you to name your methods based on business logic (e.g., `enforceCompanyFilter`) and automatically register them.
+
+**1. Create the Trigger Class with Attributes:**
+
+```php
+namespace App\Record\User;
+
+use Illuminate\Http\Request;
+use Sopheak\Core\Attributes\RecordTrigger;
+
+class UserTriggers
+{
+    #[RecordTrigger('beforeRead', description: 'Auto-filter users by company_id')]
+    public static function enforceCompanyFilter(Request $request, string $table, array $context): Request
+    {
+        // Business logic name, but hooked to 'beforeRead'
+        $request->query->set('company_id', 'eq.' . auth()->user()->company_id);
+        return $request;
+    }
+
+    #[RecordTrigger('afterCreate', description: 'Send welcome email')]
+    public static function sendWelcomeEmail(Request $request, string $table, array $context): void
+    {
+        $user = $context['record'] ?? null;
+        if ($user) {
+            // \Mail::to($user->email)->send(new WelcomeEmail($user));
+        }
+    }
+}
+```
+
+**2. Register the Class in `RecordTableType`:**
+
+Simply pass the class name to the `triggers` array. The package will automatically scan the class and map the methods to the correct lifecycle hooks.
+
+```php
+use Sopheak\Core\Types\RecordTableType;
+use App\Record\User\UserTriggers;
+
+return [
+    'users' => new RecordTableType(
+        // ... other config
+        triggers: [
+            UserTriggers::class,
+        ],
+    ),
+];
+```
+
+*Note: You can still use `#[RecordTrigger]` directly on Eloquent Models if you are using Attribute-Based Configuration (`SP_ATTRIBUTE_DISCOVERY=true`).*
 
 ### RecordTableType Parameters
 
@@ -1267,6 +1632,7 @@ new RecordTableType(
     afterUpdate: null,
     beforeDelete: null,
     afterDelete: null,
+    triggers: null,
 );
 ```
 
@@ -1315,15 +1681,11 @@ new RecordTableType(
 
 #### Validators
 
-- `createValidator` (callable|null, default: `null`): Runs before create. Must return an `Illuminate\Contracts\Validation\Validator`.
-- `updateValidator` (callable|null, default: `null`): Runs before update. Must return an `Illuminate\Contracts\Validation\Validator`.
-- `deleteValidator` (callable|null, default: `null`): Runs before delete. Must return an `Illuminate\Contracts\Validation\Validator`.
-
-Validator signature:
-
-```php
-fn(\Illuminate\Http\Request $request, ?int $id = null): \Illuminate\Contracts\Validation\Validator
-```
+- `createValidator`, `updateValidator`, `deleteValidator` (`Closure|RecordValidationType|array|string|null`, default: `null`): Validation rules for write operations. Can be:
+  - An array of Laravel validation rules.
+  - A `RecordValidationType` instance.
+  - A closure returning rules or a `RecordValidationType`.
+  - A string representing a class name containing `#[RecordValidator]` attributes.
 
 #### Computed Attributes
 
@@ -1548,6 +1910,7 @@ The value for each action can be a single permission string or an array of strin
   - a `RecordTableTriggerType` instance,
   - a single array trigger config (`['class' => ..., 'functionName' => ..., 'description' => ...]`),
   - or an array of trigger configs to run sequentially.
+- `triggers` (`array|null`, default: `null`): An array of trigger class names. The package will automatically scan these classes for `#[RecordTrigger]` attributes and map them to the appropriate lifecycle hooks.
 
 ### Class-Based Configuration (Lazy Loading)
 
@@ -3315,6 +3678,8 @@ Set `SP_ATTRIBUTE_DISCOVERY=true` in your `.env`.
 ```php
 use Sopheak\Core\Attributes\RecordTable;
 use Sopheak\Core\Attributes\RecordRelationship;
+use Sopheak\Core\Attributes\Trigger;
+use Illuminate\Http\Request;
 
 #[RecordTable(
     pmsName: 'invoice',
@@ -3346,7 +3711,18 @@ use Sopheak\Core\Attributes\RecordRelationship;
 )]
 class Invoice extends Model
 {
-    // ...
+    #[Trigger('beforeRead')]
+    public static function enforceCompanyFilter(Request $request, string $table, array $context): Request
+    {
+        $request->query->set('company_id', 'eq.' . auth()->user()->company_id);
+        return $request;
+    }
+
+    #[Trigger('afterCreate')]
+    public static function sendInvoiceEmailToCustomer(Request $request, string $table, array $context): void
+    {
+        // Send email logic...
+    }
 }
 ```
 

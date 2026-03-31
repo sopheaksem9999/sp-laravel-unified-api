@@ -115,9 +115,9 @@ class RecordTableType
         public ?array $relationships = [],
         public ?array $functions = [],
         public string|array|null $customAuditLog = null,
-        public Closure|RecordValidationType|array|null $createValidator = null,
-        public Closure|RecordValidationType|array|null $updateValidator = null,
-        public Closure|RecordValidationType|array|null $deleteValidator = null,
+        public Closure|RecordValidationType|array|string|null $createValidator = null,
+        public Closure|RecordValidationType|array|string|null $updateValidator = null,
+        public Closure|RecordValidationType|array|string|null $deleteValidator = null,
         public RecordTableTriggerType|array|null $beforeRead = null,
         public RecordTableTriggerType|array|null $afterRead = null,
         public RecordTableTriggerType|array|null $beforeCreate = null,
@@ -128,6 +128,7 @@ class RecordTableType
         public RecordTableTriggerType|array|null $afterDelete = null,
         public RecordTableTriggerType|array|null $beforeRestore = null,
         public RecordTableTriggerType|array|null $afterRestore = null,
+        public ?array $triggers = null,
         public bool $overrideTimestamps = false,
         public bool $overrideUserstamps = false,
         public ?array $attributes = null,
@@ -142,6 +143,93 @@ class RecordTableType
         }
 
         $this->public = $this->derivePublicFromAuthFlags(publicConfig: $this->public, isAuthRead: $this->isAuthRead, isAuthWrite: $this->isAuthWrite);
+
+        if (!empty($this->triggers)) {
+            $this->resolveClassTriggers();
+        }
+
+        $this->resolveClassValidators();
+    }
+
+    /**
+     * Resolve class-level validators using PHP Attributes.
+     */
+    private function resolveClassValidators(): void
+    {
+        $validatorClasses = array_filter([
+            is_string($this->createValidator) ? $this->createValidator : null,
+            is_string($this->updateValidator) ? $this->updateValidator : null,
+            is_string($this->deleteValidator) ? $this->deleteValidator : null,
+        ]);
+
+        // Also check triggers array for combined Handler classes
+        if (!empty($this->triggers)) {
+            foreach ($this->triggers as $triggerClass) {
+                if (is_string($triggerClass)) {
+                    $validatorClasses[] = $triggerClass;
+                }
+            }
+        }
+
+        $validatorClasses = array_unique($validatorClasses);
+
+        foreach ($validatorClasses as $validatorClass) {
+            if (!class_exists($validatorClass)) {
+                continue;
+            }
+
+            $reflection = new \ReflectionClass($validatorClass);
+            foreach ($reflection->getMethods() as $method) {
+                $attributes = $method->getAttributes(\Sopheak\Core\Attributes\RecordValidator::class);
+                foreach ($attributes as $attribute) {
+                    /** @var \Sopheak\Core\Attributes\RecordValidator $validatorAttr */
+                    $validatorAttr = $attribute->newInstance();
+                    $hook = $validatorAttr->hook . 'Validator'; // e.g., 'create' -> 'createValidator'
+
+                    if (property_exists($this, $hook) && (is_string($this->{$hook}) || $this->{$hook} === null)) {
+                        $this->{$hook} = [$validatorClass, $method->getName()];
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Resolve class-level triggers using PHP Attributes.
+     */
+    private function resolveClassTriggers(): void
+    {
+        foreach ($this->triggers as $triggerClass) {
+            if (!is_string($triggerClass) || !class_exists($triggerClass)) {
+                continue;
+            }
+
+            $reflection = new \ReflectionClass($triggerClass);
+            foreach ($reflection->getMethods() as $method) {
+                $attributes = $method->getAttributes(\Sopheak\Core\Attributes\RecordTrigger::class);
+                foreach ($attributes as $attribute) {
+                    /** @var \Sopheak\Core\Attributes\RecordTrigger $triggerAttr */
+                    $triggerAttr = $attribute->newInstance();
+                    $hook = $triggerAttr->hook;
+
+                    if (property_exists($this, $hook)) {
+                        $triggerType = new RecordTableTriggerType(
+                            class: $triggerClass,
+                            functionName: $method->getName(),
+                            description: $triggerAttr->description
+                        );
+
+                        if ($this->{$hook} === null) {
+                            $this->{$hook} = [$triggerType];
+                        } elseif (is_array($this->{$hook})) {
+                            $this->{$hook}[] = $triggerType;
+                        } else {
+                            $this->{$hook} = [$this->{$hook}, $triggerType];
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -190,6 +278,7 @@ class RecordTableType
             afterDelete: $properties['afterDelete'] ?? null,
             beforeRestore: $properties['beforeRestore'] ?? null,
             afterRestore: $properties['afterRestore'] ?? null,
+            triggers: $properties['triggers'] ?? null,
             overrideTimestamps: $properties['overrideTimestamps'] ?? false,
             overrideUserstamps: $properties['overrideUserstamps'] ?? false,
             attributes: $properties['attributes'] ?? null,
