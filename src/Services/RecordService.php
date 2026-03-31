@@ -1459,6 +1459,26 @@ class RecordService
         return $request;
     }
 
+    /**
+     * Get combined select and with parameters from request.
+     */
+    private static function getCombinedSelectParam(Request $request): string
+    {
+        $selectParam = $request->query('select', '');
+        $withParam = $request->query('with', '');
+
+        $combined = [];
+        if (is_string($selectParam) && $selectParam !== '') {
+            $combined[] = $selectParam;
+        }
+
+        if (is_string($withParam) && $withParam !== '') {
+            $combined[] = $withParam;
+        }
+
+        return implode(',', $combined);
+    }
+
     public function getRequestContext(Request $request): array
     {
         $context = $request->attributes->get(self::REQUEST_CONTEXT_KEY);
@@ -1553,21 +1573,9 @@ class RecordService
         $actualTableName = $tableSchema->table ?? $table;
 
         $filters = $request->except(['page', 'per_page', 'limit']);
-
-        $selectParam = $request->query('select', '');
-        $withParam = $request->query('with', '');
-
-        $combinedIncludes = [];
-        if (is_string($selectParam) && $selectParam !== '') {
-            $combinedIncludes[] = $selectParam;
-        }
-
-        if (is_string($withParam) && $withParam !== '') {
-            $combinedIncludes[] = $withParam;
-        }
-
-        $effectiveSelectParam = implode(',', $combinedIncludes);
-
+        
+        $effectiveSelectParam = self::getCombinedSelectParam($request);
+        
         $includes = $effectiveSelectParam !== '' ? explode(',', $effectiveSelectParam) : [];
 
         $page = max((int) $request->input('page', 1), 1);
@@ -1662,19 +1670,7 @@ class RecordService
             }
         }
 
-        $selectParam = $request->query('select', '');
-        $withParam = $request->query('with', '');
-
-        $combinedIncludes = [];
-        if (is_string($selectParam) && $selectParam !== '') {
-            $combinedIncludes[] = $selectParam;
-        }
-
-        if (is_string($withParam) && $withParam !== '') {
-            $combinedIncludes[] = $withParam;
-        }
-
-        $effectiveSelectParam = implode(',', $combinedIncludes);
+        $effectiveSelectParam = self::getCombinedSelectParam($request);
 
         if ($effectiveSelectParam !== '') {
             $includes = RelationshipResolverUtils::parseSelectForIncludes($effectiveSelectParam);
@@ -1755,7 +1751,7 @@ class RecordService
 
                 if ([] !== $recordIds) {
                     $optimizedBuilder = DB::table($actualTableName);
-                    $mainCols = RelationshipResolverUtils::getMainTableColumns($selectParam);
+                    $mainCols = RelationshipResolverUtils::getMainTableColumns($effectiveSelectParam);
                     // Strip computed attribute keys — they are not real DB columns
                     $attributeKeys = array_keys($tableSchema->attributes ?? []);
                     $dbMainCols = $attributeKeys !== []
@@ -2236,19 +2232,7 @@ class RecordService
             }
         }
 
-        $selectParam = $request->query('select', '');
-        $withParam = $request->query('with', '');
-
-        $combinedIncludes = [];
-        if (is_string($selectParam) && $selectParam !== '') {
-            $combinedIncludes[] = $selectParam;
-        }
-
-        if (is_string($withParam) && $withParam !== '') {
-            $combinedIncludes[] = $withParam;
-        }
-
-        $effectiveSelectParam = implode(',', $combinedIncludes);
+        $effectiveSelectParam = self::getCombinedSelectParam($request);
 
         if ($effectiveSelectParam !== '') {
             $includes = RelationshipResolverUtils::parseSelectForIncludes($effectiveSelectParam);
@@ -2435,19 +2419,7 @@ class RecordService
         $actualTableName = $tableSchema->table ?? $table;
         $pk = $tableSchema->primaryKey ?? 'id';
 
-        $selectParam = $request->query('select', '');
-        $withParam = $request->query('with', '');
-
-        $combinedIncludes = [];
-        if (is_string($selectParam) && $selectParam !== '') {
-            $combinedIncludes[] = $selectParam;
-        }
-
-        if (is_string($withParam) && $withParam !== '') {
-            $combinedIncludes[] = $withParam;
-        }
-
-        $effectiveSelectParam = implode(',', $combinedIncludes);
+        $effectiveSelectParam = self::getCombinedSelectParam($request);
 
         $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
         $recordCacheKey = $this->generateRecordCacheKey(
