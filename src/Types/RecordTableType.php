@@ -128,6 +128,7 @@ class RecordTableType
         public RecordTableTriggerType|array|null $afterDelete = null,
         public RecordTableTriggerType|array|null $beforeRestore = null,
         public RecordTableTriggerType|array|null $afterRestore = null,
+        /** @var array<string>|null */
         public ?array $triggers = null,
         public bool $overrideTimestamps = false,
         public bool $overrideUserstamps = false,
