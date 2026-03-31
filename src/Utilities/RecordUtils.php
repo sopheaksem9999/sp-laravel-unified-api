@@ -100,6 +100,16 @@ class RecordUtils
                 continue;
             }
 
+            // Skip JSON types as they are not composite types
+            if (in_array(strtolower($typeName), ['json', 'jsonb', 'pg_catalog.json', 'pg_catalog.jsonb'], true)) {
+                $value = $payload[$column];
+                if (is_array($value) || is_object($value)) {
+                    $payload[$column] = json_encode($value);
+                }
+
+                continue;
+            }
+
             $value = $payload[$column];
             if (is_string($value)) {
                 $decoded = json_decode($value, true);
