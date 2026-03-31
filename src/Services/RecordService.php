@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Services;
 
+use RuntimeException;
 use Sopheak\Core\Events\RecordMutated;
 use Exception;
 use Sopheak\Core\Interfaces\RecordFunctionInterface;
@@ -877,9 +878,10 @@ class RecordService
                     $this->executeTableTrigger($tableSchema->beforeCreate ?? null, [$request, $table, $item]);
 
                     $result = $this->createRecord(table: $table, payload: $item,  tenantId: $tenantId);
-                    if (!is_array($result) || !array_key_exists('id', $result)) {
-                        throw new \RuntimeException("Failed to create record in bulk operation for table: {$table}");
+                    if (!array_key_exists('id', $result)) {
+                        throw new RuntimeException('Failed to create record in bulk operation for table: ' . $table);
                     }
+
                     $insertId = $result['id'];
                     $recordResult = $this->getRecord($request, $table, $insertId, $tenantId);
                     $createdData[] = $recordResult['data'];
@@ -1551,10 +1553,22 @@ class RecordService
         $actualTableName = $tableSchema->table ?? $table;
 
         $filters = $request->except(['page', 'per_page', 'limit']);
-        $includes = $request->query('select', []);
-        if (is_string($includes)) {
-            $includes = explode(',', $includes);
+
+        $selectParam = $request->query('select', '');
+        $withParam = $request->query('with', '');
+
+        $combinedIncludes = [];
+        if (is_string($selectParam) && $selectParam !== '') {
+            $combinedIncludes[] = $selectParam;
         }
+
+        if (is_string($withParam) && $withParam !== '') {
+            $combinedIncludes[] = $withParam;
+        }
+
+        $effectiveSelectParam = implode(',', $combinedIncludes);
+
+        $includes = $effectiveSelectParam !== '' ? explode(',', $effectiveSelectParam) : [];
 
         $page = max((int) $request->input('page', 1), 1);
         $perPage = $request->has('per_page') ? max(1, min((int) $request->input('per_page', 25), RecordConfigService::perPageMax())) : null;
@@ -1648,9 +1662,22 @@ class RecordService
             }
         }
 
-        if ($request->has('select')) {
-            $selectParam = $request->query('select');
-            $includes = RelationshipResolverUtils::parseSelectForIncludes($selectParam);
+        $selectParam = $request->query('select', '');
+        $withParam = $request->query('with', '');
+
+        $combinedIncludes = [];
+        if (is_string($selectParam) && $selectParam !== '') {
+            $combinedIncludes[] = $selectParam;
+        }
+
+        if (is_string($withParam) && $withParam !== '') {
+            $combinedIncludes[] = $withParam;
+        }
+
+        $effectiveSelectParam = implode(',', $combinedIncludes);
+
+        if ($effectiveSelectParam !== '') {
+            $includes = RelationshipResolverUtils::parseSelectForIncludes($effectiveSelectParam);
             $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization() && count($data) <= 100;
 
             // Disable subquery optimization if nested filters, child relationships,
@@ -1764,7 +1791,7 @@ class RecordService
                 $data = RelationshipResolverUtils::includeRelationships(
                     $data,
                     $table,
-                    $selectParam,
+                    $effectiveSelectParam,
                     $this->shouldApplyTenantId($tableSchema) ? $tenantId : null
                 );
             }
@@ -1775,8 +1802,8 @@ class RecordService
         $data = RecordApiResponseService::convertCompositeFields($data, $table);
         $data = RecordApiResponseService::applyCasts($data, $tableSchema->columns ?? [], $tableSchema->casting ?? []);
         if (!empty($tableSchema->attributes)) {
-            $requestedCols = $request->has('select')
-                ? RelationshipResolverUtils::getMainTableColumns($request->query('select'))
+            $requestedCols = $effectiveSelectParam !== ''
+                ? RelationshipResolverUtils::getMainTableColumns($effectiveSelectParam)
                 : [];
             $data = RecordApiResponseService::applyAttributes($data, $table, $tableSchema->attributes, $requestedCols);
         }
@@ -1789,7 +1816,7 @@ class RecordService
                 'cached_at' => TimeUtils::now()->toISOString(),
                 'tenant_enabled' => $this->shouldApplyTenantId($tableSchema),
             ];
-            $ttl = $this->calculateOptimalCacheTTL($table, count($data), $request->has('select'));
+            $ttl = $this->calculateOptimalCacheTTL($table, count($data), $effectiveSelectParam !== '');
             QueryCacheService::put($cacheKey, $cacheData, $ttl);
         }
 
@@ -1901,7 +1928,7 @@ class RecordService
         $result = $service->createRecord($table, $payload, $tenantId);
         
         if (!is_array($result) || !array_key_exists('id', $result)) {
-            throw new \RuntimeException("Failed to create record or retrieve inserted ID for table: {$table}");
+            throw new RuntimeException('Failed to create record or retrieve inserted ID for table: ' . $table);
         }
         
         return self::executeGetById($table, $result['id'], $queryParams, $tenantId);
@@ -2090,7 +2117,7 @@ class RecordService
 
         $tableSchema = $customSchema ?? SchemaRegistryUtils::getTable($table);
         $actualTableName = $tableSchema->table ?? $table;
-        
+
         if ($tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema) && RecordUtils::isTenantIdMissing($tenantId)) {
             $tenantId = RecordUtils::resolveTenantIdFromRequest($request);
         }
@@ -2209,9 +2236,22 @@ class RecordService
             }
         }
 
-        if ($request->has('select')) {
-            $selectParam = $request->query('select');
-            $includes = RelationshipResolverUtils::parseSelectForIncludes($selectParam);
+        $selectParam = $request->query('select', '');
+        $withParam = $request->query('with', '');
+
+        $combinedIncludes = [];
+        if (is_string($selectParam) && $selectParam !== '') {
+            $combinedIncludes[] = $selectParam;
+        }
+
+        if (is_string($withParam) && $withParam !== '') {
+            $combinedIncludes[] = $withParam;
+        }
+
+        $effectiveSelectParam = implode(',', $combinedIncludes);
+
+        if ($effectiveSelectParam !== '') {
+            $includes = RelationshipResolverUtils::parseSelectForIncludes($effectiveSelectParam);
             $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization() && count($data) <= 100;
 
             // Disable subquery optimization if nested filters, child relationships,
@@ -2287,7 +2327,7 @@ class RecordService
 
                 if ([] !== $recordIds) {
                     $optimizedBuilder = DB::table($actualTableName);
-                    $mainCols = RelationshipResolverUtils::getMainTableColumns($selectParam);
+                    $mainCols = RelationshipResolverUtils::getMainTableColumns($effectiveSelectParam);
                     // Strip computed attribute keys — they are not real DB columns
                     $attributeKeys = $tableSchema instanceof RecordTableType ? array_keys($tableSchema->attributes ?? []) : [];
                     $dbMainCols = $attributeKeys !== []
@@ -2323,7 +2363,7 @@ class RecordService
                 $data = RelationshipResolverUtils::includeRelationships(
                     $data,
                     $table,
-                    $selectParam,
+                    $effectiveSelectParam,
                     $tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema) ? $tenantId : null
                 );
             }
@@ -2334,8 +2374,8 @@ class RecordService
         $data = RecordApiResponseService::convertCompositeFields($data, $table);
         $data = RecordApiResponseService::applyCasts($data, $tableSchema instanceof RecordTableType ? ($tableSchema->columns ?? []) : [], $tableSchema instanceof RecordTableType ? ($tableSchema->casting ?? []) : []);
         if ($tableSchema instanceof RecordTableType && !empty($tableSchema->attributes)) {
-            $requestedCols = $request->has('select')
-                ? RelationshipResolverUtils::getMainTableColumns($request->query('select'))
+            $requestedCols = $effectiveSelectParam !== ''
+                ? RelationshipResolverUtils::getMainTableColumns($effectiveSelectParam)
                 : [];
             $data = RecordApiResponseService::applyAttributes($data, $table, $tableSchema->attributes, $requestedCols);
         }
@@ -2348,7 +2388,7 @@ class RecordService
                 'cached_at' => TimeUtils::now()->toISOString(),
                 'tenant_enabled' => $tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema),
             ];
-            $ttl = $service->calculateOptimalCacheTTL($table, count($data), $request->has('select'));
+            $ttl = $service->calculateOptimalCacheTTL($table, count($data), $effectiveSelectParam !== '');
             QueryCacheService::put($cacheKey, $cacheData, $ttl);
         }
 
@@ -2395,12 +2435,26 @@ class RecordService
         $actualTableName = $tableSchema->table ?? $table;
         $pk = $tableSchema->primaryKey ?? 'id';
 
+        $selectParam = $request->query('select', '');
+        $withParam = $request->query('with', '');
+
+        $combinedIncludes = [];
+        if (is_string($selectParam) && $selectParam !== '') {
+            $combinedIncludes[] = $selectParam;
+        }
+
+        if (is_string($withParam) && $withParam !== '') {
+            $combinedIncludes[] = $withParam;
+        }
+
+        $effectiveSelectParam = implode(',', $combinedIncludes);
+
         $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
         $recordCacheKey = $this->generateRecordCacheKey(
             table: $table,
             id: $id,
             tenantId: $tenantId,
-            select: $request->query('select'),
+            select: $effectiveSelectParam,
             tenantEnabled: $tenantEnabled
         );
         if ($this->isCacheableRequest(request: $request, table: $table)) {
@@ -2419,8 +2473,8 @@ class RecordService
 
         $mainCols = [];
         $dbMainCols = [];
-        if ($request->has('select')) {
-            $mainCols = RelationshipResolverUtils::getMainTableColumns($request->query('select'));
+        if ($effectiveSelectParam !== '') {
+            $mainCols = RelationshipResolverUtils::getMainTableColumns($effectiveSelectParam);
             // Build DB-safe column list: strip computed attribute keys (not real DB columns)
             $attributeKeys = array_keys($tableSchema->attributes ?? []);
             $dbMainCols = $attributeKeys !== []
@@ -2436,9 +2490,8 @@ class RecordService
             return ['data' => null, 'request' => $request];
         }
 
-        if ($request->has('select')) {
-            $selectParam = $request->query('select');
-            $includes = RelationshipResolverUtils::parseSelectForIncludes($selectParam);
+        if ($effectiveSelectParam !== '') {
+            $includes = RelationshipResolverUtils::parseSelectForIncludes($effectiveSelectParam);
             $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization();
 
             // Disable subquery optimization if nested filters or child relationships are detected
@@ -2503,7 +2556,7 @@ class RecordService
                 $data = RelationshipResolverUtils::includeRelationships(
                     [$record],
                     $table,
-                    $selectParam,
+                    $effectiveSelectParam,
                     $this->shouldApplyTenantId($tableSchema) ? $tenantId : null
                 );
                 $record = $data[0] ?? $record;
@@ -2514,14 +2567,14 @@ class RecordService
         $record = RecordApiResponseService::convertCompositeFields($record, $table);
         $record = RecordApiResponseService::applyCasts($record, $tableSchema->columns ?? [], $tableSchema->casting ?? []);
         if (!empty($tableSchema->attributes)) {
-            $requestedCols = $request->has('select')
-                ? RelationshipResolverUtils::getMainTableColumns($request->query('select'))
+            $requestedCols = $effectiveSelectParam !== ''
+                ? RelationshipResolverUtils::getMainTableColumns($effectiveSelectParam)
                 : [];
             $record = RecordApiResponseService::applyAttributes($record, $table, $tableSchema->attributes, $requestedCols);
         }
 
         if ($this->isCacheableRequest($request, $table)) {
-            $ttl = $this->calculateOptimalCacheTTL($table, 1, $request->has('select'));
+            $ttl = $this->calculateOptimalCacheTTL($table, 1, $effectiveSelectParam !== '');
             QueryCacheService::put($recordCacheKey, $record, $ttl);
         }
 

@@ -2,6 +2,9 @@
 
 namespace Sopheak\Core\Types;
 
+use ReflectionClass;
+use Sopheak\Core\Attributes\RecordValidator;
+use Sopheak\Core\Attributes\RecordTrigger;
 use Closure;
 
 /**
@@ -179,11 +182,11 @@ class RecordTableType
                 continue;
             }
 
-            $reflection = new \ReflectionClass($validatorClass);
+            $reflection = new ReflectionClass($validatorClass);
             foreach ($reflection->getMethods() as $method) {
-                $attributes = $method->getAttributes(\Sopheak\Core\Attributes\RecordValidator::class);
+                $attributes = $method->getAttributes(RecordValidator::class);
                 foreach ($attributes as $attribute) {
-                    /** @var \Sopheak\Core\Attributes\RecordValidator $validatorAttr */
+                    /** @var RecordValidator $validatorAttr */
                     $validatorAttr = $attribute->newInstance();
                     $hook = $validatorAttr->hook . 'Validator'; // e.g., 'create' -> 'createValidator'
 
@@ -201,15 +204,19 @@ class RecordTableType
     private function resolveClassTriggers(): void
     {
         foreach ($this->triggers as $triggerClass) {
-            if (!is_string($triggerClass) || !class_exists($triggerClass)) {
+            if (!is_string($triggerClass)) {
                 continue;
             }
 
-            $reflection = new \ReflectionClass($triggerClass);
+            if (!class_exists($triggerClass)) {
+                continue;
+            }
+
+            $reflection = new ReflectionClass($triggerClass);
             foreach ($reflection->getMethods() as $method) {
-                $attributes = $method->getAttributes(\Sopheak\Core\Attributes\RecordTrigger::class);
+                $attributes = $method->getAttributes(RecordTrigger::class);
                 foreach ($attributes as $attribute) {
-                    /** @var \Sopheak\Core\Attributes\RecordTrigger $triggerAttr */
+                    /** @var RecordTrigger $triggerAttr */
                     $triggerAttr = $attribute->newInstance();
                     $hook = $triggerAttr->hook;
 

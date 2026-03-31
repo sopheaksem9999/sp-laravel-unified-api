@@ -134,6 +134,28 @@ class RelationshipNestedFilterTest extends TestCase
         $this->assertCount(0, $task2->assignees);
     }
 
+    public function test_nested_filter_supports_with_prefix_syntax(): void
+    {
+        $request = Request::create('/api/v1/tasks', 'GET', [
+            'select' => '*,with=assignees(*,name=eq.User 1)'
+        ]);
+
+        $schema = SchemaRegistryUtils::get();
+        $config = $schema['tasks'];
+
+        $result = RecordService::applyRequestFilters($request, $config);
+        $data = $result['data'];
+
+        $this->assertCount(2, $data);
+
+        $task1 = collect($data)->firstWhere('id', 1);
+        $task2 = collect($data)->firstWhere('id', 2);
+
+        $this->assertCount(1, $task1->assignees);
+        $this->assertEquals('User 1', $task1->assignees[0]->name);
+        $this->assertCount(0, $task2->assignees);
+    }
+
     public function test_toplevel_filter_filters_tasks_but_loads_all_relationships(): void
     {
         // Scenario 2: tasks?select=*,assignees(*)&assignees.name=eq.User 1
