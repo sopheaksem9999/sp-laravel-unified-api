@@ -435,25 +435,33 @@ $result = DB::table('invoices')->applyRequestFilters(
 
 ### Relationship Selection & Filtering
 
-Relationship loading uses the `select` query parameter for nested inclusion and filtering. The legacy `with` parameter is still supported for simple eager loading without column filtering.
+Relationship loading uses the `select` or `with` query parameter for nested inclusion and filtering. Both parameters support the exact same syntax and capabilities.
 
 **Syntax:**
 `?select=column1,column2,relationship(column1,column2,filter)`
+or
+`?with=relationship(column1,column2,filter)`
 
 **Examples:**
 
 1. **Basic Inclusion:**
    `GET /api/v1/invoices?select=*,customer(*)`
+   or
+   `GET /api/v1/invoices?with=customer(*)`
    Fetches all columns from invoices and all columns from the `customer` relationship.
 
 2. **Nested Inclusion:**
    `GET /api/v1/customers?select=*,orders(*,items(*))`
+   or
+   `GET /api/v1/customers?with=orders(*,items(*))`
    Fetches customers with their orders and order items.
 
 3. **Filtering Nested Records (Embedding):**
    You can apply filters to related records using the `column=operator.value` syntax inside the relationship parenthesis.
 
    `GET /api/v1/projects?select=*,tasks(*,assignees(*,name=eq.admin))`
+   or
+   `GET /api/v1/projects?with=tasks(*,assignees(*,name=eq.admin))`
 
    This fetches:
    - All columns from `projects`
@@ -474,10 +482,12 @@ Relationship loading uses the `select` query parameter for nested inclusion and 
    You can filter the main result set based on criteria in related tables using the dot notation `relationship.column=operator.value`.
 
    `GET /api/v1/users?select=*,posts(*)&roles.name=eq.admin`
+   or
+   `GET /api/v1/users?with=posts(*)&roles.name=eq.admin`
 
    This fetches:
    - Users who have a role named 'admin'.
-   - Includes their posts (if requested via `select`).
+   - Includes their posts (if requested via `select` or `with`).
 
    **Supported Relationships:**
    - `belongsTo`
@@ -489,10 +499,13 @@ Relationship loading uses the `select` query parameter for nested inclusion and 
    `GET /api/v1/posts?author.name=eq.John`
    Fetches posts where the author's name is 'John'.
 
-5. **Legacy `with` Parameter (still supported):**
-   - `GET /api/v1/customers?with=invoices`
-   - `GET /api/v1/customers?with=invoices,contacts`
-   This eagerly loads relationships but does not support nested filters inside `with`.
+5. **Combining `select` and `with`:**
+   You can use both parameters together. They will be merged automatically.
+   `GET /api/v1/customers?select=id,name&with=invoices(id,total)`
+
+6. **Using `with=` prefix inside `select`:**
+   For compatibility with some frontend libraries, you can prefix relationship names with `with=` inside the `select` parameter.
+   `GET /api/v1/customers?select=*,with=invoices(id,total)`
 
 ### Supported Relationship Types
 

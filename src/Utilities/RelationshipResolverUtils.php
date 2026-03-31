@@ -237,6 +237,10 @@ class RelationshipResolverUtils
                 continue;
             }
 
+            if (str_starts_with($segment, 'with=')) {
+                $segment = substr($segment, 5);
+            }
+
             // Relationship segments (alias:table(inner)) or (alias(inner)) should be ignored
             if (preg_match('/^(\w+):(\w+)\((.*)\)$/', $segment)) {
                 continue;
@@ -813,6 +817,10 @@ class RelationshipResolverUtils
                 continue;
             }
 
+            if (str_starts_with($segment, 'with=')) {
+                $segment = substr($segment, 5);
+            }
+
             // alias:table(inner)
             if (preg_match('/^(\w+):(\w+)\((.*)\)$/', $segment, $matches)) {
                 $alias = $matches[1];
@@ -825,6 +833,11 @@ class RelationshipResolverUtils
                     $innerSegs = self::parseSelectSegments($inner);
                     foreach ($innerSegs as $innerSeg) {
                         $innerSeg = trim((string) $innerSeg);
+
+                        if (str_starts_with($innerSeg, 'with=')) {
+                            $innerSeg = substr($innerSeg, 5);
+                        }
+
                         if ('*' === $innerSeg) {
                             $columns[] = '*';
 
@@ -863,6 +876,11 @@ class RelationshipResolverUtils
                     $innerSegs = self::parseSelectSegments($inner);
                     foreach ($innerSegs as $innerSeg) {
                         $innerSeg = trim((string) $innerSeg);
+
+                        if (str_starts_with($innerSeg, 'with=')) {
+                            $innerSeg = substr($innerSeg, 5);
+                        }
+
                         if ('*' === $innerSeg) {
                             $columns[] = '*';
 

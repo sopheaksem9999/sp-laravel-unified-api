@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordTablePublic;
+use Sopheak\Core\Types\RecordHasManyType;
+use Sopheak\Core\Enums\RecordRelationshipsEnum;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Traits\QueryHelpersTrait;
 
@@ -134,6 +136,81 @@ class ApplyRequestFiltersConfigTest extends TestCase
         $this->assertCount(2, $categories);
         $this->assertTrue($categories->first()->relationLoaded('items'));
         $this->assertCount(2, $categories->first()->items);
+    }
+
+    public function test_query_helpers_trait_supports_select_with_prefix_syntax(): void
+    {
+        $request = Request::create('/api/qht_categories', 'GET', [
+            'select' => 'id,name,with=items(id,name,category_id)',
+            'name' => 'starts_with.Cat',
+            'sortby' => 'id',
+            'order' => 'asc',
+        ]);
+
+        $categories = QhtCategory::query()
+            ->applyRequestFilters($request)
+            ->get();
+
+        $this->assertCount(2, $categories);
+        $this->assertTrue($categories->first()->relationLoaded('items'));
+        $this->assertCount(2, $categories->first()->items);
+    }
+
+    public function test_record_service_supports_with_as_top_level_parameter(): void
+    {
+        Config::set('record.enable_tenant_id', false);
+
+        $config = new RecordTableType(
+            table: 'qht_categories',
+            hasTenantId: false,
+            public: new RecordTablePublic(true, true),
+            relationships: [
+                'items' => new RecordHasManyType(
+                    table: 'qht_items',
+                    foreignKey: 'category_id',
+                    type: RecordRelationshipsEnum::HAS_MANY,
+                    localKey: 'id',
+                )
+            ]
+        );
+
+        $config->columns = [
+            'id' => ['type' => 'bigint'],
+            'name' => ['type' => 'string'],
+        ];
+
+        $itemsConfig = new RecordTableType(
+            table: 'qht_items',
+            hasTenantId: false,
+            public: new RecordTablePublic(true, true),
+        );
+        $itemsConfig->columns = [
+            'id' => ['type' => 'bigint'],
+            'name' => ['type' => 'string'],
+            'category_id' => ['type' => 'bigint'],
+        ];
+
+        SchemaRegistryUtils::refresh();
+        SchemaRegistryUtils::register('qht_categories', $config);
+        SchemaRegistryUtils::register('qht_items', $itemsConfig);
+        QueryBuilderFiltersUtils::clearColumnCache();
+
+        $request = Request::create('/api/qht_categories', 'GET', [
+            'with' => 'items(id,name,category_id)',
+            'sortby' => 'id',
+            'order' => 'asc',
+        ]);
+
+        $result = RecordService::applyRequestFilters($request, $config);
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('data', $result);
+        $this->assertCount(2, $result['data']);
+
+        // Ensure relationship is loaded
+        $this->assertObjectHasProperty('items', $result['data'][0]);
+        $this->assertIsArray($result['data'][0]->items);
+        $this->assertCount(2, $result['data'][0]->items);
     }
 
     public function test_query_helpers_trait_supports_search_alias(): void
