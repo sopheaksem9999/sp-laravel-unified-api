@@ -1,9 +1,18 @@
-#! Deprecated: Cursor Pagination
+---
+title: "SP Laravel API Cursor Pagination Deprecation and Migration"
+description: "Deprecation note for removed cursor pagination and migration path to the standard page and per_page pagination contract."
+keywords:
+  - cursor pagination removed
+  - pagination migration
+  - page per_page
+  - pagination contract
+  - deprecated feature
+---
 
-This package previously included an experimental cursor-based pagination service and related configuration. That implementation has been removed in favor of using Laravel's default page/per_page style pagination everywhere.
+# Cursor Pagination (Deprecated)
 
-All record listing endpoints now use traditional pagination with `page` and `per_page` query parameters and return:
+Cursor pagination support was removed from this package.
 
-- `meta.page`
-- `meta.per_page`
-- `meta.total`
+Use the current pagination contract instead:
+
+- [Pagination (Page and Per Page)](./guide/feature-pagination-page-per-page.md)

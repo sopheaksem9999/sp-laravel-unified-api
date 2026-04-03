@@ -1,3 +1,62 @@
+---
+name: sp-laravel-api-front
+title: "AI Skill: sp-laravel-api Front"
+description: "Use when building frontend integrations against sopheak/sp-laravel-api, including OpenAPI discovery, endpoint selection, payload building, filters, embeds, upsert, and response/error handling."
+keywords:
+  - sp laravel api frontend
+  - openapi api consumer
+  - dynamic crud endpoint usage
+  - query filters
+  - relationship embedding
+  - attachment upload frontend
+  - clone temp attachment
+  - attachment visibility
+  - protected download url
+  - upsert
+  - bulk upsert
+  - response envelope
+  - error_code handling
+trigger:
+  - "Use when requests ask to build frontend calls (fetch/axios) to sopheak/sp-laravel-api endpoints."
+  - "Use when reading OpenAPI to create query params, payloads, response handling, or typed API clients."
+  - "Do not use for backend package internals like migrations, RecordTableType config, or Laravel hook implementation."
+---
+
+# AI Skill: sp-laravel-api-front
+
+## Trigger Details (AI Routing)
+
+Use this skill when the task is about consuming an API powered by `sopheak/sp-laravel-api` from web/mobile frontend code.
+
+### Strong trigger intents
+
+- Build `fetch`/Axios calls for CRUD, upsert, bulk upsert, auth, report, or custom function endpoints
+- Build file upload and attachment linking flows (`upload`, `clone-temp`, `record/{table}/{record_id}`)
+- Read OpenAPI schema and map it into typed frontend request/response models
+- Construct query params (`filter`, `search`, `embed`, `columns`, `sort`, pagination)
+- Handle `error_code` and standard response envelope in frontend UX
+- Generate integration examples for React, Vue, Next.js, Nuxt, mobile, or SDK wrappers
+
+### Trigger keywords
+
+- `openapi`, `frontend`, `api consumer`, `fetch`, `axios`, `query params`
+- `attachments`, `upload`, `multipart`, `clone-temp`, `download`, `collection_name`
+- `embed`, `filter`, `search`, `columns`, `sort`, `group_by`, `agg`
+- `upsert`, `bulk upsert`, `auth login`, `report endpoint`
+- `error_code`, `success`, `meta.page`, `meta.per_page`, `meta.total`
+
+### Do not use this skill when
+
+- The task requires changing backend package internals, Laravel configs, migrations, or trigger hooks
+- The task is package architecture refactor with no frontend integration layer
+
+### Minimum context to collect first
+
+1. Base API URL and version prefix
+2. Live OpenAPI spec endpoint
+3. Auth/tenant headers required by the target endpoint
+4. Operation type (list/read/create/update/delete/upsert/custom function)
+
 # Agent Context: sp-laravel-api Frontend (API Consumer)
 
 ## What This Is
@@ -137,6 +196,127 @@ POST   /api/v2/{table}/bulk/upsert          upsert many records
 
 > Not every table exposes all endpoints. The OpenAPI `paths` object is the
 > authoritative list — if a path does not appear there, the endpoint does not exist.
+
+---
+
+## Attachment Module (Frontend Usage)
+
+Attachment endpoints are function endpoints on `sp_attachments`. The final path depends on API prefix and attachment route prefix.
+
+Default shape in most projects:
+
+```
+/{apiPrefix}/attachments
+```
+
+Use OpenAPI to confirm exact path before coding.
+
+### Core attachment endpoints
+
+```
+POST   /{apiPrefix}/{attachmentPrefix}/upload
+POST   /{apiPrefix}/{attachmentPrefix}/clone-temp
+GET    /{apiPrefix}/{attachmentPrefix}/{id}/download
+GET    /{apiPrefix}/{attachmentPrefix}/record/{table}/{record_id}
+POST   /{apiPrefix}/{attachmentPrefix}/record/{table}/{record_id}
+DELETE /{apiPrefix}/{attachmentPrefix}/record/{table}/{record_id}/{attachment_id}
+GET    /{apiPrefix}/{attachmentPrefix}/folders
+POST   /{apiPrefix}/{attachmentPrefix}/folders
+PUT    /{apiPrefix}/{attachmentPrefix}/folders/{id}
+PATCH  /{apiPrefix}/{attachmentPrefix}/folders/{id}
+DELETE /{apiPrefix}/{attachmentPrefix}/folders/{id}
+```
+
+### Upload file (multipart/form-data)
+
+Required input:
+
+- `file`
+
+Common optional inputs:
+
+- `visibility`: `private | public | temp_private | temp_public`
+- `as_temp`: boolean
+- `temp_timeout_minutes` or `temp_timeout_at`
+- `record_id`, `record_type`, `collection_name`, `replace_old`
+- `folder_id`, `title`, `caption`
+- Image options: `size_name`, `w`, `h`, `fit`
+
+Example:
+
+```ts
+const form = new FormData();
+form.append("file", fileInput.files[0]);
+form.append("visibility", "temp_private");
+form.append("record_type", "products");
+form.append("record_id", "123");
+form.append("collection_name", "gallery");
+form.append("replace_old", "false");
+
+const res = await fetch(`${baseUrl}/${apiPrefix}/${attachmentPrefix}/upload`, {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${token}`,
+    "x-company-id": companyId
+  },
+  body: form
+});
+```
+
+Note: do not set `Content-Type` manually for `FormData`; browser sets the boundary.
+
+### Clone existing attachment as temp/final
+
+Use this when user already uploaded a temp file and you want a separate final asset record.
+
+```json
+POST /{apiPrefix}/{attachmentPrefix}/clone-temp
+{
+  "attachment_id": "uuid-source-id",
+  "visibility": "private",
+  "record_type": "invoices",
+  "record_id": "inv_001",
+  "collection_name": "documents"
+}
+```
+
+### Link and unlink attachments to records
+
+Link:
+
+```json
+POST /{apiPrefix}/{attachmentPrefix}/record/{table}/{record_id}
+{
+  "attachment_id": "uuid-id",
+  "collection_name": "default"
+}
+```
+
+List by record:
+
+```http
+GET /{apiPrefix}/{attachmentPrefix}/record/{table}/{record_id}?collection_name=default
+```
+
+Unlink:
+
+```http
+DELETE /{apiPrefix}/{attachmentPrefix}/record/{table}/{record_id}/{attachment_id}?collection_name=default
+```
+
+### Visibility and access behavior
+
+- `private` and `temp_private`: frontend should use API download URL.
+- `public`: attachment usually includes direct public asset URL.
+- `temp_public`: direct URL by default, but can be forced to protected download URL when `attachments.protect_temp_public_via_download=true`.
+- Expired temp attachments return HTTP `410 Gone` on download.
+
+### Recommended frontend flow
+
+1. Upload as temp during draft forms (`as_temp=true` or `visibility=temp_private`).
+2. On final save, call `clone-temp` with final visibility and link to target record.
+3. Keep collection names consistent (`avatar`, `gallery`, `documents`) for predictable UI rendering.
+4. If policy requires access checks, use download endpoint URLs and avoid direct public URLs.
 
 ---
 
