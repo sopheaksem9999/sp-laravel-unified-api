@@ -56,7 +56,7 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
         $escaped = array_map(static function (string $functionName): string {
             $escapedFunction = preg_quote($functionName, '/');
 
-            return (string) preg_replace('/\\\\\{[^\\\\\}]+\\\\\}/', '\\\\d+', $escapedFunction);
+            return (string) preg_replace('/\\\\\{[^\\\\\}]+\\\\\}/', '[^\\\\/]+', $escapedFunction);
         }, $configuredGlobalFunctions);
 
         $globalFunctionWhere = '(?:' . implode('|', $escaped) . ')';
@@ -124,7 +124,6 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
         }
     }
 
- 
     /*
     |--------------------------------------------------------------------------
     | Upsert Operations

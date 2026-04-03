@@ -16,6 +16,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\Response;
 use Sopheak\Core\Utilities\TimeUtils;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
@@ -592,7 +593,7 @@ class RecordService
     /**
      * Execute a table-specific custom function.
      */
-    public function executeTableFunction(Request $request, string $table, string $functionName): JsonResponse
+    public function executeTableFunction(Request $request, string $table, string $functionName): Response
     {
         // Get schema and validate table exists
         $tableSchema = SchemaRegistryUtils::getTable($table);
@@ -602,31 +603,7 @@ class RecordService
 
         // Check if function exists in table schema
         $tableFunctions = $tableSchema->functions ?? [];
-        $functionConfig = null;
-        $extractedId = null;
-
-        // First try exact match
-        if (isset($tableFunctions[$functionName])) {
-            $functionConfig = $tableFunctions[$functionName];
-        } else {
-            // Try pattern matching for parameterized function names
-            foreach ($tableFunctions as $configuredFunctionName => $config) {
-                // Convert function name pattern to regex (e.g., 'role_permission/{id}' -> 'role_permission/(\d+)')
-                $pattern = preg_replace('/\{[^}]+\}/', '(\d+)', (string) $configuredFunctionName);
-                $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/';
-
-                if (preg_match($pattern, $functionName, $matches)) {
-                    $functionConfig = $config;
-
-                    // Extract ID parameter if present (first captured group)
-                    if (isset($matches[1])) {
-                        $extractedId = $matches[1];
-                    }
-
-                    break;
-                }
-            }
-        }
+        ['config' => $functionConfig, 'routeParams' => $extractedParams] = $this->resolveFunctionConfigAndRouteParams($tableFunctions, $functionName);
 
         // Resolve Class-Based Config
         if (is_string($functionConfig) && class_exists($functionConfig)) {
@@ -674,7 +651,7 @@ class RecordService
             }
         }
 
-        $response = $this->executeCustomFunction($request, $functionConfig, $extractedId);
+        $response = $this->executeCustomFunction($request, $functionConfig, $extractedParams);
 
         $method = strtoupper($request->method());
         if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true) && $response->getStatusCode() < 400) {
@@ -699,7 +676,7 @@ class RecordService
             $this->cacheService()->clearCacheForTables($clearCacheTables, $tenantId);
         }
 
-        if ($cacheKey) {
+        if ($cacheKey && $response instanceof JsonResponse) {
             $ttl = $this->calculateOptimalCacheTTL($table, 1, false);
             if (null !== $functionCacheTtl && $functionCacheTtl !== $ttl) {
                 $ttl = $functionCacheTtl;
@@ -719,35 +696,11 @@ class RecordService
      * Execute a global custom function.
      * Supports patterns like: function_name or function_name/{id}.
      */
-    public function executeGlobalFunction(Request $request, string $functionName): JsonResponse
+    public function executeGlobalFunction(Request $request, string $functionName): Response
     {
         // Check if function exists in table schema
         $globalFunctions = RecordConfigService::globalFunctions();
-        $functionConfig = null;
-        $extractedId = null;
-
-        // First try exact match
-        if (isset($globalFunctions[$functionName])) {
-            $functionConfig = $globalFunctions[$functionName];
-        } else {
-            // Try pattern matching for parameterized function names
-            foreach ($globalFunctions as $configuredFunctionName => $config) {
-                // Convert function name pattern to regex (e.g., 'role_permission/{id}' -> 'role_permission/(\d+)')
-                $pattern = preg_replace('/\{[^}]+\}/', '(\d+)', (string) $configuredFunctionName);
-                $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/';
-
-                if (preg_match($pattern, $functionName, $matches)) {
-                    $functionConfig = $config;
-
-                    // Extract ID parameter if present (first captured group)
-                    if (isset($matches[1])) {
-                        $extractedId = $matches[1];
-                    }
-
-                    break;
-                }
-            }
-        }
+        ['config' => $functionConfig, 'routeParams' => $extractedParams] = $this->resolveFunctionConfigAndRouteParams($globalFunctions, $functionName);
 
         // Resolve Class-Based Config
         if (is_string($functionConfig) && class_exists($functionConfig)) {
@@ -794,7 +747,7 @@ class RecordService
             }
         }
 
-        $response = $this->executeCustomFunction($request, $functionConfig, $extractedId);
+        $response = $this->executeCustomFunction($request, $functionConfig, $extractedParams);
 
         $method = strtoupper($request->method());
         if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true) && $response->getStatusCode() < 400) {
@@ -814,7 +767,7 @@ class RecordService
             $this->cacheService()->clearCacheForTables($clearCacheTables, $tenantId);
         }
 
-        if ($cacheKey) {
+        if ($cacheKey && $response instanceof JsonResponse) {
             $ttl = $functionCacheTtl ?? RecordConfigService::cacheTtl();
             QueryCacheService::put($cacheKey, [
                 'data' => $response->getData(true),
@@ -1321,6 +1274,7 @@ class RecordService
     {
         $tenantColumn = RecordConfigService::tenantColumn();
         $baseData = [];
+        $primaryKey = (string) ($tableSchema->primaryKey ?? 'id');
         if (!$isUpdate && $this->shouldApplyTenantId($tableSchema)) {
             $baseData[$tenantColumn] = $this->normalizeTenantId($tenantId);
         }
@@ -1335,12 +1289,28 @@ class RecordService
 
         $payloadMain = $this->sanitizePayload($extracted, $tableSchema);
 
+        // Preserve explicit primary key values on create (e.g., UUID-based tables).
+        // Updates must never allow primary key mutation.
+        if (
+            !$isUpdate
+            && isset($tableSchema->columns[$primaryKey])
+            && array_key_exists($primaryKey, $payload)
+            && null !== $payload[$primaryKey]
+            && !array_key_exists($primaryKey, $payloadMain)
+        ) {
+            $payloadMain[$primaryKey] = $payload[$primaryKey];
+        }
+
         if ($this->shouldApplyTenantId($tableSchema)) {
             if ($isUpdate) {
                 unset($payloadMain[$tenantColumn]);
             } else {
                 $payloadMain[$tenantColumn] = $this->normalizeTenantId($tenantId);
             }
+        }
+
+        if ($isUpdate) {
+            unset($payloadMain[$primaryKey]);
         }
 
         return $this->applyTimestampsAndAuditFields($payloadMain, $tableSchema, $isUpdate);
@@ -2560,7 +2530,7 @@ class RecordService
     /**
      * Execute a custom function based on its configuration.
      */
-    private function executeCustomFunction(Request $request, array|RecordFunctionType $functionConfig, mixed $id = null): JsonResponse
+    private function executeCustomFunction(Request $request, array|RecordFunctionType $functionConfig, array $routeParams = []): Response
     {
         if ($functionConfig instanceof RecordFunctionType) {
             $config = $functionConfig->toArray();
@@ -2635,13 +2605,13 @@ class RecordService
             }
         }
 
-        return $this->executeClassFunction(request: $request, functionConfig: $config, id: $id);
+        return $this->executeClassFunction(request: $request, functionConfig: $config, routeParams: $routeParams);
     }
 
     /**
      * Execute a class-based custom function.
      */
-    private function executeClassFunction(Request $request, array $functionConfig, mixed $id = null): JsonResponse
+    private function executeClassFunction(Request $request, array $functionConfig, array $routeParams = []): Response
     {
         try {
             $className = $functionConfig['class'] ?? null;
@@ -2656,7 +2626,7 @@ class RecordService
                 return RecordApiResponseService::errorWrapped(message: sprintf("Method '%s' does not exist in class '%s'", $method, $className), status: RecordApiJsonResponseEnum::SERVER_ERROR->value);
             }
 
-            $result = $id ? $instance->{$method}($request, $id) : $instance->{$method}($request);
+            $result = $instance->{$method}($request, ...array_values($routeParams));
 
             if ($result instanceof JsonResponse) {
                 $responseData = $result->getData();
@@ -2703,6 +2673,10 @@ class RecordService
                 return $wrapped;
             }
 
+            if ($result instanceof Response) {
+                return $result;
+            }
+
             return RecordApiResponseService::successWrapped($result);
         } catch (Exception $exception) {
             return RecordApiResponseService::errorFromException(
@@ -2711,6 +2685,80 @@ class RecordService
                 status: RecordApiJsonResponseEnum::SERVER_ERROR->value
             );
         }
+    }
+
+    /**
+     * @param array<string,mixed> $registry
+     *
+     * @return array{config:mixed,routeParams:array<string,string>}
+     */
+    private function resolveFunctionConfigAndRouteParams(array $registry, string $requestedFunctionName): array
+    {
+        if (array_key_exists($requestedFunctionName, $registry)) {
+            return [
+                'config' => $registry[$requestedFunctionName],
+                'routeParams' => [],
+            ];
+        }
+
+        foreach ($registry as $configuredFunctionName => $config) {
+            if (!is_string($configuredFunctionName) || '' === $configuredFunctionName) {
+                continue;
+            }
+
+            $routeParams = $this->extractRouteParamsFromFunctionPattern($configuredFunctionName, $requestedFunctionName);
+            if (null !== $routeParams) {
+                return [
+                    'config' => $config,
+                    'routeParams' => $routeParams,
+                ];
+            }
+        }
+
+        return [
+            'config' => null,
+            'routeParams' => [],
+        ];
+    }
+
+    /**
+     * @return array<string,string>|null
+     */
+    private function extractRouteParamsFromFunctionPattern(string $configuredFunctionName, string $requestedFunctionName): ?array
+    {
+        $parameterNames = [];
+        $escapedPattern = preg_quote($configuredFunctionName, '/');
+        $escapedPattern = (string) preg_replace_callback(
+            '/\\\\\{([^\\\\}]+)\\\\\}/',
+            static function (array $matches) use (&$parameterNames): string {
+                $parameterNames[] = $matches[1];
+
+                return '([^\/]+)';
+            },
+            $escapedPattern
+        );
+
+        $pattern = '/^' . $escapedPattern . '$/';
+        $matches = [];
+        if (1 !== preg_match($pattern, $requestedFunctionName, $matches)) {
+            return null;
+        }
+
+        if ([] === $parameterNames) {
+            return [];
+        }
+
+        $routeParams = [];
+        foreach ($parameterNames as $index => $name) {
+            $matchIndex = $index + 1;
+            if (!isset($matches[$matchIndex])) {
+                continue;
+            }
+
+            $routeParams[$name] = urldecode((string) $matches[$matchIndex]);
+        }
+
+        return $routeParams;
     }
 
     private function determineOperation(array $row, string $pk, ?string $legacyAction): string

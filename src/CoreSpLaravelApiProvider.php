@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core;
 
+use Sopheak\Core\Console\CleanTempAttachmentsCommand;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Router;
@@ -26,6 +27,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__ . '/../config/sp-laravel-api.php', 'sp-laravel-api');
+        $this->mergeConfigFrom(__DIR__ . '/../config/attachments.php', 'attachments');
 
         $this->app->singleton('api.response', fn(): RecordApiResponseService => new RecordApiResponseService());
         $this->app->singleton(AuditLogService::class);
@@ -38,6 +40,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
             __DIR__ . '/../config/sp-laravel-api.php' => config_path('sp-laravel-api.php'),
             __DIR__ . '/../config/audit.php' => config_path('audit.php'),
             __DIR__ . '/../config/record.php' => config_path('record.php'),
+            __DIR__ . '/../config/attachments.php' => config_path('attachments.php'),
         ], 'sp-laravel-api-config');
 
         $this->publishes([
@@ -60,6 +63,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
                 GenerateRecordTablesFromDatabaseCommand::class,
                 ExportOpenApiCommand::class,
                 ListTablesCommand::class,
+                CleanTempAttachmentsCommand::class,
             ];
 
             $commands = array_values(array_filter($commands, class_exists(...)));
