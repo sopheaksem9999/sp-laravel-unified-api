@@ -42,6 +42,7 @@ class TestCase extends BaseTestCase
         $app['config']->set('record.rpc_prefix', 'rpc');
         $app['config']->set('record.enable_tenant_id', false);
         $app['config']->set('record.tables', []);
+        $app['config']->set('attachments.tables', []);
         $app['config']->set('record.global_triggers', []);
         $app['config']->set('record.default_validation', [
             'enabled' => false,

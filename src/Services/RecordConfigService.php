@@ -187,12 +187,25 @@ class RecordConfigService
 
     public static function getTableConfig(): array
     {
-        return (array) config('record.tables', []);
+        $recordTables = (array) config('record.tables', []);
+        $attachmentEnabled = (bool) config('attachments.enabled', true);
+        $attachmentTables = $attachmentEnabled ? (array) config('attachments.tables', []) : [];
+        
+        return array_merge($attachmentTables, $recordTables);
     }
 
     public static function table(string $table): mixed
     {
-        return config('record.tables.' . $table, []);
+        $recordTable = config('record.tables.' . $table);
+        if ($recordTable !== null) {
+            return $recordTable;
+        }
+        
+        if ((bool) config('attachments.enabled', true)) {
+            return config('attachments.tables.' . $table, []);
+        }
+
+        return [];
     }
 
     public static function cacheDefaultTtl(): int

@@ -91,7 +91,7 @@ class RecordRouteMiddleware
         } else {
             // Step 2: pattern match — e.g. config key 'order/{id}' matches request value 'order/42'
             foreach ($registry as $configuredKey => $config) {
-                $pattern = preg_replace('/\{[^}]+\}/', '(\d+)', (string) $configuredKey);
+                $pattern = preg_replace('/\{[^}]+\}/', '([^/]+)', (string) $configuredKey);
                 $pattern = '/^' . str_replace('/', '\/', $pattern) . '$/';
 
                 if (preg_match($pattern, $functionName)) {
