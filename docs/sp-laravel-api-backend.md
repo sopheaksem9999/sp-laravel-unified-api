@@ -1,3 +1,63 @@
+---
+name: sp-laravel-api-backend
+title: "AI Skill: sp-laravel-api Backend"
+description: "Use when implementing or reviewing Laravel backend work powered by sopheak/sp-laravel-api, including RecordTableType config, validators, triggers, RPC functions, tenancy, permissions, response standards, and legacy ORM compatibility boundaries."
+keywords:
+  - sp laravel api backend
+  - laravel package architecture
+  - RecordTableType
+  - RecordFunctionType
+  - validators
+  - lifecycle triggers
+  - audit logging
+  - dynamic crud
+  - tenancy
+  - permission mapping
+  - legacy orm compatibility
+  - model compatibility layer
+trigger:
+  - "Use when requests mention RecordTableType, RecordFunctionType, trigger hooks, validators, tenancy, permissions, or backend package internals."
+  - "Use when implementing Laravel config-driven CRUD/RPC behavior in sopheak/sp-laravel-api."
+  - "Use when migrating legacy Eloquent/model-first patterns to package-first architecture."
+  - "Do not use for frontend-only API consumption tasks."
+---
+
+# AI Skill: sp-laravel-api-backend
+
+## Trigger Details (AI Routing)
+
+Use this skill when the task is about backend implementation inside a Laravel project using `sopheak/sp-laravel-api`.
+
+### Strong trigger intents
+
+- Add or update `RecordTableType` configuration in `config/record.php` or class-based table files
+- Define validators, trigger callbacks, permissions, tenant behavior, or response casting
+- Add or refactor `RecordFunctionType` RPC functions
+- Build or review migration + config-driven CRUD without manual controllers/routes
+- Debug package behaviors in `RecordService`, `RecordApiResponseService`, auth, permission flow, or audit hooks
+- Refactor legacy model-first/ORM-first code into package-first config and service flow
+- Explain package architecture, endpoint generation, or recommended backend conventions
+
+### Trigger keywords
+
+- `record.php`, `RecordTableType`, `RecordFunctionType`, `beforeCreate`, `afterUpdate`
+- `validator`, `deleteValidator`, `columnHiddens`, `columnWriteDisabled`, `attributes`, `casting`
+- `hasTenantId`, `isAuthRead`, `isAuthWrite`, `permissions`, `authorization`
+- `sp_attachments`, `audit`, `trigger`, `dynamic crud`, `upsert`, `bulk`
+- `CoreRecordController`, `RecordService`, `RecordConfigService`
+
+### Do not use this skill when
+
+- The task is only frontend API consumption, fetch calls, React/Vue data loading, or client-side state
+- The task is purely visual UI styling with no backend API design decisions
+
+### Minimum context to collect first
+
+1. Target table/function name and expected behavior
+2. Current config in `config/record.php` and related class-based table files
+3. Existing migration/schema and tenant/permission requirements
+4. Required hooks and validation rules for create/update/delete
+
 # Agent Context: sopheak/sp-laravel-api (Backend / Laravel)
 
 ## What This Package Is
@@ -46,6 +106,16 @@ The goal: adding a new API resource means adding one `RecordTableType` — never
 
 ---
 
+## Model Priority (Important)
+
+In this package, Eloquent models are a compatibility layer for old client code only.
+
+- Primary approach: `RecordTableType` + package pipeline (`RecordService`, `RecordApiResponseService`, DB query builder).
+- Model usage: minimal and optional, mainly for backward compatibility (`AuditableTrait`, `QueryHelpers`).
+- Recommendation: for new features, always prioritize `sp-laravel-api` config-driven architecture over model-centric design.
+
+---
+
 ## Architecture Rules — Follow These Always
 
 | Task | Use this | Never do this |
@@ -64,6 +134,7 @@ The goal: adding a new API resource means adding one `RecordTableType` — never
 | Protect columns from being written | `columnWriteDisabled: [...]` in config | Unset fields in hooks or middleware |
 | Add computed fields to read responses | `attributes: [...]` on `RecordTableType` | Manual post-processing in controller |
 | Cast raw DB column values in responses | `casting: [...]` on `RecordTableType` | Manual type coercion in hooks or controller |
+| Support legacy ORM syntax in old client code | Minimal model + `QueryHelpers` bridge (temporary) | Expanding model-centric architecture for new package features |
 
 ---
 
@@ -76,7 +147,7 @@ This is the exact scaffolding pattern. Generate only what is listed here.
 | Artifact | Generate? | Notes |
 |----------|-----------|-------|
 | Database migration | **Yes** | Standard Laravel `Schema::create` |
-| Eloquent Model | **Yes (minimal)** | Only for `AuditableTrait` — no scopes, no queries, no business logic |
+| Eloquent Model | **Yes (minimal, compatibility only)** | Only for legacy ORM syntax support (`AuditableTrait`, optional `QueryHelpers`) — no scopes, no domain logic |
 | `RecordTableType` config | **Yes** | In `app/Api/Tables/` (class-based) or inline in `config/record.php` |
 | Controller | **No** | Package registers all CRUD routes automatically |
 | Route | **No** | Package registers all routes automatically |
@@ -98,7 +169,7 @@ Schema::create('products', function (Blueprint $table) {
 });
 ```
 
-**2. Model** — minimal, no query logic:
+**2. Model** — compatibility-only, minimal, no query/domain logic:
 ```php
 // app/Models/Product.php
 class Product extends Model
@@ -107,8 +178,9 @@ class Product extends Model
     protected $table    = 'products';
     protected $fillable = ['name', 'price'];
 }
-// Do NOT add: query scopes, relationships, business logic, or accessors.
-// All queries go through DB::table() inside the package pipeline, not Eloquent.
+// Do NOT add: query scopes, relationships, business logic, or accessors for new features.
+// Keep model only as a compatibility bridge for older ORM-based client code.
+// Package-first flow stays the default: RecordTableType + RecordService + DB::table().
 ```
 
 **3. RecordTableType** — class-based (preferred for any non-trivial table):
@@ -539,6 +611,8 @@ updateValidator: fn($request, $id) => Validator::make($request->all(), [
 
 ## Lifecycle Triggers
 
+For full hook registration/context patterns, see [Record Hooks](./guide/record-hooks.md).
+
 | Hook           | Fires                  | Extra args  | Can return              |
 |----------------|------------------------|-------------|-------------------------|
 | `beforeRead`   | Before list/get query  | —           | `Request\|null`         |
@@ -865,16 +939,16 @@ disableAuditLog: false,
 customAuditLog: fn($event, $entityClass, $data, $tenantId, $ctx) => /* custom logic */,
 ```
 
-Model-driven (outside CRUD API):
+Model-driven (legacy compatibility only, outside CRUD API):
 ```php
 class Product extends Model { use \Sopheak\Core\Traits\AuditableTrait; }
 ```
 
 ---
 
-## QueryHelpers Trait
+## QueryHelpers Trait (Legacy Compatibility)
 
-For custom Eloquent controllers outside the CRUD API:
+For legacy Eloquent controllers outside the CRUD API that cannot be migrated yet:
 
 ```php
 class Product extends Model { use \Sopheak\Core\Traits\QueryHelpers; }
@@ -923,7 +997,7 @@ sp-laravel-api:clean-audit-logs            purge expired audit records
 
 ```
 success:    bool
-error_code: int      — 0 = ok; see SKILL-FRONTEND.md for full table
+error_code: int      — 0 = ok; see sp-laravel-api-front.md for full table
 data:       object | array
 meta:       { request_id, page, per_page, total }
 message:    string   — errors only

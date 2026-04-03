@@ -1,0 +1,533 @@
+---
+title: "API Access, Query Filtering, and Relationships"
+description: "API docs access mode plus query filtering, relationship selection, relationship types, and relationship write payload patterns."
+keywords:
+  - api docs access
+  - query filters
+  - relationship selection
+  - relationship types
+  - relationship write payload
+---
+
+## Record CRUD API Documentation
+
+This section documents the record CRUD endpoints provided by this package, including request/response formats, filtering, pagination, and error handling.
+
+### API Docs Access Mode
+
+The bundled docs UI endpoint is:
+
+- `GET /api-docs`
+
+Use `config/record.php` to control visibility:
+
+```php
+'api_docs' => [
+    'is_private' => env('SP_LARAVEL_API_DOCS_PRIVATE', false),
+    'access_token_key' => 'access_token',
+    'login_api' => '/v1/auth/login',
+    'email' => env('SP_LARAVEL_API_DOCS_EMAIL'),
+],
+```
+
+Behavior:
+
+- If `api_docs` config is missing, docs stay public by default.
+- If `is_private=false`, `/api-docs` loads Scalar directly.
+- If `is_private=true`, `/api-docs` shows a custom login form first.
+- If `is_private=true`, Scalar uses secure web routes:
+  - `POST /api-docs/auth/login`
+  - `POST /api-docs/auth/logout`
+  - `GET /api-docs/openapi.json`
+- In private mode, API endpoints `/{api_prefix}/docs/openapi(.json)` and `/{api_prefix}/docs/llms.*` are hidden with `404` to avoid schema leakage.
+- `login_api` supports relative route or absolute URL, so each client project can point docs login to its own auth endpoint.
+- `access_token_key` controls token extraction key from login response payload.
+- `email` is optional and enforces a fixed docs login account.
+
+### Query Filtering (applyRequestFilters macro)
+
+The package extends Laravel's `Illuminate\Database\Query\Builder` with a macro `applyRequestFilters`. This is the same filtering/pagination mechanism used by the record CRUD endpoints when listing records.
+
+```php
+use Illuminate\Support\Facades\DB;
+use Illuminate\Http\Request;
+
+public function index(Request $request)
+{
+    // Start with any base query
+    $query = DB::table('invoices')->where('active', true);
+
+    // Apply filters from request (e.g. ?status=eq.paid&sortby=created_at)
+    $result = $query->applyRequestFilters($request);
+
+    return response()->json($result);
+}
+```
+
+The `applyRequestFilters` method returns an array containing:
+
+- `data`: The result set
+- `meta`: Pagination metadata
+- `headers`: Response headers
+- `filters`: Applied filters
+- `request`: Original request object
+- `cursor_meta`: Cursor pagination metadata (if applicable)
+
+**Builder macro signature:**
+
+```php
+public function applyRequestFilters(
+    \Illuminate\Http\Request $request,
+    bool $isArray = false,
+    string $orderBy = 'id',
+    ?string $tenantColumn = ''
+): array
+```
+
+Because the macro has named parameters, you can also call it using named arguments (PHP 8+):
+
+```php
+$result = DB::table('invoices')->applyRequestFilters(
+    request: $request,
+    isArray: true,
+    orderBy: 'created_at',
+    tenantColumn: 'company_id',
+);
+```
+
+### Relationship Selection & Filtering
+
+Relationship loading uses the `select` or `with` query parameter for nested inclusion and filtering. Both parameters support the exact same syntax and capabilities.
+
+**Syntax:**
+`?select=column1,column2,relationship(column1,column2,filter)`
+or
+`?with=relationship(column1,column2,filter)`
+
+**Examples:**
+
+1. **Basic Inclusion:**
+   `GET /api/v1/invoices?select=*,customer(*)`
+   or
+   `GET /api/v1/invoices?with=customer(*)`
+   Fetches all columns from invoices and all columns from the `customer` relationship.
+
+2. **Nested Inclusion:**
+   `GET /api/v1/customers?select=*,orders(*,items(*))`
+   or
+   `GET /api/v1/customers?with=orders(*,items(*))`
+   Fetches customers with their orders and order items.
+
+3. **Filtering Nested Records (Embedding):**
+   You can apply filters to related records using the `column=operator.value` syntax inside the relationship parenthesis.
+
+   `GET /api/v1/projects?select=*,tasks(*,assignees(*,name=eq.admin))`
+   or
+   `GET /api/v1/projects?with=tasks(*,assignees(*,name=eq.admin))`
+
+   This fetches:
+   - All columns from `projects`
+   - All columns from `tasks`
+   - All columns from `assignees` (users) WHERE `name` equals `admin`.
+
+   **Supported Operators in Nested Filters:**
+   - `eq`: Equal (`name=eq.John`)
+   - `neq`: Not equal (`status=neq.archived`)
+   - `gt`, `gte`: Greater than (or equal) (`age=gte.18`)
+   - `lt`, `lte`: Less than (or equal) (`price=lt.100`)
+   - `like`: Pattern matching (`name=like.%Smith%`)
+   - `in`: In list (`status=in.active,pending`)
+
+   **Note:** If no operator is specified (e.g., `name=admin`), it defaults to equality (`eq`).
+
+4. **Filtering by Relationship (Top-Level):**
+   You can filter the main result set based on criteria in related tables using the dot notation `relationship.column=operator.value`.
+
+   `GET /api/v1/users?select=*,posts(*)&roles.name=eq.admin`
+   or
+   `GET /api/v1/users?with=posts(*)&roles.name=eq.admin`
+
+   This fetches:
+   - Users who have a role named 'admin'.
+   - Includes their posts (if requested via `select` or `with`).
+
+   **Supported Relationships:**
+   - `belongsTo`
+   - `hasMany` (uses EXISTS subquery)
+   - `hasManyThrough`
+   - `belongsToMany` (uses pivot table)
+
+   **Example:**
+   `GET /api/v1/posts?author.name=eq.John`
+   Fetches posts where the author's name is 'John'.
+
+5. **Combining `select` and `with`:**
+   You can use both parameters together. They will be merged automatically.
+   `GET /api/v1/customers?select=id,name&with=invoices(id,total)`
+
+6. **Using `with=` prefix inside `select`:**
+   For compatibility with some frontend libraries, you can prefix relationship names with `with=` inside the `select` parameter.
+   `GET /api/v1/customers?select=*,with=invoices(id,total)`
+
+### Supported Relationship Types
+
+The dynamic API understands all relationship types declared in `RecordRelationshipsEnum`. These relationships are configured per table via the `relationships` array on `RecordTableType` and are available to `select` and filter expressions.
+
+#### Belongs To (`belongsTo`)
+
+Use `RecordBelongsToType` when the current table has a foreign key pointing to a parent table.
+
+Example configuration:
+
+```php
+use Sopheak\Core\Enums\RecordRelationshipsEnum;
+use Sopheak\Core\Types\RecordBelongsToType;
+
+'invoices' => new RecordTableType(
+    table: 'invoices',
+    relationships: [
+        'customer' => new RecordBelongsToType(
+            table: 'customers',
+            type: RecordRelationshipsEnum::BELONGS_TO,
+            foreignKey: 'customer_id',
+            ownerKey: 'id',
+        ),
+    ],
+),
+```
+
+Example usage:
+
+- `GET /api/v1/invoices?select=*,customer(*)`
+- `GET /api/v1/invoices?customer.name=like.%Acme%`
+
+#### Has Many (`hasMany`)
+
+Use `RecordHasManyType` when the current table is the parent and the related table has the foreign key.
+
+Example configuration:
+
+```php
+use Sopheak\Core\Enums\RecordRelationshipsEnum;
+use Sopheak\Core\Types\RecordHasManyType;
+
+'customers' => new RecordTableType(
+    table: 'customers',
+    relationships: [
+        'invoices' => new RecordHasManyType(
+            table: 'invoices',
+            type: RecordRelationshipsEnum::HAS_MANY,
+            foreignKey: 'customer_id',
+            localKey: 'id',
+        ),
+    ],
+),
+```
+
+Example usage:
+
+- `GET /api/v1/customers?select=*,invoices(*)`
+- `GET /api/v1/customers?invoices.status=eq.paid`
+
+#### Has One (`hasOne`)
+
+Use `RecordHasManyType` with `RecordRelationshipsEnum::HAS_ONE` when the related table has a unique row per parent (semantically has-one, loaded via the same optimized path as has-many).
+
+Example configuration:
+
+```php
+'users' => new RecordTableType(
+    table: 'users',
+    relationships: [
+        'profile' => new RecordHasManyType(
+            table: 'user_profiles',
+            type: RecordRelationshipsEnum::HAS_ONE,
+            foreignKey: 'user_id',
+            localKey: 'id',
+        ),
+    ],
+),
+```
+
+Example usage:
+
+- `GET /api/v1/users?select=*,profile(*)`
+
+#### Belongs To Many (`belongsToMany`)
+
+Use `RecordMetaBelongsToManyType` for many-to-many relationships backed by a pivot table. This cannot be replaced by `RecordAassociationType` because `RecordAassociationType` only supports has-many-through over a meta table with owner/target columns and does not support pivot semantics (extra pivot columns, timestamps, morph pivots, or arbitrary pivot keys).
+
+Example configuration:
+
+```php
+use Sopheak\Core\Types\RecordMetaBelongsToManyType;
+
+'users' => new RecordTableType(
+    table: 'users',
+    relationships: [
+        'roles' => new RecordMetaBelongsToManyType(
+            related: 'roles',
+            type: RecordRelationshipsEnum::BELONGS_TO_MANY,
+            table: 'role_user',
+            foreignPivotKey: 'user_id',
+            relatedPivotKey: 'role_id',
+        ),
+    ],
+),
+```
+
+Example usage:
+
+- `GET /api/v1/users?select=*,roles(*)`
+- `GET /api/v1/users?roles.name=eq.admin`
+
+#### Has Many Through (`hasManyThrough`)
+
+Three variants are supported:
+
+1. **Standard has-many-through** using `RecordHasManyThroughType`.
+2. **Global meta-table has-many-through** using `RecordMetaHasManyThroughType`.
+3. **Association has-many-through** using `RecordAassociationType` with simplified parameters.
+
+`RecordAassociationType` can replace `RecordMetaHasManyThroughType` only when your meta table uses the standard columns (`owner`, `owner_id`, `target`, `target_id`) and `owner` stores the source table name while `target` stores the related table name. If your meta table uses different column names or needs ownerColumn customization, keep `RecordMetaHasManyThroughType`.
+
+Standard example:
+
+```php
+use Sopheak\Core\Types\RecordHasManyThroughType;
+
+'projects' => new RecordTableType(
+    table: 'projects',
+    relationships: [
+        'tasks' => new RecordHasManyThroughType(
+            table: 'tasks',
+            through: 'project_tasks',
+            firstKey: 'project_id',
+            secondKey: 'id',
+            localKey: 'id',
+            secondLocalKey: 'task_id',
+        ),
+    ],
+),
+```
+
+Global meta-table example:
+
+```php
+use Sopheak\Core\Types\RecordMetaHasManyThroughType;
+
+'packages' => new RecordTableType(
+    table: 'packages',
+    relationships: [
+        'modules' => new RecordMetaHasManyThroughType(
+            table: 'modules',
+            through: 'meta',
+            firstKey: 'owner_id',
+            secondKey: 'id',
+            localKey: 'id',
+            secondLocalKey: 'target_id',
+            ownerColumn: 'owner',
+            owner: 'package',
+        ),
+    ],
+),
+```
+
+Example usage:
+
+- `GET /api/v1/projects?select=*,tasks(*)`
+- `GET /api/v1/packages?select=*,modules(*)`
+
+Association example (simplified parameters with meta table):
+
+```php
+use Sopheak\Core\Types\RecordAassociationType;
+
+'packages' => new RecordTableType(
+    table: 'packages',
+    relationships: [
+        'modules' => new RecordAassociationType(
+            related: 'meta',
+            type: RecordRelationshipsEnum::HAS_MANY_THROUGH,
+            fromObjectType: 'packages',
+            fromObjectId: 'owner_id',
+            toObjectType: 'modules',
+            toObjectId: 'target_id',
+        ),
+    ],
+),
+```
+
+Example usage:
+
+- `GET /api/v1/packages?select=*,modules(*)`
+
+#### Has One Through (`hasOneThrough`)
+
+`RecordHasManyThroughType` also supports the `HAS_ONE_THROUGH` semantic. In most cases, you configure it the same way as has-many-through but use the enum to indicate the expected cardinality.
+
+Example configuration:
+
+```php
+'users' => new RecordTableType(
+    table: 'users',
+    relationships: [
+        'latestInvoice' => new RecordHasManyThroughType(
+            table: 'invoices',
+            through: 'invoice_logs',
+            firstKey: 'user_id',
+            secondKey: 'id',
+            localKey: 'id',
+            secondLocalKey: 'invoice_id',
+            orderBy: ['created_at' => 'desc'],
+            type: RecordRelationshipsEnum::HAS_ONE_THROUGH,
+        ),
+    ],
+),
+```
+
+Example usage:
+
+- `GET /api/v1/users?select=*,latestInvoice(*)`
+
+#### Morph Relationships
+
+Morph relationships are detected via `RecordRelationshipsEnum::isMorphRelationship()` and are supported anywhere relationship selection is supported.
+
+##### morphTo / morphOne / morphMany
+
+These are typically configured via specialized resource classes or custom loaders. The enum types are:
+
+- `MORPH_TO`
+- `MORPH_ONE`
+- `MORPH_MANY`
+
+Example conceptual usage (comments only):
+
+- A `comments` table with `commentable_type` and `commentable_id` can be exposed as a morphTo relationship from `comments` to multiple parent tables (e.g. posts, invoices).
+- In the API, you can select nested comments using `?select=*,comments(*)` regardless of the underlying parent model.
+
+##### morphToMany / morphByMany
+
+Many-to-many morph relationships use a pivot table and are treated as pivot-supporting morph types.
+
+Example using `RecordMetaBelongsToManyType` with a morph relation:
+
+```php
+'models' => new RecordTableType(
+    table: 'models',
+    relationships: [
+        'roles' => new RecordMetaBelongsToManyType(
+            related: config('permission.models.role'),
+            type: RecordRelationshipsEnum::MORPH_TO_MANY,
+            table: config('permission.table_names.model_has_roles'),
+            foreignPivotKey: config('permission.column_names.model_morph_key'),
+            relatedPivotKey: 'role_id',
+            relation: 'model',
+        ),
+    ],
+),
+```
+
+Example usage:
+
+- `GET /api/v1/models?select=*,roles(*)`
+
+##### Spatie Permission (`spatiePermission`)
+
+The package includes a dedicated `RecordSpatiePermissionType` to integrate with `spatie/laravel-permission` using a morphToMany pattern.
+
+Example configuration:
+
+```php
+use Sopheak\Core\Types\RecordSpatiePermissionType;
+
+'users' => new RecordTableType(
+    table: 'users',
+    relationships: [
+        'roles' => new RecordSpatiePermissionType(
+            related: config('permission.models.role'),
+            relation: 'model',
+            recordRelationshipsEnum: RecordRelationshipsEnum::SPATIE_PERMISSION,
+            table: config('permission.table_names.model_has_roles'),
+            foreignPivotKey: config('permission.column_names.model_morph_key'),
+            relatedPivotKey: 'role_id',
+        ),
+    ],
+),
+```
+
+Example usage:
+
+- `GET /api/v1/users?select=*,roles(*)`
+- `GET /api/v1/users?roles.name=eq.admin`
+
+### Relationship Write Payload Guide
+
+For `POST` / `PUT` / `PATCH`, relationship input is type-driven and should follow the config in `RecordTableType->relationships`.
+
+#### What can be sent in payload
+
+| Enum type (`RecordRelationshipsEnum`) | Payload support | Payload shape |
+|---|---|---|
+| `BELONGS_TO` | ✅ FK scalar only | `customer_id: 10` |
+| `HAS_MANY` | ✅ alias array | `items: [1, {"id": 2}, {"name": "Line A"}]` |
+| `BELONGS_TO_MANY` | ✅ alias array | `roles: [1, {"id": 2}]` |
+| `HAS_MANY_THROUGH` | ✅ alias array | `tasks: [3, {"id": 4}]` |
+| `MORPH_MANY` | ✅ alias array | `comments: [1, {"id": 2}]` |
+| `MORPH_TO_MANY` | ✅ alias array | `roles: [1, {"id": 2}]` |
+| `MORPH_BY_MANY` | ✅ alias array | `tags: [1, {"id": 2}]` |
+| `SPATIE_PERMISSION` | ✅ alias array | `roles: [1, {"id": 2}]` |
+| `HAS_ONE` | ⚠️ use FK style of your schema | Prefer scalar FK field in root payload |
+| `HAS_ONE_THROUGH` | ⚠️ not a direct write alias | Use main table fields / custom function |
+| `MORPH_TO` | ⚠️ use morph columns in root payload | `commentable_type`, `commentable_id` |
+| `MORPH_ONE` | ⚠️ use FK style of your schema | Prefer scalar FK field in root payload |
+
+#### FK-style examples (`BELONGS_TO`)
+
+```json
+{
+  "ref_number": "INV-1001",
+  "customer_id": 10
+}
+```
+
+Do not send:
+
+```json
+{
+  "customer": { "id": 10, "name": "Acme" }
+}
+```
+
+#### Many-type alias examples (`*Many`)
+
+```json
+{
+  "items": [
+    1,
+    { "id": 2 },
+    { "name": "Line A", "qty": 1 },
+    { "id": 5, "_delete": true }
+  ]
+}
+```
+
+#### Pivot-style examples (`BELONGS_TO_MANY`, `MORPH_TO_MANY`, `SPATIE_PERMISSION`)
+
+```json
+{
+  "roles": [
+    1,
+    { "id": 2 },
+    { "id": 3, "_delete": true }
+  ]
+}
+```
+
+#### Notes
+
+- Array relationship aliases are accepted only when declared in table `relationships` config.
+- For `BELONGS_TO`, the payload should use root FK scalar fields, not nested objects.
+- `_delete` / `_destroy` can be used on alias-array items where relationship handling supports detach/remove.
+
