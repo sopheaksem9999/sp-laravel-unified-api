@@ -190,8 +190,9 @@ class RecordConfigService
         $recordTables = (array) config('record.tables', []);
         $attachmentEnabled = (bool) config('attachments.enabled', true);
         $attachmentTables = $attachmentEnabled ? (array) config('attachments.tables', []) : [];
+        $webhookTables = (array) config('webhooks.tables', []);
         
-        return array_merge($attachmentTables, $recordTables);
+        return array_merge($webhookTables, $attachmentTables, $recordTables);
     }
 
     public static function table(string $table): mixed
@@ -202,10 +203,13 @@ class RecordConfigService
         }
         
         if ((bool) config('attachments.enabled', true)) {
-            return config('attachments.tables.' . $table, []);
+            $attachmentTable = config('attachments.tables.' . $table);
+            if ($attachmentTable !== null) {
+                return $attachmentTable;
+            }
         }
 
-        return [];
+        return config('webhooks.tables.' . $table, []);
     }
 
     public static function cacheDefaultTtl(): int

@@ -28,6 +28,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__ . '/../config/sp-laravel-api.php', 'sp-laravel-api');
         $this->mergeConfigFrom(__DIR__ . '/../config/attachments.php', 'attachments');
+        $this->mergeConfigFrom(__DIR__ . '/../config/webhooks.php', 'webhooks');
 
         $this->app->singleton('api.response', fn(): RecordApiResponseService => new RecordApiResponseService());
         $this->app->singleton(AuditLogService::class);
@@ -41,6 +42,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
             __DIR__ . '/../config/audit.php' => config_path('audit.php'),
             __DIR__ . '/../config/record.php' => config_path('record.php'),
             __DIR__ . '/../config/attachments.php' => config_path('attachments.php'),
+            __DIR__ . '/../config/webhooks.php' => config_path('webhooks.php'),
         ], 'sp-laravel-api-config');
 
         $this->publishes([

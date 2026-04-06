@@ -50,6 +50,7 @@ class ValidateSetupCommand extends Command
         $this->validateSchemaRegistryUtils();
         $this->validateRoutes();
         $this->validateRateLimiters();
+        $this->validateWebhooks();
 
         // Display results
         $this->displayResults();
@@ -70,6 +71,8 @@ class ValidateSetupCommand extends Command
             'audit.php' => 'Audit logging configuration',
             'cursor_pagination.php' => 'Cursor pagination configuration',
             'sp-laravel-api.php' => 'Main package configuration',
+            'attachments.php' => 'Attachments configuration',
+            'webhooks.php' => 'Webhooks configuration',
         ];
 
         foreach ($configFiles as $file => $description) {
@@ -373,6 +376,37 @@ class ValidateSetupCommand extends Command
             }
         } catch (Exception $exception) {
             $this->addResult('❌', 'Route check failed: ' . $exception->getMessage(), 'error');
+        }
+    }
+
+    private function validateWebhooks(): void
+    {
+        $this->info('🪝 Checking Webhooks Configuration...');
+
+        $enabled = config('webhooks.enabled', false);
+        
+        if ($enabled) {
+            $this->addResult('✅', 'Webhooks module is enabled', 'success');
+            
+            // Check if tables exist
+            try {
+                $tables = DB::select($this->getTableListQuery(DB::getDriverName()));
+                $tableNames = array_map(fn($table): string => $this->getTableNameFromResult($table, DB::getDriverName()), $tables);
+
+                $webhookTables = ['sp_webhook_endpoints', 'sp_webhook_subscriptions', 'sp_webhook_deliveries'];
+                $missingTables = array_diff($webhookTables, $tableNames);
+
+                if (empty($missingTables)) {
+                    $this->addResult('✅', 'Webhook tables exist', 'success');
+                } else {
+                    $this->addResult('❌', 'Missing webhook tables: ' . implode(', ', $missingTables), 'error');
+                    $this->addResult('ℹ️', 'Run: php artisan migrate', 'info');
+                }
+            } catch (Exception $exception) {
+                $this->addResult('❌', 'Webhook table check failed: ' . $exception->getMessage(), 'error');
+            }
+        } else {
+            $this->addResult('ℹ️', 'Webhooks module is disabled (SP_LARAVEL_API_WEBHOOKS_ENABLED=false)', 'info');
         }
     }
 
