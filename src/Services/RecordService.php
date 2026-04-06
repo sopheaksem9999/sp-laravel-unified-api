@@ -2702,7 +2702,11 @@ class RecordService
         }
 
         foreach ($registry as $configuredFunctionName => $config) {
-            if (!is_string($configuredFunctionName) || '' === $configuredFunctionName) {
+            if (!is_string($configuredFunctionName)) {
+                continue;
+            }
+
+            if ('' === $configuredFunctionName) {
                 continue;
             }
 
@@ -2755,7 +2759,7 @@ class RecordService
                 continue;
             }
 
-            $routeParams[$name] = urldecode((string) $matches[$matchIndex]);
+            $routeParams[$name] = urldecode($matches[$matchIndex]);
         }
 
         return $routeParams;

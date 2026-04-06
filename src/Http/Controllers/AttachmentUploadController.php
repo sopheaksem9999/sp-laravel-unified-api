@@ -64,7 +64,7 @@ class AttachmentUploadController extends Controller
             $attachment['url'] = $disk->url((string) ($attachment['path'] ?? ''));
         } else {
             $attachmentPrefix = config('attachments.route_prefix', 'attachments');
-            $attachment['url'] = url(RecordConfigService::apiPrefix() . '/' . $attachmentPrefix . '/' . ((string) ($attachment['id'] ?? '')) . '/download');
+            $attachment['url'] = url(RecordConfigService::apiPrefix() . '/' . $attachmentPrefix . '/' . (($attachment['id'] ?? '')) . '/download');
         }
 
         return $attachment;
