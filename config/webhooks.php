@@ -12,10 +12,12 @@ return [
     |
     | - enabled: Enable or disable the webhook module (default: false)
     | - queue_name: The queue connection/name to dispatch webhook jobs to (default: 'default')
+    | - max_payload_bytes: Maximum JSON payload size for signing (default: 1MB)
     |
     */
     'enabled' => env('SP_LARAVEL_API_WEBHOOKS_ENABLED', false),
     'queue_name' => env('SP_LARAVEL_API_WEBHOOKS_QUEUE', 'default'),
+    'max_payload_bytes' => env('SP_LARAVEL_API_WEBHOOKS_MAX_PAYLOAD', 1048576),
 
     /*
     |--------------------------------------------------------------------------

@@ -3,6 +3,7 @@
 namespace Sopheak\Core\Jobs;
 
 use Illuminate\Http\Client\Response;
+use JsonException;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -51,7 +52,27 @@ class DispatchWebhookJob implements ShouldQueue
      */
     public function handle(): void
     {
-        $payloadJson = json_encode($this->payload);
+        try {
+            $payloadJson = json_encode($this->payload, JSON_THROW_ON_ERROR);
+        } catch (JsonException $exception) {
+            RecordService::executeUpdate('sp_webhook_deliveries', $this->deliveryId, [
+                'response_status' => 422,
+                'response_body' => $exception->getMessage(),
+                'status' => 'failed',
+            ], [], $this->tenantId);
+            return;
+        }
+
+        $maxBytes = (int) config('webhooks.max_payload_bytes', 1048576);
+        if ($maxBytes > 0 && strlen($payloadJson) > $maxBytes) {
+            RecordService::executeUpdate('sp_webhook_deliveries', $this->deliveryId, [
+                'response_status' => 413,
+                'response_body' => 'Payload too large',
+                'status' => 'failed',
+            ], [], $this->tenantId);
+            return;
+        }
+
         $signature = hash_hmac('sha256', $payloadJson ?: '', $this->secret);
 
         try {
