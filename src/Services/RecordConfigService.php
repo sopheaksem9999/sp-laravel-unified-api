@@ -190,7 +190,8 @@ class RecordConfigService
         $recordTables = (array) config('record.tables', []);
         $attachmentEnabled = (bool) config('attachments.enabled', true);
         $attachmentTables = $attachmentEnabled ? (array) config('attachments.tables', []) : [];
-        $webhookTables = (array) config('webhooks.tables', []);
+        $webhookEnabled = (bool) config('webhooks.enabled', false);
+        $webhookTables = $webhookEnabled ? (array) config('webhooks.tables', []) : [];
         
         return array_merge($webhookTables, $attachmentTables, $recordTables);
     }
