@@ -542,6 +542,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Model Context Protocol (MCP) Support
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for the AI agent MCP integration.
+    | - enabled: Toggle the MCP feature entirely (default: false).
+    | - read_only: Globally disable MCP write tools (create, update, delete).
+    | - route_prefix: The prefix for HTTP/SSE MCP endpoints.
+    | - middleware: The middleware applied to the HTTP/SSE endpoints.
+    */
+    'mcp' => [
+        'enabled' => env('SP_MCP_ENABLED', false),
+        'read_only' => env('SP_MCP_READ_ONLY', false),
+        'route_prefix' => env('SP_MCP_ROUTE_PREFIX', 'mcp'),
+        'middleware' => ['api', 'auth:sanctum'],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | RPC Route Prefix Configuration
     |--------------------------------------------------------------------------
     |

@@ -33,3 +33,4 @@ This API reference is now chunked into smaller feature files for cleaner navigat
 12. [Realtime Events, OpenAPI Export, and Attribute Config](./guide/api-realtime-openapi-attribute-config.md)
 13. [Error Responses, Rate Limiting, and Security](./guide/api-errors-rate-security.md)
 14. [QueryHelpers Trait Documentation](./guide/api-queryhelpers-trait.md)
+15. [Model Context Protocol (MCP) Support](./guide/module-mcp.md)

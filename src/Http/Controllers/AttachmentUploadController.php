@@ -64,7 +64,7 @@ class AttachmentUploadController extends Controller
             $attachment['url'] = $disk->url((string) ($attachment['path'] ?? ''));
         } else {
             $attachmentPrefix = config('attachments.route_prefix', 'attachments');
-            $attachment['url'] = url(RecordConfigService::apiPrefix() . '/' . $attachmentPrefix . '/' . (($attachment['id'] ?? '')) . '/download');
+            $attachment['url'] = url(RecordConfigService::apiPrefix() . '/' . $attachmentPrefix . '/' . ($attachment['id'] ?? '') . '/download');
         }
 
         return $attachment;
@@ -142,10 +142,6 @@ class AttachmentUploadController extends Controller
         }
 
         if (is_string($requestedVisibility) && '' !== trim($requestedVisibility)) {
-            if ($asTemp && !in_array($requestedVisibility, ['temp_private', 'temp_public'], true)) {
-                return $defaultTempVisibility;
-            }
-
             return $requestedVisibility;
         }
 
@@ -622,6 +618,12 @@ class AttachmentUploadController extends Controller
         }
 
         $visibility = $this->resolveVisibility($request, (string) ($sourceAttachment['visibility'] ?? 'private'), true);
+        
+        // If visibility is explicitly provided in the request, use it
+        if ($request->has('visibility')) {
+            $visibility = $request->input('visibility');
+        }
+        
         $disk = $this->resolveDiskFromVisibility($visibility);
 
         $sourceFilename = (string) ($sourceAttachment['filename'] ?? '');
@@ -658,7 +660,11 @@ class AttachmentUploadController extends Controller
 
         $attachment = RecordService::executeCreate('sp_attachments', $attachmentPayload, [], $tenantId);
         $attachment = $this->extractRecordPayload($attachment);
-        $attachment = $this->appendUrlToAttachment($attachment);
+        
+        // The trigger might have appended the URL already, but we ensure it's there
+        if (!isset($attachment['url'])) {
+            $attachment = $this->appendUrlToAttachment($attachment);
+        }
         $this->linkAttachmentIfRequested($request, (string) $attachment['id'], $tenantId);
 
         return RecordApiResponseService::success($attachment);

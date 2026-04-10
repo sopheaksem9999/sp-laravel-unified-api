@@ -51,6 +51,7 @@ class ValidateSetupCommand extends Command
         $this->validateRoutes();
         $this->validateRateLimiters();
         $this->validateWebhooks();
+        $this->validateMcpConfiguration();
 
         // Display results
         $this->displayResults();
@@ -407,6 +408,29 @@ class ValidateSetupCommand extends Command
             }
         } else {
             $this->addResult('ℹ️', 'Webhooks module is disabled (SP_LARAVEL_API_WEBHOOKS_ENABLED=false)', 'info');
+        }
+    }
+
+    /**
+     * Validate MCP Configuration.
+     */
+    private function validateMcpConfiguration(): void
+    {
+        $this->info('🤖 Checking MCP Configuration...');
+
+        $mcpConfig = config('record.mcp');
+
+        if (is_array($mcpConfig)) {
+            $this->addResult('✅', 'MCP configuration exists', 'success');
+
+            if ($mcpConfig['enabled'] ?? false) {
+                $this->addResult('ℹ️', 'MCP module is enabled', 'info');
+            } else {
+                $this->addResult('ℹ️', 'MCP module is disabled (SP_MCP_ENABLED=false)', 'info');
+            }
+        } else {
+            $this->addResult('⚠️', 'MCP configuration is missing from config/record.php', 'warning');
+            $this->addResult('ℹ️', 'Add the mcp configuration array or run: php artisan sp-laravel-api:setup', 'info');
         }
     }
 

@@ -54,10 +54,10 @@ class DispatchWebhookJob implements ShouldQueue
     {
         try {
             $payloadJson = json_encode($this->payload, JSON_THROW_ON_ERROR);
-        } catch (JsonException $exception) {
+        } catch (JsonException $jsonException) {
             RecordService::executeUpdate('sp_webhook_deliveries', $this->deliveryId, [
                 'response_status' => 422,
-                'response_body' => $exception->getMessage(),
+                'response_body' => $jsonException->getMessage(),
                 'status' => 'failed',
             ], [], $this->tenantId);
             return;

@@ -29,6 +29,7 @@ This directory contains the API reference split into focused chunks for faster r
 12. [Realtime Events, OpenAPI Export, and Attribute Config](./api-realtime-openapi-attribute-config.md)
 13. [Error Responses, Rate Limiting, and Security](./api-errors-rate-security.md)
 14. [QueryHelpers Trait Documentation](./api-queryhelpers-trait.md)
+15. [Model Context Protocol (MCP) Support](./module-mcp.md)
 
 ## Usage Tip for AI Agents
 

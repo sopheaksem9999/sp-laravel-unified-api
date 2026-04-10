@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Services;
 
+use Illuminate\Support\LazyCollection;
 use ArgumentCountError;
 use Illuminate\Support\Carbon;
 use Closure;
@@ -50,6 +51,11 @@ class RecordApiResponseService
     {
         if (null === $data) {
             return null;
+        }
+
+        // Handle Laravel LazyCollection
+        if ($data instanceof LazyCollection) {
+            return $data->map(fn($item): mixed => static::removeHiddenFields($item, $table));
         }
 
         // Handle Laravel Collections
@@ -151,6 +157,10 @@ class RecordApiResponseService
 
         if (DB::getDriverName() !== 'pgsql') {
             return $data;
+        }
+
+        if ($data instanceof LazyCollection) {
+            return $data->map(fn($item): mixed => static::convertCompositeFields($item, $table));
         }
 
         if ($data instanceof Collection) {
@@ -490,6 +500,10 @@ class RecordApiResponseService
                 $data->currentPage(),
                 ['path' => request()->url(), 'pageName' => 'page']
             );
+        }
+
+        if ($data instanceof LazyCollection) {
+            return $data->map($applyToRow);
         }
 
         if ($data instanceof Collection) {
@@ -835,6 +849,14 @@ class RecordApiResponseService
             return array_map($applyToRow, $data);
         }
 
+        if ($data instanceof LazyCollection) {
+            return $data->map($applyToRow);
+        }
+
+        if ($data instanceof Collection) {
+            return $data->map($applyToRow);
+        }
+
         // Single record (array or object)
         if (is_array($data) || is_object($data)) {
             return $applyToRow($data);
@@ -1163,6 +1185,11 @@ class RecordApiResponseService
 
         // Handle objects (including stdClass and Eloquent models)
         if (is_object($data)) {
+            // Handle Laravel LazyCollection
+            if ($data instanceof LazyCollection) {
+                return $data->map(fn($item): mixed => static::removeDeletedAtFields($item));
+            }
+
             // Handle Laravel Collections
             if ($data instanceof Collection) {
                 return $data->map(fn($item): mixed => static::removeDeletedAtFields($item));

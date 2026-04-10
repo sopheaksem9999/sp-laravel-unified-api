@@ -22,6 +22,8 @@ use Sopheak\Core\Services\QueryCacheService;
 use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\RecordService;
 
+use Sopheak\Core\Console\McpServerCommand;
+
 class CoreSpLaravelApiProvider extends ServiceProvider
 {
     public function register(): void
@@ -54,6 +56,13 @@ class CoreSpLaravelApiProvider extends ServiceProvider
         // Load package routes
         $this->loadRoutesFrom(__DIR__ . '/../routes/api.php');
         $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
+        if (config('record.mcp.enabled', false)) {
+            $this->commands([
+                \Sopheak\Core\Console\McpServerCommand::class,
+            ]);
+
+            $this->loadRoutesFrom(__DIR__ . '/../routes/mcp.php');
+        }
 
         if ($this->app->runningInConsole()) {
             $commands = [
