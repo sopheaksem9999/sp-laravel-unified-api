@@ -41,12 +41,14 @@ curl -X GET http://your-app.test/api/v1/users
 - **🔀 Bulk Operations Toggle**: Enable/disable all bulk endpoints via a single config flag (`record.bulk_operations`)
 - **🗑️ Soft Delete Query Shortcuts**: `?with_trashed=true` on list/show endpoints; `?force=true` on delete for inline permanent removal
 - **📡 Real-Time Broadcast Events**: Opt-in `RecordMutated` broadcast event on every mutation — filterable per table via `disableBroadcast`
+- **🤖 MCP (Model Context Protocol) Support**: Built-in Stdio and HTTP/SSE MCP servers to securely expose API schemas and CRUD tools to AI agents natively.
 - **📤 OpenAPI Export Command**: `php artisan sp-laravel-api:export-openapi` — export the live schema to JSON or YAML
 - **🏷️ PHP 8.3 Attribute-Based Config**: `#[RecordTable]` and `#[RecordRelationship]` attributes for model-co-located table configuration with auto-discovery
 
 ## 📚 Documentation
 
 - [API Documentation](docs/api-documentation.md): Detailed guide on endpoints, request/response formats, and bulk operations.
+- [MCP Support](docs/guide/module-mcp.md): Guide to configuring and using the Model Context Protocol for AI integrations.
 - [Performance & Scalability](docs/performance.md): Benchmark results and optimization strategies.
 - [Audit Interface](docs/audit-interface.md): How to implement custom audit logging.
 - [Legacy Cursor Pagination](docs/cursor-pagination.md): Background on the removed cursor-based paginator.
@@ -986,6 +988,8 @@ php artisan route:clear
   php artisan sp-laravel-api:sync-record-columns
   # Validate SP Laravel API package setup and configuration
   php artisan sp-laravel-api:validate
+  # Start the Model Context Protocol (MCP) Stdio server for AI integrations
+  php artisan sp-laravel-api:mcp
 ```
 
 ### Debug Mode
@@ -1443,6 +1447,9 @@ php artisan sp-laravel-api:clean-audit-logs
 php artisan sp-laravel-api:clean-audit-logs --dry-run
 php artisan sp-laravel-api:clean-audit-logs --force --days=30
 php artisan sp-laravel-api:clean-audit-logs --batch-size=500
+
+# Start Model Context Protocol (MCP) Stdio server
+php artisan sp-laravel-api:mcp
 ```
 
 ### Export OpenAPI Schema

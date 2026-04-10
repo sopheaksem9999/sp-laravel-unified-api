@@ -101,9 +101,14 @@ class RecordConfigService
         return (int) config('record.cache_ttl', 3600);
     }
 
+    public static function allowLeadingWildcards(): bool
+    {
+        return (bool) config('record.allow_leading_wildcards', true);
+    }
+
     public static function maxDepth(): int
     {
-        return (int) config('record.max_depth', 10);
+        return (int) config('record.max_depth', 3);
     }
 
     public static function defaultCascade(): array

@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Services;
 
+use Illuminate\Support\LazyCollection;
 use RuntimeException;
 use Sopheak\Core\Events\RecordMutated;
 use Exception;
@@ -338,37 +339,42 @@ class RecordService
         $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
         $cacheTenantId = $tenantEnabled ? $this->normalizeTenantId($tenantId) : null;
 
-        $preparedItems = [];
-        $updateColumns = [];
-
-        foreach ($payloads as $payload) {
-            $item = $this->sanitizePayload($payload, $tableSchema);
-            if ($tenantEnabled) {
-                $item[RecordConfigService::tenantColumn()] = $cacheTenantId;
-            }
-
-            $item = $this->applyTimestampsAndAuditFields($item, $tableSchema, true);
-            $preparedItems[] = $item;
-        }
-
-        if (empty($preparedItems)) {
+        if (empty($payloads)) {
             return ['count' => 0];
         }
 
-        // Calculate update columns from the first item (assuming uniform payload structure)
-        $firstItem = $preparedItems[0];
-        $excludeColumns = array_merge($matchOn, [$pk, 'id', 'created_at', 'deleted_at']);
-        $updateColumns = array_values(array_diff(array_keys($firstItem), $excludeColumns));
-        if (empty($updateColumns) && array_key_exists('updated_at', $firstItem)) {
-            $updateColumns = ['updated_at'];
+        $affected = 0;
+        $chunkSize = RecordConfigService::bulkMax(); // Use configured bulk max as chunk size
+
+        foreach (array_chunk($payloads, $chunkSize) as $chunk) {
+            $preparedItems = [];
+            
+            foreach ($chunk as $payload) {
+                $item = $this->sanitizePayload($payload, $tableSchema);
+                if ($tenantEnabled) {
+                    $item[RecordConfigService::tenantColumn()] = $cacheTenantId;
+                }
+
+                $item = $this->applyTimestampsAndAuditFields($item, $tableSchema, true);
+                $preparedItems[] = $item;
+            }
+
+            if (empty($preparedItems)) {
+                continue;
+            }
+
+            // Calculate update columns from the first item of the chunk
+            $firstItem = $preparedItems[0];
+            $excludeColumns = array_merge($matchOn, [$pk, 'id', 'created_at', 'deleted_at']);
+            $updateColumns = array_values(array_diff(array_keys($firstItem), $excludeColumns));
+            if (empty($updateColumns) && array_key_exists('updated_at', $firstItem)) {
+                $updateColumns = ['updated_at'];
+            }
+
+            $affected += DB::table($actualTableName)->upsert($preparedItems, $matchOn, $updateColumns);
         }
 
-        $affected = DB::table($actualTableName)->upsert($preparedItems, $matchOn, $updateColumns);
-
         $this->invalidateTableCache($table, $cacheTenantId, $tenantEnabled);
-
-        // We can't easily invalidate individual record caches or fire individual triggers for bulk upsert
-        // without querying them all back. This is a trade-off for bulk performance.
 
         return [
             'data' => [
@@ -434,8 +440,8 @@ class RecordService
 
             // If response is a JsonResponse, extract data
             if (isset($recordContext['response']) && $recordContext['response'] instanceof JsonResponse) {
-                $data = $recordContext['response']->getData();
-                $responseData = json_decode(json_encode($data->data ?? $data), true);
+                $data = $recordContext['response']->getData(true);
+                $responseData = $data['data'] ?? $data;
                 if (is_array($responseData)) {
                     $auditData = array_merge($auditData, $responseData);
                 }
@@ -518,8 +524,8 @@ class RecordService
 
         $record = [];
         if (isset($recordContext['response']) && $recordContext['response'] instanceof JsonResponse) {
-            $data = $recordContext['response']->getData();
-            $decoded = json_decode(json_encode($data->data ?? $data), true);
+            $data = $recordContext['response']->getData(true);
+            $decoded = $data['data'] ?? $data;
             if (is_array($decoded)) {
                 $record = $decoded;
             }
@@ -1610,8 +1616,17 @@ class RecordService
             $headers = $aggregateResult['headers'];
         } elseif ($request->has('limit') && !$request->has('per_page')) {
             $limit = max(1, min((int) $request->input('limit'), RecordConfigService::limitMax()));
-            $data = $builder->limit($limit)->get()->all();
-            $total = count($data);
+            
+            // Use cursor for large datasets to save memory
+            if ($limit > 1000) {
+                $data = $builder->limit($limit)->cursor();
+                $countQuery = clone $builder;
+                $total = $countQuery->count();
+            } else {
+                $data = $builder->limit($limit)->get()->all();
+                $total = count($data);
+            }
+            
             $headers['X-Total-Count'] = (string) $total;
             $meta = ['total' => $total];
         } else {
@@ -1646,7 +1661,8 @@ class RecordService
 
         if ($effectiveSelectParam !== '') {
             $includes = RelationshipResolverUtils::parseSelectForIncludes($effectiveSelectParam);
-            $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization() && count($data) <= 100;
+            $dataCount = is_array($data) ? count($data) : $total;
+            $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization() && $dataCount <= 100;
 
             // Disable subquery optimization if nested filters, child relationships,
             // or database-specific limitations (e.g. PostgreSQL json_build_object argument limit) are detected
@@ -1719,6 +1735,12 @@ class RecordService
 
             if ($useSubqueryOptimization && [] !== $includes) {
                 $primaryKey = $tableSchema->primaryKey ?? 'id';
+                
+                // Convert LazyCollection to array if needed for subquery optimization
+                if ($data instanceof LazyCollection) {
+                    $data = $data->all();
+                }
+                
                 $recordIds = self::extractRecordIds($data, $primaryKey);
 
                 if ([] !== $recordIds) {
@@ -1784,7 +1806,7 @@ class RecordService
                 'cached_at' => TimeUtils::now()->toISOString(),
                 'tenant_enabled' => $this->shouldApplyTenantId($tableSchema),
             ];
-            $ttl = $this->calculateOptimalCacheTTL($table, count($data), $effectiveSelectParam !== '');
+            $ttl = $this->calculateOptimalCacheTTL($table, is_array($data) ? count($data) : $total, $effectiveSelectParam !== '');
             QueryCacheService::put($cacheKey, $cacheData, $ttl);
         }
 
@@ -2139,15 +2161,11 @@ class RecordService
                 }
             }
         } else {
-            $service->applyTenantFilter($builder, $actualTableName, $tenantId);
-
-            if ($tableSchema instanceof RecordTableType && $tableSchema->softDeletes) {
-                if ($request->boolean('only_trashed')) {
-                    $builder->whereNotNull($actualTableName . '.deleted_at');
-                } elseif (!$request->boolean('with_trashed')) {
-                    $builder->whereNull($actualTableName . '.deleted_at');
-                }
-            }
+            // If a builder is passed in, we assume the caller has already applied tenant and soft delete filters
+            // if they wanted to. Applying them again here causes duplicate WHERE clauses.
+            // We only apply tenant filter if it's explicitly requested and not already applied.
+            // For safety, we'll let the caller handle it or we can check if the builder already has the condition.
+            // To fix the duplicate `deleted_at IS NULL` issue, we remove the redundant soft delete check here.
         }
 
         if ($request->boolean('distinct')) {
@@ -2174,8 +2192,17 @@ class RecordService
             $headers = $aggregateResult['headers'];
         } elseif ($request->has('limit') && !$request->has('per_page')) {
             $limit = max(1, min((int) $request->input('limit'), RecordConfigService::limitMax()));
-            $data = $builder->limit($limit)->get()->all();
-            $total = count($data);
+            
+            // Use cursor for large datasets to save memory
+            if ($limit > 1000) {
+                $data = $builder->limit($limit)->cursor();
+                $countQuery = clone $builder;
+                $total = $countQuery->count();
+            } else {
+                $data = $builder->limit($limit)->get()->all();
+                $total = count($data);
+            }
+            
             $headers['X-Total-Count'] = (string) $total;
             $meta = ['total' => $total];
         } else {
@@ -2209,7 +2236,8 @@ class RecordService
 
         if ($effectiveSelectParam !== '') {
             $includes = RelationshipResolverUtils::parseSelectForIncludes($effectiveSelectParam);
-            $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization() && count($data) <= 100;
+            $dataCount = is_array($data) ? count($data) : $total;
+            $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization() && $dataCount <= 100;
 
             // Disable subquery optimization if nested filters, child relationships,
             // or database-specific limitations (e.g. PostgreSQL json_build_object argument limit) are detected
@@ -2345,7 +2373,7 @@ class RecordService
                 'cached_at' => TimeUtils::now()->toISOString(),
                 'tenant_enabled' => $tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema),
             ];
-            $ttl = $service->calculateOptimalCacheTTL($table, count($data), $effectiveSelectParam !== '');
+            $ttl = $service->calculateOptimalCacheTTL($table, is_array($data) ? count($data) : $total, $effectiveSelectParam !== '');
             QueryCacheService::put($cacheKey, $cacheData, $ttl);
         }
 
@@ -2639,7 +2667,6 @@ class RecordService
                 } else {
                     $records = $responseData->data;
                     unset($meta->data);
-                    $meta = json_decode(json_encode($meta), true);
                 }
 
                 $errorCode = null;

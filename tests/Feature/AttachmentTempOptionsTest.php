@@ -21,6 +21,13 @@ class AttachmentTempOptionsTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function tearDown(): void
+    {
+        SchemaRegistryUtils::clearAllCache();
+        
+        parent::tearDown();
+    }
+
     protected function setUp(): void
     {
         parent::setUp();

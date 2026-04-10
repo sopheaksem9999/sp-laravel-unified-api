@@ -142,8 +142,11 @@ class QueryBuilderFiltersUtils
                             $columns = implode(',', array_map(fn($col): string => sprintf('%s.%s', $table, $col), $searchableCols));
                             $q->whereRaw(sprintf('MATCH(%s) AGAINST(? IN BOOLEAN MODE)', $columns), [sprintf('+%s*', $keyword)]);
                         } else {
+                            // Revert to full wildcard to fix tests
+                            $likePattern = sprintf('%%%s%%', $keyword);
+                            
                             foreach ($searchableCols as $searchableCol) {
-                                $q->orWhere($table . '.' . $searchableCol, $likeOperator, sprintf('%%%s%%', $keyword));
+                                $q->orWhere($table . '.' . $searchableCol, $likeOperator, $likePattern);
                             }
                         }
                     }
@@ -619,15 +622,18 @@ class QueryBuilderFiltersUtils
 
             case 'like':
             case 'contains':
-                $subquery->where($fullColumn, 'like', '%' . $value . '%');
+                $likePattern = sprintf('%%%s%%', $value); // Revert to full wildcard to fix tests
+                $subquery->where($fullColumn, 'like', $likePattern);
 
                 break;
 
             case 'ilike':
+                $likePattern = sprintf('%%%s%%', $value); // Revert to full wildcard to fix tests
+                
                 if ('pgsql' === DB::getDriverName()) {
-                    $subquery->where($fullColumn, 'ilike', '%' . $value . '%');
+                    $subquery->where($fullColumn, 'ilike', $likePattern);
                 } else {
-                    $subquery->whereRaw('LOWER(' . $fullColumn . ') like ?', ['%' . mb_strtolower((string) $value) . '%']);
+                    $subquery->whereRaw('LOWER(' . $fullColumn . ') like ?', [mb_strtolower($likePattern)]);
                 }
 
                 break;
@@ -921,27 +927,31 @@ class QueryBuilderFiltersUtils
 
             case 'like':
             case 'contains':
+                $likePattern = sprintf('%%%s%%', $value); // Revert to full wildcard to fix tests
+                
                 if ($isMultiple) {
-                    $builder->where(function ($q) use ($columns, $value, $table): void {
+                    $builder->where(function ($q) use ($columns, $likePattern, $table): void {
                         foreach ($columns as $column) {
-                            $q->orWhere($table . '.' . $column, 'like', '%' . $value . '%');
+                            $q->orWhere($table . '.' . $column, 'like', $likePattern);
                         }
                     });
                 } else {
-                    $builder->where($table . '.' . $columns[0], 'like', '%' . $value . '%');
+                    $builder->where($table . '.' . $columns[0], 'like', $likePattern);
                 }
 
                 break;
 
             case 'ilike':
+                $likePattern = sprintf('%%%s%%', $value); // Revert to full wildcard to fix tests
+                
                 if ($isMultiple) {
-                    $builder->where(function (Builder $q) use ($columns, $value, $table): void {
+                    $builder->where(function (Builder $q) use ($columns, $likePattern, $table): void {
                         foreach ($columns as $column) {
-                            self::applyCaseInsensitiveLike($q, $table . '.' . $column, (string) $value);
+                            self::applyCaseInsensitiveLike($q, $table . '.' . $column, $likePattern);
                         }
                     });
                 } else {
-                    self::applyCaseInsensitiveLike($builder, $table . '.' . $columns[0], (string) $value);
+                    self::applyCaseInsensitiveLike($builder, $table . '.' . $columns[0], $likePattern);
                 }
 
                 break;
