@@ -136,6 +136,9 @@ class AuditLogService
             'entity_name' => $tableName,
             'event' => $data['event'],
             'metadata' => isset($data['metadata']) ? (is_array($data['metadata']) ? json_encode($data['metadata']) : $data['metadata']) : null,
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+            'request_id' => request()->attributes->get('request_id') ?? request()->header('X-Request-ID'),
             'created_at' => now()->toDateTimeString(),
             'updated_at' => now()->toDateTimeString(),
         ];
@@ -157,7 +160,7 @@ class AuditLogService
             ));
         }
 
-        DB::table('audit_logs')->insert($auditData);
+        DB::table(RecordConfigService::auditLogModel())->insert($auditData);
     }
 
     /**
@@ -293,8 +296,82 @@ class AuditLogService
         $entityName = AuditLogService::getTableNameFromEntityType($entityClass);
         $entityType = $entityName;
 
+        if (is_object($queryData)) {
+            $queryData = (array) $queryData;
+        }
+
         // Remove timestamp fields from nested arrays before comparison
         $queryData = self::removeTimestampFields($queryData);
+
+        if ($auditLogEventEnum === AuditLogEventEnum::UPDATED && config('audit.store_diff_only', false)) {
+            $entityId = $queryData['id'] ?? $queryData['entity_id'] ?? null;
+            $providedOldData = $queryData['old_data'] ?? $queryData['__old_data'] ?? null;
+            $providedNewData = $queryData['new_data'] ?? $queryData['__new_data'] ?? null;
+
+            $oldData = is_array($providedOldData) ? $providedOldData : null;
+            if (null === $oldData && null !== $entityId) {
+                $getOldAuditLogDate = static::getOldAuditLogDate(entityId: $entityId, entityName: $entityName, tenantId: $tenantId);
+                $oldData = null === $getOldAuditLogDate || [] === $getOldAuditLogDate ? [] : $getOldAuditLogDate;
+            }
+
+            $newData = is_array($providedNewData) ? $providedNewData : $queryData;
+
+            if (is_array($oldData) && is_array($newData)) {
+                $filteredOld = [];
+                $filteredNew = [];
+
+                if (isset($oldData['id'])) {
+                    $filteredOld['id'] = $oldData['id'];
+                }
+
+                if (isset($newData['id'])) {
+                    $filteredNew['id'] = $newData['id'];
+                }
+
+                $allKeys = array_unique(array_merge(array_keys($oldData), array_keys($newData)));
+                foreach ($allKeys as $key) {
+                    if ('id' === $key) {
+                        continue;
+                    }
+
+                    $oldVal = $oldData[$key] ?? null;
+                    $newVal = $newData[$key] ?? null;
+                    if (self::valuesAreDifferent($oldVal, $newVal)) {
+                        if (array_key_exists($key, $oldData)) {
+                            $filteredOld[$key] = $oldData[$key];
+                        }
+
+                        if (array_key_exists($key, $newData)) {
+                            $filteredNew[$key] = $newData[$key];
+                        }
+                    }
+                }
+
+                if (!is_array($providedNewData) && !is_array($providedOldData)) {
+                    $queryData = [
+                        'old_data' => $filteredOld,
+                        'new_data' => $filteredNew,
+                        'id' => $entityId,
+                    ];
+                } else {
+                    if (isset($queryData['old_data'])) {
+                        $queryData['old_data'] = $filteredOld;
+                    }
+
+                    if (isset($queryData['__old_data'])) {
+                        $queryData['__old_data'] = $filteredOld;
+                    }
+
+                    if (isset($queryData['new_data'])) {
+                        $queryData['new_data'] = $filteredNew;
+                    }
+
+                    if (isset($queryData['__new_data'])) {
+                        $queryData['__new_data'] = $filteredNew;
+                    }
+                }
+            }
+        }
 
         // Handle audit logging based on queue configuration
         if (static::isAuditQueueEnabled()) {
@@ -340,7 +417,7 @@ class AuditLogService
 
     public static function getOldAuditLogDate(int|string $entityId, string $entityName, ?string $tenantId = null): ?array
     {
-        $query = DB::table('audit_logs')
+        $query = DB::table(RecordConfigService::auditLogModel())
             ->where('entity_id', $entityId)
             ->where('entity_name', $entityName);
 
@@ -364,7 +441,7 @@ class AuditLogService
      */
     public static function getEntityAuditLogs(string $entityType, mixed $entityId, ?string $tenantId = null, int $limit = 50): Collection
     {
-        $query = DB::table('audit_logs')
+        $query = DB::table(RecordConfigService::auditLogModel())
             ->where('entity_type', $entityType)
             ->where('entity_id', $entityId);
 
@@ -387,7 +464,7 @@ class AuditLogService
     {
         $cutoffDate = Carbon::now()->subDays($daysToKeep);
 
-        $query = DB::table('audit_logs')
+        $query = DB::table(RecordConfigService::auditLogModel())
             ->where('created_at', '<', $cutoffDate);
 
         if (RecordConfigService::enableTenantId()) {
@@ -767,7 +844,7 @@ class AuditLogService
             return null;
         }
 
-        $query = DB::table('audit_logs')
+        $query = DB::table(RecordConfigService::auditLogModel())
             ->where('entity_type', $entityType)
             ->where('entity_id', $entityId)
             ->orderBy('created_at', 'desc')
@@ -1119,11 +1196,169 @@ class AuditLogService
         $words = $matches[0] ?? [];
 
         if (empty($words)) {
-            return 'CustomListener'.uniqid();
+            return 'CustomListener' . uniqid();
         }
 
         $labelWords = array_map(fn($w): string => ucfirst(strtolower($w)), $words);
 
         return ucwords(str_replace('_', ' ', ucfirst(implode(' ', $labelWords))));
+    }
+
+    /**
+     * Get aggregated statistics of audit logs based on filters.
+     *
+     * @param array $filters Filters for querying stats (e.g. tenant_id, start_date, end_date, user_id, entity_type, event)
+     */
+    public static function getAuditStats(array $filters = []): array
+    {
+        $query = DB::table(RecordConfigService::auditLogModel());
+
+        if (RecordConfigService::enableTenantId()) {
+            $tenantColumn = RecordConfigService::tenantColumn();
+            if (!empty($filters[$tenantColumn])) {
+                $query->where($tenantColumn, $filters[$tenantColumn]);
+            }
+        }
+
+        if (!empty($filters['start_date'])) {
+            $query->where('created_at', '>=', $filters['start_date']);
+        }
+
+        if (!empty($filters['end_date'])) {
+            $query->where('created_at', '<=', $filters['end_date']);
+        }
+
+        if (!empty($filters['user_id'])) {
+            $query->where('user_id', $filters['user_id']);
+        }
+
+        if (!empty($filters['entity_type'])) {
+            $query->where('entity_type', static::getTableNameFromEntityType($filters['entity_type']));
+        }
+
+        if (!empty($filters['event'])) {
+            $query->where('event', $filters['event']);
+        }
+
+        $total = $query->count();
+
+        $byEvent = (clone $query)
+            ->select('event', DB::raw('count(*) as count'))
+            ->groupBy('event')
+            ->pluck('count', 'event')
+            ->toArray();
+
+        $byUser = (clone $query)
+            ->select('user_id', DB::raw('count(*) as count'))
+            ->whereNotNull('user_id')
+            ->groupBy('user_id')
+            ->pluck('count', 'user_id')
+            ->toArray();
+
+        $byEntity = (clone $query)
+            ->select('entity_type', DB::raw('count(*) as count'))
+            ->whereNotNull('entity_type')
+            ->groupBy('entity_type')
+            ->pluck('count', 'entity_type')
+            ->toArray();
+
+        return [
+            'total' => $total,
+            'by_event' => $byEvent,
+            'by_user' => $byUser,
+            'by_entity' => $byEntity,
+        ];
+    }
+
+    /**
+     * Parse old_data and new_data to extract the history of a specific field.
+     *
+     * @param string $entityType The entity type or table name.
+     * @param int $entityId The ID of the entity.
+     * @param string $field The field name to track.
+     * @param int $limit Maximum number of history entries to return.
+     */
+    public static function getFieldTimeline(string $entityType, int $entityId, string $field, int $limit = 50): array
+    {
+        $tableName = static::getTableNameFromEntityType($entityType);
+
+        $query = DB::table(RecordConfigService::auditLogModel())
+            ->where('entity_type', $tableName)
+            ->where('entity_id', $entityId)
+            ->orderBy('created_at', 'desc');
+
+        if (RecordConfigService::enableTenantId() && request()->has(RecordConfigService::tenantColumn())) {
+            $query->where(RecordConfigService::tenantColumn(), request()->input(RecordConfigService::tenantColumn()));
+        }
+
+        // We fetch logs and filter them in memory because old_data/new_data are JSON and we want to ensure accuracy
+        // To prevent massive memory usage, we could process in chunks if needed, but usually audit logs per entity are reasonable.
+        $logs = $query->get();
+
+        $timeline = [];
+
+        foreach ($logs as $log) {
+            $oldData = is_string($log->old_data) ? json_decode($log->old_data, true) : (array) $log->old_data;
+            $newData = is_string($log->new_data) ? json_decode($log->new_data, true) : (array) $log->new_data;
+
+            $oldValue = $oldData[$field] ?? null;
+            $newValue = $newData[$field] ?? null;
+
+            // Only include in timeline if the field was actually changed in this event
+            // or if it's the creation event where the field was first set
+            if (self::valuesAreDifferent($oldValue, $newValue) || ($log->event === AuditLogEventEnum::CREATED->value && $newValue !== null)) {
+                $timeline[] = [
+                    'audit_log_id' => $log->id,
+                    'event' => $log->event,
+                    'user_id' => $log->user_id,
+                    'created_at' => $log->created_at,
+                    'old_value' => $oldValue,
+                    'new_value' => $newValue,
+                ];
+
+                if (count($timeline) >= $limit) {
+                    break;
+                }
+            }
+        }
+
+        return $timeline;
+    }
+
+    /**
+     * Aggregate field changes for a specific entity's field.
+     *
+     * @param string $entityType The entity type or table name.
+     * @param int $entityId The ID of the entity.
+     * @param string $field The field name to aggregate stats for.
+     */
+    public static function getFieldStats(string $entityType, int $entityId, string $field): array
+    {
+        $timeline = self::getFieldTimeline($entityType, $entityId, $field, 10000);
+
+        $totalChanges = count($timeline);
+        $users = [];
+        $values = [];
+
+        foreach ($timeline as $entry) {
+            $userId = $entry['user_id'];
+            if ($userId) {
+                $users[$userId] = ($users[$userId] ?? 0) + 1;
+            }
+
+            $valKey = is_scalar($entry['new_value']) ? (string) $entry['new_value'] : json_encode($entry['new_value']);
+            if ($valKey !== '' && $valKey !== 'null') {
+                $values[$valKey] = ($values[$valKey] ?? 0) + 1;
+            }
+        }
+
+        return [
+            'total_changes' => $totalChanges,
+            'changed_by_users' => $users,
+            'value_frequency' => $values,
+            'current_value' => $timeline[0]['new_value'] ?? null,
+            'first_changed_at' => empty($timeline) ? null : end($timeline)['created_at'],
+            'last_changed_at' => empty($timeline) ? null : $timeline[0]['created_at'],
+        ];
     }
 }

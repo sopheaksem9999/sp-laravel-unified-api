@@ -120,7 +120,7 @@ trait AuditableTrait
                 'id' => $id,
                 $tenantColumn => $tenantId,
                 'new_data' => $newData,
-            ], static fn ($value): bool => null !== $value);
+            ], static fn($value): bool => null !== $value);
         }
 
         if ($event === AuditLogEventEnum::UPDATED) {
@@ -132,7 +132,7 @@ trait AuditableTrait
                 $tenantColumn => $tenantId,
                 'old_data' => $oldData,
                 'new_data' => $newData,
-            ], static fn ($value): bool => null !== $value);
+            ], static fn($value): bool => null !== $value);
         }
 
         if ($event === AuditLogEventEnum::DELETED) {
@@ -142,13 +142,13 @@ trait AuditableTrait
                 'id' => $id,
                 $tenantColumn => $tenantId,
                 'old_data' => $oldData,
-            ], static fn ($value): bool => null !== $value);
+            ], static fn($value): bool => null !== $value);
         }
 
         return array_filter([
             'id' => $id,
             $tenantColumn => $tenantId,
-        ], static fn ($value): bool => null !== $value);
+        ], static fn($value): bool => null !== $value);
     }
 
     protected function buildAuditSnapshot(AuditLogEventEnum $event, bool $fromDatabase): array
@@ -225,7 +225,7 @@ trait AuditableTrait
             $with = [];
         }
 
-        $with = array_values(array_filter(array_unique($with), static fn ($value): bool => is_string($value) && '' !== $value));
+        $with = array_values(array_filter(array_unique($with), static fn($value): bool => is_string($value) && '' !== $value));
         $max = RecordConfigService::auditPerformanceMaxRelationships();
 
         return array_slice($with, 0, $max);

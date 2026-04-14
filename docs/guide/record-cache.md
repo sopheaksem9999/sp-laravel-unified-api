@@ -26,7 +26,7 @@ Main config is in `config/record.php`:
     'ttl' => env('SP_LARAVEL_API_CACHE_API_TTL', 3600),
     'prefix' => 'sp_laravel_api',
     'per_table' => [
-        // 'audit_logs' => false,
+        // 'sp_audit_logs' => false,
     ],
     'per_table_ttl' => [
         // 'products' => 600,

@@ -74,7 +74,7 @@ class RelationshipFilterMissingTableTest extends TestCase
                         secondKey: 'id',
                         localKey: 'id',
                         secondLocalKey: 'user_id',
-                    )
+                    ),
                 ],
             ),
         ]);
@@ -85,7 +85,7 @@ class RelationshipFilterMissingTableTest extends TestCase
         // Expectation: Only Task 1 should be returned.
         // Bug: If users table is not in schema registry, filter is ignored and both tasks returned.
         $request = Request::create('/api/v1/tasks', 'GET', [
-            'assignees.name' => 'eq.User 1'
+            'assignees.name' => 'eq.User 1',
         ]);
 
         // We need to resolve the config manually since we are calling RecordService directly

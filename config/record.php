@@ -114,12 +114,12 @@ return [
         // Per-table cache control (overrides global setting)
         'per_table' => [
             // Example: disable cache for specific tables
-            // 'audit_logs' => false,
+            // 'sp_audit_logs' => false,
             // 'real_time_data' => false,
         ],
         'per_table_ttl' => [
             // Example: override cache TTL for specific tables
-            // 'audit_logs' => 600,
+            // 'sp_audit_logs' => 600,
             // 'real_time_data' => 120,
         ],
     ],
@@ -162,7 +162,7 @@ return [
     // Can also be toggled per request with header: X-Debug: true
     'debug' => env('SP_LARAVEL_API_DEBUG', false),
 
-    // permission 
+    // permission
     'permission_separator' => ':', // separator for permission ex: view:invoice
     'restrict_to_own_records' => false, // limit queries to records created by the authenticated user
     'own_records_permission_prefix' => 'viewOwn', // example: viewOwn_invoice

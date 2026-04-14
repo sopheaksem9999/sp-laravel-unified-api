@@ -128,5 +128,3 @@ Route::get('/api-docs/openapi.json', function (Request $request) {
         ->json($json)
         ->header('Content-Type', 'application/vnd.oai.openapi+json; charset=utf-8');
 })->middleware('web');
-
- 

@@ -66,7 +66,7 @@ class HiddenColumnTest extends TestCase
 
         DB::table('posts')->insert([
             ['user_id' => $this->userId, 'title' => 'Post A', 'secret' => 'post_secret_1'],
-            ['user_id' => $this->userId, 'title' => 'Post B', 'secret' => 'post_secret_2']
+            ['user_id' => $this->userId, 'title' => 'Post B', 'secret' => 'post_secret_2'],
         ]);
 
         $t1 = DB::table('tasks')->insertGetId([
@@ -77,7 +77,7 @@ class HiddenColumnTest extends TestCase
         ]);
 
         DB::table('task_assignees')->insert([
-            ['task_id' => $t1, 'user_id' => $this->userId]
+            ['task_id' => $t1, 'user_id' => $this->userId],
         ]);
 
         // Register Schema for Users
@@ -123,7 +123,7 @@ class HiddenColumnTest extends TestCase
     public function test_hidden_columns_are_removed_from_main_resource(): void
     {
         $request = Request::create('/api/v1/users', 'GET', [
-            'select' => '*'
+            'select' => '*',
         ]);
 
         $result = RecordService::applyRequestFilters($request, 'users');
@@ -143,7 +143,7 @@ class HiddenColumnTest extends TestCase
     {
         // Query users with posts
         $request = Request::create('/api/v1/users', 'GET', [
-            'select' => '*,posts(*)'
+            'select' => '*,posts(*)',
         ]);
 
         $result = RecordService::applyRequestFilters($request, 'users');
@@ -167,7 +167,7 @@ class HiddenColumnTest extends TestCase
     {
         // Query posts with user
         $request = Request::create('/api/v1/posts', 'GET', [
-            'select' => '*,user(*)'
+            'select' => '*,user(*)',
         ]);
 
         $result = RecordService::applyRequestFilters($request, 'posts');
@@ -189,7 +189,7 @@ class HiddenColumnTest extends TestCase
     {
         // Query tasks with assignees (users) and reporter
         $request = Request::create('/api/v1/tasks', 'GET', [
-            'select' => '*,assignees(*),reporter(*)'
+            'select' => '*,assignees(*),reporter(*)',
         ]);
 
         $result = RecordService::applyRequestFilters($request, 'tasks');

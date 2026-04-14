@@ -2,11 +2,9 @@
 
 namespace Sopheak\Core\Utilities;
 
-use Illuminate\Support\LazyCollection;
-use Illuminate\Support\Collection;
-use Sopheak\Core\Types\RecordTableType;
 use Illuminate\Foundation\Auth\User;
 use Sopheak\Core\Enums\RecordRelationshipsEnum;
+use Spatie\Permission\PermissionServiceProvider;
 use RuntimeException;
 use Sopheak\Core\Types\RecordAassociationType;
 use Sopheak\Core\Types\RecordBelongsToType;
@@ -189,24 +187,9 @@ class RelationshipResolverUtils
      *
      * @param null|mixed $tenantId
      */
-    public static function includeRelationships(iterable $records, string $table, ?string $selectParam = null, $tenantId = null): iterable
+    public static function includeRelationships(array $records, string $table, ?string $selectParam = null, $tenantId = null): array
     {
-        if (null === $selectParam || '' === $selectParam || '0' === $selectParam) {
-            return $records;
-        }
-
-        // Convert iterable to array if it's not already, to avoid multiple iterations
-        if (!is_array($records)) {
-            if ($records instanceof LazyCollection) {
-                $records = $records->all();
-            } elseif ($records instanceof Collection) {
-                $records = $records->all();
-            } else {
-                $records = iterator_to_array($records);
-            }
-        }
-
-        if ([] === $records) {
+        if (null === $selectParam || '' === $selectParam || '0' === $selectParam || [] === $records) {
             return $records;
         }
 
@@ -388,7 +371,7 @@ class RelationshipResolverUtils
 
                 // Handle RecordSpatiePermissionType
                 if ($rel instanceof RecordSpatiePermissionType) {
-                    if (!class_exists('Spatie\\Permission\\PermissionServiceProvider')) {
+                    if (!class_exists(PermissionServiceProvider::class)) {
                         throw new RuntimeException('Spatie permission relationship configured but spatie/laravel-permission is not installed.');
                     }
 
@@ -1907,7 +1890,7 @@ class RelationshipResolverUtils
                     $nestedFilters[] = [
                         'column' => trim($filterCol),
                         'operator' => $operator,
-                        'value' => $value
+                        'value' => $value,
                     ];
                 }
             } else {
@@ -1948,14 +1931,7 @@ class RelationshipResolverUtils
         }
 
         // Apply column selection with validation
-        $defaultSelectColumns = null;
-        if (isset($schema[$relatedTable]) && $schema[$relatedTable] instanceof RecordTableType) {
-            $defaultSelectColumns = $schema[$relatedTable]->defaultSelectColumns;
-        } elseif (isset($schema[$relatedTable]) && is_array($schema[$relatedTable])) {
-            $defaultSelectColumns = $schema[$relatedTable]['defaultSelectColumns'] ?? null;
-        }
-
-        self::applyColumnSelection($builder, $columns, $schema[$relatedTable]->columns ?? [], $defaultSelectColumns);
+        self::applyColumnSelection($builder, $columns, $schema[$relatedTable]->columns ?? []);
 
         // Handle belongsToMany and morphToMany relationships with pivot table
         if ('belongsToMany' === $type || 'morphToMany' === $type) {
@@ -2142,17 +2118,10 @@ class RelationshipResolverUtils
      * @param array   $columns       Requested columns to select
      * @param array   $schemaColumns Available columns from database schema
      */
-    private static function applyColumnSelection($query, array $columns, array $schemaColumns, ?array $defaultSelectColumns = null): void
+    private static function applyColumnSelection($query, array $columns, array $schemaColumns): void
     {
         if ($columns === ['*'] || [] === $columns) {
-            if ($defaultSelectColumns !== null && $defaultSelectColumns !== ['*'] && [] !== $defaultSelectColumns) {
-                $validColumns = array_values(array_filter($defaultSelectColumns, fn($column): bool => '*' === $column || isset($schemaColumns[$column])));
-                if ([] !== $validColumns) {
-                    $query->select($validColumns);
-                }
-            }
-
-            return; // No filtering needed or default applied
+            return; // No filtering needed
         }
 
         // Validate and filter columns against schema

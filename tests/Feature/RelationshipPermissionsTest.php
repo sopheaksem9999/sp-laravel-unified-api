@@ -88,7 +88,7 @@ class RelationshipPermissionsTest extends TestCase
                         allowCreate: true,
                         allowUpdate: true,
                         allowDelete: false // Denied to detach
-                    )
+                    ),
                 ]
             ),
             'tags' => new RecordTableType(
@@ -102,7 +102,7 @@ class RelationshipPermissionsTest extends TestCase
                 pmsName: 'tasks',
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: []
-            )
+            ),
         ]);
 
         SchemaRegistryUtils::refresh();
@@ -115,8 +115,8 @@ class RelationshipPermissionsTest extends TestCase
         $payload = [
             'name' => 'Project Alpha',
             'tags' => [
-                ['name' => 'Urgent']
-            ]
+                ['name' => 'Urgent'],
+            ],
         ];
 
         $response = $this->postJson('/api/projects', $payload);
@@ -128,14 +128,14 @@ class RelationshipPermissionsTest extends TestCase
         $this->assertNotNull($tagId);
         $this->assertDatabaseHas('project_tags', [
             'project_id' => $projectId,
-            'tag_id' => $tagId
+            'tag_id' => $tagId,
         ]);
 
         // 2. Detach Tag (Delete) - Should be ALLOWED
         $updatePayload = [
             'tags' => [
-                ['id' => $tagId, '_delete' => true]
-            ]
+                ['id' => $tagId, '_delete' => true],
+            ],
         ];
 
         $response = $this->putJson('/api/projects/' . $projectId, $updatePayload);
@@ -143,7 +143,7 @@ class RelationshipPermissionsTest extends TestCase
 
         $this->assertDatabaseMissing('project_tags', [
             'project_id' => $projectId,
-            'tag_id' => $tagId
+            'tag_id' => $tagId,
         ]);
     }
 
@@ -154,8 +154,8 @@ class RelationshipPermissionsTest extends TestCase
         $payload = [
             'name' => 'Project Beta',
             'tasks' => [
-                ['title' => 'Initial Task']
-            ]
+                ['title' => 'Initial Task'],
+            ],
         ];
 
         $response = $this->postJson('/api/projects', $payload);
@@ -167,14 +167,14 @@ class RelationshipPermissionsTest extends TestCase
         $this->assertNotNull($taskId);
         $this->assertDatabaseHas('project_tasks', [
             'project_id' => $projectId,
-            'task_id' => $taskId
+            'task_id' => $taskId,
         ]);
 
         // 2. Try to Detach Task (Delete) - Should be BLOCKED/IGNORED
         $updatePayload = [
             'tasks' => [
-                ['id' => $taskId, '_delete' => true]
-            ]
+                ['id' => $taskId, '_delete' => true],
+            ],
         ];
 
         $response = $this->putJson('/api/projects/' . $projectId, $updatePayload);
@@ -183,7 +183,7 @@ class RelationshipPermissionsTest extends TestCase
         // The link should STILL exist because allowDelete = false
         $this->assertDatabaseHas('project_tasks', [
             'project_id' => $projectId,
-            'task_id' => $taskId
+            'task_id' => $taskId,
         ]);
     }
 }

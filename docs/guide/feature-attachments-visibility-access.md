@@ -21,6 +21,22 @@ keywords:
 - `temp_private`: protected download URL + timeout lifecycle
 - `temp_public`: direct disk URL by default + timeout lifecycle
 
+## Filesystem Disks (local vs public)
+
+This module assumes you use different filesystem disks for public vs private assets:
+
+- `public` / `temp_public` → `attachments.disk_public` (default: `public`)
+- `private` / `temp_private` → `attachments.disk_private` (default: `local`)
+
+When using local storage, the secure setup is:
+
+- `public` disk root: `storage/app/public` and exposed via `/storage/*` (Laravel `php artisan storage:link`)
+- `local` disk root: `storage/app` and NOT exposed by the web server
+
+If a `private` attachment can be opened by concatenating `APP_URL` + `path`, it means the private storage directory is being served publicly (usually a misconfigured symlink or web server rule). The fix is to ensure only `storage/app/public` is web-accessible.
+
+For S3 (or any cloud disk), `public` attachments will typically return a bucket/CDN URL (via `disk->url()`), while `private` attachments should still return API-proxied URLs (`/view` and `/download`) so authentication + tenant scope + expiry checks are enforced.
+
 ## Protection Option for temp_public
 
 Use `attachments.protect_temp_public_via_download`:

@@ -2,7 +2,6 @@
 
 namespace Sopheak\Core\Tests\Feature;
 
-use Illuminate\Support\Facades\Artisan;
 use Sopheak\Core\Tests\TestCase;
 
 class ValidateSetupCommandTest extends TestCase

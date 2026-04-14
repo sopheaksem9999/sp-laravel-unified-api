@@ -17,7 +17,7 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
 | Here are the API routes for the SP Laravel API package.
 | These routes provide dynamic CRUD operations for database tables
 | and audit management functionality.
-| 
+|
 | The route prefix is configurable via config('record.api_prefix').
 | Default: 'api' (can be customized to 'api/v1', 'api/v2', etc.)
 |
@@ -51,7 +51,7 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
 
     $globalFunctionWhere = '(?!)';
     $configuredGlobalFunctions = array_keys(RecordConfigService::globalFunctions());
-    $configuredGlobalFunctions = array_values(array_filter($configuredGlobalFunctions, static fn ($value): bool => is_string($value) && $value !== ''));
+    $configuredGlobalFunctions = array_values(array_filter($configuredGlobalFunctions, static fn($value): bool => is_string($value) && $value !== ''));
     if (!empty($configuredGlobalFunctions)) {
         $escaped = array_map(static function (string $functionName): string {
             $escapedFunction = preg_quote($functionName, '/');
@@ -161,9 +161,17 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
         Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/' . RecordConfigService::rpcPrefix() . '/{functionName}', [CoreRecordController::class, 'executeTableFunction'])
             ->where(['table' => $tableWhere, 'functionName' => '.*'])
             ->middleware(['throttle:api-functions', 'record.route.middleware:table_function']);
+            
+        Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/{id}/' . RecordConfigService::rpcPrefix() . '/{functionName}', [CoreRecordController::class, 'executeTableFunctionWithId'])
+            ->where(['table' => $tableWhere, 'id' => '.*', 'functionName' => '.*'])
+            ->middleware(['throttle:api-functions', 'record.route.middleware:table_function']);
     } else {
         Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/{functionName}', [CoreRecordController::class, 'executeTableFunction'])
             ->where(['table' => $tableWhere, 'functionName' => '(?!(?:upsert$|bulk(?:/|$)))(?!\d+$).+'])
+            ->middleware(['throttle:api-functions', 'record.route.middleware:table_function']);
+            
+        Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/{id}/{functionName}', [CoreRecordController::class, 'executeTableFunctionWithId'])
+            ->where(['table' => $tableWhere, 'id' => '[a-zA-Z0-9_\-]+', 'functionName' => '(?!(?:restore$|force$)).+'])
             ->middleware(['throttle:api-functions', 'record.route.middleware:table_function']);
     }
 

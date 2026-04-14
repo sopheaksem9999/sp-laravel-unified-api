@@ -2,11 +2,11 @@
 
 namespace Sopheak\Core\Tests\Feature;
 
+use Sopheak\Core\CoreSpLaravelApiProvider;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\WithFaker;
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Console\McpServerCommand;
 use Sopheak\Core\Tests\TestCase;
@@ -19,17 +19,17 @@ class McpServerCommandTest extends TestCase
     use RefreshDatabase;
     use WithFaker;
 
-    protected function getPackageProviders($app)
+    protected function getPackageProviders($app): array
     {
         return [
-            \Sopheak\Core\CoreSpLaravelApiProvider::class,
+            CoreSpLaravelApiProvider::class,
         ];
     }
 
     protected function getEnvironmentSetUp($app): void
     {
         parent::getEnvironmentSetUp($app);
-        
+
         $app['config']->set('record.mcp.enabled', true);
         $app['config']->set('record.mcp.read_only', false);
     }
@@ -54,7 +54,7 @@ class McpServerCommandTest extends TestCase
                 public: new RecordTablePublic(read: true, write: true)
             ),
         ]);
-        
+
         Config::set('record.mcp.enabled', true);
         Config::set('record.mcp.read_only', false);
 
@@ -78,7 +78,7 @@ class McpServerCommandTest extends TestCase
             'jsonrpc' => '2.0',
             'id' => 1,
             'method' => 'initialize',
-            'params' => []
+            'params' => [],
         ]) . "\n";
 
         fwrite($stdin, $payload);
@@ -91,7 +91,7 @@ class McpServerCommandTest extends TestCase
 
         rewind($stdout);
         $output = stream_get_contents($stdout);
-        
+
         $this->assertStringContainsString('"protocolVersion":"2024-11-05"', $output);
         $this->assertStringContainsString('"serverInfo"', $output);
     }
@@ -114,7 +114,7 @@ class McpServerCommandTest extends TestCase
 
         rewind($stdout);
         $output = stream_get_contents($stdout);
-        
+
         $this->assertStringContainsString('"error":{"code":-32700,"message":"Parse error"}', $output);
     }
 
@@ -142,8 +142,8 @@ class McpServerCommandTest extends TestCase
             'method' => 'tools/call',
             'params' => [
                 'name' => 'list_mcp_cli_tasks',
-                'arguments' => []
-            ]
+                'arguments' => [],
+            ],
         ]) . "\n";
 
         fwrite($stdin, $payload1);

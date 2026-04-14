@@ -33,3 +33,56 @@ Links are stored in `sp_attachment_links` using:
 - `collection_name` defaults to `default`.
 - Upload and clone flows can auto-link when `record_id` and `record_type` are provided.
 - `replace_old=true` removes older links in the same collection and deletes old attachment files/rows.
+
+## Example: Upload Multiple Files and Link to an Invoice
+
+This shows two common patterns for attaching multiple files to a record like an invoice.
+
+### Option A: Upload First, Then Link (Recommended)
+
+1) Upload each file (multipart):
+
+```bash
+curl -X POST "http://your-api.test/{api_prefix}/{attachment_prefix}/upload" \
+  -H "Authorization: Bearer <TOKEN>" \
+  -F "file=@/path/to/a.png" \
+  -F "visibility=private"
+```
+
+```bash
+curl -X POST "http://your-api.test/{api_prefix}/{attachment_prefix}/upload" \
+  -H "Authorization: Bearer <TOKEN>" \
+  -F "file=@/path/to/b.pdf" \
+  -F "visibility=private"
+```
+
+Each upload returns an attachment `id`. Collect them (example):
+
+- `a_id`
+- `b_id`
+
+2) Link them to an invoice (example invoice ID: `INV-1001`):
+
+```bash
+curl -X POST "http://your-api.test/{api_prefix}/{attachment_prefix}/record/invoices/INV-1001" \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "attachment_ids": ["a_id", "b_id"],
+    "collection_name": "invoice_files"
+  }'
+```
+
+### Option B: Upload and Auto-Link Per File
+
+Upload each file and include `record_type`, `record_id`, and optionally `collection_name`:
+
+```bash
+curl -X POST "http://your-api.test/{api_prefix}/{attachment_prefix}/upload" \
+  -H "Authorization: Bearer <TOKEN>" \
+  -F "file=@/path/to/a.png" \
+  -F "visibility=private" \
+  -F "record_type=invoices" \
+  -F "record_id=INV-1001" \
+  -F "collection_name=invoice_files"
+```

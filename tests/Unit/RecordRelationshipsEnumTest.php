@@ -27,7 +27,7 @@ class RecordRelationshipsEnumTest extends TestCase
 
         $nonMorphCases = array_filter(
             RecordRelationshipsEnum::cases(),
-            static fn (RecordRelationshipsEnum $enum): bool => !in_array($enum, $morphCases, true),
+            static fn(RecordRelationshipsEnum $enum): bool => !in_array($enum, $morphCases, true),
         );
 
         foreach ($nonMorphCases as $case) {
@@ -56,7 +56,7 @@ class RecordRelationshipsEnumTest extends TestCase
 
         $nonPivotCases = array_filter(
             RecordRelationshipsEnum::cases(),
-            static fn (RecordRelationshipsEnum $enum): bool => !in_array($enum, $pivotCases, true),
+            static fn(RecordRelationshipsEnum $enum): bool => !in_array($enum, $pivotCases, true),
         );
 
         foreach ($nonPivotCases as $case) {

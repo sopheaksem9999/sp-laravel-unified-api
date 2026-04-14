@@ -118,6 +118,16 @@ In this package, Eloquent models are a compatibility layer for old client code o
 
 ## Architecture Rules — Follow These Always
 
+### Key Architecture Rules
+
+1.  **NO CONTROLLERS FOR CRUD**: Never write a `FooController` just to do `Foo::all()`, `Foo::create()`, `Foo::update()`. Use `RecordTableType`.
+2.  **NO ROUTES FOR CRUD**: Never write `Route::get('/foo', ...)` in `routes/api.php` or `web.php` for basic data. It’s handled dynamically.
+3.  **NO RPC FOR STANDARD READS**: Never create custom RPC endpoints (like `getLogs`) just to list or filter records. The package automatically provides full-featured listing, filtering, and pagination via `GET /api/v1/{table}`.
+4.  **ALL BUILT-IN API ROUTES (TABLE AND TABLE FUNCTIONS) MUST BE CONFIGURED ON THE RECORD TABLE**: If you need a custom endpoint related to a table (like `POST /api/v1/table_name/rpc/custom-action`), define it using the `functions` array inside the `RecordTableType` configuration, NOT by hardcoding routes in `routes/api.php`.
+5.  **GLOBAL FUNCTIONS IN CONFIG**: If you need an RPC endpoint not tied to a specific table, use `record.global_functions` in `config/record.php`.
+6.  **HOOKS OVER OBSERVERS**: Need to hash a password or assign a default status? Use `beforeCreate` or `beforeUpdate` triggers in the config instead of Eloquent Observers.
+7.  **VALIDATORS OVER FORM REQUESTS**: Need validation? Define `createValidator` or `updateValidator` in the config instead of making a `FooRequest` class.
+
 | Task | Use this | Never do this |
 |------|----------|---------------|
 | Expose a DB table as API | `RecordTableType` in `config/record.php` | Manual controller + route |
@@ -353,7 +363,7 @@ Hooks run at every stage of the request. Use them for:
 ### 8. Comprehensive audit trail — automatic
 
 Every CRUD operation is logged: who, what, when, before/after state, recap of changed fields.
-Accessible via `GET /api/v1/audit/logs`, field timeline, and stats endpoints.
+Accessible via `GET /api/v1/audit_logs`, field timeline, and stats endpoints.
 Override per record with `customAuditLog`. Disable per table with `disableAuditLog: true`.
 
 ---
@@ -984,7 +994,8 @@ Product::query()->applyRequestFilters(request: $request, isArray: false, orderBy
 
 ```
 sp-laravel-api:record {table}              scaffold table config class
-sp-laravel-api:sync-record-columns         sync DB schema → column metadata
+sp-laravel-api:generate-record-tables-from-db   generate config files for all tables (ignores internal/system tables)
+sp-laravel-api:sync-record-columns         sync DB schema → column metadata (ignores internal/system tables)
 sp-laravel-api:sync-record-columns --force --table=x
 sp-laravel-api:setup                       publish configs and migrations
 sp-laravel-api:validate-setup --fix        validate installation, auto-repair

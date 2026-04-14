@@ -21,7 +21,6 @@ use Sopheak\Core\Services\AuditLogService;
 use Sopheak\Core\Services\QueryCacheService;
 use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\RecordService;
-
 use Sopheak\Core\Console\McpServerCommand;
 
 class CoreSpLaravelApiProvider extends ServiceProvider
@@ -51,6 +50,9 @@ class CoreSpLaravelApiProvider extends ServiceProvider
             __DIR__ . '/../database/migrations/' => database_path('migrations'),
         ], 'sp-laravel-api-migrations');
 
+        // Automatically load migrations from the package
+        $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
+
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'sp-laravel-api');
 
         // Load package routes
@@ -58,7 +60,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
         $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
         if (config('record.mcp.enabled', false)) {
             $this->commands([
-                \Sopheak\Core\Console\McpServerCommand::class,
+                McpServerCommand::class,
             ]);
 
             $this->loadRoutesFrom(__DIR__ . '/../routes/mcp.php');

@@ -2,7 +2,6 @@
 
 namespace Sopheak\Core\Services;
 
-use Illuminate\Support\LazyCollection;
 use RuntimeException;
 use Sopheak\Core\Events\RecordMutated;
 use Exception;
@@ -339,42 +338,37 @@ class RecordService
         $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
         $cacheTenantId = $tenantEnabled ? $this->normalizeTenantId($tenantId) : null;
 
-        if (empty($payloads)) {
+        $preparedItems = [];
+        $updateColumns = [];
+
+        foreach ($payloads as $payload) {
+            $item = $this->sanitizePayload($payload, $tableSchema);
+            if ($tenantEnabled) {
+                $item[RecordConfigService::tenantColumn()] = $cacheTenantId;
+            }
+
+            $item = $this->applyTimestampsAndAuditFields($item, $tableSchema, true);
+            $preparedItems[] = $item;
+        }
+
+        if (empty($preparedItems)) {
             return ['count' => 0];
         }
 
-        $affected = 0;
-        $chunkSize = RecordConfigService::bulkMax(); // Use configured bulk max as chunk size
-
-        foreach (array_chunk($payloads, $chunkSize) as $chunk) {
-            $preparedItems = [];
-            
-            foreach ($chunk as $payload) {
-                $item = $this->sanitizePayload($payload, $tableSchema);
-                if ($tenantEnabled) {
-                    $item[RecordConfigService::tenantColumn()] = $cacheTenantId;
-                }
-
-                $item = $this->applyTimestampsAndAuditFields($item, $tableSchema, true);
-                $preparedItems[] = $item;
-            }
-
-            if (empty($preparedItems)) {
-                continue;
-            }
-
-            // Calculate update columns from the first item of the chunk
-            $firstItem = $preparedItems[0];
-            $excludeColumns = array_merge($matchOn, [$pk, 'id', 'created_at', 'deleted_at']);
-            $updateColumns = array_values(array_diff(array_keys($firstItem), $excludeColumns));
-            if (empty($updateColumns) && array_key_exists('updated_at', $firstItem)) {
-                $updateColumns = ['updated_at'];
-            }
-
-            $affected += DB::table($actualTableName)->upsert($preparedItems, $matchOn, $updateColumns);
+        // Calculate update columns from the first item (assuming uniform payload structure)
+        $firstItem = $preparedItems[0];
+        $excludeColumns = array_merge($matchOn, [$pk, 'id', 'created_at', 'deleted_at']);
+        $updateColumns = array_values(array_diff(array_keys($firstItem), $excludeColumns));
+        if (empty($updateColumns) && array_key_exists('updated_at', $firstItem)) {
+            $updateColumns = ['updated_at'];
         }
 
+        $affected = DB::table($actualTableName)->upsert($preparedItems, $matchOn, $updateColumns);
+
         $this->invalidateTableCache($table, $cacheTenantId, $tenantEnabled);
+
+        // We can't easily invalidate individual record caches or fire individual triggers for bulk upsert
+        // without querying them all back. This is a trade-off for bulk performance.
 
         return [
             'data' => [
@@ -440,8 +434,8 @@ class RecordService
 
             // If response is a JsonResponse, extract data
             if (isset($recordContext['response']) && $recordContext['response'] instanceof JsonResponse) {
-                $data = $recordContext['response']->getData(true);
-                $responseData = $data['data'] ?? $data;
+                $data = $recordContext['response']->getData();
+                $responseData = json_decode(json_encode($data->data ?? $data), true);
                 if (is_array($responseData)) {
                     $auditData = array_merge($auditData, $responseData);
                 }
@@ -469,8 +463,8 @@ class RecordService
             ];
 
             if (
-                !empty($tableSchema->customAuditLog) &&
-                $this->callCustomAuditLogger(
+                !empty($tableSchema->customAuditLog)
+                && $this->callCustomAuditLogger(
                     callback: $tableSchema->customAuditLog,
                     event: $event,
                     entityClass: $entityClass,
@@ -524,8 +518,8 @@ class RecordService
 
         $record = [];
         if (isset($recordContext['response']) && $recordContext['response'] instanceof JsonResponse) {
-            $data = $recordContext['response']->getData(true);
-            $decoded = $data['data'] ?? $data;
+            $data = $recordContext['response']->getData();
+            $decoded = json_decode(json_encode($data->data ?? $data), true);
             if (is_array($decoded)) {
                 $record = $decoded;
             }
@@ -549,7 +543,7 @@ class RecordService
             );
         } catch (Throwable) {
             // Never let a broadcast failure break the HTTP response
-            
+
         }
     }
 
@@ -836,7 +830,7 @@ class RecordService
                 if ('create' === $operation) {
                     $this->executeTableTrigger($tableSchema->beforeCreate ?? null, [$request, $table, $item]);
 
-                    $result = $this->createRecord(table: $table, payload: $item,  tenantId: $tenantId);
+                    $result = $this->createRecord(table: $table, payload: $item, tenantId: $tenantId);
                     if (!array_key_exists('id', $result)) {
                         throw new RuntimeException('Failed to create record in bulk operation for table: ' . $table);
                     }
@@ -1411,10 +1405,10 @@ class RecordService
             if (is_string($resolvedSource) && '' !== $resolvedSource) {
                 $context['tenant_source'] = $resolvedSource;
             }
-     
+
             $request->attributes->set(self::TENANT_ATTRIBUTE_KEY, $resolvedTenant);
         }
-    
+
         $guard = RecordConfigService::authGuard();
         $user = auth($guard)->user();
         $context['user'] = $user ? [
@@ -1541,7 +1535,7 @@ class RecordService
                 RecordConfigService::tenantColumn() => $tenantId,
             ],
         ];
-        $triggerParams = $this->executeTableTrigger( $tableSchema->beforeRead ?? null, $triggerParams);
+        $triggerParams = $this->executeTableTrigger($tableSchema->beforeRead ?? null, $triggerParams);
         if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
             $request = $triggerParams[0];
         }
@@ -1549,10 +1543,10 @@ class RecordService
         $actualTableName = $tableSchema->table ?? $table;
 
         $filters = $request->except(['page', 'per_page', 'limit']);
-        
+
         $selectParam = $request->query('select', '');
         $effectiveSelectParam = self::getCombinedSelectParam($request);
-        
+
         $includes = $effectiveSelectParam !== '' ? explode(',', $effectiveSelectParam) : [];
 
         $page = max((int) $request->input('page', 1), 1);
@@ -1616,17 +1610,8 @@ class RecordService
             $headers = $aggregateResult['headers'];
         } elseif ($request->has('limit') && !$request->has('per_page')) {
             $limit = max(1, min((int) $request->input('limit'), RecordConfigService::limitMax()));
-            
-            // Use cursor for large datasets to save memory
-            if ($limit > 1000) {
-                $data = $builder->limit($limit)->cursor();
-                $countQuery = clone $builder;
-                $total = $countQuery->count();
-            } else {
-                $data = $builder->limit($limit)->get()->all();
-                $total = count($data);
-            }
-            
+            $data = $builder->limit($limit)->get()->all();
+            $total = count($data);
             $headers['X-Total-Count'] = (string) $total;
             $meta = ['total' => $total];
         } else {
@@ -1661,8 +1646,7 @@ class RecordService
 
         if ($effectiveSelectParam !== '') {
             $includes = RelationshipResolverUtils::parseSelectForIncludes($effectiveSelectParam);
-            $dataCount = is_array($data) ? count($data) : $total;
-            $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization() && $dataCount <= 100;
+            $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization() && count($data) <= 100;
 
             // Disable subquery optimization if nested filters, child relationships,
             // or database-specific limitations (e.g. PostgreSQL json_build_object argument limit) are detected
@@ -1735,12 +1719,6 @@ class RecordService
 
             if ($useSubqueryOptimization && [] !== $includes) {
                 $primaryKey = $tableSchema->primaryKey ?? 'id';
-                
-                // Convert LazyCollection to array if needed for subquery optimization
-                if ($data instanceof LazyCollection) {
-                    $data = $data->all();
-                }
-                
                 $recordIds = self::extractRecordIds($data, $primaryKey);
 
                 if ([] !== $recordIds) {
@@ -1806,7 +1784,7 @@ class RecordService
                 'cached_at' => TimeUtils::now()->toISOString(),
                 'tenant_enabled' => $this->shouldApplyTenantId($tableSchema),
             ];
-            $ttl = $this->calculateOptimalCacheTTL($table, is_array($data) ? count($data) : $total, $effectiveSelectParam !== '');
+            $ttl = $this->calculateOptimalCacheTTL($table, count($data), $effectiveSelectParam !== '');
             QueryCacheService::put($cacheKey, $cacheData, $ttl);
         }
 
@@ -1841,8 +1819,8 @@ class RecordService
             $queryParams = $parsedParams;
         }
 
-        $request = new Request($queryParams);
-        
+        $request = Request::create(uri: '/', method: 'GET', parameters: $queryParams);
+
         if ($tenantId !== null) {
             $request->attributes->set('resolved_tenant_id', $tenantId);
         }
@@ -1871,10 +1849,10 @@ class RecordService
         $pk = $tableSchema->primaryKey ?? 'id';
 
         // Add the ID filter to the query parameters
-        $queryParams[$pk] = $id;
+        $queryParams[$pk] = 'eq.' . $id;
 
-        $request = new Request($queryParams);
-        
+        $request = Request::create(uri: '/', method: 'GET', parameters: $queryParams);
+
         if ($tenantId !== null) {
             $request->attributes->set('resolved_tenant_id', $tenantId);
         }
@@ -1894,7 +1872,7 @@ class RecordService
     public static function executeCreate(string $table, array $payload, array|string $queryParams = [], mixed $tenantId = null): array
     {
         $service = app(self::class);
-        
+
         // Extract relationship keys from payload to automatically include them
         $includes = [];
         foreach ($payload as $key => $value) {
@@ -1902,12 +1880,12 @@ class RecordService
                 $includes[] = $key . '(*)';
             }
         }
-        
+
         if (is_string($queryParams)) {
             parse_str($queryParams, $parsedParams);
             $queryParams = $parsedParams;
         }
-        
+
         // Merge payload relationships into select query param
         if (!empty($includes)) {
             $existingSelect = $queryParams['select'] ?? '';
@@ -1916,11 +1894,11 @@ class RecordService
         }
 
         $result = $service->createRecord($table, $payload, $tenantId);
-        
+
         if (!is_array($result) || !array_key_exists('id', $result)) {
             throw new RuntimeException('Failed to create record or retrieve inserted ID for table: ' . $table);
         }
-        
+
         return self::executeGetById($table, $result['id'], $queryParams, $tenantId);
     }
 
@@ -1937,7 +1915,7 @@ class RecordService
     public static function executeUpdate(string $table, mixed $id, array $payload, array|string $queryParams = [], mixed $tenantId = null): array
     {
         $service = app(self::class);
-        
+
         // Extract relationship keys from payload to automatically include them
         $includes = [];
         foreach ($payload as $key => $value) {
@@ -1945,12 +1923,12 @@ class RecordService
                 $includes[] = $key . '(*)';
             }
         }
-        
+
         if (is_string($queryParams)) {
             parse_str($queryParams, $parsedParams);
             $queryParams = $parsedParams;
         }
-        
+
         // Merge payload relationships into select query param
         if (!empty($includes)) {
             $existingSelect = $queryParams['select'] ?? '';
@@ -1959,7 +1937,7 @@ class RecordService
         }
 
         $service->updateRecord($table, $id, $payload, $tenantId);
-        
+
         return self::executeGetById($table, $id, $queryParams, $tenantId);
     }
 
@@ -1975,17 +1953,17 @@ class RecordService
     public static function executeDelete(string $table, mixed $id, array|string $queryParams = [], mixed $tenantId = null): array
     {
         $service = app(self::class);
-        
+
         if (is_string($queryParams)) {
             parse_str($queryParams, $parsedParams);
             $queryParams = $parsedParams;
         }
-        
+
         // Fetch the record before deleting it
         $record = self::executeGetById($table, $id, $queryParams, $tenantId);
-        
+
         $service->deleteRecord($table, $id, $tenantId);
-        
+
         return $record;
     }
 
@@ -2006,7 +1984,7 @@ class RecordService
         }
 
         $request = new Request($queryParams);
-        
+
         $schema = SchemaRegistryUtils::get();
         $tableSchema = $schema[$table] ?? null;
         $actualTableName = $tableSchema->table ?? $table;
@@ -2192,17 +2170,8 @@ class RecordService
             $headers = $aggregateResult['headers'];
         } elseif ($request->has('limit') && !$request->has('per_page')) {
             $limit = max(1, min((int) $request->input('limit'), RecordConfigService::limitMax()));
-            
-            // Use cursor for large datasets to save memory
-            if ($limit > 1000) {
-                $data = $builder->limit($limit)->cursor();
-                $countQuery = clone $builder;
-                $total = $countQuery->count();
-            } else {
-                $data = $builder->limit($limit)->get()->all();
-                $total = count($data);
-            }
-            
+            $data = $builder->limit($limit)->get()->all();
+            $total = count($data);
             $headers['X-Total-Count'] = (string) $total;
             $meta = ['total' => $total];
         } else {
@@ -2236,8 +2205,7 @@ class RecordService
 
         if ($effectiveSelectParam !== '') {
             $includes = RelationshipResolverUtils::parseSelectForIncludes($effectiveSelectParam);
-            $dataCount = is_array($data) ? count($data) : $total;
-            $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization() && $dataCount <= 100;
+            $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization() && count($data) <= 100;
 
             // Disable subquery optimization if nested filters, child relationships,
             // or database-specific limitations (e.g. PostgreSQL json_build_object argument limit) are detected
@@ -2373,7 +2341,7 @@ class RecordService
                 'cached_at' => TimeUtils::now()->toISOString(),
                 'tenant_enabled' => $tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema),
             ];
-            $ttl = $service->calculateOptimalCacheTTL($table, is_array($data) ? count($data) : $total, $effectiveSelectParam !== '');
+            $ttl = $service->calculateOptimalCacheTTL($table, count($data), $effectiveSelectParam !== '');
             QueryCacheService::put($cacheKey, $cacheData, $ttl);
         }
 
@@ -2570,7 +2538,7 @@ class RecordService
             $config['isPublic'] = true;
         }
 
-        $isPublic = (bool)($config['isPublic'] ?? false);
+        $isPublic = (bool) ($config['isPublic'] ?? false);
         $pmsName = $config['pmsName'] ?? null;
 
         $requiresAuth = !$isPublic || (null !== $pmsName && '' !== $pmsName && [] !== $pmsName);
@@ -2667,6 +2635,7 @@ class RecordService
                 } else {
                     $records = $responseData->data;
                     unset($meta->data);
+                    $meta = json_decode(json_encode($meta), true);
                 }
 
                 $errorCode = null;

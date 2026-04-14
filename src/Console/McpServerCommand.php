@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Console;
 
+use Sopheak\Core\Services\McpServerService;
 use Illuminate\Console\Command;
 
 class McpServerCommand extends Command
@@ -23,19 +24,19 @@ class McpServerCommand extends Command
     /**
      * @var resource|null
      */
-    public static $stdinMock = null;
+    public static $stdinMock;
 
     /**
      * @var resource|null
      */
-    public static $stdoutMock = null;
+    public static $stdoutMock;
 
     /**
      * Execute the console command.
      */
     public function handle(): void
     {
-        $mcpService = app(\Sopheak\Core\Services\McpServerService::class);
+        $mcpService = app(McpServerService::class);
 
         // Run an infinite loop reading from STDIN
         $stdin = self::$stdinMock ?: fopen('php://stdin', 'r');

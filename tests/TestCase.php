@@ -8,7 +8,6 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Sopheak\Core\CoreSpLaravelApiProvider;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Schema\Blueprint;
-
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
 class TestCase extends BaseTestCase
@@ -55,6 +54,8 @@ class TestCase extends BaseTestCase
             'per_table_ttl' => [],
         ]);
         $app['config']->set('audit.enabled', false);
+        $app['config']->set('audit.audit_log_model', 'sp_audit_logs');
+        $app['config']->set('audit.queue_enabled', false);
     }
 
     protected function setUp(): void
@@ -69,24 +70,26 @@ class TestCase extends BaseTestCase
         RateLimiter::for('api-writes', fn() => Limit::perMinute(1000));
         RateLimiter::for('api-functions', fn() => Limit::perMinute(1000));
 
-        // Ensure audit_logs table exists to avoid runtime errors in tests
-        if (!Schema::hasTable('audit_logs')) {
-            Schema::create('audit_logs', function (Blueprint $table): void {
+        // Ensure sp_audit_logs table exists to avoid runtime errors in tests
+        if (!Schema::hasTable('sp_audit_logs')) {
+            Schema::create('sp_audit_logs', function (Blueprint $table): void {
                 $table->id();
-                $table->string('title')->nullable();
-                $table->longText('old_data')->nullable();
-                $table->longText('new_data')->nullable();
-                $table->text('recap')->nullable();
-                $table->string('subject')->nullable();
-                $table->unsignedBigInteger('user_id')->nullable();
                 $table->string('entity_type')->nullable();
-                $table->string('tenant_id')->nullable()->index();
-                $table->unsignedBigInteger('entity_id')->nullable();
+                $table->string('entity_id')->nullable();
                 $table->string('entity_name')->nullable();
                 $table->string('event')->nullable();
-                $table->longText('metadata')->nullable();
-                $table->timestamp('created_at')->nullable();
-                $table->timestamp('updated_at')->nullable();
+                $table->string('title')->nullable();
+                $table->string('subject')->nullable();
+                $table->text('recap')->nullable();
+                $table->text('old_data')->nullable();
+                $table->text('new_data')->nullable();
+                $table->string('user_id')->nullable();
+                $table->string('tenant_id')->nullable();
+                $table->json('metadata')->nullable();
+                $table->string('ip_address')->nullable();
+                $table->string('user_agent')->nullable();
+                $table->string('request_id')->nullable();
+                $table->timestamps();
             });
         }
     }

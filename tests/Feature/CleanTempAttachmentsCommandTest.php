@@ -24,6 +24,9 @@ class CleanTempAttachmentsCommandTest extends TestCase
                 $table->string('id')->primary();
                 $table->string('disk');
                 $table->string('path');
+                $table->string('filename')->nullable();
+                $table->string('mime_type')->nullable();
+                $table->integer('size')->nullable();
                 $table->string('visibility');
                 $table->timestamp('temp_timeout')->nullable();
                 $table->timestamp('created_at')->nullable();
@@ -63,6 +66,9 @@ class CleanTempAttachmentsCommandTest extends TestCase
                 'id' => 'expired-timeout',
                 'disk' => 'local',
                 'path' => 'attachments/expired-timeout.txt',
+                'filename' => 'expired-timeout.txt',
+                'mime_type' => 'text/plain',
+                'size' => 15,
                 'visibility' => 'temp_private',
                 'temp_timeout' => Carbon::now()->subMinutes(5)->toDateTimeString(),
                 'created_at' => Carbon::now()->toDateTimeString(),
@@ -72,6 +78,9 @@ class CleanTempAttachmentsCommandTest extends TestCase
                 'id' => 'expired-fallback',
                 'disk' => 'local',
                 'path' => 'attachments/expired-fallback.txt',
+                'filename' => 'expired-fallback.txt',
+                'mime_type' => 'text/plain',
+                'size' => 15,
                 'visibility' => 'temp_public',
                 'temp_timeout' => null,
                 'created_at' => Carbon::now()->subHours(3)->toDateTimeString(),
@@ -81,6 +90,9 @@ class CleanTempAttachmentsCommandTest extends TestCase
                 'id' => 'keep-temp',
                 'disk' => 'local',
                 'path' => 'attachments/keep-temp.txt',
+                'filename' => 'keep-temp.txt',
+                'mime_type' => 'text/plain',
+                'size' => 15,
                 'visibility' => 'temp_private',
                 'temp_timeout' => Carbon::now()->addMinutes(30)->toDateTimeString(),
                 'created_at' => Carbon::now()->subHours(10)->toDateTimeString(),
@@ -90,6 +102,9 @@ class CleanTempAttachmentsCommandTest extends TestCase
                 'id' => 'keep-private',
                 'disk' => 'local',
                 'path' => 'attachments/keep-private.txt',
+                'filename' => 'keep-private.txt',
+                'mime_type' => 'text/plain',
+                'size' => 15,
                 'visibility' => 'private',
                 'temp_timeout' => Carbon::now()->subMinutes(5)->toDateTimeString(),
                 'created_at' => Carbon::now()->subHours(5)->toDateTimeString(),
@@ -98,9 +113,9 @@ class CleanTempAttachmentsCommandTest extends TestCase
         ]);
 
         DB::table('sp_attachment_links')->insert([
-            ['attachment_id' => 'expired-timeout'],
-            ['attachment_id' => 'expired-fallback'],
-            ['attachment_id' => 'keep-temp'],
+            ['attachment_id' => 'expired-timeout', 'record_id' => '1', 'record_type' => 'test', 'collection_name' => 'default'],
+            ['attachment_id' => 'expired-fallback', 'record_id' => '2', 'record_type' => 'test', 'collection_name' => 'default'],
+            ['attachment_id' => 'keep-temp', 'record_id' => '3', 'record_type' => 'test', 'collection_name' => 'default'],
         ]);
 
         $this->artisan('sp-laravel-api:clean-temp-attachments', ['--force' => true])

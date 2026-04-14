@@ -32,7 +32,7 @@ class OpenApiTest extends TestCase
 
         // Check server URL
         $serverUrl = $spec['servers'][0]['url'];
-        
+
         // The fix should remove the appended '/api', so it should just be the app.url
         $this->assertEquals('http://mylekha_task_management_back.test', $serverUrl);
     }

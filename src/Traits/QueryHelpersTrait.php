@@ -73,7 +73,7 @@ trait QueryHelpersTrait
         $this->normalizeSearchParameter($request);
         $isTenantEnabled = RecordConfigService::enableTenantId();
         $tenantColumn = RecordConfigService::tenantColumn();
-        
+
         $tableName = $builder->getModel()->getTable();
         $this->ensureSchemaForTable($tableName);
 

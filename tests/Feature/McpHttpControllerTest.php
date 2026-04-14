@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Tests\Feature;
 
+use Sopheak\Core\CoreSpLaravelApiProvider;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\WithFaker;
@@ -18,17 +19,17 @@ class McpHttpControllerTest extends TestCase
     use RefreshDatabase;
     use WithFaker;
 
-    protected function getPackageProviders($app)
+    protected function getPackageProviders($app): array
     {
         return [
-            \Sopheak\Core\CoreSpLaravelApiProvider::class,
+            CoreSpLaravelApiProvider::class,
         ];
     }
 
     protected function getEnvironmentSetUp($app): void
     {
         parent::getEnvironmentSetUp($app);
-        
+
         $app['config']->set('record.mcp.enabled', true);
         $app['config']->set('record.mcp.read_only', false);
     }
@@ -53,7 +54,7 @@ class McpHttpControllerTest extends TestCase
                 public: new RecordTablePublic(read: true, write: true)
             ),
         ]);
-        
+
         Config::set('record.mcp.enabled', true);
         Config::set('record.mcp.read_only', false);
 
@@ -67,7 +68,7 @@ class McpHttpControllerTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertHeader('Content-Type', 'text/event-stream; charset=UTF-8');
-        
+
         // SSE streamed response doesn't immediately return content in a normal way
         // We can just verify the status and headers for now
     }
@@ -79,7 +80,7 @@ class McpHttpControllerTest extends TestCase
             'jsonrpc' => '2.0',
             'id' => 1,
             'method' => 'initialize',
-            'params' => []
+            'params' => [],
         ];
 
         $response = $this->postJson('/mcp/message', $payload);
@@ -90,7 +91,7 @@ class McpHttpControllerTest extends TestCase
                 'id' => 1,
                 'result' => [
                     'protocolVersion' => '2024-11-05',
-                ]
+                ],
             ]);
     }
 
@@ -101,17 +102,18 @@ class McpHttpControllerTest extends TestCase
             'jsonrpc' => '2.0',
             'id' => 2,
             'method' => 'tools/list',
-            'params' => []
+            'params' => [],
         ];
 
         $response = $this->postJson('/mcp/message', $payload);
 
         $response->assertStatus(200);
+
         $tools = $response->json('result.tools');
-        
+
         $this->assertIsArray($tools);
         $toolNames = collect($tools)->pluck('name')->toArray();
-        
+
         $this->assertContains('list_mcp_tasks', $toolNames);
         $this->assertContains('read_mcp_tasks', $toolNames);
         $this->assertContains('create_mcp_tasks', $toolNames);
@@ -135,18 +137,18 @@ class McpHttpControllerTest extends TestCase
             'method' => 'tools/call',
             'params' => [
                 'name' => 'list_mcp_tasks',
-                'arguments' => []
-            ]
+                'arguments' => [],
+            ],
         ];
 
         $response = $this->postJson('/mcp/message', $payload);
 
         $response->assertStatus(200);
-        
+
         $result = $response->json('result');
         $this->assertIsArray($result['content']);
-        
-        $content = json_decode($result['content'][0]['text'], true);
+
+        $content = json_decode((string) $result['content'][0]['text'], true);
         $this->assertArrayHasKey('data', $content);
         $this->assertCount(1, $content['data']);
         $this->assertEquals('Test Task', $content['data'][0]['title']);
@@ -162,13 +164,13 @@ class McpHttpControllerTest extends TestCase
             'jsonrpc' => '2.0',
             'id' => 1,
             'method' => 'tools/list',
-            'params' => []
+            'params' => [],
         ];
 
         $listResponse = $this->postJson('/mcp/message', $listPayload);
         $tools = $listResponse->json('result.tools');
         $toolNames = collect($tools)->pluck('name')->toArray();
-        
+
         $this->assertContains('list_mcp_tasks', $toolNames);
         $this->assertContains('read_mcp_tasks', $toolNames);
         $this->assertNotContains('create_mcp_tasks', $toolNames);
@@ -182,14 +184,14 @@ class McpHttpControllerTest extends TestCase
                 'name' => 'create_mcp_tasks',
                 'arguments' => [
                     'payload' => [
-                        'title' => 'New Task'
-                    ]
-                ]
-            ]
+                        'title' => 'New Task',
+                    ],
+                ],
+            ],
         ];
 
         $createResponse = $this->postJson('/mcp/message', $createPayload);
-        
+
         $createResponse->assertStatus(200);
         $this->assertArrayHasKey('error', $createResponse->json());
         $this->assertEquals(-32601, $createResponse->json('error.code'));
@@ -206,22 +208,22 @@ class McpHttpControllerTest extends TestCase
                 'name' => 'create_mcp_tasks',
                 'arguments' => [
                     'payload' => [
-                        'title' => 'New Task from MCP'
-                    ]
-                ]
-            ]
+                        'title' => 'New Task from MCP',
+                    ],
+                ],
+            ],
         ];
 
         $response = $this->postJson('/mcp/message', $payload);
 
         $response->assertStatus(200);
-        
+
         $result = $response->json('result');
-        $content = json_decode($result['content'][0]['text'], true);
-        
+        $content = json_decode((string) $result['content'][0]['text'], true);
+
         $this->assertEquals('New Task from MCP', $content['data']['title']);
         $this->assertDatabaseHas('mcp_tasks', [
-            'title' => 'New Task from MCP'
+            'title' => 'New Task from MCP',
         ]);
     }
 }

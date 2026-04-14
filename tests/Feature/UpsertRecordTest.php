@@ -120,14 +120,14 @@ class UpsertRecordTest extends TestCase
                     'sku' => 'SKU-NEW',
                     'name' => 'New Product',
                     'price' => 150,
-                ]
-            ]
+                ],
+            ],
         ];
 
         $response = $this->postJson('/api/products/bulk?match_on=sku', $payload);
 
         $response->assertStatus(200);
-        
+
         $this->assertDatabaseHas('products', ['sku' => 'SKU-EXISTING', 'name' => 'Updated Existing', 'price' => 75]);
         $this->assertDatabaseHas('products', ['sku' => 'SKU-NEW', 'name' => 'New Product']);
         $this->assertDatabaseCount('products', 2);
@@ -136,7 +136,7 @@ class UpsertRecordTest extends TestCase
     /** @test */
     public function it_can_bulk_upsert_via_dedicated_endpoint(): void
     {
-         // Pre-existing
+        // Pre-existing
         DB::table('products')->insert([
             'sku' => 'SKU-EXISTING',
             'name' => 'Existing',
@@ -155,7 +155,7 @@ class UpsertRecordTest extends TestCase
                 'sku' => 'SKU-NEW-BULK',
                 'name' => 'New Bulk Product',
                 'price' => 200,
-            ]
+            ],
         ];
 
         $response = $this->postJson('/api/products/bulk/upsert?match_on=sku', $payload);

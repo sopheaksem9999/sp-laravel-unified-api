@@ -11,7 +11,6 @@ use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordBelongsToType;
-
 use Illuminate\Support\Facades\Schema;
 
 class OrderByWithRelationshipTest extends TestCase
@@ -79,7 +78,7 @@ class OrderByWithRelationshipTest extends TestCase
                     'user' => new RecordBelongsToType(
                         table: 'users',
                         foreignKey: 'user_id'
-                    )
+                    ),
                 ]
             ),
             'users' => new RecordTableType(
@@ -87,7 +86,7 @@ class OrderByWithRelationshipTest extends TestCase
                 pmsName: 'user',
                 hasTenantId: false,
                 public: new RecordTablePublic(read: true)
-            )
+            ),
         ];
 
         Config::set('record.tables', $config);
@@ -150,7 +149,7 @@ class OrderByWithRelationshipTest extends TestCase
                     'user' => new RecordBelongsToType(
                         table: 'users',
                         foreignKey: 'user_id'
-                    )
+                    ),
                 ]
             ),
             'users' => new RecordTableType(
@@ -158,7 +157,7 @@ class OrderByWithRelationshipTest extends TestCase
                 pmsName: 'user',
                 hasTenantId: false,
                 public: new RecordTablePublic(read: true)
-            )
+            ),
         ];
 
         Config::set('record.tables', $config);

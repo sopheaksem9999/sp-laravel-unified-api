@@ -5,8 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Services\RecordConfigService;
 
-return new class extends Migration
-{
+return new class extends Migration {
     public function up(): void
     {
         $tenantColumn = RecordConfigService::tenantColumn();
@@ -47,8 +46,8 @@ return new class extends Migration
             }
             $table->uuid('attachment_id')->index();
             $table->uuid('record_id')->index();
-            $table->string('record_type')->index(); 
-            $table->string('collection_name')->nullable()->index(); 
+            $table->string('record_type')->index();
+            $table->string('collection_name')->nullable()->index();
             $table->timestamps();
         });
     }

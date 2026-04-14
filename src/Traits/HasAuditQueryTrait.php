@@ -137,13 +137,13 @@ trait HasAuditQueryTrait
                 'success' => true,
                 'error_code' => HttpErrorCodeConstant::SUCCESS,
                 'data' => $logs,
-                'message' => 'Audit logs retrieved successfully'
+                'message' => 'Audit logs retrieved successfully',
             ]);
         } catch (Exception $exception) {
             return response()->json([
                 'success' => false,
                 'error_code' => HttpErrorCodeConstant::INTERNAL_SERVER_ERROR,
-                'message' => 'Failed to retrieve audit logs: ' . $exception->getMessage()
+                'message' => 'Failed to retrieve audit logs: ' . $exception->getMessage(),
             ], RecordApiJsonResponseEnum::SERVER_ERROR->value);
         }
     }

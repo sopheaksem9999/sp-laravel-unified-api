@@ -37,8 +37,43 @@ class GenerateRecordTablesFromDatabaseCommand extends Command
 
         $created = 0;
 
+        $ignoredTables = [
+            // Internal Package Tables
+            'sp_attachments',
+            'sp_attachment_links',
+            'sp_document_folders',
+            'sp_webhook_endpoints',
+            'sp_webhook_subscriptions',
+            'sp_webhook_deliveries',
+            'sp_audit_logs',
+            'audit_logs',
+
+            // Standard Laravel Tables
+            'migrations',
+            'failed_jobs',
+            'jobs',
+            'job_batches',
+            'password_resets',
+            'password_reset_tokens',
+            'personal_access_tokens',
+            'sessions',
+            'cache',
+            'cache_locks',
+
+            // Laravel Passport / OAuth
+            'oauth_auth_codes',
+            'oauth_access_tokens',
+            'oauth_clients',
+            'oauth_personal_access_clients',
+            'oauth_refresh_tokens',
+        ];
+
         foreach ($allTables as $tableName) {
             if (str_contains((string) $tableName, '_has')) {
+                continue;
+            }
+
+            if (in_array($tableName, $ignoredTables, true)) {
                 continue;
             }
 
@@ -186,22 +221,22 @@ class GenerateRecordTablesFromDatabaseCommand extends Command
         $relationshipsCode = $this->buildRelationshipsCode($relationships);
 
         return <<<PHP
-<?php
+            <?php
 
-use Sopheak\\Core\\Types\\RecordBelongsToType;
-use Sopheak\\Core\\Types\\RecordTableType;
+            use Sopheak\\Core\\Types\\RecordBelongsToType;
+            use Sopheak\\Core\\Types\\RecordTableType;
 
-return new RecordTableType(
-    pmsName: {$pmsLiteral},
-    table: {$tableLiteral},
-    isAuthRead: true,
-    isAuthWrite: true,
-    relationships: {$relationshipsCode},
-    functions: [],
-    softDeletes: {$softDeletesLiteral},
-    hasTenantId: {$hasTenantLiteral},
-);
-PHP;
+            return new RecordTableType(
+                pmsName: {$pmsLiteral},
+                table: {$tableLiteral},
+                isAuthRead: true,
+                isAuthWrite: true,
+                relationships: {$relationshipsCode},
+                functions: [],
+                softDeletes: {$softDeletesLiteral},
+                hasTenantId: {$hasTenantLiteral},
+            );
+            PHP;
     }
 
     private function buildRelationshipsCode(array $relationships): string
@@ -240,7 +275,7 @@ PHP;
             throw new RuntimeException('Path exists and is not a directory: ' . $path);
         }
 
-        if (!mkdir($path, 0755, true) && !is_dir($path)) {
+        if (!mkdir($path, 0o755, true) && !is_dir($path)) {
             throw new RuntimeException('Failed to create directory: ' . $path);
         }
     }
@@ -248,7 +283,7 @@ PHP;
     private function writeFile(string $path, string $contents): void
     {
         $dir = dirname($path);
-        if (!is_dir($dir) && (!mkdir($dir, 0755, true) && !is_dir($dir))) {
+        if (!is_dir($dir) && (!mkdir($dir, 0o755, true) && !is_dir($dir))) {
             throw new RuntimeException('Failed to create directory: ' . $dir);
         }
 

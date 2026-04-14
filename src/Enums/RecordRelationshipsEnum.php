@@ -4,7 +4,7 @@ namespace Sopheak\Core\Enums;
 
 /**
  * Enum for defining relationship types in the Record API system.
- * 
+ *
  * This enum provides standardized relationship type definitions for
  * the dynamic API system, ensuring consistency across the application.
  */

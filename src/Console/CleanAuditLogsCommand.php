@@ -4,6 +4,7 @@ namespace Sopheak\Core\Console;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
 use Sopheak\Core\Services\RecordConfigService;
 
@@ -45,19 +46,19 @@ class CleanAuditLogsCommand extends Command
         }
 
         $cutoffDate = Carbon::now()->subDays($retentionDays);
-        
+
         $this->info("Audit Log Cleanup");
         $this->info("================");
         $this->line(sprintf('Retention period: %s days', $retentionDays));
         $this->line('Cutoff date: ' . $cutoffDate->format('Y-m-d H:i:s'));
         $this->line('Batch size: ' . $batchSize);
-        
+
         if ($isDryRun) {
             $this->warn("DRY RUN MODE - No data will be deleted");
         }
 
         // Get count of records to be deleted
-        $totalCount = DB::table('audit_logs')
+        $totalCount = DB::table(RecordConfigService::auditLogModel())
             ->where('created_at', '<', $cutoffDate)
             ->count();
 
@@ -74,8 +75,16 @@ class CleanAuditLogsCommand extends Command
             return Command::SUCCESS;
         }
 
+        $archiveEnabled = config('audit.archive.enabled', false);
+        $archiveDisk = config('audit.archive.disk', 'local');
+        $archivePath = config('audit.archive.path', 'audit-archives');
+
         if ($isDryRun) {
             $this->info(sprintf('DRY RUN: Would delete %s audit log records.', $totalCount));
+            if ($archiveEnabled) {
+                $this->info(sprintf('DRY RUN: Would archive logs to disk "%s" at path "%s".', $archiveDisk, $archivePath));
+            }
+
             return Command::SUCCESS;
         }
 
@@ -84,11 +93,40 @@ class CleanAuditLogsCommand extends Command
         $progressBar = $this->output->createProgressBar($totalCount);
         $progressBar->start();
 
+        $tempFile = null;
+        $handle = null;
+
+        if ($archiveEnabled) {
+            $tempFile = tempnam(sys_get_temp_dir(), 'audit_archive_');
+            $handle = fopen($tempFile, 'w');
+        }
+
         do {
-            $batchDeleted = DB::table('audit_logs')
-                ->where('created_at', '<', $cutoffDate)
-                ->limit($batchSize)
-                ->delete();
+            if ($archiveEnabled) {
+                $records = DB::table(RecordConfigService::auditLogModel())
+                    ->where('created_at', '<', $cutoffDate)
+                    ->limit($batchSize)
+                    ->get();
+
+                $batchCount = $records->count();
+                if ($batchCount === 0) {
+                    break;
+                }
+
+                foreach ($records as $record) {
+                    fwrite($handle, json_encode($record) . PHP_EOL);
+                }
+
+                $ids = $records->pluck('id')->toArray();
+                $batchDeleted = DB::table(RecordConfigService::auditLogModel())
+                    ->whereIn('id', $ids)
+                    ->delete();
+            } else {
+                $batchDeleted = DB::table(RecordConfigService::auditLogModel())
+                    ->where('created_at', '<', $cutoffDate)
+                    ->limit($batchSize)
+                    ->delete();
+            }
 
             $deletedCount += $batchDeleted;
             $progressBar->advance($batchDeleted);
@@ -103,10 +141,26 @@ class CleanAuditLogsCommand extends Command
         $progressBar->finish();
         $this->newLine(2);
 
+        if ($archiveEnabled && $deletedCount > 0) {
+            fclose($handle);
+            $storage = Storage::disk($archiveDisk);
+            $filename = sprintf('audit_archive_%s.jsonl', Carbon::now()->format('Y_m_d_His'));
+            $fullPath = rtrim((string) $archivePath, '/') . '/' . $filename;
+
+            $this->info(sprintf('Uploading archive to %s:%s...', $archiveDisk, $fullPath));
+            $storage->put($fullPath, fopen($tempFile, 'r'));
+            unlink($tempFile);
+
+            $this->info(sprintf('Archived %d logs successfully.', $deletedCount));
+        } elseif ($archiveEnabled) {
+            fclose($handle);
+            unlink($tempFile);
+        }
+
         $this->info(sprintf('Successfully deleted %d audit log records.', $deletedCount));
-        
+
         // Show remaining count
-        $remainingCount = DB::table('audit_logs')->count();
+        $remainingCount = DB::table(RecordConfigService::auditLogModel())->count();
         $this->line('Remaining audit logs: ' . $remainingCount);
 
         return Command::SUCCESS;

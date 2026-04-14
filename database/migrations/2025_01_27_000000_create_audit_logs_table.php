@@ -5,15 +5,14 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Services\RecordConfigService;
 
-return new class extends Migration
-{
+return new class extends Migration {
     /**
      * Run the migrations.
      */
     public function up(): void
     {
         if (RecordConfigService::auditEnabled()) {
-            Schema::create('audit_logs', function (Blueprint $blueprint): void {
+            Schema::create('sp_audit_logs', function (Blueprint $blueprint): void {
                 $blueprint->id();
 
                 if (RecordConfigService::enableTenantId()) {
@@ -49,6 +48,7 @@ return new class extends Migration
     public function down(): void
     {
         if (RecordConfigService::auditEnabled()) {
+            Schema::dropIfExists('sp_audit_logs');
             Schema::dropIfExists('audit_logs');
         }
     }

@@ -91,7 +91,7 @@ class ProcessBulkOperationJob implements ShouldQueue
                 'table' => $this->table,
                 'operation' => $this->operation,
                 'error' => $throwable->getMessage(),
-                'trace' => $throwable->getTraceAsString()
+                'trace' => $throwable->getTraceAsString(),
             ]);
 
             // Re-throw to ensure job is marked as failed in queue

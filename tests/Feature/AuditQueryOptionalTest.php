@@ -34,7 +34,7 @@ class AuditQueryOptionalTest extends TestCase
             $mock->shouldReceive('getAuditStats')
                 ->with([
                     'entity_type' => 'test_models',
-                    'entity_id' => 123
+                    'entity_id' => 123,
                 ])
                 ->andReturn($mockStats);
         });
@@ -44,7 +44,7 @@ class AuditQueryOptionalTest extends TestCase
         // However, HasAuditQueryTrait calls AuditLogService::getAuditStats.
 
         // Since AuditLogService methods are static, we might need to rely on the actual implementation
-        // or refactor to allow mocking. 
+        // or refactor to allow mocking.
         // For this test, let's assume we can't easily mock static methods without extensive setup.
         // So we'll rely on the fact that HasAuditQueryTrait calls resolveAuditEntityClass.
 
@@ -55,7 +55,7 @@ class AuditQueryOptionalTest extends TestCase
         // But we want to test the trait's implementation.
 
         // Let's just run the endpoint. If it fails with BadMethodCallException, the test fails.
-        // If it fails with something else (like DB error in AuditLogService), that's fine, 
+        // If it fails with something else (like DB error in AuditLogService), that's fine,
         // it means it passed the check.
 
         // Actually, since we are in a test environment, AuditLogService might try to query the DB.

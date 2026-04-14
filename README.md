@@ -420,6 +420,10 @@ php artisan sp-laravel-api:record customers
 This generates `config/records/tables/customers.php` returning a `RecordTableType` for the `customers` table. After creating the file and the underlying database table, you can sync its `columns` definition from the DB schema:
 
 ```bash
+# Create configs for all tables in your database (ignores system/package tables)
+php artisan sp-laravel-api:generate-record-tables-from-db
+
+# Sync columns from database into existing config files (ignores system/package tables)
 php artisan sp-laravel-api:sync-record-columns --force
 ```
 
@@ -1169,10 +1173,10 @@ php artisan migrate
 
 ```sql
 -- Add indexes for better performance
-CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
-CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at);
--- Optional (only if you enable multi-tenant mode and store tenant IDs in audit_logs)
--- CREATE INDEX idx_audit_logs_tenant_id ON audit_logs(tenant_id);
+CREATE INDEX idx_sp_audit_logs_entity ON sp_audit_logs(entity_type, entity_id);
+CREATE INDEX idx_sp_audit_logs_created_at ON sp_audit_logs(created_at);
+-- Optional (only if you enable multi-tenant mode and store tenant IDs in sp_audit_logs)
+-- CREATE INDEX idx_sp_audit_logs_tenant_id ON sp_audit_logs(tenant_id);
 CREATE INDEX idx_users_email ON users(email);
 ```
 

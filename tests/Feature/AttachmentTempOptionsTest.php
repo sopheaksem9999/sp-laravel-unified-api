@@ -21,13 +21,6 @@ class AttachmentTempOptionsTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected function tearDown(): void
-    {
-        SchemaRegistryUtils::clearAllCache();
-        
-        parent::tearDown();
-    }
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -139,6 +132,34 @@ class AttachmentTempOptionsTest extends TestCase
     }
 
     /** @test */
+    public function upload_accepts_string_boolean_fields(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-04-03 10:00:00'));
+
+        $request = Request::create(
+            uri: '/attachments/upload',
+            method: 'POST',
+            parameters: [
+                'as_temp' => 'false',
+                'replace_old' => 'false',
+                'visibility' => 'private',
+            ],
+            files: [
+                'file' => UploadedFile::fake()->create('sample.txt', 1, 'text/plain'),
+            ]
+        );
+
+        $controller = new AttachmentUploadController();
+        $response = $controller->upload($request);
+
+        $this->assertSame(200, $response->getStatusCode());
+        $payload = $response->getData(true);
+        $this->assertSame('private', $payload['visibility']);
+
+        Carbon::setTestNow();
+    }
+
+    /** @test */
     public function clone_temp_creates_new_attachment_and_copies_file(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-04-03 12:00:00'));
@@ -226,7 +247,7 @@ class AttachmentTempOptionsTest extends TestCase
         $this->assertSame(200, $response->getStatusCode());
         $payload = $response->getData(true);
         $this->assertSame('temp_public', $payload['visibility']);
-        $this->assertStringContainsString('/api/attachments/' . $payload['id'] . '/download', (string) $payload['url']);
+        $this->assertStringContainsString('/api/' . config('attachments.route_prefix', 'attachments') . '/' . $payload['id'] . '/view', (string) $payload['url']);
 
         Carbon::setTestNow();
     }
