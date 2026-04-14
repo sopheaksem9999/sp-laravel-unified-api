@@ -14,7 +14,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 class RecordRouteMiddleware
 {
-    public function handle(Request $request, Closure $next, string $action): Response
+    public function handle(Request $request, Closure $next, string $action): mixed
     {
         $middlewares = $this->resolveMiddlewares($request, $action);
         if ([] === $middlewares) {

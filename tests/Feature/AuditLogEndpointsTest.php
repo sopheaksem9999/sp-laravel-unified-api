@@ -24,10 +24,6 @@ class AuditLogEndpointsTest extends TestCase
 
         config()->set('audit.enabled', true);
         config()->set('record.enabled', true);
-
-        $auditConfig = require __DIR__ . '/../../config/audit.php';
-        config()->set('audit.tables', ['sp_audit_logs' => $auditConfig['tables']['sp_audit_logs']]);
-        config()->set('record.tables', config('audit.tables'));
         SchemaRegistryUtils::refresh();
 
         // Register the dynamic API routes
@@ -85,16 +81,16 @@ class AuditLogEndpointsTest extends TestCase
 
         // Define the gate for testing
         Gate::define('manage-audit-logs', fn($user): bool => $user->id === 1);
-        Gate::define('view:sp_audit_logs', fn($user): bool => true);
-        Gate::define('create:sp_audit_logs', fn($user): bool => true);
-        Gate::define('update:sp_audit_logs', fn($user): bool => true);
-        Gate::define('delete:sp_audit_logs', fn($user): bool => true);
+        Gate::define('view:audit_log', fn($user): bool => $user->id === 1);
+        Gate::define('create:audit_log', fn($user): bool => $user->id === 1);
+        Gate::define('update:audit_log', fn($user): bool => $user->id === 1);
+        Gate::define('delete:audit_log', fn($user): bool => $user->id === 1);
     }
 
     /** @test */
     public function it_requires_authentication_and_permission(): void
     {
-        $response = $this->getJson('/api/v1/audit_logs');
+        $response = $this->getJson('/api/sp_audit_logs');
         $response->assertStatus(401);
 
         $unauthorizedUser = new User();
@@ -111,7 +107,7 @@ class AuditLogEndpointsTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $response = $this->actingAs($unauthorizedUser, 'api')->getJson('/api/v1/audit_logs');
+        $response = $this->actingAs($unauthorizedUser, 'api')->getJson('/api/sp_audit_logs');
         $response->assertStatus(403);
     }
 
@@ -129,10 +125,9 @@ class AuditLogEndpointsTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $response = $this->actingAs($this->user, 'api')->getJson('/api/v1/audit_logs?filter[entity_type]=invoices');
-
+        $response = $this->actingAs($this->user, 'api')->getJson('/api/sp_audit_logs?filter[entity_type]=invoices');
         $response->assertStatus(200);
-        $this->assertEquals('invoices', $response->json('data.data.0.entity_type'));
+        $this->assertEquals('invoices', $response->json('data.0.entity_type'));
     }
 
     /** @test */
@@ -143,7 +138,7 @@ class AuditLogEndpointsTest extends TestCase
             ['entity_type' => 'invoices', 'entity_id' => '2', 'event' => 'updated', 'created_at' => now(), 'updated_at' => now()],
         ]);
 
-        $response = $this->actingAs($this->user, 'api')->getJson('/api/v1/audit_logs/rpc/stats');
+        $response = $this->actingAs($this->user, 'api')->getJson('/api/sp_audit_logs/rpc/stats');
 
         $response->assertStatus(200);
         $this->assertEquals(2, $response->json('data.total'));
@@ -166,7 +161,7 @@ class AuditLogEndpointsTest extends TestCase
             ],
         ]);
 
-        $response = $this->actingAs($this->user, 'api')->getJson('/api/v1/audit_logs/rpc/field-timeline/invoices/1/status');
+        $response = $this->actingAs($this->user, 'api')->getJson('/api/sp_audit_logs/rpc/field-timeline/invoices/1/status');
 
         $response->assertStatus(200);
         $this->assertCount(1, $response->json('data'));
@@ -198,7 +193,7 @@ class AuditLogEndpointsTest extends TestCase
             ],
         ]);
 
-        $response = $this->actingAs($this->user, 'api')->getJson('/api/v1/audit_logs/rpc/field-stats/invoices/1/status');
+        $response = $this->actingAs($this->user, 'api')->getJson('/api/sp_audit_logs/rpc/field-stats/invoices/1/status');
 
         $response->assertStatus(200);
         $this->assertEquals(2, $response->json('data.total_changes'));
