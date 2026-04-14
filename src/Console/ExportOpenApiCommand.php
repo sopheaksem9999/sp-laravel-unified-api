@@ -67,7 +67,7 @@ class ExportOpenApiCommand extends Command
 
         // Ensure the directory exists
         $directory = dirname($outputPath);
-        if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
+        if (!is_dir($directory) && !mkdir($directory, 0o755, true) && !is_dir($directory)) {
             $this->error('Failed to create directory: ' . $directory);
 
             return self::FAILURE;

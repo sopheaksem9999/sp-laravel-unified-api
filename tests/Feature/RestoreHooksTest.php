@@ -280,5 +280,3 @@ class RestoreHooksTest extends TestCase
         $this->assertNull($row->deleted_at);
     }
 }
-
-

@@ -431,7 +431,7 @@ trait HasBulkOperations
             $idsToDelete = array_unique($idsToDelete);
 
             if ($request->boolean('async') || $request->header('X-Async-Process')) {
-                $formattedItems = array_map(fn ($id): array => [$pk => $id], $idsToDelete);
+                $formattedItems = array_map(fn($id): array => [$pk => $id], $idsToDelete);
                 return $this->dispatchAsyncBulk($request, $table, 'delete', $formattedItems, $tenantId);
             }
 

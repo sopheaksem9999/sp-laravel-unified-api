@@ -24,7 +24,6 @@ class RecordValidationType
         return new self(
             class: $properties['class'] ?? throw new InvalidArgumentException('class is required'),
             functionName: $properties['functionName'] ?? throw new InvalidArgumentException('functionName is required'),
-
         );
     }
 
@@ -48,7 +47,6 @@ class RecordValidationType
                 return new self(
                     class: $first['class'] ?? throw new InvalidArgumentException('class is required in config array'),
                     functionName: $first['functionName'] ?? throw new InvalidArgumentException('functionName is required in config array'),
-
                 );
             }
         }
@@ -56,7 +54,6 @@ class RecordValidationType
         return new self(
             class: $config['class'] ?? throw new InvalidArgumentException('class is required in config array'),
             functionName: $config['functionName'] ?? throw new InvalidArgumentException('functionName is required in config array'),
-
         );
     }
 }

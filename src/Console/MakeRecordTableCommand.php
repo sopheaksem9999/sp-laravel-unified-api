@@ -90,21 +90,21 @@ class MakeRecordTableCommand extends Command
         $softDeletesLiteral = $softDeletes ? 'true' : 'false';
 
         return <<<PHP
-<?php
+            <?php
 
-use Sopheak\\Core\\Types\\RecordTableType;
+            use Sopheak\\Core\\Types\\RecordTableType;
 
-return new RecordTableType(
-    pmsName: {$pmsLiteral},
-    table: {$tableLiteral},
-    isAuthRead: true,
-    isAuthWrite: true,
-    relationships: [],
-    functions: [],
-    softDeletes: {$softDeletesLiteral},
-    hasTenantId: {$hasTenantLiteral},
-);
-PHP;
+            return new RecordTableType(
+                pmsName: {$pmsLiteral},
+                table: {$tableLiteral},
+                isAuthRead: true,
+                isAuthWrite: true,
+                relationships: [],
+                functions: [],
+                softDeletes: {$softDeletesLiteral},
+                hasTenantId: {$hasTenantLiteral},
+            );
+            PHP;
     }
 
     private function ensureDirectory(string $path): void
@@ -117,7 +117,7 @@ PHP;
             throw new RuntimeException('Path exists and is not a directory: ' . $path);
         }
 
-        if (!mkdir($path, 0755, true) && !is_dir($path)) {
+        if (!mkdir($path, 0o755, true) && !is_dir($path)) {
             throw new RuntimeException('Failed to create directory: ' . $path);
         }
     }
@@ -125,7 +125,7 @@ PHP;
     private function writeFile(string $path, string $contents): void
     {
         $dir = dirname($path);
-        if (!is_dir($dir) && (!mkdir($dir, 0755, true) && !is_dir($dir))) {
+        if (!is_dir($dir) && (!mkdir($dir, 0o755, true) && !is_dir($dir))) {
             throw new RuntimeException('Failed to create directory: ' . $dir);
         }
 

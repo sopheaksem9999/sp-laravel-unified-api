@@ -14,7 +14,7 @@ class AuditLogServiceTest extends TestCase
     /** @test */
     public function it_returns_plain_entity_type_as_table_name_when_not_namespace(): void
     {
-        $this->assertSame('audit_logs', AuditLogService::getTableNameFromEntityType('audit_logs'));
+        $this->assertSame('sp_audit_logs', AuditLogService::getTableNameFromEntityType('sp_audit_logs'));
         $this->assertSame('custom_type', AuditLogService::getTableNameFromEntityType('custom_type'));
     }
 
@@ -151,14 +151,14 @@ class AuditLogServiceTest extends TestCase
     /** @test */
     public function it_uses_previous_metadata_for_field_changes(): void
     {
-        DB::table('audit_logs')->truncate();
+        DB::table('sp_audit_logs')->truncate();
 
         $entityType = 'invoices';
         $entityId = 1;
         $prevChangedAt = Carbon::parse('2025-01-01 10:00:00');
         $prevCreatedAt = Carbon::parse('2025-01-02 12:30:00');
 
-        DB::table('audit_logs')->insert([
+        DB::table('sp_audit_logs')->insert([
             'entity_type' => $entityType,
             'entity_id' => $entityId,
             'metadata' => json_encode([

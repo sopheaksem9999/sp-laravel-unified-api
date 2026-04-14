@@ -237,5 +237,3 @@ class DeleteHooksTest extends TestCase
         $this->assertSoftDeleted('orders', ['id' => $id]);
     }
 }
-
-

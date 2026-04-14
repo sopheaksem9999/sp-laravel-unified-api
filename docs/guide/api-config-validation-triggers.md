@@ -54,6 +54,10 @@ php artisan sp-laravel-api:record customers
 This creates `config/records/tables/customers.php` with a basic `RecordTableType` definition for the `customers` table. After creating the file and the corresponding database table, you can populate the `columns` metadata from the database schema:
 
 ```bash
+# Create configs for all tables in your database (ignores system/package tables)
+php artisan sp-laravel-api:generate-record-tables-from-db
+
+# Sync columns from database into existing config files (ignores system/package tables)
 php artisan sp-laravel-api:sync-record-columns --force
 ```
 

@@ -87,7 +87,7 @@ class RelationshipNestedFilterTest extends TestCase
                         secondKey: 'id',
                         localKey: 'id',
                         secondLocalKey: 'user_id',
-                    )
+                    ),
                 ],
             ),
             'users' => new RecordTableType(
@@ -110,7 +110,7 @@ class RelationshipNestedFilterTest extends TestCase
         // Wait, Task 2 has User 2. Filter excludes User 2. So Task 2 should show empty assignees.
 
         $request = Request::create('/api/v1/tasks', 'GET', [
-            'select' => '*,assignees(*,name=eq.User 1)'
+            'select' => '*,assignees(*,name=eq.User 1)',
         ]);
 
         $schema = SchemaRegistryUtils::get();
@@ -137,7 +137,7 @@ class RelationshipNestedFilterTest extends TestCase
     public function test_nested_filter_supports_with_prefix_syntax(): void
     {
         $request = Request::create('/api/v1/tasks', 'GET', [
-            'select' => '*,with=assignees(*,name=eq.User 1)'
+            'select' => '*,with=assignees(*,name=eq.User 1)',
         ]);
 
         $schema = SchemaRegistryUtils::get();
@@ -164,7 +164,7 @@ class RelationshipNestedFilterTest extends TestCase
 
         $request = Request::create('/api/v1/tasks', 'GET', [
             'select' => '*,assignees(*)',
-            'assignees.name' => 'eq.User 1'
+            'assignees.name' => 'eq.User 1',
         ]);
 
         $schema = SchemaRegistryUtils::get();
@@ -185,7 +185,7 @@ class RelationshipNestedFilterTest extends TestCase
     {
         $request = Request::create('/api/v1/tasks', 'GET', [
             'select' => '*,assignees(*)',
-            'assignees.name' => 'eq.NonExistingUser'
+            'assignees.name' => 'eq.NonExistingUser',
         ]);
 
         $schema = SchemaRegistryUtils::get();
@@ -214,7 +214,7 @@ class RelationshipNestedFilterTest extends TestCase
                         fromObjectId: 'owner_id',
                         toObjectType: 'users',
                         toObjectId: 'target_id',
-                    )
+                    ),
                 ],
             ),
             'users' => new RecordTableType(
@@ -230,7 +230,7 @@ class RelationshipNestedFilterTest extends TestCase
         SchemaRegistryUtils::refresh();
 
         $request = Request::create('/api/v1/tasks', 'GET', [
-            'select' => '*,assignees(*)'
+            'select' => '*,assignees(*)',
         ]);
 
         $schema = SchemaRegistryUtils::get();
@@ -263,7 +263,7 @@ class RelationshipNestedFilterTest extends TestCase
                         allowCreate: false,
                         allowUpdate: false,
                         allowDelete: true,
-                    )
+                    ),
                 ],
             ),
             'users' => new RecordTableType(

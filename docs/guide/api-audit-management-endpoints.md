@@ -25,21 +25,23 @@ Audit title, subject, and recap labels are configurable via `config/audit.php`:
 ### Get Audit Logs
 
 ```http
-GET /{api_prefix}/audit/logs
+GET /{api_prefix}/audit_logs
 ```
 
-Retrieve audit logs with filtering options.
+Retrieve audit logs using the standard dynamic CRUD API. You can use standard filters.
 
 #### Query Parameters
 
-- `entity_type` (string, required) - Filter by entity type (table name, e.g. `invoices`)
-- `entity_id` (integer, required) - Filter by specific entity ID
-- `limit` (integer) - Max results (default: 50, max: 100)
+- `filter[entity_type]` (string, optional) - Filter by entity type (table name, e.g. `invoices`)
+- `filter[entity_id]` (integer, optional) - Filter by specific entity ID
+- `filter[event]` (string, optional) - Filter by event type
+- `filter[user_id]` (integer, optional) - Filter by user ID
+- `per_page` (integer) - Max results (default: 15)
 
 #### Example Request
 
 ```http
-GET /api/v1/audit/logs?entity_type=invoices&entity_id=123&limit=20
+GET /api/v1/audit_logs?filter[entity_type]=invoices&filter[entity_id]=123&per_page=20
 Authorization: Bearer {access_token}
 ```
 
@@ -68,12 +70,12 @@ Authorization: Bearer {access_token}
 }
 ```
 
-**Note:** `old_data`, `new_data`, and `metadata` are stored as JSON strings in the database. Clients can `JSON.parse` / `json_decode` them when needed.
+**Note:** `sp_audit_logs` table does **not** expose standard Create, Update, or Delete API endpoints. Audit logs are written strictly by the internal logic events configured on your models. Manual insertion or modification via the API is forbidden to preserve security and data integrity.
 
 ### Get Audit Statistics
 
 ```http
-GET /{api_prefix}/audit/stats
+GET /{api_prefix}/audit_logs/rpc/stats
 ```
 
 Get audit statistics and metrics.
@@ -110,16 +112,16 @@ Get audit statistics and metrics.
 ### Get Field Timeline
 
 ```http
-GET /{api_prefix}/audit/field-timeline
+GET /{api_prefix}/audit_logs/rpc/field-timeline/{entityType}/{entityId}/{field}
 ```
 
 Get timeline of changes for a specific field.
 
-#### Query Parameters (Required)
+#### Path Parameters (Required)
 
-- `entity_type` (string) - Entity type
-- `entity_id` (integer) - Entity ID
-- `field` (string) - Field name
+- `entityType` (string) - Entity type (e.g., `invoices`)
+- `entityId` (integer) - Entity ID
+- `field` (string) - Field name (e.g., `status`)
 
 #### Optional Parameters
 
@@ -159,15 +161,15 @@ Get timeline of changes for a specific field.
 ### Get Field Statistics
 
 ```http
-GET /{api_prefix}/audit/field-stats
+GET /{api_prefix}/audit_logs/rpc/field-stats/{entityType}/{entityId}/{field}
 ```
 
-Get statistics for a specific field across entities.
+Get statistics for a specific field across an entity.
 
-#### Query Parameters (Required)
+#### Path Parameters (Required)
 
-- `entity_type` (string) - Entity type
-- `entity_id` (integer) - Entity ID
+- `entityType` (string) - Entity type
+- `entityId` (integer) - Entity ID
 - `field` (string) - Field name
 
 #### Response Format
@@ -189,52 +191,11 @@ Get statistics for a specific field across entities.
 }
 ```
 
-### Create Audit Log
-
-```http
-POST /{api_prefix}/audit/logs
-```
-
-Manually create an audit log entry.
-
-#### Request Body
-
-```json
-{
-  "event": "updated",
-  "entity_type": "invoices",
-  "entity_name": "invoices",
-  "entity_id": 123,
-  "subject": "INV-001",
-  "recap": "Status changed via API",
-  "metadata": {
-    "id": 123,
-    "old_data": { "status": "draft" },
-    "new_data": { "status": "sent" }
-  }
-}
-```
-
-**Note:** If `metadata.old_data` and `metadata.new_data` are provided, they are used as the explicit old/new snapshots for the audit record. If omitted for updates, the system may infer `old_data` from the most recent `new_data` stored for the same entity.
-
 ### Get Specific Audit Log
 
 ```http
-GET /{api_prefix}/audit/logs/{id}
+GET /{api_prefix}/audit_logs/{id}
 ```
 
-Retrieve a specific audit log by ID.
-
-### Cleanup Audit Logs
-
-```http
-DELETE /{api_prefix}/audit/cleanup
-```
-
-Clean up old audit logs (admin only - requires `can:manage-audit-logs` permission).
-
-#### Query Parameters
-
-- `days` (integer) - Retention period in days
-- `dry_run` (boolean) - Preview what would be deleted
+Retrieve a specific audit log by ID. This uses the standard read endpoint since read access is allowed (`canRead: true`).
 

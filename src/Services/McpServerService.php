@@ -16,7 +16,6 @@ class McpServerService
     /**
      * Handle an incoming JSON-RPC request payload.
      *
-     * @param array $payload
      * @return array|null The JSON-RPC response payload, or null if it's a notification
      */
     public function handleRequest(array $payload): ?array
@@ -42,37 +41,32 @@ class McpServerService
             }
 
             return $this->successResponse($id, $result);
-        } catch (Exception $e) {
+        } catch (Exception $exception) {
             if ($id === null) {
                 return null;
             }
+
             // Code -32601 is Method not found
-            $code = $e->getCode() ?: -32603; // Internal error
-            if ($e->getMessage() === 'Method not found') {
+            $code = $exception->getCode() ?: -32603; // Internal error
+            if ($exception->getMessage() === 'Method not found') {
                 $code = -32601;
             }
-            return $this->errorResponse($id, $code, $e->getMessage());
+
+            return $this->errorResponse($id, $code, $exception->getMessage());
         }
     }
 
     protected function routeMethod(string $method, array $params): mixed
     {
-        switch ($method) {
-            case 'initialize':
-                return $this->handleInitialize($params);
-            case 'notifications/initialized':
-                return null; // Just acknowledge
-            case 'resources/list':
-                return $this->handleResourcesList($params);
-            case 'resources/read':
-                return $this->handleResourcesRead($params);
-            case 'tools/list':
-                return $this->handleToolsList($params);
-            case 'tools/call':
-                return $this->handleToolsCall($params);
-            default:
-                throw new Exception('Method not found', -32601);
-        }
+        return match ($method) {
+            'initialize' => $this->handleInitialize($params),
+            'notifications/initialized' => null,
+            'resources/list' => $this->handleResourcesList($params),
+            'resources/read' => $this->handleResourcesRead($params),
+            'tools/list' => $this->handleToolsList($params),
+            'tools/call' => $this->handleToolsCall($params),
+            default => throw new Exception('Method not found', -32601),
+        };
     }
 
     protected function handleInitialize(array $params): array
@@ -106,9 +100,9 @@ class McpServerService
             }
 
             $resources[] = [
-                'uri' => "schema://{$table}",
-                'name' => "{$table} Schema",
-                'description' => "Database schema and configuration for {$table}",
+                'uri' => 'schema://' . $table,
+                'name' => $table . ' Schema',
+                'description' => 'Database schema and configuration for ' . $table,
                 'mimeType' => 'application/json',
             ];
         }
@@ -122,7 +116,7 @@ class McpServerService
     {
         $uri = $params['uri'] ?? '';
         if (!str_starts_with($uri, 'schema://')) {
-            throw new Exception("Invalid resource URI: {$uri}");
+            throw new Exception('Invalid resource URI: ' . $uri);
         }
 
         $table = substr($uri, 9); // Remove 'schema://'
@@ -130,7 +124,7 @@ class McpServerService
         $config = SchemaRegistryUtils::get()[$table] ?? null;
 
         if (!$config || !($config instanceof RecordTableType)) {
-            throw new Exception("Resource not found: {$uri}");
+            throw new Exception('Resource not found: ' . $uri);
         }
 
         $schemaData = [
@@ -170,24 +164,24 @@ class McpServerService
             }
 
             $tools[] = [
-                'name' => "list_{$table}",
-                'description' => "List records from {$table}",
+                'name' => 'list_' . $table,
+                'description' => 'List records from ' . $table,
                 'inputSchema' => [
                     'type' => 'object',
                     'properties' => [
                         'queryParams' => [
                             'type' => 'object',
                             'description' => 'Query parameters (e.g., filters, sortby, select)',
-                            'additionalProperties' => true
+                            'additionalProperties' => true,
                         ],
                         'tenantId' => ['type' => ['string', 'integer', 'null']],
-                    ]
-                ]
+                    ],
+                ],
             ];
 
             $tools[] = [
-                'name' => "read_{$table}",
-                'description' => "Read a single record from {$table}",
+                'name' => 'read_' . $table,
+                'description' => 'Read a single record from ' . $table,
                 'inputSchema' => [
                     'type' => 'object',
                     'properties' => [
@@ -195,18 +189,18 @@ class McpServerService
                         'queryParams' => [
                             'type' => 'object',
                             'description' => 'Query parameters (e.g., select)',
-                            'additionalProperties' => true
+                            'additionalProperties' => true,
                         ],
                         'tenantId' => ['type' => ['string', 'integer', 'null']],
                     ],
-                    'required' => ['id']
-                ]
+                    'required' => ['id'],
+                ],
             ];
 
             if (!$readOnly) {
                 $tools[] = [
-                    'name' => "create_{$table}",
-                    'description' => "Create a new record in {$table}",
+                    'name' => 'create_' . $table,
+                    'description' => 'Create a new record in ' . $table,
                     'inputSchema' => [
                         'type' => 'object',
                         'properties' => [
@@ -214,13 +208,13 @@ class McpServerService
                             'queryParams' => ['type' => 'object', 'additionalProperties' => true],
                             'tenantId' => ['type' => ['string', 'integer', 'null']],
                         ],
-                        'required' => ['payload']
-                    ]
+                        'required' => ['payload'],
+                    ],
                 ];
 
                 $tools[] = [
-                    'name' => "update_{$table}",
-                    'description' => "Update an existing record in {$table}",
+                    'name' => 'update_' . $table,
+                    'description' => 'Update an existing record in ' . $table,
                     'inputSchema' => [
                         'type' => 'object',
                         'properties' => [
@@ -229,13 +223,13 @@ class McpServerService
                             'queryParams' => ['type' => 'object', 'additionalProperties' => true],
                             'tenantId' => ['type' => ['string', 'integer', 'null']],
                         ],
-                        'required' => ['id', 'payload']
-                    ]
+                        'required' => ['id', 'payload'],
+                    ],
                 ];
 
                 $tools[] = [
-                    'name' => "delete_{$table}",
-                    'description' => "Delete a record from {$table}",
+                    'name' => 'delete_' . $table,
+                    'description' => 'Delete a record from ' . $table,
                     'inputSchema' => [
                         'type' => 'object',
                         'properties' => [
@@ -243,8 +237,8 @@ class McpServerService
                             'queryParams' => ['type' => 'object', 'additionalProperties' => true],
                             'tenantId' => ['type' => ['string', 'integer', 'null']],
                         ],
-                        'required' => ['id']
-                    ]
+                        'required' => ['id'],
+                    ],
                 ];
             }
         }
@@ -259,7 +253,7 @@ class McpServerService
 
         $parts = explode('_', $name, 2);
         if (count($parts) !== 2) {
-            throw new Exception("Tool not found: {$name}", -32601);
+            throw new Exception('Tool not found: ' . $name, -32601);
         }
 
         $action = $parts[0];
@@ -267,15 +261,15 @@ class McpServerService
 
         $readOnly = config('record.mcp.read_only', true);
         if ($readOnly && in_array($action, ['create', 'update', 'delete'])) {
-            throw new Exception("Tool not found or read-only mode is enabled: {$name}", -32601);
+            throw new Exception('Tool not found or read-only mode is enabled: ' . $name, -32601);
         }
 
         $validActions = ['list', 'read', 'create', 'update', 'delete'];
         if (!in_array($action, $validActions)) {
-            throw new Exception("Tool not found: {$name}", -32601);
+            throw new Exception('Tool not found: ' . $name, -32601);
         }
 
-        $authAction = match($action) {
+        $authAction = match ($action) {
             'list', 'read' => RecordConstants::READ,
             'create' => RecordConstants::ACTION_CREATE,
             'update' => RecordConstants::ACTION_UPDATE,
@@ -289,7 +283,7 @@ class McpServerService
         $tenantId = $args['tenantId'] ?? null;
 
         try {
-            $result = match($action) {
+            $result = match ($action) {
                 'list' => RecordService::executeGetByFilter($table, $queryParams, $tenantId, true, 'id'),
                 'read' => RecordService::executeGetById($table, $id, $queryParams, $tenantId),
                 'create' => RecordService::executeCreate($table, $payload, $queryParams, $tenantId),
@@ -301,19 +295,19 @@ class McpServerService
                 'content' => [
                     [
                         'type' => 'text',
-                        'text' => json_encode($result, JSON_PRETTY_PRINT)
-                    ]
-                ]
+                        'text' => json_encode($result, JSON_PRETTY_PRINT),
+                    ],
+                ],
             ];
-        } catch (Exception $e) {
+        } catch (Exception $exception) {
             return [
                 'isError' => true,
                 'content' => [
                     [
                         'type' => 'text',
-                        'text' => $e->getMessage()
-                    ]
-                ]
+                        'text' => $exception->getMessage(),
+                    ],
+                ],
             ];
         }
     }

@@ -3,7 +3,7 @@
   "description": "Core utilities for Laravel apps: standardized API responses, request ID middleware, and CLI helpers.",
   "type": "library",
   "license": "proprietary",
-  "version": "0.4.50",
+  "version": "0.4.55",
   "require": {
     "php": "^8.2|^8.3|^8.4|^8.5",
     "intervention/image": "^4.0",

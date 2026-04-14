@@ -191,7 +191,7 @@ class QueryCacheService
             'filters' => md5(serialize($filters)),
             'includes' => md5(serialize($includes)),
             'page' => $page,
-            'limit' => $limit
+            'limit' => $limit,
         ];
 
         return md5(serialize($keyParts));

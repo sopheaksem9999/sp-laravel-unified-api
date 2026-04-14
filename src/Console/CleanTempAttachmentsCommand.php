@@ -41,7 +41,7 @@ class CleanTempAttachmentsCommand extends Command
         $now = Carbon::now();
         $cutoffDate = $now->copy()->subMinutes((int) $retentionMinutes);
         $hasTempTimeoutColumn = Schema::hasColumn('sp_attachments', 'temp_timeout');
-        
+
         $this->info("Temporary Attachments Cleanup");
         $this->info("=============================");
         $this->info(sprintf('Fallback retention period: %s minutes', $retentionMinutes));
@@ -59,7 +59,7 @@ class CleanTempAttachmentsCommand extends Command
         // Since RecordService requires tenant context and we are in a global command,
         // we might need to bypass tenant scope or iterate over tenants.
         // For simplicity, we'll use DB facade to find the records, then delete them.
-        
+
         $query = DB::table('sp_attachments')
             ->whereIn('visibility', ['temp_private', 'temp_public']);
 
@@ -102,7 +102,7 @@ class CleanTempAttachmentsCommand extends Command
 
                 // Delete database record
                 DB::table('sp_attachments')->where('id', $record->id)->delete();
-                
+
                 // Delete associated links
                 DB::table('sp_attachment_links')->where('attachment_id', $record->id)->delete();
 

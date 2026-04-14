@@ -230,13 +230,13 @@ trait HasCrudOperations
                     return $response;
                 }
             }
-           
+
             if (
                 RecordConfigService::defaultValidationEnabled()
                 && (!RecordConfigService::defaultValidationOnlyWhenMissing() || null === $tableSchema->createValidator)
             ) {
                 $rules = DefaultValidationUtils::buildCreateRules($tableSchema);
-             
+
                 if ($rules !== []) {
                     $validator = Validator::make($request->all(), $rules);
                     if ($validator->fails()) {

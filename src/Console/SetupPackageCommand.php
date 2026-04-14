@@ -46,6 +46,8 @@ class SetupPackageCommand extends Command
             $created += $this->ensureFile('config/records/globalFunctions/README.md', $this->defaultRecordGlobalFunctionsReadme(), $force);
             $created += $this->ensureFile('config/record.php', $this->defaultRecordConfig(), $force);
             $created += $this->ensureFile('config/audit.php', $this->defaultAuditConfig(), $force);
+            $created += $this->ensureFile('config/attachments.php', $this->defaultAttachmentsConfig(), $force);
+            $created += $this->ensureFile('config/webhooks.php', $this->defaultWebhooksConfig(), $force);
             $created += $this->ensureAppServiceProviderRateLimiters();
         } catch (Throwable $throwable) {
             $this->error('❌ Failed to create configuration files: ' . $throwable->getMessage());
@@ -143,19 +145,19 @@ class SetupPackageCommand extends Command
             }
         }
 
-        $snippet =
-            "    RateLimiter::for('api-reads', function (Request \$request): Limit {" . PHP_EOL .
-            "        \$key = \$request->user()?->getAuthIdentifier() ?? \$request->ip();" . PHP_EOL .
-            "        return Limit::perMinute(200)->by((string) \$key);" . PHP_EOL .
-            "    });" . PHP_EOL . PHP_EOL .
-            "    RateLimiter::for('api-writes', function (Request \$request): Limit {" . PHP_EOL .
-            "        \$key = \$request->user()?->getAuthIdentifier() ?? \$request->ip();" . PHP_EOL .
-            "        return Limit::perMinute(100)->by((string) \$key);" . PHP_EOL .
-            "    });" . PHP_EOL . PHP_EOL .
-            "    RateLimiter::for('api-functions', function (Request \$request): Limit {" . PHP_EOL .
-            "        \$key = \$request->user()?->getAuthIdentifier() ?? \$request->ip();" . PHP_EOL .
-            "        return Limit::perMinute(100)->by((string) \$key);" . PHP_EOL .
-            "    });" . PHP_EOL;
+        $snippet
+            = "    RateLimiter::for('api-reads', function (Request \$request): Limit {" . PHP_EOL
+            . "        \$key = \$request->user()?->getAuthIdentifier() ?? \$request->ip();" . PHP_EOL
+            . "        return Limit::perMinute(200)->by((string) \$key);" . PHP_EOL
+            . "    });" . PHP_EOL . PHP_EOL
+            . "    RateLimiter::for('api-writes', function (Request \$request): Limit {" . PHP_EOL
+            . "        \$key = \$request->user()?->getAuthIdentifier() ?? \$request->ip();" . PHP_EOL
+            . "        return Limit::perMinute(100)->by((string) \$key);" . PHP_EOL
+            . "    });" . PHP_EOL . PHP_EOL
+            . "    RateLimiter::for('api-functions', function (Request \$request): Limit {" . PHP_EOL
+            . "        \$key = \$request->user()?->getAuthIdentifier() ?? \$request->ip();" . PHP_EOL
+            . "        return Limit::perMinute(100)->by((string) \$key);" . PHP_EOL
+            . "    });" . PHP_EOL;
 
         if (str_contains($contents, "RateLimiter::for('api-reads'")) {
             return $contents;
@@ -175,12 +177,12 @@ class SetupPackageCommand extends Command
 
         if (preg_match('/\\}\\s*$/', $contents, $m, PREG_OFFSET_CAPTURE)) {
             $insertPos = $m[0][1];
-            $bootMethod =
-                PHP_EOL .
-                '    public function boot(): void' . PHP_EOL .
-                '    {' . PHP_EOL .
-                $snippet .
-                '    }' . PHP_EOL;
+            $bootMethod
+                = PHP_EOL
+                . '    public function boot(): void' . PHP_EOL
+                . '    {' . PHP_EOL
+                . $snippet
+                . '    }' . PHP_EOL;
             return substr($contents, 0, $insertPos) . $bootMethod . substr($contents, $insertPos);
         }
 
@@ -190,40 +192,40 @@ class SetupPackageCommand extends Command
     private function defaultAppServiceProviderWithRateLimiters(): string
     {
         return <<<'PHP'
-<?php
+            <?php
 
-namespace App\Providers;
+            namespace App\Providers;
 
-use Illuminate\Cache\RateLimiting\Limit;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Support\ServiceProvider;
+            use Illuminate\Cache\RateLimiting\Limit;
+            use Illuminate\Http\Request;
+            use Illuminate\Support\Facades\RateLimiter;
+            use Illuminate\Support\ServiceProvider;
 
-class AppServiceProvider extends ServiceProvider
-{
-    public function register(): void
-    {
-    }
+            class AppServiceProvider extends ServiceProvider
+            {
+                public function register(): void
+                {
+                }
 
-    public function boot(): void
-    {
-        RateLimiter::for('api-reads', function (Request $request): Limit {
-            $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
-            return Limit::perMinute(200)->by((string) $key);
-        });
+                public function boot(): void
+                {
+                    RateLimiter::for('api-reads', function (Request $request): Limit {
+                        $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
+                        return Limit::perMinute(200)->by((string) $key);
+                    });
 
-        RateLimiter::for('api-writes', function (Request $request): Limit {
-            $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
-            return Limit::perMinute(100)->by((string) $key);
-        });
+                    RateLimiter::for('api-writes', function (Request $request): Limit {
+                        $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
+                        return Limit::perMinute(100)->by((string) $key);
+                    });
 
-        RateLimiter::for('api-functions', function (Request $request): Limit {
-            $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
-            return Limit::perMinute(100)->by((string) $key);
-        });
-    }
-}
-PHP;
+                    RateLimiter::for('api-functions', function (Request $request): Limit {
+                        $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
+                        return Limit::perMinute(100)->by((string) $key);
+                    });
+                }
+            }
+            PHP;
     }
 
     private function ensureFile(string $path, string $contents, bool $force): int
@@ -251,7 +253,7 @@ PHP;
     private function writeFile(string $path, string $contents): void
     {
         $dir = dirname($path);
-        if (!is_dir($dir) && (!mkdir($dir, 0755, true) && !is_dir($dir))) {
+        if (!is_dir($dir) && (!mkdir($dir, 0o755, true) && !is_dir($dir))) {
             throw new RuntimeException('Failed to create directory: ' . $dir);
         }
 
@@ -270,7 +272,7 @@ PHP;
             throw new RuntimeException('Path exists and is not a directory: ' . $path);
         }
 
-        if (!mkdir($path, 0755, true) && !is_dir($path)) {
+        if (!mkdir($path, 0o755, true) && !is_dir($path)) {
             throw new RuntimeException('Failed to create directory: ' . $path);
         }
     }
@@ -278,452 +280,532 @@ PHP;
     private function defaultRecordTablesReadme(): string
     {
         return <<<'MD'
-# Record Table Configs
+            # Record Table Configs
 
-Put table config files in this folder to keep `config/record.php` clean.
+            Put table config files in this folder to keep `config/record.php` clean.
 
-## Rules
+            ## Rules
 
-- Each `*.php` file can return:
-  - a single `RecordTableType`, or
-  - an array like `['table_name' => RecordTableType, ...]`
-- The filename (without `.php`) is used as the table key when returning a single `RecordTableType`.
+            - Each `*.php` file can return:
+              - a single `RecordTableType`, or
+              - an array like `['table_name' => RecordTableType, ...]`
+            - The filename (without `.php`) is used as the table key when returning a single `RecordTableType`.
 
-## Example (single table)
+            ## Example (single table)
 
-Create `config/records/tables/customers.php`:
+            Create `config/records/tables/customers.php`:
 
-```php
-<?php
+            ```php
+            <?php
 
-use Illuminate\Http\Request;
-use Illuminate\Contracts\Validation\Validator as ValidatorContract;
-use Illuminate\Support\Facades\Validator;
-use Sopheak\Core\Types\RecordTableType;
+            use Illuminate\Http\Request;
+            use Illuminate\Contracts\Validation\Validator as ValidatorContract;
+            use Illuminate\Support\Facades\Validator;
+            use Sopheak\Core\Types\RecordTableType;
 
-return new RecordTableType(
-    pmsName: 'customer',
-    table: 'customers',
-    isAuthRead: true,
-    isAuthWrite: true,
-    relationships: [],
-    softDeletes: true,
-    hasTenantId: false,
-    createValidator: function (Request $request, ?int $id = null): ValidatorContract {
-        return Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-        ]);
-    },
-);
-```
+            return new RecordTableType(
+                pmsName: 'customer',
+                table: 'customers',
+                isAuthRead: true,
+                isAuthWrite: true,
+                relationships: [],
+                softDeletes: true,
+                hasTenantId: false,
+                createValidator: function (Request $request, ?int $id = null): ValidatorContract {
+                    return Validator::make($request->all(), [
+                        'name' => 'required|string|max:255',
+                    ]);
+                },
+            );
+            ```
 
-## Example (multiple tables in one file)
+            ## Example (multiple tables in one file)
 
-Create `config/records/tables/core.php`:
+            Create `config/records/tables/core.php`:
 
-```php
-<?php
+            ```php
+            <?php
 
-use Sopheak\Core\Types\RecordTableType;
+            use Sopheak\Core\Types\RecordTableType;
 
-return [
-    'invoices' => new RecordTableType(
-        pmsName: 'invoice',
-        table: 'invoices',
-        isAuthRead: true,
-        isAuthWrite: true,
-        relationships: [],
-        softDeletes: true,
-        hasTenantId: false,
-    ),
-];
-```
-MD;
+            return [
+                'invoices' => new RecordTableType(
+                    pmsName: 'invoice',
+                    table: 'invoices',
+                    isAuthRead: true,
+                    isAuthWrite: true,
+                    relationships: [],
+                    softDeletes: true,
+                    hasTenantId: false,
+                ),
+            ];
+            ```
+            MD;
     }
 
     private function defaultRecordGlobalFunctionsReadme(): string
     {
         return <<<'MD'
-# Record Global Function Configs
+            # Record Global Function Configs
 
-Put global function config files in this folder.
+            Put global function config files in this folder.
 
-## Rules
+            ## Rules
 
-- Each `*.php` file must return an array of function configs.
-- File name is used as group prefix for API path.
-- Example: `auth.php` + key `login` => endpoint key `auth/login`.
-- If a key already contains `/`, the key is used as-is.
+            - Each `*.php` file must return an array of function configs.
+            - File name is used as group prefix for API path.
+            - Example: `auth.php` + key `login` => endpoint key `auth/login`.
+            - If a key already contains `/`, the key is used as-is.
 
-## Example
+            ## Example
 
-Create `config/records/globalFunctions/auth.php`:
+            Create `config/records/globalFunctions/auth.php`:
 
-```php
-<?php
+            ```php
+            <?php
 
-use Sopheak\Core\Types\RecordFunctionType;
+            use Sopheak\Core\Types\RecordFunctionType;
 
-return [
-    'login' => new RecordFunctionType(
-        httpMethod: ['POST'],
-        class: \App\Services\AuthService::class,
-        functionName: 'login',
-        description: 'Login',
-    ),
-];
-```
-MD;
+            return [
+                'login' => new RecordFunctionType(
+                    httpMethod: ['POST'],
+                    class: \App\Services\AuthService::class,
+                    functionName: 'login',
+                    description: 'Login',
+                ),
+            ];
+            ```
+            MD;
     }
 
     private function defaultRecordConfig(): string
     {
         return <<<'PHP'
-<?php
+            <?php
 
-use Illuminate\Http\Request;
-use Illuminate\Contracts\Validation\Validator;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
-use Sopheak\Core\Types\RecordBelongsToType;
-use Sopheak\Core\Types\RecordFunctionType;
-use Sopheak\Core\Types\RecordHasManyThroughType;
-use Sopheak\Core\Types\RecordHasManyType;
-use Sopheak\Core\Types\RecordMetaBelongsToManyType;
-use Sopheak\Core\Types\RecordSpatiePermissionType;
-use Sopheak\Core\Types\RecordTableType;
-use Sopheak\Core\Types\RecordTableTriggerType;
+            use Illuminate\Http\Request;
+            use Illuminate\Contracts\Validation\Validator;
+            use RecursiveDirectoryIterator;
+            use RecursiveIteratorIterator;
+            use Sopheak\Core\Types\RecordBelongsToType;
+            use Sopheak\Core\Types\RecordFunctionType;
+            use Sopheak\Core\Types\RecordHasManyThroughType;
+            use Sopheak\Core\Types\RecordHasManyType;
+            use Sopheak\Core\Types\RecordMetaBelongsToManyType;
+            use Sopheak\Core\Types\RecordSpatiePermissionType;
+            use Sopheak\Core\Types\RecordTableType;
+            use Sopheak\Core\Types\RecordTableTriggerType;
 
-$tables = [
-    'users' => new RecordTableType(
-        pmsName: 'user',
-        table: 'users',
-        isAuthRead: true,
-        isAuthWrite: true,
-        relationships: [],
-        functions: [],
-        softDeletes: false,
-        hasTenantId: false,
-        createValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'email' => 'required|email',
-            'password' => 'required|string|min:8',
-        ]),
-        updateValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make($request->all(), [
-            'name' => 'sometimes|required|string|max:255',
-            'email' => 'sometimes|required|email',
-            'password' => 'sometimes|required|string|min:8',
-        ]),
-        deleteValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make(['id' => $id], [
-            'id' => 'required|integer',
-        ]),
-    ),
-];
+            $tables = [
+                'users' => new RecordTableType(
+                    pmsName: 'user',
+                    table: 'users',
+                    isAuthRead: true,
+                    isAuthWrite: true,
+                    relationships: [],
+                    functions: [],
+                    softDeletes: false,
+                    hasTenantId: false,
+                    createValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make($request->all(), [
+                        'name' => 'required|string|max:255',
+                        'email' => 'required|email',
+                        'password' => 'required|string|min:8',
+                    ]),
+                    updateValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make($request->all(), [
+                        'name' => 'sometimes|required|string|max:255',
+                        'email' => 'sometimes|required|email',
+                        'password' => 'sometimes|required|string|min:8',
+                    ]),
+                    deleteValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make(['id' => $id], [
+                        'id' => 'required|integer',
+                    ]),
+                ),
+            ];
 
-$globalFunctions = [];
-$tablesDirectory = __DIR__ . '/records/tables';
-$globalFunctionsDirectory = __DIR__ . '/records/globalFunctions';
+            $globalFunctions = [];
+            $tablesDirectory = __DIR__ . '/records/tables';
+            $globalFunctionsDirectory = __DIR__ . '/records/globalFunctions';
 
-if (is_dir($tablesDirectory)) {
-    $directoryIterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($tablesDirectory)
-    );
+            if (is_dir($tablesDirectory)) {
+                $directoryIterator = new RecursiveIteratorIterator(
+                    new RecursiveDirectoryIterator($tablesDirectory)
+                );
 
-    foreach ($directoryIterator as $file) {
-        if (!$file->isFile()) {
-            continue;
-        }
+                foreach ($directoryIterator as $file) {
+                    if (!$file->isFile()) {
+                        continue;
+                    }
 
-        if ($file->getExtension() !== 'php') {
-            continue;
-        }
+                    if ($file->getExtension() !== 'php') {
+                        continue;
+                    }
 
-        $path = $file->getPathname();
-        $config = require $path;
+                    $path = $file->getPathname();
+                    $config = require $path;
 
-        if ($config instanceof RecordTableType) {
-            $name = pathinfo($path, PATHINFO_FILENAME);
-            $tables[$name] = $config;
-        } elseif (is_array($config)) {
-            $tables = array_merge($tables, $config);
-        }
-    }
-}
-
-if (is_dir($globalFunctionsDirectory)) {
-    $globalFunctionsDirectoryIterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($globalFunctionsDirectory)
-    );
-
-    foreach ($globalFunctionsDirectoryIterator as $file) {
-        if (!$file->isFile()) {
-            continue;
-        }
-
-        if ($file->getExtension() !== 'php') {
-            continue;
-        }
-
-        $path = $file->getPathname();
-        $config = require $path;
-
-        if (!is_array($config)) {
-            continue;
-        }
-
-        $group = pathinfo((string) $path, PATHINFO_FILENAME);
-
-        foreach ($config as $functionName => $functionConfig) {
-            if (!is_string($functionName) || $functionName === '') {
-                continue;
+                    if ($config instanceof RecordTableType) {
+                        $name = pathinfo($path, PATHINFO_FILENAME);
+                        $tables[$name] = $config;
+                    } elseif (is_array($config)) {
+                        $tables = array_merge($tables, $config);
+                    }
+                }
             }
 
-            $normalizedFunctionName = ltrim($functionName, '/');
-            $prefixedFunctionName = str_contains($normalizedFunctionName, '/')
-                ? $normalizedFunctionName
-                : $group . '/' . $normalizedFunctionName;
+            if (is_dir($globalFunctionsDirectory)) {
+                $globalFunctionsDirectoryIterator = new RecursiveIteratorIterator(
+                    new RecursiveDirectoryIterator($globalFunctionsDirectory)
+                );
 
-            $globalFunctions[$prefixedFunctionName] = $functionConfig;
-        }
-    }
-}
+                foreach ($globalFunctionsDirectoryIterator as $file) {
+                    if (!$file->isFile()) {
+                        continue;
+                    }
 
-return [
-    /*
-    |--------------------------------------------------------------------------
-    | Tenant ID Configuration
-    |--------------------------------------------------------------------------
-    |
-    | This option controls whether tenant_id filtering is enabled across the
-    | Record API system. When enabled, all queries will include tenant_id
-    | filtering for multi-tenant data isolation. When disabled, tenant_id
-    | filtering is completely bypassed for optimal performance in single-tenant
-    | or non-tenant environments.
-    |
-    | Default: false (for backward compatibility with existing projects)
-    |
-    */
-    'enable_tenant_id' => false,
-    'tenant_column' => 'tenant_id',
-    'tenant_header' => 'X-Tenant-ID',
-    'table_config_path' => 'records/tables',
+                    if ($file->getExtension() !== 'php') {
+                        continue;
+                    }
 
-    /*
-    |--------------------------------------------------------------------------
-    | API Route Prefix Configuration
-    |--------------------------------------------------------------------------
-    |
-    | This option controls the route prefix for the Record API endpoints.
-    | By default, routes are registered under 'api' (e.g., /api/customers).
-    | You can customize this prefix to match your application's routing structure.
-    |
-    */
-    'api_prefix' => 'api/v1',
+                    $path = $file->getPathname();
+                    $config = require $path;
 
-     /*
-    |--------------------------------------------------------------------------
-    | API Docs UI Access
-    |--------------------------------------------------------------------------
-    |
-    | login_api can point to your client project's auth route.
-    | Supports:
-    | - Relative path: /v1/auth/login
-    | - Absolute URL: https://api.example.com/v1/auth/login
-    | - access_token_key: token key in login response payload
-    | - login_api: client project login route/URL used by docs login form
-    | - email: optional fixed docs account email enforced by docs login proxy
-    */
-    'api_docs' => [
-        'is_private' => env('SP_LARAVEL_API_DOCS_PRIVATE', false),
-        'access_token_key' => 'access_token',
-        'login_api' => '/v1/auth/login',
-        'email' => env('SP_LARAVEL_API_DOCS_EMAIL'),
-    ],
+                    if (!is_array($config)) {
+                        continue;
+                    }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Model Context Protocol (MCP) Support
-    |--------------------------------------------------------------------------
-    |
-    | Configuration for the AI agent MCP integration.
-    | - enabled: Toggle the MCP feature entirely (default: false).
-    | - read_only: Globally disable MCP write tools (create, update, delete).
-    | - route_prefix: The prefix for HTTP/SSE MCP endpoints.
-    | - middleware: The middleware applied to the HTTP/SSE endpoints.
-    */
-    'mcp' => [
-        'enabled' => env('SP_MCP_ENABLED', false),
-        'read_only' => env('SP_MCP_READ_ONLY', false),
-        'route_prefix' => env('SP_MCP_ROUTE_PREFIX', 'mcp'),
-        'middleware' => ['api', 'auth:sanctum'],
-    ],
+                    $group = pathinfo((string) $path, PATHINFO_FILENAME);
 
-    /*
-    |--------------------------------------------------------------------------
-    | RPC Route Prefix Configuration
-    |--------------------------------------------------------------------------
-    |
-    | This option controls the route prefix for the Global RPC endpoints.
-    | By default, routes are registered under 'rpc' (e.g., /api/v1/rpc/my_function).
-    |
-    */
-    'rpc_prefix' => '',
+                    foreach ($config as $functionName => $functionConfig) {
+                        if (!is_string($functionName) || $functionName === '') {
+                            continue;
+                        }
 
-    // Maximum items returned per page for list endpoints
-    'per_page_max' => 10000,
+                        $normalizedFunctionName = ltrim($functionName, '/');
+                        $prefixedFunctionName = str_contains($normalizedFunctionName, '/')
+                            ? $normalizedFunctionName
+                            : $group . '/' . $normalizedFunctionName;
 
-    // Maximum items returned for limit parameter (non-paginated requests)
-    'limit_max' => 10000,
+                        $globalFunctions[$prefixedFunctionName] = $functionConfig;
+                    }
+                }
+            }
 
-    // Maximum items per bulk operation
-    'bulk_max' => 1000,
+            return [
+                /*
+                |--------------------------------------------------------------------------
+                | Tenant ID Configuration
+                |--------------------------------------------------------------------------
+                |
+                | This option controls whether tenant_id filtering is enabled across the
+                | Record API system. When enabled, all queries will include tenant_id
+                | filtering for multi-tenant data isolation. When disabled, tenant_id
+                | filtering is completely bypassed for optimal performance in single-tenant
+                | or non-tenant environments.
+                |
+                | Default: false (for backward compatibility with existing projects)
+                |
+                */
+                'enable_tenant_id' => false,
+                'tenant_column' => 'tenant_id',
+                'tenant_header' => 'X-Tenant-ID',
+                'table_config_path' => 'records/tables',
 
-    // Cache configuration
-    'cache' => [
-        // Enable/disable caching globally for the Records API
-        'enabled' => env('SP_LARAVEL_API_CACHE_API', false),
+                /*
+                |--------------------------------------------------------------------------
+                | API Route Prefix Configuration
+                |--------------------------------------------------------------------------
+                |
+                | This option controls the route prefix for the Record API endpoints.
+                | By default, routes are registered under 'api' (e.g., /api/customers).
+                | You can customize this prefix to match your application's routing structure.
+                |
+                */
+                'api_prefix' => 'api/v1',
 
-        // Cache TTL for query results (seconds)
-        'ttl' => 3600,
+                 /*
+                |--------------------------------------------------------------------------
+                | API Docs UI Access
+                |--------------------------------------------------------------------------
+                |
+                | login_api can point to your client project's auth route.
+                | Supports:
+                | - Relative path: /v1/auth/login
+                | - Absolute URL: https://api.example.com/v1/auth/login
+                | - access_token_key: token key in login response payload
+                | - login_api: client project login route/URL used by docs login form
+                | - email: optional fixed docs account email enforced by docs login proxy
+                */
+                'api_docs' => [
+                    'is_private' => env('SP_LARAVEL_API_DOCS_PRIVATE', false),
+                    'access_token_key' => 'access_token',
+                    'login_api' => '/v1/auth/login',
+                    'email' => env('SP_LARAVEL_API_DOCS_EMAIL'),
+                ],
 
-        // Cache key prefix for Records API
-        'prefix' => 'sp_laravel_api',
+                /*
+                |--------------------------------------------------------------------------
+                | Model Context Protocol (MCP) Support
+                |--------------------------------------------------------------------------
+                |
+                | Configuration for the AI agent MCP integration.
+                | - enabled: Toggle the MCP feature entirely (default: false).
+                | - read_only: Globally disable MCP write tools (create, update, delete).
+                | - route_prefix: The prefix for HTTP/SSE MCP endpoints.
+                | - middleware: The middleware applied to the HTTP/SSE endpoints.
+                */
+                'mcp' => [
+                    'enabled' => env('SP_MCP_ENABLED', false),
+                    'read_only' => env('SP_MCP_READ_ONLY', false),
+                    'route_prefix' => env('SP_MCP_ROUTE_PREFIX', 'mcp'),
+                    'middleware' => ['api', 'auth:sanctum'],
+                ],
 
-        // Per-table cache control (overrides global setting)
-        'per_table' => [
-            // Example: disable cache for specific tables
-            // 'audit_logs' => false,
-            // 'real_time_data' => false,
-        ],
-        'per_table_ttl' => [
-            // Example: override cache TTL for specific tables
-            // 'audit_logs' => 600,
-            // 'real_time_data' => 120,
-        ],
-    ],
+                /*
+                |--------------------------------------------------------------------------
+                | RPC Route Prefix Configuration
+                |--------------------------------------------------------------------------
+                |
+                | This option controls the route prefix for the Global RPC endpoints.
+                | By default, routes are registered under 'rpc' (e.g., /api/v1/rpc/my_function).
+                |
+                */
+                'rpc_prefix' => '',
 
-    // Legacy cache_ttl for backward compatibility (deprecated, use cache.ttl instead)
-    'cache_ttl' => 3600,
+                // Maximum items returned per page for list endpoints
+                'per_page_max' => 10000,
 
-    // Maximum nesting depth to prevent performance issues (default: 2)
-    'max_depth' => 10,
+                // Maximum items returned for limit parameter (non-paginated requests)
+                'limit_max' => 10000,
 
-    // Default cascade behavior for nested writes (can be overridden per endpoint)
-    'default_cascade' => [
-        'create' => false,  // allow nested create on store
-        'update' => false,  // allow nested update on update
-        'upsert' => false,  // upsert by primary key when provided
-    ],
+                // Maximum items per bulk operation
+                'bulk_max' => 1000,
 
-    // Include debug details in API error responses.
-    'debug' => false,
+                // Cache configuration
+                'cache' => [
+                    // Enable/disable caching globally for the Records API
+                    'enabled' => env('SP_LARAVEL_API_CACHE_API', false),
 
-    // permission 
-    'permission_separator' => ':', // separator for permission ex: view:invoice
-    'restrict_to_own_records' => false, // limit queries to records created by the authenticated user
-    'own_records_permission_prefix' => 'viewOwn', // example: viewOwn_invoice
+                    // Cache TTL for query results (seconds)
+                    'ttl' => 3600,
 
-    // Config-driven middleware map (default + per-table overrides)
-    'middleware_map' => [
-        'default' => [
-            '*' => [],
-            'read' => [],
-            'write' => [],
-            'function' => [],
-        ],
-        'tables' => [
-        ],
-    ],
+                    // Cache key prefix for Records API
+                    'prefix' => 'sp_laravel_api',
 
-    'global_functions' => $globalFunctions,
+                    // Per-table cache control (overrides global setting)
+                    'per_table' => [
+                        // Example: disable cache for specific tables
+                        // 'audit_logs' => false,
+                        // 'real_time_data' => false,
+                    ],
+                    'per_table_ttl' => [
+                        // Example: override cache TTL for specific tables
+                        // 'audit_logs' => 600,
+                        // 'real_time_data' => 120,
+                    ],
+                ],
 
-    // Table configurations
-    'tables' => $tables,
-];
-PHP;
+                // Legacy cache_ttl for backward compatibility (deprecated, use cache.ttl instead)
+                'cache_ttl' => 3600,
+
+                // Maximum nesting depth to prevent performance issues (default: 2)
+                'max_depth' => 10,
+
+                // Default cascade behavior for nested writes (can be overridden per endpoint)
+                'default_cascade' => [
+                    'create' => false,  // allow nested create on store
+                    'update' => false,  // allow nested update on update
+                    'upsert' => false,  // upsert by primary key when provided
+                ],
+
+                // Include debug details in API error responses.
+                'debug' => false,
+
+                // permission 
+                'permission_separator' => ':', // separator for permission ex: view:invoice
+                'restrict_to_own_records' => false, // limit queries to records created by the authenticated user
+                'own_records_permission_prefix' => 'viewOwn', // example: viewOwn_invoice
+
+                // Config-driven middleware map (default + per-table overrides)
+                'middleware_map' => [
+                    'default' => [
+                        '*' => [],
+                        'read' => [],
+                        'write' => [],
+                        'function' => [],
+                    ],
+                    'tables' => [
+                    ],
+                ],
+
+                'global_functions' => $globalFunctions,
+
+                // Table configurations
+                'tables' => $tables,
+            ];
+            PHP;
     }
 
     private function defaultAuditConfig(): string
     {
         return <<<'PHP'
-<?php
+            <?php
 
-return [
-    /*
-    |--------------------------------------------------------------------------
-    | Enable Audit Logging
-    |--------------------------------------------------------------------------
-    */
-    'enabled' => env('AUDIT_LOG_ENABLED', true),
+            return [
+                /*
+                |--------------------------------------------------------------------------
+                | Enable Audit Logging
+                |--------------------------------------------------------------------------
+                */
+                'enabled' => env('AUDIT_LOG_ENABLED', true),
 
-    /*
-    |--------------------------------------------------------------------------
-    | Queue Configuration
-    |--------------------------------------------------------------------------
-    */
-    'queue_enabled' => env('AUDIT_LOG_QUEUE', false),
-    'queue_connection' => env('AUDIT_LOG_QUEUE_CONNECTION', 'default'),
-    'queue_name' => env('AUDIT_LOG_QUEUE_NAME', 'default'),
+                /*
+                |--------------------------------------------------------------------------
+                | Queue Configuration
+                |--------------------------------------------------------------------------
+                */
+                'queue_enabled' => env('AUDIT_LOG_QUEUE', false),
+                'queue_connection' => env('AUDIT_LOG_QUEUE_CONNECTION', 'default'),
+                'queue_name' => env('AUDIT_LOG_QUEUE_NAME', 'default'),
 
-    /*
-    |--------------------------------------------------------------------------
-    | Log Retention
-    |--------------------------------------------------------------------------
-    */
-    'retention_days' => env('AUDIT_LOG_RETENTION_DAYS', 365),
+                /*
+                |--------------------------------------------------------------------------
+                | Log Retention
+                |--------------------------------------------------------------------------
+                */
+                'retention_days' => env('AUDIT_LOG_RETENTION_DAYS', 365),
 
-    /*
-    |--------------------------------------------------------------------------
-    | Excluded Events
-    |--------------------------------------------------------------------------
-    */
-    'excluded_events' => [
-        // 'updated',
-    ],
+                /*
+                |--------------------------------------------------------------------------
+                | Excluded Events
+                |--------------------------------------------------------------------------
+                */
+                'excluded_events' => [
+                    // 'updated',
+                ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Excluded Attributes
-    |--------------------------------------------------------------------------
-    */
-    'excluded_attributes' => [
-        'password',
-        'remember_token',
-        'email_verified_at',
-        'created_at',
-        'updated_at',
-        'deleted_at',
-    ],
+                /*
+                |--------------------------------------------------------------------------
+                | Excluded Attributes
+                |--------------------------------------------------------------------------
+                */
+                'excluded_attributes' => [
+                    'password',
+                    'remember_token',
+                    'email_verified_at',
+                    'created_at',
+                    'updated_at',
+                    'deleted_at',
+                ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Authentication Events
-    |--------------------------------------------------------------------------
-    */
-    'log_authentication_events' => env('AUDIT_LOG_AUTH_EVENTS', true),
+                /*
+                |--------------------------------------------------------------------------
+                | Authentication Events
+                |--------------------------------------------------------------------------
+                */
+                'log_authentication_events' => env('AUDIT_LOG_AUTH_EVENTS', true),
 
-    /*
-    |--------------------------------------------------------------------------
-    | Performance Settings
-    |--------------------------------------------------------------------------
-    */
-    'performance' => [
-        'max_relationships' => 10,
-        'use_transactions' => true,
-        'batch_size' => 100,
-    ],
+                /*
+                |--------------------------------------------------------------------------
+                | Performance Settings
+                |--------------------------------------------------------------------------
+                */
+                'performance' => [
+                    'max_relationships' => 10,
+                    'use_transactions' => true,
+                    'batch_size' => 100,
+                ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Security Settings
-    |--------------------------------------------------------------------------
-    */
-    'security' => [
-        'encrypt_sensitive_data' => env('AUDIT_LOG_ENCRYPT', false),
-        'hash_ip_addresses' => env('AUDIT_LOG_HASH_IPS', false),
-        'anonymize_old_logs' => env('AUDIT_LOG_ANONYMIZE', false),
-    ],
-];
-PHP;
+                /*
+                |--------------------------------------------------------------------------
+                | Security Settings
+                |--------------------------------------------------------------------------
+                */
+                'security' => [
+                    'encrypt_sensitive_data' => env('AUDIT_LOG_ENCRYPT', false),
+                    'hash_ip_addresses' => env('AUDIT_LOG_HASH_IPS', false),
+                    'anonymize_old_logs' => env('AUDIT_LOG_ANONYMIZE', false),
+                ],
+                /*
+                |--------------------------------------------------------------------------
+                | Audit Log Table Configuration
+                |--------------------------------------------------------------------------
+                |
+                | This defines the default table configuration for the audit logs API.
+                | It is automatically merged into the main record.tables configuration.
+                | By default, create/update/delete are disabled (read-only).
+                |
+                */
+                'tables' => [
+                    'sp_audit_logs' => new \Sopheak\Core\Types\RecordTableType(
+                        table: 'sp_audit_logs',
+                        pmsName: 'audit_log',
+                        primaryKey: 'id',
+                        softDeletes: false,
+                        hasTenantId: true,
+                        isAuthRead: true,
+                        isAuthWrite: false,
+                        canCreate: false,
+                        canUpdate: false,
+                        canDelete: false,
+                        canUpsert: false,
+                        columns: [
+                            'id' => ['type' => 'integer', 'nullable' => false],
+                            'entity_name' => ['type' => 'string', 'nullable' => true],
+                            'entity_type' => ['type' => 'string', 'nullable' => true],
+                            'entity_id' => ['type' => 'integer', 'nullable' => true],
+                            'user_id' => ['type' => 'integer', 'nullable' => true],
+                            'event' => ['type' => 'string', 'nullable' => true],
+                            'title' => ['type' => 'string', 'nullable' => true],
+                            'subject' => ['type' => 'string', 'nullable' => true],
+                            'recap' => ['type' => 'string', 'nullable' => true],
+                            'old_data' => ['type' => 'json', 'nullable' => true],
+                            'new_data' => ['type' => 'json', 'nullable' => true],
+                            'metadata' => ['type' => 'json', 'nullable' => true],
+                            'ip_address' => ['type' => 'string', 'nullable' => true],
+                            'user_agent' => ['type' => 'string', 'nullable' => true],
+                            'request_id' => ['type' => 'string', 'nullable' => true],
+                        ],
+                        relationships: [
+                            'user' => new \Sopheak\Core\Types\RecordBelongsToType(
+                                table: 'users',
+                                type: \Sopheak\Core\Enums\RecordRelationshipsEnum::BELONGS_TO,
+                                foreignKey: 'user_id',
+                                ownerKey: 'id'
+                            ),
+                        ],
+                        functions: [
+                            'stats' => new \Sopheak\Core\Types\RecordFunctionType(
+                                class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
+                                functionName: 'getStats',
+                                httpMethod: ['GET'],
+                                description: 'Get audit statistics'
+                            ),
+                            'field-timeline/{entityType}/{entityId}/{field}' => new \Sopheak\Core\Types\RecordFunctionType(
+                                class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
+                                functionName: 'getFieldTimeline',
+                                httpMethod: ['GET'],
+                                description: 'Get field timeline'
+                            ),
+                            'field-stats/{entityType}/{entityId}/{field}' => new \Sopheak\Core\Types\RecordFunctionType(
+                                class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
+                                functionName: 'getFieldStats',
+                                httpMethod: ['GET'],
+                                description: 'Get field statistics'
+                            ),
+                        ]
+                    ),
+                ],
+            ];
+            PHP;
+    }
+
+    private function defaultWebhooksConfig(): string
+    {
+        return file_get_contents(__DIR__ . '/../../config/webhooks.php') ?: "<?php\n\nreturn [];";
+    }
+
+    private function defaultAttachmentsConfig(): string
+    {
+        return file_get_contents(__DIR__ . '/../../config/attachments.php') ?: "<?php\n\nreturn [];";
     }
 }

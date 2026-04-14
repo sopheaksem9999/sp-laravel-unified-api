@@ -36,7 +36,6 @@ use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Types\RecordTableTriggerType;
 use Sopheak\Core\Types\RecordValidationType;
 
-
 class BasicTest extends TestCase
 {
     /** @test */

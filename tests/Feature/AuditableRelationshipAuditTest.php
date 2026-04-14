@@ -26,7 +26,7 @@ class AuditableRelationshipAuditTest extends TestCase
         Config::set('audit.enabled', true);
         Config::set('audit.log_relationships', true);
 
-        
+
         Schema::create('parents', function (Blueprint $table): void {
             $table->id();
             $table->string('name');
@@ -64,7 +64,7 @@ class AuditableRelationshipAuditTest extends TestCase
 
         $parent->update(['name' => 'Parent 2']);
 
-        $log = DB::table('audit_logs')
+        $log = DB::table('sp_audit_logs')
             ->where('entity_name', 'parents')
             ->where('entity_id', $parent->id)
             ->where('event', 'updated')

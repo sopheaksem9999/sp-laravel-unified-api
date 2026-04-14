@@ -50,8 +50,8 @@ class LegacyConfigTest extends TestCase
                         'class' => LegacyFunction::class,
                         'functionName' => 'handle',
                         'description' => 'Legacy function',
-                    ]
-                ]
+                    ],
+                ],
             ],
         ]);
 
@@ -62,7 +62,7 @@ class LegacyConfigTest extends TestCase
 
         // Assert it was converted to RecordTableType
         $this->assertInstanceOf(RecordTableType::class, $tableConfig);
-        
+
         // Assert public property was converted to RecordTablePublic
         $this->assertInstanceOf(RecordTablePublic::class, $tableConfig->public);
         $this->assertTrue($tableConfig->public->read);
@@ -70,22 +70,22 @@ class LegacyConfigTest extends TestCase
 
         // Assert granular permission override worked
         $this->assertTrue($tableConfig->canCreate);
-        
+
         // Assert fallback worked (if not overridden)
         // can_write was false, so canUpdate and canDelete should be false (since they fallback to can_write if null)
         $this->assertFalse($tableConfig->canUpdate);
         $this->assertFalse($tableConfig->canDelete);
-        
+
         // Check functions
         $this->assertIsArray($tableConfig->functions);
         $this->assertArrayHasKey('legacy_func', $tableConfig->functions);
         $this->assertIsArray($tableConfig->functions['legacy_func']);
-        
+
         // Test executing table function with array config
         $service = new RecordService();
         $request = Request::create('/api/v1/legacy_items/rpc/legacy_func', 'GET');
         $response = $service->executeTableFunction($request, 'legacy_items', 'legacy_func');
-        
+
         $this->assertEquals(200, $response->getStatusCode());
         $this->assertEquals('Legacy function executed', $response->getData()->data->message);
     }
@@ -99,14 +99,14 @@ class LegacyConfigTest extends TestCase
                 'class' => LegacyFunction::class,
                 'functionName' => 'handle',
                 'description' => 'Legacy global function',
-            ]
+            ],
         ]);
 
         $service = new RecordService();
         $request = Request::create('/api/v1/rpc/legacy_global', 'GET');
-        
+
         $response = $service->executeGlobalFunction($request, 'legacy_global');
-        
+
         $this->assertEquals(200, $response->getStatusCode());
         $this->assertEquals('Legacy function executed', $response->getData()->data->message);
     }
@@ -308,21 +308,21 @@ class LegacyConfigTest extends TestCase
                         'allow_create' => true,
                         'allow_update' => true,
                         'allow_delete' => true,
-                    ]
-                ]
+                    ],
+                ],
             ],
             'legacy_child' => [
                 'pmsName' => 'legacy_child',
                 'table' => 'legacy_child',
-            ]
+            ],
         ]);
-        
+
         SchemaRegistryUtils::refresh();
         RelationshipResolverUtils::clearSchemaCache();
-        
+
         // Resolve relationship
         $rel = RelationshipResolverUtils::resolveRelationship('legacy_parent', 'children');
-        
+
         $this->assertIsArray($rel);
         $this->assertEquals('hasMany', $rel['type']);
         $this->assertEquals('legacy_child', $rel['table']);

@@ -15,7 +15,6 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
 class QueryBuilderFiltersUtils
 {
-
     private const FILTER_OPERATORS = [
         'is', 'eq', 'neq', 'like', 'ilike', 'gt', 'lt', 'gte', 'lte', 'in', 'contains',
         'between', 'not_between', 'starts_with', 'ends_with', 'not_like', 'not_in', 'is_not',
@@ -142,11 +141,8 @@ class QueryBuilderFiltersUtils
                             $columns = implode(',', array_map(fn($col): string => sprintf('%s.%s', $table, $col), $searchableCols));
                             $q->whereRaw(sprintf('MATCH(%s) AGAINST(? IN BOOLEAN MODE)', $columns), [sprintf('+%s*', $keyword)]);
                         } else {
-                            // Revert to full wildcard to fix tests
-                            $likePattern = sprintf('%%%s%%', $keyword);
-                            
                             foreach ($searchableCols as $searchableCol) {
-                                $q->orWhere($table . '.' . $searchableCol, $likeOperator, $likePattern);
+                                $q->orWhere($table . '.' . $searchableCol, $likeOperator, sprintf('%%%s%%', $keyword));
                             }
                         }
                     }
@@ -622,18 +618,15 @@ class QueryBuilderFiltersUtils
 
             case 'like':
             case 'contains':
-                $likePattern = sprintf('%%%s%%', $value); // Revert to full wildcard to fix tests
-                $subquery->where($fullColumn, 'like', $likePattern);
+                $subquery->where($fullColumn, 'like', '%' . $value . '%');
 
                 break;
 
             case 'ilike':
-                $likePattern = sprintf('%%%s%%', $value); // Revert to full wildcard to fix tests
-                
                 if ('pgsql' === DB::getDriverName()) {
-                    $subquery->where($fullColumn, 'ilike', $likePattern);
+                    $subquery->where($fullColumn, 'ilike', '%' . $value . '%');
                 } else {
-                    $subquery->whereRaw('LOWER(' . $fullColumn . ') like ?', [mb_strtolower($likePattern)]);
+                    $subquery->whereRaw('LOWER(' . $fullColumn . ') like ?', ['%' . mb_strtolower((string) $value) . '%']);
                 }
 
                 break;
@@ -927,31 +920,27 @@ class QueryBuilderFiltersUtils
 
             case 'like':
             case 'contains':
-                $likePattern = sprintf('%%%s%%', $value); // Revert to full wildcard to fix tests
-                
                 if ($isMultiple) {
-                    $builder->where(function ($q) use ($columns, $likePattern, $table): void {
+                    $builder->where(function ($q) use ($columns, $value, $table): void {
                         foreach ($columns as $column) {
-                            $q->orWhere($table . '.' . $column, 'like', $likePattern);
+                            $q->orWhere($table . '.' . $column, 'like', '%' . $value . '%');
                         }
                     });
                 } else {
-                    $builder->where($table . '.' . $columns[0], 'like', $likePattern);
+                    $builder->where($table . '.' . $columns[0], 'like', '%' . $value . '%');
                 }
 
                 break;
 
             case 'ilike':
-                $likePattern = sprintf('%%%s%%', $value); // Revert to full wildcard to fix tests
-                
                 if ($isMultiple) {
-                    $builder->where(function (Builder $q) use ($columns, $likePattern, $table): void {
+                    $builder->where(function (Builder $q) use ($columns, $value, $table): void {
                         foreach ($columns as $column) {
-                            self::applyCaseInsensitiveLike($q, $table . '.' . $column, $likePattern);
+                            self::applyCaseInsensitiveLike($q, $table . '.' . $column, (string) $value);
                         }
                     });
                 } else {
-                    self::applyCaseInsensitiveLike($builder, $table . '.' . $columns[0], $likePattern);
+                    self::applyCaseInsensitiveLike($builder, $table . '.' . $columns[0], (string) $value);
                 }
 
                 break;

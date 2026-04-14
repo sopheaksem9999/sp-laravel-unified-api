@@ -72,7 +72,42 @@ class SyncRecordColumnsCommand extends Command
 
             $updatedTables = 0;
 
+            $ignoredTables = [
+                // Internal Package Tables
+                'sp_attachments',
+                'sp_attachment_links',
+                'sp_document_folders',
+                'sp_webhook_endpoints',
+                'sp_webhook_subscriptions',
+                'sp_webhook_deliveries',
+                'sp_audit_logs',
+                'audit_logs',
+
+                // Standard Laravel Tables
+                'migrations',
+                'failed_jobs',
+                'jobs',
+                'job_batches',
+                'password_resets',
+                'password_reset_tokens',
+                'personal_access_tokens',
+                'sessions',
+                'cache',
+                'cache_locks',
+
+                // Laravel Passport / OAuth
+                'oauth_auth_codes',
+                'oauth_access_tokens',
+                'oauth_clients',
+                'oauth_personal_access_clients',
+                'oauth_refresh_tokens',
+            ];
+
             foreach ($tables as $tableName => $config) {
+                if (in_array($tableName, $ignoredTables, true)) {
+                    continue;
+                }
+
                 // 2. Resolve RecordTableType instance from config
                 if (is_string($config) && class_exists($config)) {
                     $instance = new $config();

@@ -44,46 +44,46 @@ class OpenApiService
         $globalFunctionCount = count(RecordConfigService::globalFunctions());
 
         return <<<MDX
-# SP Laravel API Agent Contract
+            # SP Laravel API Agent Contract
 
-This API is private/internal. Prefer OpenAPI as the source of truth.
+            This API is private/internal. Prefer OpenAPI as the source of truth.
 
-## OpenAPI
+            ## OpenAPI
 
-- Schema URL: {$openApiUrl}
-- Content-Type: application/vnd.oai.openapi+json
-- Auth: Bearer token
-- Tenant header: {$tenantHeader} (maps to {$tenantColumn})
+            - Schema URL: {$openApiUrl}
+            - Content-Type: application/vnd.oai.openapi+json
+            - Auth: Bearer token
+            - Tenant header: {$tenantHeader} (maps to {$tenantColumn})
 
-## Key Notes
+            ## Key Notes
 
-- OpenAPI schema is the only source of truth for modules, fields, and relationships.
-- Do not duplicate or hardcode relationship details from this MDX document.
-- Read relationship metadata from `paths` + `components.schemas` in OpenAPI.
-- If OpenAPI and any prose differ, always follow OpenAPI.
+            - OpenAPI schema is the only source of truth for modules, fields, and relationships.
+            - Do not duplicate or hardcode relationship details from this MDX document.
+            - Read relationship metadata from `paths` + `components.schemas` in OpenAPI.
+            - If OpenAPI and any prose differ, always follow OpenAPI.
 
-## Endpoint Patterns
+            ## Endpoint Patterns
 
-- List: /{$apiPrefix}/{table}
-- Detail: /{$apiPrefix}/{table}/{id}
-- Create: POST /{$apiPrefix}/{table}
-- Update: PUT|PATCH /{$apiPrefix}/{table}/{id}
-- Delete: DELETE /{$apiPrefix}/{table}/{id}
-- Global RPC: {$globalRpcPattern}
-- Table RPC: {$tableRpcPattern}
+            - List: /{$apiPrefix}/{table}
+            - Detail: /{$apiPrefix}/{table}/{id}
+            - Create: POST /{$apiPrefix}/{table}
+            - Update: PUT|PATCH /{$apiPrefix}/{table}/{id}
+            - Delete: DELETE /{$apiPrefix}/{table}/{id}
+            - Global RPC: {$globalRpcPattern}
+            - Table RPC: {$tableRpcPattern}
 
-## Runtime Snapshot
+            ## Runtime Snapshot
 
-- Configured tables: {$tableCount}
-- Configured global functions: {$globalFunctionCount}
+            - Configured tables: {$tableCount}
+            - Configured global functions: {$globalFunctionCount}
 
-## Agent Rules
+            ## Agent Rules
 
-- Do not invent fields or endpoints.
-- Generate frontend types and API clients from OpenAPI schema URL.
-- Use error_code and message from API responses for UI handling.
-- Respect tenant header and auth on every request.
-MDX;
+            - Do not invent fields or endpoints.
+            - Generate frontend types and API clients from OpenAPI schema URL.
+            - Use error_code and message from API responses for UI handling.
+            - Respect tenant header and auth on every request.
+            MDX;
     }
 
     /**
@@ -658,7 +658,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                 'get' => $canRead ? [
                     'tags' => [$formattedRecordName],
                     'summary' => 'List ' . $formattedRecordName,
-                    'description' => "Retrieve {$recordName} records with comprehensive query capabilities:\n\n**Advanced Filtering:** Multiple operators ([Filter](#description/-getting-started))\n\n{$relationshipDescription}",
+                    'description' => "Retrieve {$formattedRecordName} records with comprehensive query capabilities:\n\n**Advanced Filtering:** Multiple operators ([Filter](#description/-getting-started))\n\n{$relationshipDescription}",
                     'responses' => [
                         '200' => [
                             'description' => 'Successful response',
@@ -696,8 +696,8 @@ Accepts an array of IDs or an array of objects with the primary key.
                 ] : [],
                 'post' => $canCreate ? [
                     'tags' => [$formattedRecordName],
-                    'summary' => 'Create ' . $recordName,
-                    'description' => "Create a new {$recordName} record with comprehensive validation:\n\n**Advanced Validation:** Multiple rules ([Validation](#description/-getting-started))\n\n{$relationshipDescription}",
+                    'summary' => 'Create ' . $formattedRecordName,
+                    'description' => "Create a new {$formattedRecordName} record with comprehensive validation:\n\n**Advanced Validation:** Multiple rules ([Validation](#description/-getting-started))\n\n{$relationshipDescription}",
                     'requestBody' => [
                         'required' => true,
                         'content' => [
@@ -754,7 +754,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                     'post' => [
                         'tags' => [$formattedRecordName],
                         'summary' => 'Upsert ' . $formattedRecordName,
-                        'description' => "Create or update a {$recordName} record based on match_on columns.\n\n{$relationshipDescription}",
+                        'description' => "Create or update a {$formattedRecordName} record based on match_on columns.\n\n{$relationshipDescription}",
                         'requestBody' => [
                             'required' => true,
                             'content' => [
@@ -829,7 +829,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                     'post' => [
                         'tags' => [$formattedRecordName],
                         'summary' => 'Bulk Upsert ' . $formattedRecordName,
-                        'description' => "Bulk create or update {$recordName} records based on match_on columns.\n\n{$relationshipDescription}",
+                        'description' => "Bulk create or update {$formattedRecordName} records based on match_on columns.\n\n{$relationshipDescription}",
                         'requestBody' => [
                             'required' => true,
                             'content' => [
@@ -905,7 +905,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                 'parameters' => array_merge([self::pathIdParameter()], $tenantHeaderParameters),
                 'get' => $canRead ? [
                     'tags' => [$formattedRecordName],
-                    'summary' => sprintf('Get %s by ID', $recordName),
+                    'summary' => sprintf('Get %s by ID', $formattedRecordName),
                     'responses' => [
                         '200' => [
                             'description' => 'Successful response',
@@ -958,7 +958,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                 'put' => $canUpdate ? [
                     'tags' => [$formattedRecordName],
                     'summary' => 'Update ' . $formattedRecordName,
-                    'description' => "Update an existing {$recordName} record with comprehensive validation:\n\n**Advanced Validation:** Multiple rules ([Validation](#description/-getting-started))\n\n{$relationshipDescription}",
+                    'description' => "Update an existing {$formattedRecordName} record with comprehensive validation:\n\n**Advanced Validation:** Multiple rules ([Validation](#description/-getting-started))\n\n{$relationshipDescription}",
                     'requestBody' => [
                         'required' => true,
                         'content' => [
@@ -1017,6 +1017,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                 'delete' => $canDelete ? [
                     'tags' => [$formattedRecordName],
                     'summary' => 'Delete ' . $formattedRecordName,
+                    'description' => sprintf('Delete an existing %s record.', $formattedRecordName),
                     'responses' => [
                         '200' => [
                             'description' => 'Deleted',
@@ -1083,6 +1084,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                     'post' => [
                         'tags' => [$formattedRecordName],
                         'summary' => 'Restore ' . $formattedRecordName,
+                        'description' => sprintf('Restore a deleted %s record.', $formattedRecordName),
                         'responses' => [
                             '200' => [
                                 'description' => 'Restored',
@@ -1132,6 +1134,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                     'delete' => [
                         'tags' => [$formattedRecordName],
                         'summary' => 'Force delete ' . $formattedRecordName,
+                        'description' => sprintf('Force delete an existing %s record.', $formattedRecordName),
                         'responses' => [
                             '200' => [
                                 'description' => 'Deleted',

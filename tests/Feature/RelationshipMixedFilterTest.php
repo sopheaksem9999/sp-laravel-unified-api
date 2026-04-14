@@ -55,31 +55,31 @@ class RelationshipMixedFilterTest extends TestCase
 
         DB::table('user_roles')->insert([
             ['user_id' => $u1, 'role_id' => $rAdmin],
-            ['user_id' => $u1, 'role_id' => $rUser]
+            ['user_id' => $u1, 'role_id' => $rUser],
         ]);
 
         DB::table('posts')->insert([
             ['user_id' => $u1, 'title' => 'Post A', 'status' => 'published'],
-            ['user_id' => $u1, 'title' => 'Post B', 'status' => 'draft']
+            ['user_id' => $u1, 'title' => 'Post B', 'status' => 'draft'],
         ]);
 
         // User 2: User only, Has Published post
         $u2 = DB::table('users')->insertGetId(['name' => 'User 2']);
         DB::table('user_roles')->insert([
-            ['user_id' => $u2, 'role_id' => $rUser]
+            ['user_id' => $u2, 'role_id' => $rUser],
         ]);
         DB::table('posts')->insert([
-            ['user_id' => $u2, 'title' => 'Post C', 'status' => 'published']
+            ['user_id' => $u2, 'title' => 'Post C', 'status' => 'published'],
         ]);
 
         // User 3: Editor, Has Draft post
         $u3 = DB::table('users')->insertGetId(['name' => 'User 3']);
         $rEditor = DB::table('roles')->insertGetId(['name' => 'editor']);
         DB::table('user_roles')->insert([
-            ['user_id' => $u3, 'role_id' => $rEditor]
+            ['user_id' => $u3, 'role_id' => $rEditor],
         ]);
         DB::table('posts')->insert([
-            ['user_id' => $u3, 'title' => 'Post D', 'status' => 'draft']
+            ['user_id' => $u3, 'title' => 'Post D', 'status' => 'draft'],
         ]);
 
         // Register Schema
@@ -92,7 +92,7 @@ class RelationshipMixedFilterTest extends TestCase
                 table: 'user_roles',
                 foreignPivotKey: 'user_id',
                 relatedPivotKey: 'role_id'
-            )
+            ),
         ];
         // Must update config because RelationshipResolverUtils reads from config('record.tables')
         config(['record.tables.users' => $config]);
@@ -114,7 +114,7 @@ class RelationshipMixedFilterTest extends TestCase
 
         $request = Request::create('/api/v1/users', 'GET', [
             'select' => '*,posts(*,status=eq.published),roles(*)',
-            'roles.name' => 'eq.admin'
+            'roles.name' => 'eq.admin',
         ]);
 
         $result = RecordService::applyRequestFilters($request, 'users');

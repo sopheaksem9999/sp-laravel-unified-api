@@ -9,9 +9,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class McpHttpController extends Controller
 {
-    public function __construct(protected McpServerService $mcpService)
-    {
-    }
+    public function __construct(protected McpServerService $mcpService) {}
 
     public function handlePost(Request $request)
     {
@@ -25,17 +23,15 @@ class McpHttpController extends Controller
         return response()->json($response);
     }
 
-    public function handleSse(Request $request)
+    public function handleSse(Request $request): StreamedResponse
     {
-        $response = new StreamedResponse(function () use ($request) {
+        $response = new StreamedResponse(function (): void {
             $sessionId = uniqid('mcp_', true);
             $postUrl = url(config('record.mcp.route_prefix', 'mcp') . '/message?session_id=' . $sessionId);
-            
             echo "event: endpoint\n";
             echo "data: " . $postUrl . "\n\n";
             ob_flush();
             flush();
-
             // Just keep connection open. Real implementation would use Redis/broadcast to send messages.
             while (true) {
                 echo ": keepalive\n\n";

@@ -304,7 +304,7 @@ class AttributeDiscoveryService
                 $triggerAttr = $attrRef->newInstance();
 
                 $hook = $triggerAttr->hook;
-                
+
                 if (!isset($triggers[$hook])) {
                     $triggers[$hook] = [];
                 }

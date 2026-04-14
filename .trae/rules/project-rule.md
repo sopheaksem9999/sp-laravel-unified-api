@@ -23,6 +23,10 @@
 # Architecture Notes
 - `RecordService` is the main CRUD orchestration layer (tenant filter, triggers, validators, cache invalidation, relationship include/write).
 - `RecordApiResponseService` is the single response contract (`success`, `error_code`, `meta.request_id`).
+- **NO ROUTES FOR CRUD:** Never write `Route::get(...)` in `routes/api.php` for standard API endpoints.
+- **NO CONTROLLERS FOR CRUD:** Never write standard CRUD controllers.
+- **NO RPC FOR STANDARD READS:** Never create custom RPC endpoints (like `getLogs`) just to list or filter records. The package automatically provides full-featured listing, filtering, and pagination via `GET /api/v1/{table}`. Only use custom functions for complex aggregations (like stats or timelines) or actions that the standard CRUD cannot handle.
+- **CONFIG-DRIVEN ENDPOINTS:** All built-in API routes (both table CRUD and custom table functions) MUST be configured on the record table definition using `RecordTableType` (e.g., in `config/record.php` or `config/records/tables/`). Use the `functions` property for table-specific RPC endpoints, and `global_functions` for global endpoints.
 - `RecordTableType` controls endpoint behavior:
   - **Auth flags:** `isAuthRead`, `isAuthWrite` (primary)
   - **Legacy compatibility:** `public` is still supported/derived

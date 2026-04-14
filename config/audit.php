@@ -29,10 +29,10 @@ return [
     |--------------------------------------------------------------------------
     |
     | This option is kept for backward compatibility but is no longer used.
-    | Audit logs are stored directly in the audit_logs table.
+    | Audit logs are stored directly in the sp_audit_logs table.
     |
     */
-    'audit_log_model' => 'audit_logs',
+    'audit_log_model' => 'sp_audit_logs',
 
     /*
     |--------------------------------------------------------------------------
@@ -58,6 +58,33 @@ return [
     |
     */
     'retention_days' => env('SP_LARAVEL_API_AUDIT_LOG_RETENTION_DAYS', 365),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Archive Settings
+    |--------------------------------------------------------------------------
+    |
+    | These settings control whether old audit logs should be archived before
+    | they are deleted by the retention policy.
+    |
+    */
+    'archive' => [
+        'enabled' => env('SP_LARAVEL_API_AUDIT_LOG_ARCHIVE_ENABLED', false),
+        'disk' => env('SP_LARAVEL_API_AUDIT_LOG_ARCHIVE_DISK', 'local'),
+        'path' => env('SP_LARAVEL_API_AUDIT_LOG_ARCHIVE_PATH', 'audit-archives'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Store Diff Only
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, only changed attributes will be stored in old_values and
+    | new_values for updated events. This can significantly reduce database size.
+    | Set to false (default) to keep backward compatibility and store all data.
+    |
+    */
+    'store_diff_only' => env('SP_LARAVEL_API_AUDIT_LOG_DIFF_ONLY', false),
 
     /*
     |--------------------------------------------------------------------------
@@ -189,5 +216,75 @@ return [
 
         // Anonymize user data after retention period
         'anonymize_old_logs' => env('SP_LARAVEL_API_AUDIT_LOG_ANONYMIZE', false),
+    ],
+    /*
+    |--------------------------------------------------------------------------
+    | Audit Log Table Configuration
+    |--------------------------------------------------------------------------
+    |
+    | This defines the default table configuration for the audit logs API.
+    | It is automatically merged into the main record.tables configuration.
+    | By default, create/update/delete are disabled (read-only).
+    |
+    */
+    'tables' => [
+        'sp_audit_logs' => new \Sopheak\Core\Types\RecordTableType(
+            table: 'sp_audit_logs',
+            pmsName: 'audit_log',
+            primaryKey: 'id',
+            softDeletes: false,
+            hasTenantId: true,
+            isAuthRead: true,
+            isAuthWrite: false,
+            canCreate: false,
+            canUpdate: false,
+            canDelete: false,
+            canUpsert: false,
+            columns: [
+                'id' => ['type' => 'integer', 'nullable' => false],
+                'entity_name' => ['type' => 'string', 'nullable' => true],
+                'entity_type' => ['type' => 'string', 'nullable' => true],
+                'entity_id' => ['type' => 'integer', 'nullable' => true],
+                'user_id' => ['type' => 'integer', 'nullable' => true],
+                'event' => ['type' => 'string', 'nullable' => true],
+                'title' => ['type' => 'string', 'nullable' => true],
+                'subject' => ['type' => 'string', 'nullable' => true],
+                'recap' => ['type' => 'string', 'nullable' => true],
+                'old_data' => ['type' => 'json', 'nullable' => true],
+                'new_data' => ['type' => 'json', 'nullable' => true],
+                'metadata' => ['type' => 'json', 'nullable' => true],
+                'ip_address' => ['type' => 'string', 'nullable' => true],
+                'user_agent' => ['type' => 'string', 'nullable' => true],
+                'request_id' => ['type' => 'string', 'nullable' => true],
+            ],
+            relationships: [
+                'user' => new \Sopheak\Core\Types\RecordBelongsToType(
+                    table: 'users',
+                    type: \Sopheak\Core\Enums\RecordRelationshipsEnum::BELONGS_TO,
+                    foreignKey: 'user_id',
+                    ownerKey: 'id'
+                ),
+            ],
+            functions: [
+                'stats' => new \Sopheak\Core\Types\RecordFunctionType(
+                    class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
+                    functionName: 'getStats',
+                    httpMethod: ['GET'],
+                    description: 'Get audit statistics'
+                ),
+                'field-timeline/{entityType}/{entityId}/{field}' => new \Sopheak\Core\Types\RecordFunctionType(
+                    class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
+                    functionName: 'getFieldTimeline',
+                    httpMethod: ['GET'],
+                    description: 'Get field timeline'
+                ),
+                'field-stats/{entityType}/{entityId}/{field}' => new \Sopheak\Core\Types\RecordFunctionType(
+                    class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
+                    functionName: 'getFieldStats',
+                    httpMethod: ['GET'],
+                    description: 'Get field statistics'
+                ),
+            ]
+        ),
     ],
 ];

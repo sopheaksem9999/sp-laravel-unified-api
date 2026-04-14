@@ -80,11 +80,18 @@ class RecordFunctionType
     /**
      * Create a new RecordFunctionType instance.
      *
-     * @param array|string|null $pmsName   The PMS name identifier(s) for this function (optional, null for public)
      * @param array|string|RecordFunctionMethodEnum $httpMethod      Allowed HTTP methods (e.g., 'GET', ['GET', 'POST'])
      * @param string       $class           Class name for class-based functions (required)
      * @param string       $functionName Method name for class-based functions (required)
      * @param null|string  $description     Function description for documentation purposes
+     * @param array|string|null $pmsName   The PMS name identifier(s) for this function (optional, null for public)
+     * @param bool $isPublic Whether the function is public (default: false)
+     * @param int|null $cacheTTL Cache TTL in seconds (default: null)
+     * @param array|string|null $clearCacheTables Tables to clear cache (default: null)
+     * @param array|string|null $middleware Middleware to apply (default: null)
+     * @param array|null $querySchema OpenAPI schema array for query parameters (e.g. ['type' => 'object', 'properties' => [...]])
+     * @param array|null $payloadSchema OpenAPI schema array for request payload (e.g. ['type' => 'object', 'properties' => [...]])
+     * @param array|null $responseSchema OpenAPI schema array for response body (e.g. ['type' => 'object', 'properties' => [...]])
      *
      * @throws InvalidArgumentException When class or functionName is empty
      */

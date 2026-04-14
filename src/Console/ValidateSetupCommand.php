@@ -242,8 +242,8 @@ class ValidateSetupCommand extends Command
             if (in_array('migrations', $tableNames)) {
                 $this->addResult('✅', 'Migrations table exists', 'success');
 
-                // Check for audit_logs table
-                if (in_array('audit_logs', $tableNames)) {
+                // Check for sp_audit_logs table
+                if (in_array('sp_audit_logs', $tableNames)) {
                     $this->addResult('✅', 'Audit logs table exists', 'success');
                 } else {
                     $this->addResult('⚠️', 'Audit logs table missing - run: php artisan migrate', 'warning');
@@ -385,10 +385,10 @@ class ValidateSetupCommand extends Command
         $this->info('🪝 Checking Webhooks Configuration...');
 
         $enabled = config('webhooks.enabled', false);
-        
+
         if ($enabled) {
             $this->addResult('✅', 'Webhooks module is enabled', 'success');
-            
+
             // Check if tables exist
             try {
                 $tables = DB::select($this->getTableListQuery(DB::getDriverName()));
@@ -545,7 +545,7 @@ class ValidateSetupCommand extends Command
         $this->results[] = [
             'icon' => $icon,
             'message' => $message,
-            'type' => $type
+            'type' => $type,
         ];
 
         // Display immediately if verbose

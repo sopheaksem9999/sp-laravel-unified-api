@@ -40,6 +40,27 @@ class AttachmentUploadController extends Controller
         return is_array($result) ? $result : [];
     }
 
+    private function normalizeBooleanInputs(Request $request, array $keys): void
+    {
+        foreach ($keys as $key) {
+            if (!$request->has($key)) {
+                continue;
+            }
+
+            $value = $request->input($key);
+            if (!is_string($value)) {
+                continue;
+            }
+
+            $normalized = strtolower($value);
+            if ('true' === $normalized) {
+                $request->merge([$key => true]);
+            } elseif ('false' === $normalized) {
+                $request->merge([$key => false]);
+            }
+        }
+    }
+
     private function resolveTenantId(Request $request): mixed
     {
         if (!RecordConfigService::enableTenantId()) {
@@ -58,13 +79,29 @@ class AttachmentUploadController extends Controller
     {
         $visibility = (string) ($attachment['visibility'] ?? 'private');
 
+        $attachmentPrefix = config('attachments.route_prefix', 'attachments');
+        $baseApiUrl = url(RecordConfigService::apiPrefix() . '/' . $attachmentPrefix . '/' . (($attachment['id'] ?? '')));
+
+        $attachment['download_url'] = $baseApiUrl . '/download';
+
         if ($this->shouldUseDirectAssetUrl($visibility)) {
+            $diskName = (string) ($attachment['disk'] ?? 'local');
             /** @var FilesystemAdapter $disk */
-            $disk = Storage::disk((string) ($attachment['disk'] ?? 'local'));
-            $attachment['url'] = $disk->url((string) ($attachment['path'] ?? ''));
+            $disk = Storage::disk($diskName);
+
+            $path = (string) ($attachment['path'] ?? '');
+            if (Str::startsWith($path, '/')) {
+                $path = ltrim($path, '/');
+            }
+
+            if (in_array($diskName, ['local', 'public'], true)) {
+                $attachment['url'] = asset('storage/' . $path);
+            } else {
+                // For cloud disks like s3, use the native disk URL generator
+                $attachment['url'] = $disk->url($path);
+            }
         } else {
-            $attachmentPrefix = config('attachments.route_prefix', 'attachments');
-            $attachment['url'] = url(RecordConfigService::apiPrefix() . '/' . $attachmentPrefix . '/' . ($attachment['id'] ?? '') . '/download');
+            $attachment['url'] = $baseApiUrl . '/view';
         }
 
         return $attachment;
@@ -142,6 +179,10 @@ class AttachmentUploadController extends Controller
         }
 
         if (is_string($requestedVisibility) && '' !== trim($requestedVisibility)) {
+            if ($asTemp && !in_array($requestedVisibility, ['temp_private', 'temp_public'], true)) {
+                return $defaultTempVisibility;
+            }
+
             return $requestedVisibility;
         }
 
@@ -154,7 +195,7 @@ class AttachmentUploadController extends Controller
 
     private function resolveDiskFromVisibility(string $visibility): string
     {
-        return in_array($visibility, ['public', 'temp_public'], true) ? 'public' : 'local';
+        return in_array($visibility, ['public', 'temp_public'], true) ? (string) config('attachments.disk_public', 'public') : (string) config('attachments.disk_private', 'local');
     }
 
     private function resolveTempTimeout(Request $request, string $visibility): ?string
@@ -178,14 +219,16 @@ class AttachmentUploadController extends Controller
         return Carbon::now()->addMinutes($fallbackMinutes)->toDateTimeString();
     }
 
-    private function generateAttachmentStoragePath(?string $extension = null): string
+    private function generateAttachmentStoragePath(string $visibility, ?string $extension = null): string
     {
         $filename = Str::uuid()->toString();
         if (is_string($extension) && '' !== trim($extension)) {
             $filename .= '.' . ltrim($extension, '.');
         }
 
-        return 'attachments/' . date('Y/m/d') . '/' . $filename;
+        $baseDir = in_array($visibility, ['public', 'temp_public'], true) ? 'attachments/public' : 'attachments/private';
+
+        return $baseDir . '/' . date('Y/m/d') . '/' . $filename;
     }
 
     private function copyAttachmentFile(array $sourceAttachment, string $targetDisk, string $targetPath): void
@@ -380,9 +423,9 @@ class AttachmentUploadController extends Controller
         }
 
         $attachmentIds = array_column($linksResult['data'], 'attachment_id');
-        
+
         $attachmentsResult = RecordService::executeGetByFilter('sp_attachments', [
-            'id' => 'in.' . implode(',', $attachmentIds)
+            'id' => 'in.' . implode(',', $attachmentIds),
         ], $tenantId);
 
         $attachmentsById = [];
@@ -484,7 +527,9 @@ class AttachmentUploadController extends Controller
     {
         $maxSize = config('attachments.max_upload_size', 10240);
         $maxTempTimeoutMinutes = (int) config('attachments.max_temp_timeout_minutes', 43200);
-        
+
+        $this->normalizeBooleanInputs($request, ['replace_old', 'as_temp']);
+
         $request->validate([
             'file' => 'required|file|max:' . $maxSize,
             'size_name' => 'nullable|string',
@@ -511,7 +556,7 @@ class AttachmentUploadController extends Controller
 
         $visibility = $this->resolveVisibility($request, 'private');
         $disk = $this->resolveDiskFromVisibility($visibility);
-        
+
         $width = $request->input('w');
         $height = $request->input('h');
         $fit = $request->input('fit', 'contain');
@@ -527,7 +572,7 @@ class AttachmentUploadController extends Controller
             }
         }
 
-        $fullPath = $this->generateAttachmentStoragePath($file->getClientOriginalExtension());
+        $fullPath = $this->generateAttachmentStoragePath($visibility, $file->getClientOriginalExtension());
         $path = dirname($fullPath);
         $filename = basename($fullPath);
 
@@ -588,6 +633,9 @@ class AttachmentUploadController extends Controller
     public function cloneTemp(Request $request): JsonResponse
     {
         $maxTempTimeoutMinutes = (int) config('attachments.max_temp_timeout_minutes', 43200);
+
+        $this->normalizeBooleanInputs($request, ['replace_old', 'as_temp']);
+
         $request->validate([
             'attachment_id' => 'required|string',
             'visibility' => 'nullable|in:private,public,temp_private,temp_public',
@@ -618,12 +666,6 @@ class AttachmentUploadController extends Controller
         }
 
         $visibility = $this->resolveVisibility($request, (string) ($sourceAttachment['visibility'] ?? 'private'), true);
-        
-        // If visibility is explicitly provided in the request, use it
-        if ($request->has('visibility')) {
-            $visibility = $request->input('visibility');
-        }
-        
         $disk = $this->resolveDiskFromVisibility($visibility);
 
         $sourceFilename = (string) ($sourceAttachment['filename'] ?? '');
@@ -633,7 +675,7 @@ class AttachmentUploadController extends Controller
             $extension = pathinfo($sourcePath, PATHINFO_EXTENSION);
         }
 
-        $fullPath = $this->generateAttachmentStoragePath($extension);
+        $fullPath = $this->generateAttachmentStoragePath($visibility, $extension);
         $this->copyAttachmentFile($sourceAttachment, $disk, $fullPath);
 
         $tempTimeout = $this->resolveTempTimeout($request, $visibility);
@@ -660,17 +702,23 @@ class AttachmentUploadController extends Controller
 
         $attachment = RecordService::executeCreate('sp_attachments', $attachmentPayload, [], $tenantId);
         $attachment = $this->extractRecordPayload($attachment);
-        
-        // The trigger might have appended the URL already, but we ensure it's there
-        if (!isset($attachment['url'])) {
-            $attachment = $this->appendUrlToAttachment($attachment);
-        }
+        $attachment = $this->appendUrlToAttachment($attachment);
         $this->linkAttachmentIfRequested($request, (string) $attachment['id'], $tenantId);
 
         return RecordApiResponseService::success($attachment);
     }
 
-    public function download(Request $request, string $id): StreamedResponse|JsonResponse
+    public function view(Request $request, string $id): StreamedResponse|JsonResponse|Response
+    {
+        return $this->serveFile($request, $id, true);
+    }
+
+    public function download(Request $request, string $id): StreamedResponse|JsonResponse|Response
+    {
+        return $this->serveFile($request, $id, false);
+    }
+
+    private function serveFile(Request $request, string $id, bool $inline): StreamedResponse|JsonResponse|Response
     {
         $tenantId = $this->resolveTenantId($request);
 
@@ -695,7 +743,17 @@ class AttachmentUploadController extends Controller
 
         /** @var FilesystemAdapter $disk */
         $disk = Storage::disk($attachment['disk']);
-        
+
+        if ($inline) {
+            $mimeType = (string) ($attachment['mime_type'] ?? 'application/octet-stream');
+            $response = $disk->response($attachment['path']);
+            if (method_exists($response, 'header')) {
+                $response->header('Content-Type', $mimeType);
+            }
+
+            return $response;
+        }
+
         return $disk->download($attachment['path'], $attachment['filename']);
     }
 }

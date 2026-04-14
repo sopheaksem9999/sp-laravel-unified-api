@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Http\Controllers\Concerns;
 
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Exception;
 use Illuminate\Http\Request;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
@@ -20,35 +21,50 @@ trait HasFunctionOperations
     public function executeTableFunction(Request $request, string $table, string $functionName): Response
     {
         try {
-            $tableSchema = $this->resolveSchemaOrFail($table);
-            $action = match (strtoupper($request->method())) {
-                'POST' => 'create',
-                'PUT', 'PATCH' => 'update',
-                'DELETE' => 'delete',
-                default => 'read',
-            };
-
-            $isEndpointEnabled = match ($action) {
-                'create' => $this->isCreateEndpointEnabled($tableSchema),
-                'update' => $this->isUpdateEndpointEnabled($tableSchema),
-                'delete' => $this->isDeleteEndpointEnabled($tableSchema),
-                default => $this->isReadEndpointEnabled($tableSchema),
-            };
-
-            if (!$isEndpointEnabled) {
-                return $this->resourceNotAvailableResponse();
-            }
-
-            $this->authorizeAction($table, $action);
+            $this->resolveSchemaOrFail($table);
 
             return $this->recordService->executeTableFunction($request, $table, $functionName);
+        } catch (HttpResponseException $exception) {
+            throw $exception;
         } catch (Exception $exception) {
             $status = $exception->getCode();
             if (!is_int($status) || $status < 100 || $status > 599) {
                 $status = RecordApiJsonResponseEnum::SERVER_ERROR->value;
             }
 
-            return RecordApiResponseService::errorFromException($exception, $exception->getMessage(), $status);
+            return RecordApiResponseService::errorFromException($exception, $exception->getMessage() ?: $exception::class, $status);
+        }
+    }
+
+    /**
+     * Execute a table-specific custom function with an ID parameter.
+     */
+    public function executeTableFunctionWithId(Request $request, string $table, string $id, string $functionName): Response
+    {
+        // For endpoints like {table}/{id}/{functionName} (e.g. sp_attachments/{id}/download),
+        // we can inject the 'id' into the request payload so the custom controller function can access it.
+        // However, standard custom functions are usually mapped to methods like `download(Request $request, string $id)`.
+        // The executeTableFunction inside RecordService does not natively pass the $id as a separate param 
+        // to the custom controller method unless we modify it or merge it into the request.
+        // For now, we inject it into the request so the controller can retrieve it via $request->route('id') or $request->input('id').
+        $request->merge(['id' => $id]);
+        
+        // Also ensure the route parameters are set properly if they aren't already
+        $request->route()->setParameter('id', $id);
+
+        try {
+            $this->resolveSchemaOrFail($table);
+
+            return $this->recordService->executeTableFunction($request, $table, $functionName);
+        } catch (HttpResponseException $exception) {
+            throw $exception;
+        } catch (Exception $exception) {
+            $status = $exception->getCode();
+            if (!is_int($status) || $status < 100 || $status > 599) {
+                $status = RecordApiJsonResponseEnum::SERVER_ERROR->value;
+            }
+
+            return RecordApiResponseService::errorFromException($exception, $exception->getMessage() ?: $exception::class, $status);
         }
     }
 
@@ -60,6 +76,8 @@ trait HasFunctionOperations
     {
         try {
             return $this->recordService->executeGlobalFunction($request, $functionName);
+        } catch (HttpResponseException $exception) {
+            throw $exception;
         } catch (Exception $exception) {
             $status = $exception->getCode();
             if (!is_int($status) || $status < 100 || $status > 599) {

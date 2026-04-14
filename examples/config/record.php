@@ -2,10 +2,10 @@
 
 /**
  * Example Record Configuration for SP Laravel API
- * 
+ *
  * This file demonstrates how to configure your database tables
  * for the dynamic API functionality.
- * 
+ *
  * Copy this to your Laravel app's config/record.php and modify
  * according to your database schema and requirements.
  */
@@ -155,14 +155,14 @@ $tables = [
                 foreignKey: 'user_id',
                 ownerKey: 'id'
             ),
-            
+
             // One-to-Many: Post has many comments
             'comments' => new RecordHasManyType(
                 table: 'comments',
                 foreignKey: 'post_id',
                 localKey: 'id'
             ),
-            
+
             // Many-to-Many: Post belongs to many categories
             'categories' => new RecordMetaBelongsToManyType(
                 related: 'categories',
@@ -195,7 +195,7 @@ $tables = [
                 foreignKey: 'post_id',
                 ownerKey: 'id'
             ),
-            
+
             // Belongs To: Comment belongs to user
             'user' => new RecordBelongsToType(
                 table: 'users',
@@ -225,14 +225,14 @@ $tables = [
                 foreignKey: 'user_id',
                 ownerKey: 'id'
             ),
-            
+
             // One-to-Many: Order has many order items
             'items' => new RecordHasManyType(
                 table: 'order_items',
                 foreignKey: 'order_id',
                 localKey: 'id'
             ),
-            
+
             // Has Many Through: Order has many products through order items
             'products' => new RecordHasManyThroughType(
                 table: 'products',
@@ -265,7 +265,7 @@ $tables = [
                 foreignKey: 'product_id',
                 localKey: 'id'
             ),
-            
+
             // Belongs To: Product belongs to category
             'category' => new RecordBelongsToType(
                 table: 'categories',
@@ -295,14 +295,14 @@ $tables = [
                 foreignKey: 'category_id',
                 localKey: 'id'
             ),
-            
+
             // Self-referencing: Category has many subcategories
             'subcategories' => new RecordHasManyType(
                 table: 'categories',
                 foreignKey: 'parent_id',
                 localKey: 'id'
             ),
-            
+
             // Self-referencing: Category belongs to parent category
             'parent' => new RecordBelongsToType(
                 table: 'categories',

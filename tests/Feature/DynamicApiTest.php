@@ -106,10 +106,10 @@ class DynamicApiTest extends TestCase
                         'name',
                         'email',
                         'created_at',
-                        'updated_at'
-                    ]
+                        'updated_at',
+                    ],
                 ],
-                'meta'
+                'meta',
             ]);
     }
 
@@ -141,7 +141,7 @@ class DynamicApiTest extends TestCase
         $userData = [
             'name' => $this->faker->name,
             'email' => $this->faker->unique()->safeEmail,
-            'password' => 'password123'
+            'password' => 'password123',
         ];
 
         $testResponse = $this->postJson('/api/users', $userData);
@@ -154,14 +154,14 @@ class DynamicApiTest extends TestCase
                     'name',
                     'email',
                     'created_at',
-                    'updated_at'
+                    'updated_at',
                 ],
-                'meta'
+                'meta',
             ]);
 
         $this->assertDatabaseHas('users', [
             'name' => $userData['name'],
-            'email' => $userData['email']
+            'email' => $userData['email'],
         ]);
     }
 
@@ -186,14 +186,14 @@ class DynamicApiTest extends TestCase
                     'name',
                     'email',
                     'created_at',
-                    'updated_at'
+                    'updated_at',
                 ],
-                'meta'
+                'meta',
             ])
             ->assertJson([
                 'data' => [
                     'id' => $userId,
-                ]
+                ],
             ]);
     }
 
@@ -208,7 +208,7 @@ class DynamicApiTest extends TestCase
             'updated_at' => now(),
         ]);
         $updateData = [
-            'name' => 'Updated Name'
+            'name' => 'Updated Name',
         ];
 
         $testResponse = $this->putJson('/api/users/' . $userId, $updateData);
@@ -221,19 +221,19 @@ class DynamicApiTest extends TestCase
                     'name',
                     'email',
                     'created_at',
-                    'updated_at'
+                    'updated_at',
                 ],
-                'meta'
+                'meta',
             ])
             ->assertJson([
                 'data' => [
-                    'name' => 'Updated Name'
-                ]
+                    'name' => 'Updated Name',
+                ],
             ]);
 
         $this->assertDatabaseHas('users', [
             'id' => $userId,
-            'name' => 'Updated Name'
+            'name' => 'Updated Name',
         ]);
     }
 
@@ -254,7 +254,7 @@ class DynamicApiTest extends TestCase
             ->assertJsonStructure(['success', 'data', 'meta']);
 
         $this->assertDatabaseMissing('users', [
-            'id' => $userId
+            'id' => $userId,
         ]);
     }
 
@@ -332,10 +332,10 @@ class DynamicApiTest extends TestCase
                 'data' => [
                     '*' => [
                         'id',
-                        'name'
-                    ]
+                        'name',
+                    ],
                 ],
-                'meta'
+                'meta',
             ]);
 
         // Ensure email is not included
@@ -482,7 +482,7 @@ class DynamicApiTest extends TestCase
 
         $testResponse->assertStatus(404)
             ->assertJson([
-                'message' => 'Not found'
+                'message' => 'Not found',
             ]);
     }
 
@@ -491,7 +491,7 @@ class DynamicApiTest extends TestCase
     {
         $testResponse = $this->postJson('/api/users', [
             'name' => '', // Invalid: empty name
-            'email' => 'invalid-email' // Invalid: not a valid email
+            'email' => 'invalid-email', // Invalid: not a valid email
         ]);
 
         $testResponse->assertStatus((int) RecordApiJsonResponseEnum::VALIDATION_ERROR->value)

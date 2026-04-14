@@ -97,7 +97,7 @@ class ApplyRequestFiltersConfigTest extends TestCase
             'name' => ['type' => 'string'],
             'category' => ['type' => 'string'],
             'created_at' => ['type' => 'datetime'],
-            'updated_at' => ['type' => 'datetime']
+            'updated_at' => ['type' => 'datetime'],
         ];
 
         // Ensure SchemaRegistryUtils is fresh
@@ -106,9 +106,9 @@ class ApplyRequestFiltersConfigTest extends TestCase
 
         $result = RecordService::applyRequestFilters($request, $config);
 
-        // Debugging failure: 
+        // Debugging failure:
         // If result count is 3, it means filtering failed.
-        // Likely allowedColumns returned empty because SchemaRegistryUtils::register 
+        // Likely allowedColumns returned empty because SchemaRegistryUtils::register
         // didn't populate columns correctly or QueryBuilderFiltersUtils didn't see them.
 
         $this->assertIsArray($result);
@@ -170,7 +170,7 @@ class ApplyRequestFiltersConfigTest extends TestCase
                     foreignKey: 'category_id',
                     type: RecordRelationshipsEnum::HAS_MANY,
                     localKey: 'id',
-                )
+                ),
             ]
         );
 

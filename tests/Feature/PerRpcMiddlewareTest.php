@@ -69,7 +69,7 @@ class PerRpcMiddlewareTest extends TestCase
 
         $router = $this->app['router'];
         $router->aliasMiddleware('test.require-token', RpcRequireTokenMiddleware::class);
-        $router->aliasMiddleware('test.require-plan',  RpcRequirePlanMiddleware::class);
+        $router->aliasMiddleware('test.require-plan', RpcRequirePlanMiddleware::class);
 
         // Default: all RPCs require a token unless overridden by function-level middleware
         Config::set('record.middleware_map', [
