@@ -192,8 +192,10 @@ class RecordConfigService
         $attachmentTables = $attachmentEnabled ? (array) config('attachments.tables', []) : [];
         $webhookEnabled = (bool) config('webhooks.enabled', false);
         $webhookTables = $webhookEnabled ? (array) config('webhooks.tables', []) : [];
+        $auditEnabled = (bool) config('audit.enabled', false);
+        $auditTables = $auditEnabled ? (array) config('audit.tables', []) : [];
 
-        return array_merge($webhookTables, $attachmentTables, $recordTables);
+        return array_merge($webhookTables, $attachmentTables, $auditTables, $recordTables);
     }
 
     public static function table(string $table): mixed
@@ -201,6 +203,13 @@ class RecordConfigService
         $recordTable = config('record.tables.' . $table);
         if ($recordTable !== null) {
             return $recordTable;
+        }
+
+        if ((bool) config('audit.enabled', false)) {
+            $auditTable = config('audit.tables.' . $table);
+            if ($auditTable !== null) {
+                return $auditTable;
+            }
         }
 
         if ((bool) config('attachments.enabled', true)) {
