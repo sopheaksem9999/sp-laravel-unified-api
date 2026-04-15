@@ -208,6 +208,14 @@ class QueryCacheService
         return $deleted + self::forgetByPrefix(sprintf('record_func:table:%s', $table));
     }
 
+    /**
+     * Alias for invalidateTable to be used via dependency injection
+     */
+    public function invalidateTableCache(string $table): int
+    {
+        return self::invalidateTable($table);
+    }
+
     public static function invalidateTableForTenant(string $table, string $tenantKey): int
     {
         $deleted = self::forgetByPrefix(sprintf('record_index:table:%s:tenant:%s', $table, $tenantKey));

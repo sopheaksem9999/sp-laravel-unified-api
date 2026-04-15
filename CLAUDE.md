@@ -46,6 +46,7 @@
 - Keep config-driven behavior centralized in `RecordConfigService`, `RecordTableType`, and docs.
 - Add/update tests for every behavior change in core flow (tenant, auth, filters, permission, triggers, response wrapper).
 - Update docs when behavior changes (`README.md`, `docs/api-documentation.md`).
+- For documentation writing rules (VitePress + Mermaid + OpenAPI + AI retrieval), see `docs/docs-authoring-guide.md`.
 - **IMPORTANT DOCS RULE:** ONLY update documentation files inside the `sp-laravel-api/docs` directory. DO NOT edit files in the `sp-laravel-api-docs` directory, as they are auto-generated via a bash script from the main package.
 - **IMPORTANT SCOPE RULE:** Do not edit files outside the `/Users/sopheak/Documents/Sopheak-dev/QBO Finance/Package/sp-laravel-api` directory when working on this package.
 - Keep strict typing and PSR-12 style.

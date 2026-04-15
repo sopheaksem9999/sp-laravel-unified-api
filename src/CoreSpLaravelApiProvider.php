@@ -20,8 +20,17 @@ use Sopheak\Core\Http\Middleware\RequestId;
 use Sopheak\Core\Services\AuditLogService;
 use Sopheak\Core\Services\QueryCacheService;
 use Sopheak\Core\Services\RecordApiResponseService;
+use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Console\McpServerCommand;
+use Illuminate\Support\Facades\Route;
+
+use Illuminate\Support\Facades\Event;
+use Sopheak\Core\Events\RecordCreated;
+use Sopheak\Core\Events\RecordDeleted;
+use Sopheak\Core\Events\RecordUpdated;
+use Sopheak\Core\Listeners\InvalidateRecordCacheListener;
+use Sopheak\Core\Listeners\LogRecordAuditListener;
 
 class CoreSpLaravelApiProvider extends ServiceProvider
 {
@@ -89,6 +98,16 @@ class CoreSpLaravelApiProvider extends ServiceProvider
         $router = $this->app['router'];
         $router->aliasMiddleware('request.id', RequestId::class);
         $router->aliasMiddleware('record.route.middleware', RecordRouteMiddleware::class);
+
+        Event::listen([RecordCreated::class, RecordUpdated::class, RecordDeleted::class], InvalidateRecordCacheListener::class);
+        Event::listen([RecordCreated::class, RecordUpdated::class, RecordDeleted::class], LogRecordAuditListener::class);
+
+        Route::bind('table', function (string $value) {
+            $tableConfig = RecordConfigService::getTableConfig($value);
+            abort_if(! $tableConfig, 404, "Dynamic Table [{$value}] not found.");
+
+            return $value;
+        });
 
         /**
          * @param Request     $request       HTTP request carrying query parameters.

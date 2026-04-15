@@ -1,0 +1,8 @@
+- [x] Event classes are `readonly` and do not accept `Request` objects
+- [x] `RecordCreated` event is dispatched with `$auditContext` instead of `$request`
+- [x] `RecordUpdated` event is dispatched with `$auditContext` instead of `$request`
+- [x] `RecordDeleted` event is dispatched with `$auditContext` instead of `$request`
+- [x] Listeners are registered in `CoreSpLaravelApiProvider`
+- [x] `RecordQueryBuilder` handles strict selects and tenant isolation
+- [x] `Route::bind('table')` validates table existence early
+- [x] All tests pass without regression

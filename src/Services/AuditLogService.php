@@ -285,6 +285,20 @@ class AuditLogService
     }
 
     /**
+     * Log an audit event (wrapper for instance calls).
+     */
+    public function log(AuditLogEventEnum $event, string $table, array $auditContext): void
+    {
+        $tenantId = $auditContext['tenant_id'] ?? null;
+        self::insertAuditLog(
+            auditLogEventEnum: $event,
+            entityClass: $table,
+            queryData: $auditContext,
+            tenantId: $tenantId
+        );
+    }
+
+    /**
      * Insert an audit log entry for a given entity class and payload.
      */
     public static function insertAuditLog(AuditLogEventEnum $auditLogEventEnum, string $entityClass, array|object $queryData = [], ?string $subject = '', ?string $recap = '', mixed $tenantId = null): void
