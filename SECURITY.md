@@ -2,20 +2,32 @@
 
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+| Version | Supported |
+| ------- | --------- |
+| 2.x     | ✅        |
+| 1.x     | ⚠️ Critical fixes only |
+| < 1.0   | ❌        |
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
+Please report vulnerabilities privately to: security@yourdomain.com
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+Do not open a public GitHub issue for security reports.
+
+When reporting, include:
+- Affected version(s)
+- Reproduction steps / PoC
+- Impact assessment
+- Suggested fix (if available)
+
+## Response Timeline
+
+- Initial acknowledgment: within 48 hours
+- Triage decision: within 5 business days
+- Fix/release target: based on severity
+- Ongoing updates: at least weekly until resolved
+
+## Disclosure Policy
+
+We follow coordinated disclosure. Please allow time for a fix before public disclosure.
+If accepted, we will credit the reporter (unless anonymity is requested).
