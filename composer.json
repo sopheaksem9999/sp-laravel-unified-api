@@ -3,7 +3,7 @@
   "description": "Core utilities for Laravel apps: standardized API responses, request ID middleware, and CLI helpers.",
   "type": "library",
   "license": "proprietary",
-  "version": "0.4.61",
+  "version": "0.4.62",
   "require": {
     "php": "^8.2|^8.3|^8.4|^8.5",
     "intervention/image": "^4.0",
@@ -32,6 +32,7 @@
     "test": "vendor/bin/phpunit",
     "test-coverage": "vendor/bin/phpunit --coverage-html coverage",
     "analyse": "vendor/bin/phpstan analyse src tests",
+    "docs:validate": "php bin/validate-docs.php",
     "format": "@rector:fix",
     "format-check": "@rector:check",
     "rector": "vendor/bin/rector process --dry-run",

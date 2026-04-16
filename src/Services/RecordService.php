@@ -4,6 +4,9 @@ namespace Sopheak\Core\Services;
 
 use RuntimeException;
 use Sopheak\Core\Events\RecordMutated;
+use Sopheak\Core\Events\RecordCreated;
+use Sopheak\Core\Events\RecordUpdated;
+use Sopheak\Core\Events\RecordDeleted;
 use Exception;
 use Sopheak\Core\Interfaces\RecordFunctionInterface;
 use Throwable;
@@ -1899,7 +1902,24 @@ class RecordService
             throw new RuntimeException('Failed to create record or retrieve inserted ID for table: ' . $table);
         }
 
-        return self::executeGetById($table, $result['id'], $queryParams, $tenantId);
+        $record = self::executeGetById($table, $result['id'], $queryParams, $tenantId);
+
+        $request = request();
+        $auditContext = [
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'user_id' => auth(RecordConfigService::authGuard())->id(),
+            'request_id' => $request->attributes->get('request_id'),
+        ];
+
+        $recordData = $record['data'] ?? [];
+        if (!is_array($recordData)) {
+            $recordData = json_decode(json_encode($recordData), true) ?: [];
+        }
+
+        RecordCreated::dispatch($table, $recordData, $result['id'], $auditContext);
+
+        return $record;
     }
 
     /**
@@ -1915,6 +1935,12 @@ class RecordService
     public static function executeUpdate(string $table, mixed $id, array $payload, array|string $queryParams = [], mixed $tenantId = null): array
     {
         $service = app(self::class);
+
+        $oldRecord = self::executeGetById($table, $id, [], $tenantId);
+        $oldPayload = $oldRecord['data'] ?? [];
+        if (!is_array($oldPayload)) {
+            $oldPayload = json_decode(json_encode($oldPayload), true) ?: [];
+        }
 
         // Extract relationship keys from payload to automatically include them
         $includes = [];
@@ -1938,7 +1964,24 @@ class RecordService
 
         $service->updateRecord($table, $id, $payload, $tenantId);
 
-        return self::executeGetById($table, $id, $queryParams, $tenantId);
+        $newRecord = self::executeGetById($table, $id, $queryParams, $tenantId);
+
+        $request = request();
+        $auditContext = [
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'user_id' => auth(RecordConfigService::authGuard())->id(),
+            'request_id' => $request->attributes->get('request_id'),
+        ];
+
+        $newRecordData = $newRecord['data'] ?? [];
+        if (!is_array($newRecordData)) {
+            $newRecordData = json_decode(json_encode($newRecordData), true) ?: [];
+        }
+
+        RecordUpdated::dispatch($table, $oldPayload, $newRecordData, $id, $auditContext);
+
+        return $newRecord;
     }
 
     /**
@@ -1961,8 +2004,22 @@ class RecordService
 
         // Fetch the record before deleting it
         $record = self::executeGetById($table, $id, $queryParams, $tenantId);
+        $oldPayload = $record['data'] ?? [];
+        if (!is_array($oldPayload)) {
+            $oldPayload = json_decode(json_encode($oldPayload), true) ?: [];
+        }
 
         $service->deleteRecord($table, $id, $tenantId);
+
+        $request = request();
+        $auditContext = [
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'user_id' => auth(RecordConfigService::authGuard())->id(),
+            'request_id' => $request->attributes->get('request_id'),
+        ];
+
+        RecordDeleted::dispatch($table, $oldPayload, $id, $auditContext);
 
         return $record;
     }

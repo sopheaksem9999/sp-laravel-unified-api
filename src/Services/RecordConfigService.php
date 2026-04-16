@@ -185,7 +185,7 @@ class RecordConfigService
         return (bool) config('record.default_validation.foreign_keys', true);
     }
 
-    public static function getTableConfig(): array
+    public static function getTableConfig(?string $table = null): mixed
     {
         $recordTables = (array) config('record.tables', []);
         $attachmentEnabled = (bool) config('attachments.enabled', true);
@@ -195,7 +195,13 @@ class RecordConfigService
         $auditEnabled = (bool) config('audit.enabled', false);
         $auditTables = $auditEnabled ? (array) config('audit.tables', []) : [];
 
-        return array_merge($webhookTables, $attachmentTables, $auditTables, $recordTables);
+        $tables = array_merge($webhookTables, $attachmentTables, $auditTables, $recordTables);
+
+        if ($table !== null) {
+            return $tables[$table] ?? null;
+        }
+
+        return $tables;
     }
 
     public static function table(string $table): mixed
