@@ -49,6 +49,7 @@ class ValidateSetupCommand extends Command
         $this->validatePermissions();
         $this->validateSchemaRegistryUtils();
         $this->validateRoutes();
+        $this->validatePackageLimits();
         $this->validateRateLimiters();
         $this->validateWebhooks();
         $this->validateMcpConfiguration();
@@ -377,6 +378,44 @@ class ValidateSetupCommand extends Command
             }
         } catch (Exception $exception) {
             $this->addResult('❌', 'Route check failed: ' . $exception->getMessage(), 'error');
+        }
+    }
+
+    /**
+     * Validate package configuration limits.
+     */
+    private function validatePackageLimits(): void
+    {
+        $this->info('⚖️ Checking Package Configuration Limits...');
+
+        // Check depth and relation limits
+        $maxDepth = config('record.max_depth');
+        if (is_int($maxDepth) && $maxDepth > 0) {
+            $this->addResult('✅', 'max_depth is configured properly: ' . $maxDepth, 'success');
+        } else {
+            $this->addResult('⚠️', 'max_depth is missing or invalid in config/record.php', 'warning');
+        }
+
+        $maxRelations = config('record.max_relations');
+        if (is_int($maxRelations) && $maxRelations > 0) {
+            $this->addResult('✅', 'max_relations is configured properly: ' . $maxRelations, 'success');
+        } else {
+            $this->addResult('⚠️', 'max_relations is missing or invalid in config/record.php', 'warning');
+        }
+
+        $maxRelationItems = config('record.max_relation_items');
+        if (is_int($maxRelationItems) && $maxRelationItems > 0) {
+            $this->addResult('✅', 'max_relation_items is configured properly: ' . $maxRelationItems, 'success');
+        } else {
+            $this->addResult('⚠️', 'max_relation_items is missing or invalid in config/record.php', 'warning');
+        }
+
+        // Check rate_limits
+        $rateLimits = config('record.rate_limits');
+        if (is_array($rateLimits)) {
+            $this->addResult('✅', 'rate_limits array is present in config/record.php', 'success');
+        } else {
+            $this->addResult('ℹ️', 'rate_limits is not configured (using defaults)', 'info');
         }
     }
 

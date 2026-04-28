@@ -101,6 +101,7 @@ class MakeRecordTableCommand extends Command
                 isAuthWrite: true,
                 relationships: [],
                 functions: [],
+                triggers: [], // e.g. [MyTriggerClass::class]
                 softDeletes: {$softDeletesLiteral},
                 hasTenantId: {$hasTenantLiteral},
             );

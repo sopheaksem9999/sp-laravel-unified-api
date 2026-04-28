@@ -169,6 +169,14 @@ or
    For compatibility with some frontend libraries, you can prefix relationship names with `with=` inside the `select` parameter.
    `GET /api/v1/customers?select=*,with=invoices(id,total)`
 
+### Configuration Limits
+
+To prevent performance issues and memory exhaustion from deeply nested or overly broad queries, you can configure the following limits in `config/record.php`:
+
+- **`max_depth`** (default: 10): The maximum nesting depth for relationship queries.
+- **`max_relations`** (default: 20): The maximum number of relationships that can be loaded in a single query.
+- **`max_relation_items`** (default: 500): The maximum number of items retrieved for a single relationship collection (e.g., a `hasMany` or `belongsToMany` relation).
+
 ### Supported Relationship Types
 
 The dynamic API understands all relationship types declared in `RecordRelationshipsEnum`. These relationships are configured per table via the `relationships` array on `RecordTableType` and are available to `select` and filter expressions.

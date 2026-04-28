@@ -11,10 +11,15 @@ use Sopheak\Core\Attributes\RecordTrigger;
 use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Services\RecordService;
 
-class AttachmentTrigger
+/**
+ * Handles attachment URL appending and physical file deletion.
+ *
+ * Extends RecordTriggerBase for easy customization.
+ */
+class AttachmentTrigger extends RecordTriggerBase
 {
     #[RecordTrigger('afterRead')]
-    public static function appendUrl(Request $request, string $table, array $context): void
+    public static function afterRead(Request $request, string $table, array $context): void
     {
         if (isset($context['data']) && is_array($context['data'])) {
             foreach ($context['data'] as &$attachment) {
@@ -46,7 +51,7 @@ class AttachmentTrigger
     }
 
     #[RecordTrigger('beforeDelete')]
-    public static function deletePhysicalFile(Request $request, string $table, mixed $context): void
+    public static function beforeDelete(Request $request, string $table, mixed $context): void
     {
         $id = is_array($context) ? ($context['id'] ?? null) : $context;
         if (!$id) {

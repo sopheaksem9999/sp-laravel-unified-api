@@ -54,6 +54,8 @@ class RecordCacheService
     {
         $tenantColumn = RecordConfigService::tenantColumn();
         $tenantKey = $this->resolveTenantCacheKey(tenantId: $filters[$tenantColumn] ?? null, tenantEnabled: $tenantEnabled);
+        $this->recursiveKsort($filters);
+        $this->recursiveKsort($includes);
         $keyData = [
             'filters' => $filters,
             'includes' => $includes,
@@ -68,6 +70,9 @@ class RecordCacheService
     public function generateRecordCacheKey(string $table, mixed $id, mixed $tenantId, mixed $select, bool $tenantEnabled): string
     {
         $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
+        if (is_array($select)) {
+            $this->recursiveKsort($select);
+        }
         $keyData = [
             'id' => $id,
             'select' => $select,
@@ -80,7 +85,7 @@ class RecordCacheService
     public function generateTableFunctionCacheKey(string $table, string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled): string
     {
         $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
-        ksort($queryParams);
+        $this->recursiveKsort($queryParams);
         $keyData = [
             'function' => $functionName,
             'query' => $queryParams,
@@ -93,7 +98,7 @@ class RecordCacheService
     public function generateGlobalFunctionCacheKey(string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled): string
     {
         $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
-        ksort($queryParams);
+        $this->recursiveKsort($queryParams);
         $keyData = [
             'function' => $functionName,
             'query' => $queryParams,
@@ -185,5 +190,16 @@ class RecordCacheService
         }
 
         return (string) $tenantId;
+    }
+
+    private function recursiveKsort(array &$array): void
+    {
+        foreach ($array as &$value) {
+            if (is_array($value)) {
+                $this->recursiveKsort($value);
+            }
+        }
+
+        ksort($array);
     }
 }
