@@ -245,7 +245,7 @@ class RecordConfigService
 
     public static function auditLogModel(): string
     {
-        return (string) config('audit.audit_log_model', 'audit_logs');
+        return (string) config('audit.audit_log_model', 'sp_audit_logs');
     }
 
     public static function auditQueueEnabled(): bool

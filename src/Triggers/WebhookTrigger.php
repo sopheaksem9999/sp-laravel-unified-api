@@ -9,35 +9,41 @@ use Sopheak\Core\Attributes\RecordTrigger;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Jobs\DispatchWebhookJob;
 
-class WebhookTrigger
+/**
+ * Handles webhook dispatching for record events.
+ *
+ * Extends RecordTriggerBase for easy customization.
+ * Override any method in your app to customize webhook behavior.
+ */
+class WebhookTrigger extends RecordTriggerBase
 {
     #[RecordTrigger('afterCreate')]
-    public static function handleAfterCreate(Request $request, string $table, mixed $context): void
+    public static function afterCreate(Request $request, string $table, array $context): void
     {
-        $tenantId = is_array($context) ? ($context['tenant_id'] ?? null) : null;
+        $tenantId = $context['tenant_id'] ?? null;
         $data = self::extractDataFromContext($context);
         self::dispatchWebhooks($table, 'created', $data, $tenantId);
     }
 
     #[RecordTrigger('afterUpdate')]
-    public static function handleAfterUpdate(Request $request, string $table, mixed $context): void
+    public static function afterUpdate(Request $request, string $table, array $context): void
     {
-        $tenantId = is_array($context) ? ($context['tenant_id'] ?? null) : null;
+        $tenantId = $context['tenant_id'] ?? null;
         $data = self::extractDataFromContext($context);
         self::dispatchWebhooks($table, 'updated', $data, $tenantId);
     }
 
     #[RecordTrigger('afterDelete')]
-    public static function handleAfterDelete(Request $request, string $table, mixed $context): void
+    public static function afterDelete(Request $request, string $table, array $context): void
     {
-        $tenantId = is_array($context) ? ($context['tenant_id'] ?? null) : null;
+        $tenantId = $context['tenant_id'] ?? null;
 
-        $oldData = is_array($context) ? ($context['old_data'] ?? $context['record'] ?? []) : [];
+        $oldData = $context['old_data'] ?? $context['record'] ?? [];
         if (is_object($oldData)) {
             $oldData = (array) $oldData;
         }
 
-        $id = is_array($context) ? ($context['id'] ?? null) : $context;
+        $id = $context['id'] ?? null;
         if ($id) {
             $oldData['id'] = $id;
         }
@@ -45,12 +51,8 @@ class WebhookTrigger
         self::dispatchWebhooks($table, 'deleted', $oldData, $tenantId);
     }
 
-    private static function extractDataFromContext(mixed $context): array
+    private static function extractDataFromContext(array $context): array
     {
-        if (!is_array($context)) {
-            return [];
-        }
-
         $data = $context['data'] ?? $context['response'] ?? [];
         if ($data instanceof JsonResponse) {
             $decoded = json_decode($data->getContent(), true);

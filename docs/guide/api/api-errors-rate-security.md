@@ -91,6 +91,24 @@ Different endpoints have different rate limits:
 
 Rate limits are configurable in your Laravel application's rate limiting configuration.
 
+#### Per-Table Rate Limits
+
+For dynamic CRUD writes, you can specify custom rate limits on a per-table basis directly in `config/record.php`. This allows you to define stricter or more lenient limits depending on the table.
+
+```php
+'rate_limits' => [
+    'users' => [
+        'create' => ['limit' => 50, 'decay_minutes' => 1],
+        'update' => ['limit' => 100, 'decay_minutes' => 1],
+    ],
+    'invoices' => [
+        'create' => ['limit' => 10, 'decay_minutes' => 1],
+    ],
+],
+```
+
+These limits override the global API write limits for the specified table operations.
+
 ### Security Considerations
 
 ### Authentication
