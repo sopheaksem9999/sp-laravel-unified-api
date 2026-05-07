@@ -81,6 +81,31 @@ return [
     // Maximum items per bulk operation
     'bulk_max' => 1000,
 
+    /*
+    |--------------------------------------------------------------------------
+    | Per-Table Rate Limiting
+    |--------------------------------------------------------------------------
+    |
+    | Configure rate limits per table for write operations. This allows different
+    | tables to have stricter or more lenient rate limits based on their needs.
+    |
+    | Each entry overrides the global rate limits only for the specified table.
+    |
+    | Example:
+    | 'rate_limits' => [
+    |     'users' => [
+    |         'create' => ['limit' => 50, 'decay_minutes' => 1],
+    |         'update' => ['limit' => 100, 'decay_minutes' => 1],
+    |     ],
+    |     'invoices' => [
+    |         'create' => ['limit' => 10, 'decay_minutes' => 1],
+    |     ],
+    | ],
+    */
+    'rate_limits' => [
+        // Per-table rate limits (empty = use global defaults)
+    ],
+
     // Enable or disable bulk operation endpoints (POST /bulk, /bulk/create, /bulk/update, /bulk/delete, /bulk/upsert)
     'bulk_operations' => env('SP_BULK_OPERATIONS', true),
 
@@ -147,8 +172,14 @@ return [
     // Legacy cache_ttl for backward compatibility (deprecated, use cache.ttl instead)
     'cache_ttl' => env('SP_LARAVEL_API_CACHE_API_TTL', 3600),
 
-    // Maximum nesting depth to prevent performance issues (default: 2)
+    // Maximum nesting depth to prevent performance issues (default: 10)
     'max_depth' => 10,
+
+    // Maximum number of relationships to load per query (prevents N+1 / memory exhaustion)
+    'max_relations' => 20,
+
+    // Maximum number of items in a single relationship (e.g., belongsToMany pivot)
+    'max_relation_items' => 500,
 
     // Default cascade behavior for nested writes (can be overridden per endpoint)
     'default_cascade' => [

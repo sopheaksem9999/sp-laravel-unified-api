@@ -233,6 +233,7 @@ class GenerateRecordTablesFromDatabaseCommand extends Command
                 isAuthWrite: true,
                 relationships: {$relationshipsCode},
                 functions: [],
+                triggers: [], // e.g. [MyTriggerClass::class]
                 softDeletes: {$softDeletesLiteral},
                 hasTenantId: {$hasTenantLiteral},
             );

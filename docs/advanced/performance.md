@@ -22,7 +22,8 @@ keywords:
 ## Relationship Loading
 
 - Prefer loading only needed relationships (`select=*,customer(id,name)`).
-- Keep relationship depth small and predictable (`max_depth` is your safety valve).
+- Keep relationship depth small and predictable (`max_depth` is your safety valve, default 10).
+- Prevent N+1 memory exhaustion by relying on `max_relations` (default 20) and `max_relation_items` (default 500) set in `config/record.php`.
 - Avoid joining multiple high-cardinality relations on list endpoints unless required.
 
 ## Caching

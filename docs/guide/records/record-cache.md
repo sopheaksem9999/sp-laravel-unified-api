@@ -70,6 +70,15 @@ A request is cacheable only when all conditions are true:
 
 ## Invalidation Behavior
 
+### Cache Invalidation (Namespace Versioning)
+
+This package does not invalidate cache by wildcard deletes (no Redis `KEYS`, no database `LIKE`, and no driver-specific cache tags). Instead, it uses namespace versioning:
+
+- Each cached key is stored with an internal version token (table/global-function + tenant).
+- When a write happens (or you manually clear cache), the package increments a small namespace version key.
+- New reads automatically use the latest version token, making old cached entries unreachable.
+- Old entries are removed automatically when their TTL expires.
+
 ### CRUD writes
 
 For successful write operations, runtime clears affected table/record caches automatically.

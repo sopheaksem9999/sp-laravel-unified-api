@@ -32,3 +32,4 @@ This API reference is now chunked into smaller feature files for cleaner navigat
 11. [Error Responses, Rate Limiting, and Security](/guide/api-errors-rate-security)
 12. [QueryHelpers Trait Documentation](/guide/api-queryhelpers-trait)
 13. [Model Context Protocol (MCP) Support](/guide/module-mcp)
+14. [Laravel AI SDK Integration](/guide/modules/module-ai-sdk)
