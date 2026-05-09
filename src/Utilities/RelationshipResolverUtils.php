@@ -4,7 +4,6 @@ namespace Sopheak\Core\Utilities;
 
 use Illuminate\Foundation\Auth\User;
 use Sopheak\Core\Enums\RecordRelationshipsEnum;
-use Spatie\Permission\PermissionServiceProvider;
 use RuntimeException;
 use Sopheak\Core\Types\RecordAassociationType;
 use Sopheak\Core\Types\RecordBelongsToType;
@@ -371,7 +370,7 @@ class RelationshipResolverUtils
 
                 // Handle RecordSpatiePermissionType
                 if ($rel instanceof RecordSpatiePermissionType) {
-                    if (!class_exists(PermissionServiceProvider::class)) {
+                    if (!class_exists('Spatie\\Permission\\PermissionServiceProvider')) {
                         throw new RuntimeException('Spatie permission relationship configured but spatie/laravel-permission is not installed.');
                     }
 
@@ -951,12 +950,10 @@ class RelationshipResolverUtils
         $actualMainTableName = $schema[$table]->table ?? $table;
         $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
 
-        // Build column selection for JSON object
-        $jsonColumns = self::buildJsonObjectColumns($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
-        $jsonObjectExpr = self::buildJsonObjectExpression($jsonColumns);
-
         // Use alias for subquery to avoid conflicts when main table = related table
         $subqueryAlias = $actualRelatedTableName === $actualMainTableName ? $actualRelatedTableName . '_sub' : $actualRelatedTableName;
+        // Build column selection for JSON object
+        $jsonObjectExpr = self::buildJsonObjectExpression($columns, $schema[$relatedTable]->columns ?? [], $subqueryAlias);
 
         $subquery = DB::table($actualRelatedTableName . ' as ' . $subqueryAlias)
             ->selectRaw($jsonObjectExpr)
@@ -995,8 +992,7 @@ class RelationshipResolverUtils
         $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
 
         // Build column selection for JSON object
-        $jsonColumns = self::buildJsonObjectColumns($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
-        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($jsonColumns);
+        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
 
         // Build the JSON array aggregation subquery
         $subqueryRaw = "(
@@ -1045,8 +1041,7 @@ class RelationshipResolverUtils
         $actualPivotTableName = $schema[$pivotTable]->table ?? $pivotTable;
 
         // Build column selection for JSON object
-        $jsonColumns = self::buildJsonObjectColumns($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
-        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($jsonColumns);
+        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
 
         // Build the JSON array aggregation subquery for many-to-many
         $subqueryRaw = "(
@@ -1128,8 +1123,7 @@ class RelationshipResolverUtils
         $actualPivotTableName = $schema[$pivotTable]->table ?? $pivotTable;
 
         // Build column selection for JSON object
-        $jsonColumns = self::buildJsonObjectColumns($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
-        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($jsonColumns);
+        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
 
         // Build the JSON array aggregation subquery for morph-to-many
         // Use DB::raw with parameter binding to handle model_type correctly
@@ -1198,8 +1192,7 @@ class RelationshipResolverUtils
         $actualThroughTableName = $schema[$throughTable]->table ?? $throughTable;
 
         // Build column selection for JSON object
-        $jsonColumns = self::buildJsonObjectColumns($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
-        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($jsonColumns);
+        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
 
         // Build the JSON array aggregation subquery with join
         $subqueryRaw = "(
@@ -1238,9 +1231,9 @@ class RelationshipResolverUtils
     }
 
     /**
-     * Build JSON_OBJECT column specification for subqueries.
+     * Resolve and validate JSON object columns for subqueries.
      */
-    private static function buildJsonObjectColumns(array $columns, array $schemaColumns, string $tableName = ''): string
+    private static function resolveJsonObjectColumns(array $columns, array $schemaColumns): array
     {
         if ($columns === ['*'] || [] === $columns) {
             $columns = array_keys($schemaColumns);
@@ -1256,10 +1249,29 @@ class RelationshipResolverUtils
             $validColumns = array_filter($validColumns, fn($column): bool => $tenantCol !== $column);
         }
 
-        if ([] === $validColumns) {
-            $columnRef = $tableName !== '' && $tableName !== '0' ? sprintf('%s.id', $tableName) : 'id';
+        return array_values($validColumns);
+    }
 
-            return "'id', " . $columnRef; // Fallback to id column
+    /**
+     * Build database-specific JSON object expression from requested columns.
+     */
+    private static function buildJsonObjectExpression(array $columns, array $schemaColumns, string $tableName = ''): string
+    {
+        $driver = DB::getDriverName();
+        $validColumns = self::resolveJsonObjectColumns($columns, $schemaColumns);
+        if ([] === $validColumns) {
+            $validColumns = ['id'];
+        }
+
+        if ('pgsql' === $driver) {
+            // PostgreSQL limits function calls to 100 args. Build JSON from a row instead.
+            $rowColumns = [];
+            foreach ($validColumns as $validColumn) {
+                $columnRef = $tableName !== '' && $tableName !== '0' ? sprintf('%s.%s', $tableName, $validColumn) : $validColumn;
+                $rowColumns[] = sprintf('%s as %s', $columnRef, $validColumn);
+            }
+
+            return sprintf('(select row_to_json(__sp_obj) from (select %s) as __sp_obj)', implode(', ', $rowColumns));
         }
 
         $jsonPairs = [];
@@ -1267,30 +1279,19 @@ class RelationshipResolverUtils
             $columnRef = $tableName !== '' && $tableName !== '0' ? sprintf('%s.%s', $tableName, $validColumn) : $validColumn;
             $jsonPairs[] = sprintf("'%s', %s", $validColumn, $columnRef);
         }
+        $jsonColumns = implode(', ', $jsonPairs);
 
-        return implode(', ', $jsonPairs);
-    }
-
-    /**
-     * Build database-specific JSON object expression from column specification.
-     */
-    private static function buildJsonObjectExpression(string $jsonColumns): string
-    {
-        $driver = DB::getDriverName();
-
-        return match ($driver) {
-            'pgsql' => sprintf('json_build_object(%s)', $jsonColumns),
-            'sqlite' => sprintf('json_object(%s)', $jsonColumns),
-            default => sprintf('JSON_OBJECT(%s)', $jsonColumns),
-        };
+        return 'sqlite' === $driver
+            ? sprintf('json_object(%s)', $jsonColumns)
+            : sprintf('JSON_OBJECT(%s)', $jsonColumns);
     }
 
     /**
      * Build database-specific JSON array aggregation expression of JSON objects.
      */
-    private static function buildJsonArrayAggExpression(string $jsonColumns): string
+    private static function buildJsonArrayAggExpression(array $columns, array $schemaColumns, string $tableName = ''): string
     {
-        $jsonObjectExpr = self::buildJsonObjectExpression($jsonColumns);
+        $jsonObjectExpr = self::buildJsonObjectExpression($columns, $schemaColumns, $tableName);
         $driver = DB::getDriverName();
 
         return match ($driver) {
