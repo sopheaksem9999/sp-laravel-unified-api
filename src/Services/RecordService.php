@@ -1677,9 +1677,18 @@ class RecordService
                         $schema = SchemaRegistryUtils::get();
                         $relatedTable = $relConfig['table'] ?? null;
                         $relatedSchema = $relatedTable && isset($schema[$relatedTable]) ? $schema[$relatedTable] : null;
+                        $requestedCols = $include['columns'] ?? ['*'];
+                        $isWildcardSelect = $requestedCols === ['*'] || [] === $requestedCols;
+
+                        // If we cannot resolve related schema for wildcard selection on PostgreSQL,
+                        // avoid subquery optimization to prevent json_build_object argument overflow.
+                        if (! $relatedSchema && $isWildcardSelect) {
+                            $useSubqueryOptimization = false;
+
+                            break;
+                        }
 
                         if ($relatedSchema && is_array($relatedSchema->columns ?? null)) {
-                            $requestedCols = $include['columns'] ?? ['*'];
                             if ($requestedCols === ['*'] || [] === $requestedCols) {
                                 $columnCount = count($relatedSchema->columns ?? []);
                             } else {
