@@ -142,7 +142,24 @@ class RecordConfigService
 
     public static function globalFunctions(): array
     {
-        return (array) config('record.global_functions', []);
+        $configured = (array) config('record.global_functions', []);
+
+        if (!(bool) config('sp-laravel-api.attribute_discovery.enabled', false)) {
+            return $configured;
+        }
+
+        try {
+            $discovered = AttributeDiscoveryService::discoverGlobalFunctions();
+        } catch (\Throwable) {
+            $discovered = [];
+        }
+
+        if ([] === $discovered) {
+            return $configured;
+        }
+
+        // File-based config takes precedence on key conflicts.
+        return array_merge($discovered, $configured);
     }
 
     public static function globalTriggers(): array
