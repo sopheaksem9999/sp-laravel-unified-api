@@ -750,3 +750,151 @@ return [
 ```
 
 *Note: You can still use `#[RecordTrigger]` directly on Eloquent Models if you are using Attribute-Based Configuration (`SP_ATTRIBUTE_DISCOVERY=true`).*
+
+### Using PHP Attributes for Table and Global Functions
+
+You can also declare custom functions via attributes when attribute discovery is enabled (`SP_ATTRIBUTE_DISCOVERY=true`).
+
+Available attributes:
+
+- `#[RecordFunction(...)]` for table functions
+- `#[RecordGlobalFunction(...)]` for global functions
+
+```php
+namespace App\Models;
+
+use Illuminate\Http\Request;
+use Sopheak\Core\Attributes\RecordTable;
+use Sopheak\Core\Attributes\RecordFunction;
+use Sopheak\Core\Attributes\RecordGlobalFunction;
+
+#[RecordTable(table: 'invoices', pmsName: 'invoices')]
+class Invoice
+{
+    #[RecordFunction(
+        name: 'sync',
+        httpMethod: ['POST'],
+        pmsName: 'invoice.sync',
+        disableCache: true,
+        description: 'Sync invoice to external system'
+    )]
+    public static function sync(Request $request): array
+    {
+        return ['ok' => true];
+    }
+
+    #[RecordGlobalFunction(
+        name: 'health',
+        httpMethod: ['GET'],
+        isPublic: true,
+        description: 'Health check endpoint'
+    )]
+    public static function health(Request $request): array
+    {
+        return ['status' => 'ok'];
+    }
+}
+```
+
+Behavior and precedence:
+
+- File config still has priority over attributes on key conflicts.
+- For table config conflicts, file `functions` entries override discovered `#[RecordFunction]`.
+- For global config conflicts, `record.global_functions` entries override discovered `#[RecordGlobalFunction]`.
+
+### Full End-to-End Example
+
+Use this complete setup when you want table functions and global functions from attributes.
+
+**1) Enable attribute discovery**
+
+```env
+SP_ATTRIBUTE_DISCOVERY=true
+```
+
+```php
+// config/sp-laravel-api.php
+'attribute_discovery' => [
+    'enabled' => env('SP_ATTRIBUTE_DISCOVERY', false),
+    'paths' => ['app/Models', 'app/Record'],
+],
+```
+
+**2) Declare attribute-based table + functions**
+
+```php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Request;
+use Sopheak\Core\Attributes\RecordTable;
+use Sopheak\Core\Attributes\RecordFunction;
+use Sopheak\Core\Attributes\RecordGlobalFunction;
+
+#[RecordTable(table: 'invoices', pmsName: 'invoices', hasTenantId: true, softDeletes: true)]
+class Invoice extends Model
+{
+    #[RecordFunction(
+        name: 'sync',
+        httpMethod: ['POST'],
+        pmsName: 'invoice.sync',
+        disableCache: true,
+        description: 'Sync invoice to external system'
+    )]
+    public static function sync(Request $request): array
+    {
+        $id = (int) $request->route('id');
+        return ['ok' => true, 'invoice_id' => $id];
+    }
+
+    #[RecordGlobalFunction(
+        name: 'health',
+        httpMethod: ['GET'],
+        isPublic: true,
+        description: 'Health check endpoint'
+    )]
+    public static function health(Request $request): array
+    {
+        return ['status' => 'ok'];
+    }
+}
+```
+
+**3) Keep record config minimal (optional)**
+
+```php
+// config/record.php
+return [
+    'api_prefix' => 'api/v2',
+    'rpc_prefix' => 'rpc',
+    'tables' => [
+        // can stay empty for fully attribute-driven table config
+    ],
+    'global_functions' => [
+        // can stay empty for attribute-driven global functions
+    ],
+];
+```
+
+**4) Call the endpoints**
+
+```http
+POST /api/v2/invoices/123/rpc/sync
+GET /api/v2/rpc/health
+```
+
+**5) Override with file config (file wins)**
+
+```php
+// config/record.php
+'global_functions' => [
+    'health' => new \Sopheak\Core\Types\RecordFunctionType(
+        httpMethod: ['GET'],
+        class: \App\Http\Controllers\HealthController::class,
+        functionName: 'fromConfig',
+        isPublic: true
+    ),
+],
+```
+
+With this override, `GET /api/v2/rpc/health` uses `HealthController::fromConfig` instead of the attribute method.

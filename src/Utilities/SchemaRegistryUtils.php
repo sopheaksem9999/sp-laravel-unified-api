@@ -105,7 +105,9 @@ class SchemaRegistryUtils
 
             foreach ($attributeTables as $tableName => $config) {
                 if (isset($registry[$tableName])) {
-                    // File-based config takes precedence — skip attribute entry
+                    // File-based config takes precedence on conflicts; still merge
+                    // attribute-defined functions that are missing in file config.
+                    self::mergeMissingFunctions($registry[$tableName], $config);
                     continue;
                 }
 
@@ -235,6 +237,19 @@ class SchemaRegistryUtils
         }
 
         return array_values(array_unique($aliases));
+    }
+
+    private static function mergeMissingFunctions(RecordTableType $existingConfig, RecordTableType $attributeConfig): void
+    {
+        $existingFunctions = is_array($existingConfig->functions ?? null) ? $existingConfig->functions : [];
+        $attributeFunctions = is_array($attributeConfig->functions ?? null) ? $attributeConfig->functions : [];
+
+        if ([] === $attributeFunctions) {
+            return;
+        }
+
+        // Existing config wins on key conflicts.
+        $existingConfig->functions = array_merge($attributeFunctions, $existingFunctions);
     }
 
     /**
