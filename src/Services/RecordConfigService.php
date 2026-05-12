@@ -250,9 +250,60 @@ class RecordConfigService
         return (int) config('record.cache.default_ttl', self::cacheTtl());
     }
 
-    public static function useSubqueryOptimization(): bool
+    public static function subqueryOptimizationMaxRecords(): int
     {
-        return (bool) config('record.use_subquery_optimization', true);
+        return (int) config('record.subquery_optimization_max_records', 100);
+    }
+
+    public static function paginationDefaultMode(): string
+    {
+        return (string) config('record.pagination.default_mode', 'offset');
+    }
+
+    public static function cursorDefaultColumn(): string
+    {
+        return (string) config('record.pagination.cursor.default_column', 'id');
+    }
+
+    public static function cursorCompositeEnabled(): bool
+    {
+        return (bool) config('record.pagination.cursor.composite_enabled', true);
+    }
+
+    public static function skipTotalDefault(): bool
+    {
+        return (bool) config('record.pagination.skip_total_default', false);
+    }
+
+    public static function readConnection(): ?string
+    {
+        $conn = config('record.database.read_connection');
+
+        return is_string($conn) && $conn !== '' ? $conn : null;
+    }
+
+    public static function writeConnection(): ?string
+    {
+        $conn = config('record.database.write_connection');
+
+        return is_string($conn) && $conn !== '' ? $conn : null;
+    }
+
+    public static function indexHints(): array
+    {
+        return (array) config('record.index_hints', []);
+    }
+
+    public static function tableIndexHints(string $table): array
+    {
+        $hints = self::indexHints();
+
+        return (array) ($hints[$table] ?? []);
+    }
+
+    public static function profilingEnabled(): bool
+    {
+        return (bool) config('record.profiling.enabled', false);
     }
 
     public static function auditEnabled(bool $default = false): bool
