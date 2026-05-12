@@ -67,6 +67,25 @@ class RecordCacheService
         return sprintf('record_index:table:%s:tenant:%s:hash:%s', $table, $tenantKey, md5(serialize($keyData)));
     }
 
+    public function generateCursorCacheKey(string $table, array $filters, array $includes, string $cursor, string $direction, string $cursorColumn, int $limit, bool $tenantEnabled): string
+    {
+        $tenantColumn = RecordConfigService::tenantColumn();
+        $tenantKey = $this->resolveTenantCacheKey(tenantId: $filters[$tenantColumn] ?? null, tenantEnabled: $tenantEnabled);
+        $this->recursiveKsort($filters);
+        $this->recursiveKsort($includes);
+        $keyData = [
+            'filters' => $filters,
+            'includes' => $includes,
+            'cursor' => $cursor,
+            'direction' => $direction,
+            'cursor_column' => $cursorColumn,
+            'limit' => $limit,
+            'tenant_enabled' => $tenantEnabled,
+        ];
+
+        return sprintf('record_cursor:table:%s:tenant:%s:hash:%s', $table, $tenantKey, md5(serialize($keyData)));
+    }
+
     public function generateRecordCacheKey(string $table, mixed $id, mixed $tenantId, mixed $select, bool $tenantEnabled): string
     {
         $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);

@@ -1522,6 +1522,190 @@ class RecordService
         return in_array($normalized, ['1', 'true', 'yes', 'on'], true);
     }
 
+    public function generateCursorCacheKey(string $table, array $filters, array $includes, string $cursor, string $direction, string $cursorColumn, int $limit, bool $tenantEnabled): string
+    {
+        return $this->cacheService()->generateCursorCacheKey($table, $filters, $includes, $cursor, $direction, $cursorColumn, $limit, $tenantEnabled);
+    }
+
+    private function getReadConnection(): ?\Illuminate\Database\ConnectionInterface
+    {
+        $connection = RecordConfigService::readConnection();
+
+        return $connection ? DB::connection($connection) : null;
+    }
+
+    private function applyIndexHint(Builder $builder, string $table, string $context = 'list'): void
+    {
+        $hints = RecordConfigService::tableIndexHints($table);
+        $index = $hints[$context] ?? null;
+        if ($index !== null) {
+            $builder->from(DB::raw($builder->from . ' FORCE INDEX (' . $index . ')'));
+        }
+    }
+
+    private function getApproximateCount(string $actualTableName): int
+    {
+        return match (DB::getDriverName()) {
+            'mysql' => (int) (DB::select(
+                'SELECT TABLE_ROWS FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+                [$actualTableName]
+            )[0]->TABLE_ROWS ?? 0),
+            'pgsql' => (int) (DB::select(
+                'SELECT reltuples::bigint AS estimate FROM pg_class WHERE relname = ?',
+                [$actualTableName]
+            )[0]->estimate ?? 0),
+            default => 0,
+        };
+    }
+
+    private function explainQuery(Builder $builder): array
+    {
+        try {
+            $sql = $builder->toSql();
+            $bindings = $builder->getBindings();
+
+            $start = microtime(true);
+            $result = match (DB::getDriverName()) {
+                'mysql' => DB::select('EXPLAIN FORMAT=JSON ' . $sql, $bindings),
+                'pgsql' => DB::select('EXPLAIN (ANALYZE false, FORMAT JSON) ' . $sql, $bindings),
+                default => [['query' => $sql, 'bindings' => $bindings]],
+            };
+            $durationMs = (microtime(true) - $start) * 1000;
+
+            return [
+                'plan' => $result,
+                'query_time_ms' => round($durationMs, 2),
+                'sql' => $sql,
+                'bindings' => $bindings,
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Execute offset pagination (page/per_page) on a built query.
+     *
+     * @return array{data: array, meta: array, headers: array, total: int}
+     */
+    private function executeOffsetPagination(Builder $builder, Request $request): array
+    {
+        $headers = [];
+        $meta = [];
+
+        $maxPerPage = RecordConfigService::perPageMax();
+        $perPage = max(1, min((int) $request->input('per_page', RecordConfigService::limitMax()), $maxPerPage));
+        $page = max((int) $request->input('page', 1), 1);
+
+        $skipTotal = $request->boolean('skip_total', RecordConfigService::skipTotalDefault());
+
+        if ($skipTotal) {
+            $total = 0;
+            $headers['X-Total-Count'] = '0';
+            $meta = ['total' => 0];
+        } else {
+            $countQuery = clone $builder;
+            $total = $countQuery->count();
+            $headers['X-Total-Count'] = (string) $total;
+        }
+
+        $data = $builder->forPage($page, $perPage)->get()->all();
+        $actualCount = count($data);
+
+        $paginationRequested = $request->has('page') || $request->has('per_page');
+
+        if (!$skipTotal && $total > 0) {
+            $lastPage = (int) ceil($total / $perPage);
+            if ($paginationRequested) {
+                $headers['X-Page'] = (string) $page;
+                $headers['X-Per-Page'] = (string) $perPage;
+                $headers['X-Total-Pages'] = (string) $lastPage;
+                $meta = [
+                    'page' => $page,
+                    'per_page' => $perPage,
+                    'total' => $total,
+                ];
+            } else {
+                $meta = ['total' => $total];
+            }
+        } else {
+            $meta = ['total' => $actualCount];
+        }
+
+        return [$data, $meta, $headers, $total];
+    }
+
+    /**
+     * Execute cursor (keyset) pagination on a built query.
+     *
+     * @return array{data: array, meta: array, headers: array, total: int}
+     */
+    private function executeCursorPagination(Builder $builder, Request $request, string $primaryKey): array
+    {
+        $headers = [];
+        $meta = [];
+
+        $maxPerPage = RecordConfigService::perPageMax();
+        $perPage = max(1, min((int) $request->input('per_page', RecordConfigService::limitMax()), $maxPerPage));
+
+        $cursor = $request->input('cursor');
+        $direction = $request->input('direction', 'next');
+        $cursorColumn = $request->input('cursor_column', RecordConfigService::cursorDefaultColumn());
+
+        $cursorOperator = $direction === 'next' ? '>' : '<';
+        $sortOrder = $direction === 'next' ? 'asc' : 'desc';
+
+        if (RecordConfigService::cursorCompositeEnabled() && $cursorColumn !== $primaryKey) {
+            // Composite cursor: use (cursor_column, primary_key) for stable ordering
+            // when sort column may have non-unique values
+            $builder->where(function ($q) use ($cursorColumn, $primaryKey, $cursor, $cursorOperator) {
+                $q->where($cursorColumn, $cursorOperator, $cursor)
+                  ->orWhere(function ($q2) use ($cursorColumn, $primaryKey, $cursor, $cursorOperator) {
+                      $q2->where($cursorColumn, '=', $cursor)
+                         ->where($primaryKey, $cursor === 'next' ? '>=' : '<=', $cursor);
+                  });
+            });
+            $builder->orderBy($cursorColumn, $sortOrder)
+                    ->orderBy($primaryKey, $sortOrder);
+        } else {
+            $builder->where($cursorColumn, $cursorOperator, $cursor)
+                    ->orderBy($cursorColumn, $sortOrder);
+        }
+
+        $data = $builder->limit($perPage)->get()->all();
+
+        $nextCursor = null;
+        if (count($data) > 0) {
+            $lastRow = $data[count($data) - 1];
+            $nextCursor = $lastRow->{$cursorColumn} ?? null;
+        }
+
+        $headers['X-Cursor'] = (string) ($nextCursor ?? '');
+        $meta = [
+            'cursor' => $nextCursor,
+            'direction' => $direction,
+            'cursor_column' => $cursorColumn,
+        ];
+
+        return [$data, $meta, $headers, 0];
+    }
+
+    /**
+     * Execute pagination on a built query, handling all modes.
+     *
+     * @return array{data: array, meta: array, headers: array, total: int}
+     */
+    private function executePagination(Builder $builder, Request $request, string $primaryKey): array
+    {
+        if ($request->has('cursor')) {
+            return $this->executeCursorPagination($builder, $request, $primaryKey);
+        }
+
+        return $this->executeOffsetPagination($builder, $request);
+    }
+
     /**
      * List records for a table.
      */
@@ -1545,7 +1729,7 @@ class RecordService
 
         $actualTableName = $tableSchema->table ?? $table;
 
-        $filters = $request->except(['page', 'per_page', 'limit']);
+        $filters = $request->except(['page', 'per_page', 'limit', 'cursor', 'cursor_column', 'direction', 'skip_total', 'explain']);
 
         $selectParam = $request->query('select', '');
         $effectiveSelectParam = self::getCombinedSelectParam($request);
@@ -1558,6 +1742,7 @@ class RecordService
 
         $isCacheable = $this->isCacheableRequest(request: $request, table: $table);
         $cacheKey = null;
+        $isCursor = $request->has('cursor');
 
         if ($isCacheable) {
             $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
@@ -1567,14 +1752,27 @@ class RecordService
                 $cacheFilters[RecordConfigService::tenantColumn()] = $tenantId;
             }
 
-            $cacheKey = $this->generateOptimizedCacheKey(
-                table: $table,
-                filters: $cacheFilters,
-                includes: $includes,
-                page: $page,
-                limit: $perPage ?? $limit,
-                tenantEnabled: $tenantEnabled
-            );
+            if ($isCursor) {
+                $cacheKey = $this->generateCursorCacheKey(
+                    table: $table,
+                    filters: $cacheFilters,
+                    includes: $includes,
+                    cursor: $request->input('cursor', ''),
+                    direction: $request->input('direction', 'next'),
+                    cursorColumn: $request->input('cursor_column', RecordConfigService::cursorDefaultColumn()),
+                    limit: $perPage ?? $limit,
+                    tenantEnabled: $tenantEnabled
+                );
+            } else {
+                $cacheKey = $this->generateOptimizedCacheKey(
+                    table: $table,
+                    filters: $cacheFilters,
+                    includes: $includes,
+                    page: $page,
+                    limit: $perPage ?? $limit,
+                    tenantEnabled: $tenantEnabled
+                );
+            }
 
             $cached = QueryCacheService::get($cacheKey);
             if (null !== $cached) {
@@ -1583,6 +1781,10 @@ class RecordService
         }
 
         $builder = DB::table($actualTableName);
+        $readConn = $this->getReadConnection();
+        if ($readConn !== null) {
+            $builder = $readConn->table($actualTableName);
+        }
 
         $this->applyTenantFilter($builder, $actualTableName, $tenantId);
 
@@ -1598,12 +1800,21 @@ class RecordService
             $builder->distinct();
         }
 
+        $this->applyIndexHint($builder, $table, 'list');
+
         QueryBuilderFiltersUtils::apply($builder, $request, $actualTableName, $tableSchema->primaryKey ?? 'id');
 
         $headers = [];
         $meta = [];
         $data = [];
         $total = 0;
+
+        // Explain query profiling (opt-in via ?explain=true)
+        $explainResult = null;
+        if (RecordConfigService::profilingEnabled() && $request->boolean('explain')) {
+            $explainBuilder = clone $builder;
+            $explainResult = $this->explainQuery($explainBuilder);
+        }
 
         $aggregateResult = QueryBuilderFiltersUtils::applyAggregateAndGroupBy($builder, $request, $actualTableName);
 
@@ -1618,30 +1829,7 @@ class RecordService
             $headers['X-Total-Count'] = (string) $total;
             $meta = ['total' => $total];
         } else {
-            $paginationRequested = $request->has('page') || $request->has('per_page');
-            $maxPerPage = RecordConfigService::perPageMax();
-            $perPage = max(1, min((int) $request->input('per_page', RecordConfigService::limitMax()), $maxPerPage));
-
-            $page = max((int) $request->input('page', 1), 1);
-            $countQuery = clone $builder;
-            $total = $countQuery->count();
-
-            $data = $builder->forPage($page, $perPage)->get()->all();
-
-            $headers['X-Total-Count'] = (string) $total;
-            $lastPage = (int) ceil($total / $perPage);
-            if ($paginationRequested) {
-                $headers['X-Page'] = (string) $page;
-                $headers['X-Per-Page'] = (string) $perPage;
-                $headers['X-Total-Pages'] = (string) $lastPage;
-                $meta = [
-                    'page' => $page,
-                    'per_page' => $perPage,
-                    'total' => $total,
-                ];
-            } else {
-                $meta = ['total' => $total];
-            }
+            [$data, $meta, $headers, $total] = $this->executePagination($builder, $request, $tableSchema->primaryKey ?? 'id');
         }
 
         $selectParam = $request->query('select', '');
@@ -1649,7 +1837,7 @@ class RecordService
 
         if ($effectiveSelectParam !== '') {
             $includes = RelationshipResolverUtils::parseSelectForIncludes($effectiveSelectParam);
-            $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization() && count($data) <= 100;
+            $useSubqueryOptimization = count($data) <= RecordConfigService::subqueryOptimizationMaxRecords();
 
             // Disable subquery optimization if nested filters, child relationships,
             // or database-specific limitations (e.g. PostgreSQL json_build_object argument limit) are detected
@@ -1802,6 +1990,10 @@ class RecordService
 
         if ($this->shouldIncludeDebug($request)) {
             $meta['debug']['lazy_stats'] = QueryBuilderFiltersUtils::getLazyStats();
+        }
+
+        if ($explainResult !== null) {
+            $meta['debug']['explain'] = $explainResult;
         }
 
         return [
@@ -2156,7 +2348,7 @@ class RecordService
             $tenantId = RecordUtils::resolveTenantIdFromRequest($request);
         }
 
-        $filters = $request->except(['page', 'per_page', 'limit']);
+        $filters = $request->except(['page', 'per_page', 'limit', 'cursor', 'cursor_column', 'direction', 'skip_total', 'explain']);
         $includes = $request->query('select', []);
         if (is_string($includes)) {
             $includes = explode(',', $includes);
@@ -2165,6 +2357,7 @@ class RecordService
         $page = max((int) $request->input('page', 1), 1);
         $perPage = $request->has('per_page') ? max(1, min((int) $request->input('per_page', 25), RecordConfigService::perPageMax())) : null;
         $limit = $request->has('limit') ? max(1, min((int) $request->input('limit'), RecordConfigService::limitMax())) : RecordConfigService::limitMax();
+        $isCursor = $request->has('cursor');
 
         // Disable cache if using builder as we can't easily key the builder state
         $isCacheable = !$builder && $service->isCacheableRequest($request, $table);
@@ -2178,14 +2371,27 @@ class RecordService
                 $cacheFilters[RecordConfigService::tenantColumn()] = $tenantId;
             }
 
-            $cacheKey = $service->generateOptimizedCacheKey(
-                table: $table,
-                filters: $cacheFilters,
-                includes: $includes,
-                page: $page,
-                limit: $perPage ?? $limit,
-                tenantEnabled: $tenantEnabled
-            );
+            if ($isCursor) {
+                $cacheKey = $service->generateCursorCacheKey(
+                    table: $table,
+                    filters: $cacheFilters,
+                    includes: $includes,
+                    cursor: $request->input('cursor', ''),
+                    direction: $request->input('direction', 'next'),
+                    cursorColumn: $request->input('cursor_column', RecordConfigService::cursorDefaultColumn()),
+                    limit: $perPage ?? $limit,
+                    tenantEnabled: $tenantEnabled
+                );
+            } else {
+                $cacheKey = $service->generateOptimizedCacheKey(
+                    table: $table,
+                    filters: $cacheFilters,
+                    includes: $includes,
+                    page: $page,
+                    limit: $perPage ?? $limit,
+                    tenantEnabled: $tenantEnabled
+                );
+            }
 
             $cached = QueryCacheService::get($cacheKey);
             if (null !== $cached) {
@@ -2195,6 +2401,10 @@ class RecordService
 
         if (!$builder instanceof Builder) {
             $builder = DB::table($actualTableName);
+            $readConn = $service->getReadConnection();
+            if ($readConn !== null) {
+                $builder = $readConn->table($actualTableName);
+            }
             $service->applyTenantFilter($builder, $actualTableName, $tenantId);
 
             if ($tableSchema instanceof RecordTableType && $tableSchema->softDeletes) {
@@ -2221,12 +2431,21 @@ class RecordService
             $defaultOrderBy = $orderBy;
         }
 
+        $service->applyIndexHint($builder, $table, 'list');
+
         QueryBuilderFiltersUtils::apply($builder, $request, $actualTableName, $defaultOrderBy);
 
         $headers = [];
         $meta = [];
         $data = [];
         $total = 0;
+
+        // Explain query profiling (opt-in via ?explain=true)
+        $explainResult = null;
+        if (RecordConfigService::profilingEnabled() && $request->boolean('explain')) {
+            $explainBuilder = clone $builder;
+            $explainResult = $service->explainQuery($explainBuilder);
+        }
 
         $aggregateResult = QueryBuilderFiltersUtils::applyAggregateAndGroupBy($builder, $request, $actualTableName);
 
@@ -2241,29 +2460,7 @@ class RecordService
             $headers['X-Total-Count'] = (string) $total;
             $meta = ['total' => $total];
         } else {
-            $paginationRequested = $request->has('page') || $request->has('per_page');
-            $maxPerPage = RecordConfigService::perPageMax();
-            $perPage = max(1, min((int) $request->input('per_page', RecordConfigService::limitMax()), $maxPerPage));
-
-            $page = max((int) $request->input('page', 1), 1);
-            $countQuery = clone $builder;
-            $total = $countQuery->count();
-            $data = $builder->forPage($page, $perPage)->get()->all();
-
-            $headers['X-Total-Count'] = (string) $total;
-            $lastPage = (int) ceil($total / $perPage);
-            if ($paginationRequested) {
-                $headers['X-Page'] = (string) $page;
-                $headers['X-Per-Page'] = (string) $perPage;
-                $headers['X-Total-Pages'] = (string) $lastPage;
-                $meta = [
-                    'page' => $page,
-                    'per_page' => $perPage,
-                    'total' => $total,
-                ];
-            } else {
-                $meta = ['total' => $total];
-            }
+            [$data, $meta, $headers, $total] = $service->executePagination($builder, $request, $defaultOrderBy);
         }
 
         $selectParam = $request->query('select', '');
@@ -2271,7 +2468,7 @@ class RecordService
 
         if ($effectiveSelectParam !== '') {
             $includes = RelationshipResolverUtils::parseSelectForIncludes($effectiveSelectParam);
-            $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization() && count($data) <= 100;
+            $useSubqueryOptimization = count($data) <= RecordConfigService::subqueryOptimizationMaxRecords();
 
             // Disable subquery optimization if nested filters, child relationships,
             // or database-specific limitations (e.g. PostgreSQL json_build_object argument limit) are detected
@@ -2415,6 +2612,10 @@ class RecordService
             $meta['debug']['lazy_stats'] = QueryBuilderFiltersUtils::getLazyStats();
         }
 
+        if ($explainResult !== null) {
+            $meta['debug']['explain'] = $explainResult;
+        }
+
         if ($isArray === false) {
             $data = $data[0] ?? [];
         }
@@ -2500,9 +2701,8 @@ class RecordService
 
         if ($effectiveSelectParam !== '') {
             $includes = RelationshipResolverUtils::parseSelectForIncludes($effectiveSelectParam);
-            $useSubqueryOptimization = RecordConfigService::useSubqueryOptimization();
+            $useSubqueryOptimization = true;
 
-            // Disable subquery optimization if nested filters or child relationships are detected
             if ($useSubqueryOptimization) {
                 foreach ($includes as $alias => $include) {
                     if (!empty($include['children'])) {
