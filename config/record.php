@@ -181,6 +181,85 @@ return [
     // Maximum number of items in a single relationship (e.g., belongsToMany pivot)
     'max_relation_items' => 500,
 
+    // Maximum records for subquery JSON optimization before falling back to
+    // the N+1 bulk-loading path. Set higher (e.g. 500) for larger pages with
+    // simple relationships. The system auto-disables the optimization when
+    // the database or relationship type doesn't support JSON aggregation.
+    'subquery_optimization_max_records' => 100,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Pagination Performance Settings
+    |--------------------------------------------------------------------------
+    |
+    | Configure cursor-based pagination and optional COUNT skipping to handle
+    | large datasets more efficiently.
+    |
+    */
+    'pagination' => [
+        // Default pagination mode: 'offset' (traditional page/per_page) or 'cursor'
+        'default_mode' => env('SP_PAGINATION_DEFAULT_MODE', 'offset'),
+
+        // Cursor pagination settings
+        'cursor' => [
+            // Default cursor column when not specified in request
+            'default_column' => 'id',
+            // Enable composite cursors (multi-column for non-unique sort columns)
+            'composite_enabled' => true,
+        ],
+
+        // When true, paginated list requests skip the COUNT(*) query unless explicitly requested
+        'skip_total_default' => env('SP_PAGINATION_SKIP_TOTAL', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Database Connection Settings
+    |--------------------------------------------------------------------------
+    |
+    | Configure separate read/write connections for query load distribution.
+    | Leave empty to use the default database connection.
+    |
+    */
+    'database' => [
+        // Read connection name (configured in config/database.php)
+        'read_connection' => env('DB_READ_CONNECTION'),
+        // Write connection name (configured in config/database.php)
+        'write_connection' => env('DB_WRITE_CONNECTION'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Index Hints
+    |--------------------------------------------------------------------------
+    |
+    | Per-table index hints to influence the query optimizer on large tables.
+    |
+    | Example:
+    | 'index_hints' => [
+    |     'customers' => [
+    |         'list' => 'idx_customers_tenant_status_created',
+    |         'filter_status' => 'idx_customers_status',
+    |     ],
+    | ],
+    |
+    */
+    'index_hints' => [],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Query Profiling
+    |--------------------------------------------------------------------------
+    |
+    | When enabled via ?explain=true query parameter, the response meta will
+    | include query execution plans and timing for debugging slow queries.
+    |
+    */
+    'profiling' => [
+        // Enable the ?explain=true feature (disabled by default for security)
+        'enabled' => env('SP_QUERY_PROFILING_ENABLED', false),
+    ],
+
     // Default cascade behavior for nested writes (can be overridden per endpoint)
     'default_cascade' => [
         'create' => false,  // allow nested create on store

@@ -29,6 +29,7 @@ use Closure;
  * @property null|array        $columnHiddens   Columns to hide from responses
  * @property null|array        $columnWriteDisabled    Columns that cannot be written via API payloads
  * @property null|array        $columnIndexes  Array of full-text index configurations for optimized search
+ * @property null|array        $searchable      Explicit searchable fields for `?search=` (supports `relationship.column`)
  * @property string|array|null $customAuditLog Custom audit logger callback (callable string or [class, httpMethod])
  *
  * Example usage:
@@ -115,6 +116,7 @@ class RecordTableType
         public ?array $columnHiddens = [],
         public ?array $columnWriteDisabled = [],
         public ?array $columnIndexes = [],
+        public ?array $searchable = [],
         public ?array $relationships = [],
         public ?array $functions = [],
         public string|array|null $customAuditLog = null,
@@ -270,6 +272,7 @@ class RecordTableType
             columnHiddens: $properties['columnHiddens'] ?? [],
             columnWriteDisabled: $properties['columnWriteDisabled'] ?? [],
             columnIndexes: $properties['columnIndexes'] ?? [],
+            searchable: $properties['searchable'] ?? [],
             relationships: $properties['relationships'] ?? [],
             functions: $properties['functions'] ?? [],
             customAuditLog: $properties['customAuditLog'] ?? null,

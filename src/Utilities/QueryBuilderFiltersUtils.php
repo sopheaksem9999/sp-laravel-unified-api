@@ -1648,7 +1648,10 @@ class QueryBuilderFiltersUtils
      */
     private static function executeOperators(Builder $builder, string $table, array $allowedCols, array $params): void
     {
-        $groupedFilters = self::extractGroupedFilters($params);
+        $groupedFilters = array_merge(
+            self::extractConfiguredSearchFilters($params, $table),
+            self::extractGroupedFilters($params)
+        );
         if ([] !== $groupedFilters) {
             self::applyGroupedFilters($builder, $table, $allowedCols, $groupedFilters, null);
         }
@@ -1742,7 +1745,10 @@ class QueryBuilderFiltersUtils
             }
         }
 
-        $groupedFilters = self::extractGroupedFilters($params);
+        $groupedFilters = array_merge(
+            self::extractConfiguredSearchFilters($params, $table),
+            self::extractGroupedFilters($params)
+        );
         if ([] !== $groupedFilters) {
             self::applyGroupedFilters($builder, $table, $allowedCols, $groupedFilters, $tenantId);
         }
@@ -1863,6 +1869,70 @@ class QueryBuilderFiltersUtils
         }
 
         return $grouped;
+    }
+
+    private static function extractConfiguredSearchFilters(array &$params, string $table): array
+    {
+        if (!array_key_exists('search', $params)) {
+            return [];
+        }
+
+        $rawSearch = $params['search'];
+        unset($params['search']);
+
+        if (is_array($rawSearch)) {
+            $rawSearch = $rawSearch[0] ?? null;
+        }
+
+        if (!is_string($rawSearch)) {
+            return [];
+        }
+
+        $keyword = trim($rawSearch);
+        if ('' === $keyword) {
+            return [];
+        }
+
+        $tableConfig = SchemaRegistryUtils::getTable($table);
+        $searchable = $tableConfig instanceof RecordTableType
+            ? ($tableConfig->searchable ?? [])
+            : ($tableConfig['searchable'] ?? []);
+
+        if (!is_array($searchable) || [] === $searchable) {
+            return [];
+        }
+
+        $operator = 'pgsql' === DB::getDriverName() ? 'ilike' : 'like';
+        $children = [];
+
+        foreach ($searchable as $field) {
+            if (!is_string($field)) {
+                continue;
+            }
+
+            $field = trim($field);
+            if ('' === $field) {
+                continue;
+            }
+
+            $children[] = [
+                'type' => 'condition',
+                'column' => $field,
+                'operator' => $operator,
+                'value' => $keyword,
+                'modifier' => null,
+            ];
+        }
+
+        if ([] === $children) {
+            return [];
+        }
+
+        return [[
+            'type' => 'group',
+            'logic' => 'or',
+            'children' => $children,
+        ]];
     }
 
     private static function parseGroupedLogicNode(string $logic, string $value): ?array

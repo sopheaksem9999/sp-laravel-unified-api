@@ -9,9 +9,12 @@ use FilesystemIterator;
 use SplFileInfo;
 use ReflectionClass;
 use ReflectionException;
+use Sopheak\Core\Attributes\RecordFunction;
+use Sopheak\Core\Attributes\RecordGlobalFunction;
 use Sopheak\Core\Attributes\RecordRelationship;
 use Sopheak\Core\Attributes\RecordTable;
 use Sopheak\Core\Attributes\RecordTrigger;
+use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Types\RecordTableTriggerType;
 use Sopheak\Core\Types\RecordTableType;
 use Illuminate\Support\Str;
@@ -36,38 +39,105 @@ class AttributeDiscoveryService
      */
     public static function discover(): array
     {
-        $paths = (array) config('sp-laravel-api.attribute_discovery.paths', ['app/Models']);
         $discovered = [];
+        $reflections = self::discoverClasses();
 
-        foreach ($paths as $path) {
-            $absolutePath = str_starts_with((string) $path, '/') ? $path : base_path($path);
-            if (!is_dir($absolutePath)) {
+        // 1. Discover full tables
+        foreach ($reflections as $reflection) {
+            $tableAttr = self::getTableAttribute($reflection);
+            if (!$tableAttr instanceof RecordTable) {
                 continue;
             }
 
-            foreach (self::phpFilesIn($absolutePath) as $file) {
-                $class = self::classFromFile($file);
-                if ($class === null) {
-                    continue;
-                }
+            $tableKey = self::resolveTableKey($reflection, $tableAttr);
+            $discovered[$tableKey] = self::buildTableType($reflection, $tableAttr, $tableKey);
+        }
 
-                try {
-                    $reflection = new ReflectionClass($class);
-                } catch (ReflectionException) {
-                    continue;
-                }
+        // 2. Discover standalone table functions (where table is specified in the attribute)
+        foreach ($reflections as $reflection) {
+            if (self::getTableAttribute($reflection) instanceof RecordTable) {
+                continue; // Already processed above
+            }
 
-                $tableAttr = self::getTableAttribute($reflection);
-                if (!$tableAttr instanceof RecordTable) {
-                    continue;
-                }
+            foreach ($reflection->getMethods() as $method) {
+                foreach ($method->getAttributes(RecordFunction::class) as $attrRef) {
+                    /** @var RecordFunction $functionAttr */
+                    $functionAttr = $attrRef->newInstance();
+                    
+                    if ($functionAttr->table === null) {
+                        continue;
+                    }
 
-                $tableKey = self::resolveTableKey($reflection, $tableAttr);
-                $discovered[$tableKey] = self::buildTableType($reflection, $tableAttr, $tableKey);
+                    $tableKey = $functionAttr->table;
+                    if (!isset($discovered[$tableKey])) {
+                        $discovered[$tableKey] = new RecordTableType(table: $tableKey);
+                    }
+
+                    if (!is_array($discovered[$tableKey]->functions)) {
+                        $discovered[$tableKey]->functions = [];
+                    }
+
+                    $name = $functionAttr->name ?? $method->getName();
+
+                    $discovered[$tableKey]->functions[$name] = self::buildFunctionType(
+                        className: $reflection->getName(),
+                        methodName: $method->getName(),
+                        name: $name,
+                        httpMethod: $functionAttr->httpMethod,
+                        isPublic: $functionAttr->isPublic,
+                        pmsName: $functionAttr->pmsName,
+                        disableCache: $functionAttr->disableCache,
+                        cacheTTL: $functionAttr->cacheTTL,
+                        description: $functionAttr->description,
+                        querySchema: $functionAttr->querySchema,
+                        payloadSchema: $functionAttr->payloadSchema,
+                        responseSchema: $functionAttr->responseSchema,
+                        clearCacheTables: $functionAttr->clearCacheTables,
+                        middleware: $functionAttr->middleware,
+                    );
+                }
             }
         }
 
         return $discovered;
+    }
+
+    /**
+     * Discover global functions declared via #[RecordGlobalFunction] attributes.
+     *
+     * @return array<string, RecordFunctionType>
+     */
+    public static function discoverGlobalFunctions(): array
+    {
+        $functions = [];
+
+        foreach (self::discoverClasses() as $reflection) {
+            foreach ($reflection->getMethods() as $method) {
+                foreach ($method->getAttributes(RecordGlobalFunction::class) as $attrRef) {
+                    /** @var RecordGlobalFunction $functionAttr */
+                    $functionAttr = $attrRef->newInstance();
+                    $name = $functionAttr->name ?? $method->getName();
+                    $functions[$name] = self::buildFunctionType(
+                        className: $reflection->getName(),
+                        methodName: $method->getName(),
+                        name: $name,
+                        httpMethod: $functionAttr->httpMethod,
+                        isPublic: $functionAttr->isPublic,
+                        pmsName: $functionAttr->pmsName,
+                        disableCache: $functionAttr->disableCache,
+                        cacheTTL: $functionAttr->cacheTTL,
+                        description: $functionAttr->description,
+                        querySchema: $functionAttr->querySchema,
+                        payloadSchema: $functionAttr->payloadSchema,
+                        responseSchema: $functionAttr->responseSchema,
+                        clearCacheTables: $functionAttr->clearCacheTables,
+                        middleware: $functionAttr->middleware,
+                    );
+                }
+            }
+        }
+
+        return $functions;
     }
 
     /**
@@ -87,6 +157,39 @@ class AttributeDiscoveryService
                 yield $file->getRealPath();
             }
         }
+    }
+
+    /**
+     * Discover reflection classes from configured attribute discovery paths.
+     *
+     * @return array<ReflectionClass>
+     */
+    private static function discoverClasses(): array
+    {
+        $paths = (array) config('sp-laravel-api.attribute_discovery.paths', ['app/Models']);
+        $classes = [];
+
+        foreach ($paths as $path) {
+            $absolutePath = str_starts_with((string) $path, '/') ? $path : base_path($path);
+            if (!is_dir($absolutePath)) {
+                continue;
+            }
+
+            foreach (self::phpFilesIn($absolutePath) as $file) {
+                $class = self::classFromFile($file);
+                if ($class === null) {
+                    continue;
+                }
+
+                try {
+                    $classes[$class] = new ReflectionClass($class);
+                } catch (ReflectionException) {
+                    continue;
+                }
+            }
+        }
+
+        return array_values($classes);
     }
 
     /**
@@ -198,6 +301,7 @@ class AttributeDiscoveryService
     {
         $relationships = self::collectRelationships($reflection);
         $triggers = self::collectTriggers($reflection);
+        $functions = self::collectTableFunctions($reflection);
 
         $pmsName = $attr->pmsName ?? Str::snake($reflection->getShortName());
 
@@ -218,6 +322,7 @@ class AttributeDiscoveryService
             isAuthWrite: $attr->isAuthWrite,
             primaryKey: $attr->primaryKey,
             relationships: $relationships,
+            functions: $functions,
             beforeRead: $triggers['beforeRead'] ?? null,
             afterRead: $triggers['afterRead'] ?? null,
             beforeCreate: $triggers['beforeCreate'] ?? null,
@@ -287,6 +392,80 @@ class AttributeDiscoveryService
         }
 
         return $relationships;
+    }
+
+    /**
+     * Collect all #[RecordFunction] attributes from class methods and map to table functions.
+     *
+     * @return array<string, RecordFunctionType>
+     */
+    private static function collectTableFunctions(ReflectionClass $reflection): array
+    {
+        $functions = [];
+
+        foreach ($reflection->getMethods() as $method) {
+            foreach ($method->getAttributes(RecordFunction::class) as $attrRef) {
+                /** @var RecordFunction $functionAttr */
+                $functionAttr = $attrRef->newInstance();
+
+                $name = $functionAttr->name ?? $method->getName();
+
+                $functions[$name] = self::buildFunctionType(
+                    className: $reflection->getName(),
+                    methodName: $method->getName(),
+                    name: $name,
+                    httpMethod: $functionAttr->httpMethod,
+                    isPublic: $functionAttr->isPublic,
+                    pmsName: $functionAttr->pmsName,
+                    disableCache: $functionAttr->disableCache,
+                    cacheTTL: $functionAttr->cacheTTL,
+                    description: $functionAttr->description,
+                    querySchema: $functionAttr->querySchema,
+                    payloadSchema: $functionAttr->payloadSchema,
+                    responseSchema: $functionAttr->responseSchema,
+                    clearCacheTables: $functionAttr->clearCacheTables,
+                    middleware: $functionAttr->middleware,
+                );
+            }
+        }
+
+        return $functions;
+    }
+
+    /**
+     * Build a RecordFunctionType from discovered function metadata.
+     */
+    private static function buildFunctionType(
+        string $className,
+        string $methodName,
+        string $name,
+        array|string $httpMethod,
+        bool $isPublic,
+        array|string|null $pmsName,
+        bool $disableCache,
+        ?int $cacheTTL,
+        ?string $description,
+        ?array $querySchema,
+        ?array $payloadSchema,
+        ?array $responseSchema,
+        array|string|null $clearCacheTables,
+        array|string|null $middleware
+    ): RecordFunctionType {
+        return new RecordFunctionType(
+            httpMethod: $httpMethod,
+            class: $className,
+            functionName: $methodName,
+            isPublic: $isPublic,
+            pmsName: $pmsName,
+            disableCache: $disableCache,
+            cacheTTL: $cacheTTL,
+            description: $description ?? sprintf('Attribute function: %s', $name),
+            querySchema: $querySchema,
+            payloadSchema: $payloadSchema,
+            responseSchema: $responseSchema,
+            clearCacheTables: $clearCacheTables,
+            middleware: $middleware,
+        );
     }
 
     /**

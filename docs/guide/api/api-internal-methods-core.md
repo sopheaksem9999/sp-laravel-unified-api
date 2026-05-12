@@ -17,10 +17,10 @@ The package provides internal methods that allow developers to execute CRUD oper
 
 All methods are available statically on `Sopheak\Core\Services\RecordService`.
 
-#### `queryByFilter`
+#### `executeGetByFilter`
 Fetch multiple records using API filter syntax.
 ```php
-public static function queryByFilter(
+public static function executeGetByFilter(
     string $table, 
     array|string $queryParams = [], 
     mixed $tenantId = null, 
@@ -29,10 +29,10 @@ public static function queryByFilter(
 ): array
 ```
 
-#### `queryById`
+#### `executeGetById`
 Fetch a single record by ID, optionally loading relationships.
 ```php
-public static function queryById(
+public static function executeGetById(
     string $table, 
     mixed $id, 
     array|string $queryParams = [], 
@@ -40,10 +40,10 @@ public static function queryById(
 ): array
 ```
 
-#### `queryCreate`
+#### `executeCreate`
 Create a record and return it fully loaded with requested relationships.
 ```php
-public static function queryCreate(
+public static function executeCreate(
     string $table, 
     array $payload, 
     array|string $queryParams = [], 
@@ -51,10 +51,10 @@ public static function queryCreate(
 ): array
 ```
 
-#### `queryUpdate`
+#### `executeUpdate`
 Update a record and return it fully loaded with requested relationships.
 ```php
-public static function queryUpdate(
+public static function executeUpdate(
     string $table, 
     mixed $id, 
     array $payload, 
@@ -63,10 +63,10 @@ public static function queryUpdate(
 ): array
 ```
 
-#### `queryDelete`
+#### `executeDelete`
 Delete a record and return the fully loaded record *before* it was deleted.
 ```php
-public static function queryDelete(
+public static function executeDelete(
     string $table, 
     mixed $id, 
     array|string $queryParams = [], 
@@ -76,7 +76,7 @@ public static function queryDelete(
 
 ### Write Side-Effects (Record Lifecycle Events)
 
-Internal write methods (`queryCreate`, `queryUpdate`, `queryDelete`) trigger the same side-effects as the HTTP API.
+Internal write methods (`executeCreate`, `executeUpdate`, `executeDelete`) trigger the same side-effects as the HTTP API.
 
 After a successful write, the package dispatches these events:
 - `Sopheak\Core\Events\RecordCreated`
@@ -98,19 +98,19 @@ You can pass query parameters as an array or a URL-encoded string.
 use Sopheak\Core\Services\RecordService;
 
 // Using array syntax
-$invoice = RecordService::queryById('invoices', 1, [
+$invoice = RecordService::executeGetById('invoices', 1, [
     'select' => '*,customer(*),items(*,product(*))'
 ]);
 
 // Using string syntax
-$activeUsers = RecordService::queryByFilter('users', 'select=*,profile(*)&status=eq.active');
+$activeUsers = RecordService::executeGetByFilter('users', 'select=*,profile(*)&status=eq.active');
 ```
 
 #### 2. Creating a Record and Getting it Back
-When creating a record, you often need the newly generated ID or default database values immediately. `queryCreate` handles this and can even load relationships in the same step.
+When creating a record, you often need the newly generated ID or default database values immediately. `executeCreate` handles this and can even load relationships in the same step.
 
 ```php
-$newOrder = RecordService::queryCreate('orders', 
+$newOrder = RecordService::executeCreate('orders', 
     // Payload
     [
         'customer_id' => 5,
@@ -129,7 +129,7 @@ echo $newOrder['data']['customer']['name']; // Loaded relationship
 Similar to creation, you can update a record and immediately get the fresh data back.
 
 ```php
-$updatedOrder = RecordService::queryUpdate('orders', 12, 
+$updatedOrder = RecordService::executeUpdate('orders', 12, 
     // Payload
     ['status' => 'completed'],
     // Query params
@@ -138,10 +138,10 @@ $updatedOrder = RecordService::queryUpdate('orders', 12,
 ```
 
 #### 4. Deleting a Record
-Sometimes you need the data of the record you just deleted (e.g., to send a cancellation email). `queryDelete` fetches the record *before* deleting it and returns it.
+Sometimes you need the data of the record you just deleted (e.g., to send a cancellation email). `executeDelete` fetches the record *before* deleting it and returns it.
 
 ```php
-$deletedUser = RecordService::queryDelete('users', 42, [
+$deletedUser = RecordService::executeDelete('users', 42, [
     'select' => '*,profile(*)'
 ]);
 
@@ -154,7 +154,7 @@ If your application uses multi-tenancy, you can pass the `$tenantId` as the last
 
 ```php
 $tenantId = 99;
-$tenantUsers = RecordService::queryByFilter('users', [], $tenantId);
+$tenantUsers = RecordService::executeGetByFilter('users', [], $tenantId);
 ```
 
 ### Function Caching
