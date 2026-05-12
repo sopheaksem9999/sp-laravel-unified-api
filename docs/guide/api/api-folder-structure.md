@@ -24,12 +24,14 @@ project-root/
 │       ├── Invoice/                 # Invoice Module
 │       │   ├── InvoiceFunctions.php # Custom RPC function classes
 │       │   ├── InvoiceTriggers.php  # Lifecycle hooks
-│       │   └── InvoiceValidators.php# Custom validation logic
+│       │   ├── InvoiceValidators.php# Custom validation logic
+│       │   └── InvoiceService.php   # Business logic & helper methods
 │       │
 │       └── User/                    # User Module
-│           ├── UserFunctions.php    
-│           ├── UserTriggers.php     
-│           └── UserValidators.php   
+│           ├── UserFunctions.php    # Custom RPC function classes
+│           ├── UserTriggers.php     # Lifecycle hooks
+│           └── UserValidators.php   # Custom validation logic
+│           └── UserService.php    # Business logic & helper methods
 ```
 
 **Pros:**

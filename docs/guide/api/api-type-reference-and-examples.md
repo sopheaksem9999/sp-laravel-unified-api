@@ -38,6 +38,7 @@ new RecordTableType(
     columnHiddens: [],
     columnWriteDisabled: [],
     columnIndexes: [],
+    searchable: [],
     auditLogFn: null,
     createValidator: null,
     updateValidator: null,
@@ -91,6 +92,7 @@ new RecordTableType(
 - `columnHiddens` (?array, default: `[]`): List of column names to always hide from API responses. This is applied recursively to nested relationships as well. Hidden columns are removed even if their value is `null`.
 - `columnWriteDisabled` (?array, default: `[]`): List of column names that are not writable via API payloads (create, update, upsert, and nested relationship writes). These columns are stripped from incoming payloads even if provided by the client.
 - `columnIndexes` (?array, default: `[]`): Declares full-text index column sets for search optimization. Format: a list of column name arrays, e.g. `[['name', 'description'], ['content']]`.
+- `searchable` (?array, default: `[]`): Explicit fields used by the `?search=` query param. Supports root columns like `'name'` and one-level relationship fields like `'customer.display_name'` or `'items.description'`.
 
 #### Relationships & Table RPC Functions
 
@@ -601,4 +603,3 @@ $userRoles = new RecordSpatiePermissionType(
     teamsEnabled: true,
 );
 ```
-
