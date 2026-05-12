@@ -768,6 +768,7 @@ use Sopheak\Core\Attributes\RecordTable;
 use Sopheak\Core\Attributes\RecordFunction;
 use Sopheak\Core\Attributes\RecordGlobalFunction;
 
+// 1. Table-scoped function inside the model
 #[RecordTable(table: 'invoices', pmsName: 'invoices')]
 class Invoice
 {
@@ -782,7 +783,26 @@ class Invoice
     {
         return ['ok' => true];
     }
+}
 
+// 2. Table-scoped function in a separate file
+// You must specify the `table` parameter so the package knows where it belongs.
+class InvoiceFunctions
+{
+    // The name will automatically default to the method name ('listModulePermissions')
+    #[RecordFunction(
+        table: 'modules',
+        description: 'List module permissions'
+    )]
+    public static function listModulePermissions(Request $request): JsonResponse
+    {
+        // ... logic
+    }
+}
+
+// 3. Global function (not attached to any specific table)
+class HealthFunctions 
+{
     #[RecordGlobalFunction(
         name: 'health',
         httpMethod: ['GET'],
@@ -878,10 +898,12 @@ return [
 
 **4) Call the endpoints**
 
-```http
-POST /api/v2/invoices/123/rpc/sync
-GET /api/v2/rpc/health
-```
+- Table function (inside model):
+  `POST /api/v2/invoices/123/rpc/sync`
+- Table function (standalone file):
+  `GET /api/v2/modules/123/rpc/listModulePermissions`
+- Global function:
+  `GET /api/v2/rpc/health`
 
 **5) Override with file config (file wins)**
 

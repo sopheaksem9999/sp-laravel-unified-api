@@ -15,7 +15,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
 class RecordGlobalFunction
 {
     public function __construct(
-        public readonly string $name,
+        public readonly ?string $name = null,
         public readonly array|string|RecordFunctionMethodEnum $httpMethod = [RecordFunctionMethodEnum::GET->value],
         public readonly bool $isPublic = true,
         public readonly array|string|null $pmsName = null,

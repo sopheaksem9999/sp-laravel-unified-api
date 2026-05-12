@@ -29,6 +29,7 @@ Retrieve a paginated list of records with filtering, sorting, and relationship l
 **Search**
 
 - `s` (string) - Search across searchable columns (uses full-text index when available, otherwise LIKE)
+- `search` (string) - Search only the fields declared in `RecordTableType(searchable: [...])`. Supports main-table columns and one-level relationship fields like `customer.display_name` or `items.name`.
 
 **Selection & Relationships**
 
@@ -125,6 +126,40 @@ Notes:
 - Complex grouped examples are best URL-encoded when sent from frontend clients.
 - If an operator is not supported by the current database driver, API returns validation error with an explicit message.
 
+#### Config-Driven `search`
+
+Use `searchable` on the table config when you want a stable `?search=` parameter for clients instead of requiring them to build `or=(...)` expressions manually.
+
+```php
+'invoices' => new RecordTableType(
+    table: 'invoices',
+    searchable: [
+        'ref_number',
+        'customer.display_name',
+        'items.name',
+        'items.description',
+    ],
+),
+```
+
+Client request:
+
+```http
+GET /api/v1/invoices?select=*,customer(*),items(*)&search=INV-001
+```
+
+This behaves like:
+
+```http
+GET /api/v1/invoices?select=*,customer(*),items(*)&or=(ref_number.ilike.INV-001,customer.display_name.ilike.INV-001,items.name.ilike.INV-001,items.description.ilike.INV-001)
+```
+
+Notes:
+
+- `search` is additive with normal top-level filters, so `status=eq.open&search=INV-001` becomes `status = open AND (...)`.
+- Relationship fields in `searchable` use the same one-level dot notation supported by grouped relationship filters.
+- `search` uses `ilike` on PostgreSQL and `like` on other drivers.
+
 When `aggregate` is present and valid, the list endpoint returns aggregated rows instead of paginated records. The response still follows the standard shape, with:
 
 - `data`: Aggregated rows (including `group_by` columns and aggregate aliases like `count_id`).
@@ -135,7 +170,7 @@ When `aggregate` is present and valid, the list endpoint returns aggregated rows
 #### Example Request
 
 ```http
-GET /api/v1/invoices?per_page=25&sortby=created_at&order=desc&select=*,customer(*),items(*,product(*))&status=eq.pending&total=gte.100&s=invoice
+GET /api/v1/invoices?per_page=25&sortby=created_at&order=desc&select=*,customer(*),items(*,product(*))&status=eq.pending&total=gte.100&search=invoice
 Authorization: Bearer {access_token}
 ```
 
@@ -511,4 +546,3 @@ Permanently delete a record (bypasses soft delete).
 - `403` - Forbidden
 - `404` - Not found (table not configured/disabled or record not found)
 - `500` - Server error
-

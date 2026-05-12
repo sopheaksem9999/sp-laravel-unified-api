@@ -113,7 +113,8 @@ $result = Invoice::query()->applyRequestFilters(
 
 **Search**
 
-- `s` or `search`: Searches across all columns in the model table. Example: `?s=invoice`.
+- `s`: Searches across the model table's searchable text columns. Example: `?s=invoice`.
+- `search`: Uses `RecordTableType(searchable: [...])` when that table is registered in the record schema. Supports root columns and one-level relationship fields. Example: `?search=invoice`.
 
 **Select (main table only)**
 

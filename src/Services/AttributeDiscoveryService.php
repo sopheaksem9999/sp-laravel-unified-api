@@ -40,8 +40,10 @@ class AttributeDiscoveryService
     public static function discover(): array
     {
         $discovered = [];
+        $reflections = self::discoverClasses();
 
-        foreach (self::discoverClasses() as $reflection) {
+        // 1. Discover full tables
+        foreach ($reflections as $reflection) {
             $tableAttr = self::getTableAttribute($reflection);
             if (!$tableAttr instanceof RecordTable) {
                 continue;
@@ -49,6 +51,52 @@ class AttributeDiscoveryService
 
             $tableKey = self::resolveTableKey($reflection, $tableAttr);
             $discovered[$tableKey] = self::buildTableType($reflection, $tableAttr, $tableKey);
+        }
+
+        // 2. Discover standalone table functions (where table is specified in the attribute)
+        foreach ($reflections as $reflection) {
+            if (self::getTableAttribute($reflection) instanceof RecordTable) {
+                continue; // Already processed above
+            }
+
+            foreach ($reflection->getMethods() as $method) {
+                foreach ($method->getAttributes(RecordFunction::class) as $attrRef) {
+                    /** @var RecordFunction $functionAttr */
+                    $functionAttr = $attrRef->newInstance();
+                    
+                    if ($functionAttr->table === null) {
+                        continue;
+                    }
+
+                    $tableKey = $functionAttr->table;
+                    if (!isset($discovered[$tableKey])) {
+                        $discovered[$tableKey] = new RecordTableType(table: $tableKey);
+                    }
+
+                    if (!is_array($discovered[$tableKey]->functions)) {
+                        $discovered[$tableKey]->functions = [];
+                    }
+
+                    $name = $functionAttr->name ?? $method->getName();
+
+                    $discovered[$tableKey]->functions[$name] = self::buildFunctionType(
+                        className: $reflection->getName(),
+                        methodName: $method->getName(),
+                        name: $name,
+                        httpMethod: $functionAttr->httpMethod,
+                        isPublic: $functionAttr->isPublic,
+                        pmsName: $functionAttr->pmsName,
+                        disableCache: $functionAttr->disableCache,
+                        cacheTTL: $functionAttr->cacheTTL,
+                        description: $functionAttr->description,
+                        querySchema: $functionAttr->querySchema,
+                        payloadSchema: $functionAttr->payloadSchema,
+                        responseSchema: $functionAttr->responseSchema,
+                        clearCacheTables: $functionAttr->clearCacheTables,
+                        middleware: $functionAttr->middleware,
+                    );
+                }
+            }
         }
 
         return $discovered;
@@ -68,10 +116,11 @@ class AttributeDiscoveryService
                 foreach ($method->getAttributes(RecordGlobalFunction::class) as $attrRef) {
                     /** @var RecordGlobalFunction $functionAttr */
                     $functionAttr = $attrRef->newInstance();
-                    $functions[$functionAttr->name] = self::buildFunctionType(
+                    $name = $functionAttr->name ?? $method->getName();
+                    $functions[$name] = self::buildFunctionType(
                         className: $reflection->getName(),
                         methodName: $method->getName(),
-                        name: $functionAttr->name,
+                        name: $name,
                         httpMethod: $functionAttr->httpMethod,
                         isPublic: $functionAttr->isPublic,
                         pmsName: $functionAttr->pmsName,
@@ -359,10 +408,12 @@ class AttributeDiscoveryService
                 /** @var RecordFunction $functionAttr */
                 $functionAttr = $attrRef->newInstance();
 
-                $functions[$functionAttr->name] = self::buildFunctionType(
+                $name = $functionAttr->name ?? $method->getName();
+
+                $functions[$name] = self::buildFunctionType(
                     className: $reflection->getName(),
                     methodName: $method->getName(),
-                    name: $functionAttr->name,
+                    name: $name,
                     httpMethod: $functionAttr->httpMethod,
                     isPublic: $functionAttr->isPublic,
                     pmsName: $functionAttr->pmsName,
