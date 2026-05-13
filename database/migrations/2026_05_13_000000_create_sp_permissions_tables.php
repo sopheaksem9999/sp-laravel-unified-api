@@ -15,7 +15,7 @@ return new class extends Migration {
             $table->bigIncrements('id');
             $table->string('name')->unique();
             $table->string('group')->nullable()->index();
-            $table->string('guard_name');
+            $table->string('guard_name')->index();
             $table->text('description')->nullable();
             $table->timestamps();
         });
@@ -23,7 +23,7 @@ return new class extends Migration {
         Schema::create('sp_roles', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('name')->unique();
-            $table->string('guard_name');
+            $table->string('guard_name')->index();
             $table->text('description')->nullable();
             $table->boolean('is_system')->default(false);
             $table->timestamps();
