@@ -16,6 +16,11 @@ class RecordConfigService
         return (string) config('record.tenant_column', 'tenant_id');
     }
 
+    public static function tenantColumnType(): string
+    {
+        return (string) config('record.tenant_column_type', 'string');
+    }
+
     public static function tenantHeader(): string
     {
         return (string) config('record.tenant_header', 'X-Tenant-ID');
@@ -211,8 +216,10 @@ class RecordConfigService
         $webhookTables = $webhookEnabled ? (array) config('webhooks.tables', []) : [];
         $auditEnabled = (bool) config('audit.enabled', false);
         $auditTables = $auditEnabled ? (array) config('audit.tables', []) : [];
+        $permissionEnabled = (bool) config('permission.enabled', false);
+        $permissionTables = $permissionEnabled ? (array) config('permission.tables', []) : [];
 
-        $tables = array_merge($webhookTables, $attachmentTables, $auditTables, $recordTables);
+        $tables = array_merge($webhookTables, $attachmentTables, $auditTables, $permissionTables, $recordTables);
 
         if ($table !== null) {
             return $tables[$table] ?? null;

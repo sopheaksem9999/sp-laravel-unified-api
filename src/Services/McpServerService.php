@@ -3,6 +3,7 @@
 namespace Sopheak\Core\Services;
 
 use Exception;
+use Sopheak\Core\Authorization\PermissionService;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Services\RecordService;
@@ -346,11 +347,16 @@ class McpServerService
         $allowed = false;
         $authHandler = config('record.authorization');
         $gate = $authHandler === null ? Gate::forUser($user) : null;
+        $permissionService = null;
+
         foreach ($perms as $perm) {
             if ($authHandler !== null) {
                 $granted = is_string($authHandler)
                     ? (bool) app($authHandler)->handle($user, $perm, $table, $action)
                     : (bool) $authHandler($user, $perm, $table, $action);
+            } elseif (config('permission.enabled', false)) {
+                $permissionService ??= app(PermissionService::class);
+                $granted = $permissionService->userHasPermission($user, $perm);
             } else {
                 $granted = $gate->allows($perm);
             }

@@ -3,6 +3,7 @@
 namespace Sopheak\Core;
 
 use Sopheak\Core\Console\CleanTempAttachmentsCommand;
+use Sopheak\Core\Console\MigrateFromSpatieCommand;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Router;
@@ -23,12 +24,14 @@ use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Console\McpServerCommand;
+use Sopheak\Core\Console\EnablePgsqlRlsCommand;
 use Illuminate\Support\Facades\Route;
 
 use Illuminate\Support\Facades\Event;
 use Sopheak\Core\Events\RecordCreated;
 use Sopheak\Core\Events\RecordDeleted;
 use Sopheak\Core\Events\RecordUpdated;
+use Sopheak\Core\Authorization\PermissionRegistrar;
 use Sopheak\Core\Listeners\InvalidateRecordCacheListener;
 use Sopheak\Core\Listeners\LogRecordAuditListener;
 
@@ -40,6 +43,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__ . '/../config/attachments.php', 'attachments');
         $this->mergeConfigFrom(__DIR__ . '/../config/webhooks.php', 'webhooks');
         $this->mergeConfigFrom(__DIR__ . '/../config/audit.php', 'audit');
+        $this->mergeConfigFrom(__DIR__ . '/../config/permission.php', 'permission');
 
 
         $this->app->singleton('api.response', fn(): RecordApiResponseService => new RecordApiResponseService());
@@ -55,6 +59,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
             __DIR__ . '/../config/record.php' => config_path('record.php'),
             __DIR__ . '/../config/attachments.php' => config_path('attachments.php'),
             __DIR__ . '/../config/webhooks.php' => config_path('webhooks.php'),
+            __DIR__ . '/../config/permission.php' => config_path('permission.php'),
         ], 'sp-laravel-api-config');
 
         $this->publishes([
@@ -88,6 +93,8 @@ class CoreSpLaravelApiProvider extends ServiceProvider
                 ExportOpenApiCommand::class,
                 ListTablesCommand::class,
                 CleanTempAttachmentsCommand::class,
+                MigrateFromSpatieCommand::class,
+                EnablePgsqlRlsCommand::class,
             ];
 
             $commands = array_values(array_filter($commands, class_exists(...)));
@@ -98,9 +105,25 @@ class CoreSpLaravelApiProvider extends ServiceProvider
         $router = $this->app['router'];
         $router->aliasMiddleware('request.id', RequestId::class);
         $router->aliasMiddleware('record.route.middleware', RecordRouteMiddleware::class);
+        $router->aliasMiddleware('pgsql.tenant', \Sopheak\Core\Http\Middleware\SetPostgresTenantContext::class);
 
         Event::listen([RecordCreated::class, RecordUpdated::class, RecordDeleted::class], InvalidateRecordCacheListener::class);
         Event::listen([RecordCreated::class, RecordUpdated::class, RecordDeleted::class], LogRecordAuditListener::class);
+
+        if (config('permission.enabled', false)) {
+            $this->app->singleton(PermissionRegistrar::class);
+
+            $this->app->booted(function () {
+                try {
+                    $registrar = app(PermissionRegistrar::class);
+                    $registrar->autoRegisterFromConfig();
+                    $registrar->registerPermissions();
+                } catch (\Throwable $e) {
+                    // Permission tables may not exist yet (pre-migration)
+                    // Silently skip — auto-registration will happen on next boot
+                }
+            });
+        }
 
         Route::bind('table', function (string $value) {
             $tableConfig = RecordConfigService::getTableConfig($value);

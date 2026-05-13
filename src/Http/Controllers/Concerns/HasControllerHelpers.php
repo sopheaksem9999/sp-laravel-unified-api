@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Sopheak\Core\Authorization\PermissionService;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 use Sopheak\Core\Exceptions\RecordNotFoundException;
 use Sopheak\Core\Jobs\ProcessBulkOperationJob;
@@ -185,11 +186,16 @@ trait HasControllerHelpers
         $allowed = false;
         $authHandler = config('record.authorization');
         $gate = $authHandler === null ? Gate::forUser($user) : null;
+        $permissionService = null;
+
         foreach ($perms as $perm) {
             if ($authHandler !== null) {
                 $granted = is_string($authHandler)
                     ? (bool) app($authHandler)->handle($user, $perm, $table, $action)
                     : (bool) $authHandler($user, $perm, $table, $action);
+            } elseif (config('permission.enabled', false)) {
+                $permissionService ??= app(PermissionService::class);
+                $granted = $permissionService->userHasPermission($user, $perm);
             } else {
                 $granted = $gate->allows($perm);
             }

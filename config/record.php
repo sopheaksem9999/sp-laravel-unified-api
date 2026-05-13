@@ -46,6 +46,7 @@ return [
     */
     'enable_tenant_id' => false,
     'tenant_column' => 'tenant_id',
+    'tenant_column_type' => 'string', // PGSQL RLS cast type: string, integer, bigint, uuid
     'tenant_header' => 'X-Tenant-ID',
     'table_config_path' => 'records/tables',
 
