@@ -297,18 +297,35 @@ class ValidateSetupCommand extends Command
         $this->info('🔐 Checking Permissions Setup...');
 
         try {
-            // Check if Spatie Permission tables exist
             $tables = DB::select($this->getTableListQuery(DB::getDriverName()));
             $tableNames = array_map(fn($table): string => $this->getTableNameFromResult($table, DB::getDriverName()), $tables);
 
-            $permissionTables = ['permissions', 'roles', 'model_has_permissions', 'model_has_roles', 'role_has_permissions'];
-            $missingTables = array_diff($permissionTables, $tableNames);
+            $spBuiltInTables = ['sp_permissions', 'sp_roles', 'sp_role_permissions', 'sp_model_roles', 'sp_model_permissions'];
+            $spMissingTables = array_diff($spBuiltInTables, $tableNames);
 
-            if (empty($missingTables)) {
-                $this->addResult('✅', 'Spatie Permission tables exist', 'success');
+            if (empty($spMissingTables)) {
+                $this->addResult('✅', 'Built-in permission tables (sp_*) exist', 'success');
+
+                if (config('permission.enabled', false)) {
+                    $this->addResult('✅', 'Built-in permission system is enabled', 'success');
+                } else {
+                    $this->addResult('ℹ️', 'Built-in permission system is disabled (config/permission.php enabled=false)', 'info');
+                    $this->addResult('ℹ️', 'Set SP_PERMISSION_ENABLED=true or permission.enabled=true to activate', 'info');
+                }
             } else {
-                $this->addResult('⚠️', 'Missing permission tables: ' . implode(', ', $missingTables), 'warning');
-                $this->addResult('ℹ️', 'Run: php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider"', 'info');
+                $this->addResult('⚠️', 'Missing built-in permission tables: ' . implode(', ', $spMissingTables), 'warning');
+                $this->addResult('ℹ️', 'Run: php artisan migrate to create the permission tables', 'info');
+            }
+
+            $spatieTables = ['permissions', 'roles', 'model_has_permissions', 'model_has_roles', 'role_has_permissions'];
+            $existingSpatie = array_intersect($spatieTables, $tableNames);
+
+            if (!empty($existingSpatie)) {
+                $this->addResult('ℹ️', 'Found Spatie permission tables (' . implode(', ', $existingSpatie) . ')', 'info');
+
+                if (config('permission.enabled', false)) {
+                    $this->addResult('ℹ️', 'Run: php artisan sp-laravel-api:migrate-from-spatie to migrate data', 'info');
+                }
             }
         } catch (Exception $exception) {
             $this->addResult('❌', 'Permission check failed: ' . $exception->getMessage(), 'error');
