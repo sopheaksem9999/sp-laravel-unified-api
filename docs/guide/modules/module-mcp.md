@@ -109,7 +109,7 @@ SP_API_MCP_ENABLED=true
 
 # Production — locked behind shared secret
 SP_API_MCP_ENABLED=true
-SP_API_MCP_TOKEN=sk-mcp-prod-abc123xyz
+SP_API_MCP_TOKEN=YOUR_MCP_TOKEN
 ```
 
 ## Available Resources & Tools
@@ -210,7 +210,7 @@ Available on **both** endpoints (Data MCP and Schema MCP):
 **Request:**
 ```http
 POST /api/v1/mcp/schema
-Authorization: Bearer sk-mcp-prod-abc123xyz
+Authorization: Bearer YOUR_MCP_TOKEN
 
 {
   "jsonrpc": "2.0",
@@ -246,7 +246,7 @@ Authorization: Bearer sk-mcp-prod-abc123xyz
 **Request:**
 ```http
 POST /api/v1/mcp/schema
-Authorization: Bearer sk-mcp-prod-abc123xyz
+Authorization: Bearer YOUR_MCP_TOKEN
 
 {
   "jsonrpc": "2.0",
@@ -316,7 +316,7 @@ Authorization: Bearer sk-mcp-prod-abc123xyz
 **Request:**
 ```http
 POST /api/v1/mcp/schema
-Authorization: Bearer sk-mcp-prod-abc123xyz
+Authorization: Bearer YOUR_MCP_TOKEN
 
 {
   "jsonrpc": "2.0",
@@ -369,7 +369,7 @@ With token (production):
       "type": "remote",
       "url": "https://api.yoursaas.com/api/v1/mcp/schema",
       "headers": {
-        "Authorization": "Bearer sk-mcp-prod-abc123xyz"
+        "Authorization": "Bearer YOUR_MCP_TOKEN"
       }
     }
   }
