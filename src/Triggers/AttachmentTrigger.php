@@ -64,7 +64,7 @@ class AttachmentTrigger extends RecordTriggerBase
         if (!$oldData) {
             $tenantId = is_array($context) ? ($context['tenant_id'] ?? $context['tenantColumn'] ?? null) : null;
             try {
-                $record = RecordService::executeGetById($table, $id, [], $tenantId);
+                $record = RecordService::executeGetById(table: $table, id: $id, queryParams: [], tenantId: $tenantId);
                 $oldData = $record['data'] ?? null;
             } catch (Exception) {
                 $oldData = null;

@@ -30,7 +30,7 @@ class HasRolesTest extends TestCase
 
         $this->createPermissionTables();
 
-        $this->app['config']->set('permission.enabled', true);
+        $this->app['config']->set('permissions.enabled', true);
         $this->app['config']->set('sp-laravel-api.auth.guard', 'api');
     }
 
@@ -211,8 +211,8 @@ class HasRolesTest extends TestCase
         $allPermissions = $user->getAllPermissions();
 
         $this->assertCount(2, $allPermissions);
-        $this->assertTrue($allPermissions->pluck('name')->contains('view:invoice'));
-        $this->assertTrue($allPermissions->pluck('name')->contains('create:invoice'));
+        $this->assertTrue($allPermissions->contains('view:invoice'));
+        $this->assertTrue($allPermissions->contains('create:invoice'));
     }
 
     /** @test */
@@ -285,7 +285,7 @@ class HasRolesTest extends TestCase
         // getAllPermissions should reflect the granted permission (not stale cache)
         $refreshed = $user->getAllPermissions();
         $this->assertCount(1, $refreshed);
-        $this->assertEquals('view:invoice', $refreshed->first()->name);
+        $this->assertEquals('view:invoice', $refreshed->first());
     }
 
     /** @test */
@@ -310,7 +310,7 @@ class HasRolesTest extends TestCase
         // getAllPermissions should now reflect the role-based permission
         $userPermissions = $user->getAllPermissions();
         $this->assertCount(1, $userPermissions);
-        $this->assertEquals('view:invoice', $userPermissions->first()->name);
+        $this->assertEquals('view:invoice', $userPermissions->first());
     }
 
     /** @test */
@@ -346,10 +346,14 @@ class HasRolesTest extends TestCase
         if (!Schema::hasTable('sp_roles')) {
             Schema::create('sp_roles', function (Blueprint $table) {
                 $table->bigIncrements('id');
-                $table->string('name')->unique();
+                $table->string('name');
+                $table->string('key')->nullable();
                 $table->string('guard_name');
                 $table->text('description')->nullable();
                 $table->boolean('is_system')->default(false);
+                $table->boolean('is_master')->default(false);
+                $table->boolean('is_default')->default(false);
+                $table->unique('key', 'sp_roles_key_unique');
                 $table->timestamps();
             });
         }
@@ -364,8 +368,8 @@ class HasRolesTest extends TestCase
             });
         }
 
-        if (!Schema::hasTable('sp_model_roles')) {
-            Schema::create('sp_model_roles', function (Blueprint $table) {
+        if (!Schema::hasTable('sp_model_has_roles')) {
+            Schema::create('sp_model_has_roles', function (Blueprint $table) {
                 $table->bigIncrements('id');
                 $table->string('model_type');
                 $table->unsignedBigInteger('model_id');

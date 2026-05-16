@@ -4,6 +4,8 @@ namespace Sopheak\Core\Authorization\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Support\Str;
+use Sopheak\Core\Services\RecordConfigService;
 
 class Role extends Model
 {
@@ -11,17 +13,67 @@ class Role extends Model
 
     protected $fillable = [
         'name',
+        'key',
         'guard_name',
         'description',
         'is_system',
+        'is_master',
+        'is_default',
     ];
 
     protected $casts = [
         'is_system' => 'boolean',
+        'is_master' => 'boolean',
+        'is_default' => 'boolean',
     ];
+
+    public function __construct(array $attributes = [])
+    {
+        parent::__construct($attributes);
+
+        if (RecordConfigService::enableTenantId()) {
+            $tenantColumn = RecordConfigService::tenantColumn();
+            if (!in_array($tenantColumn, $this->fillable, true)) {
+                $this->fillable[] = $tenantColumn;
+            }
+        }
+    }
 
     protected static function booted(): void
     {
+        static::creating(function (self $role) {
+            if ($role->guard_name === null) {
+                $role->guard_name = RecordConfigService::authGuard();
+            }
+
+            if ($role->key === null) {
+                $slug = Str::slug($role->name);
+                $baseSlug = $slug;
+                $suffix = 1;
+
+                $query = static::query()->where('key', $slug);
+                if (RecordConfigService::enableTenantId()) {
+                    $tenantColumn = RecordConfigService::tenantColumn();
+                    if ($role->{$tenantColumn} !== null) {
+                        $query->where($tenantColumn, $role->{$tenantColumn});
+                    }
+                }
+
+                while ($query->exists()) {
+                    $slug = $baseSlug . '-' . $suffix++;
+                    $query = static::query()->where('key', $slug);
+                    if (RecordConfigService::enableTenantId()) {
+                        $tenantColumn = RecordConfigService::tenantColumn();
+                        if ($role->{$tenantColumn} !== null) {
+                            $query->where($tenantColumn, $role->{$tenantColumn});
+                        }
+                    }
+                }
+
+                $role->key = $slug;
+            }
+        });
+
         static::deleting(function (self $role) {
             if ($role->is_system) {
                 throw new \RuntimeException('Cannot delete system role: ' . $role->name);

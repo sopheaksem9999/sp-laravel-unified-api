@@ -36,6 +36,10 @@ See docs/ai/commands.md
 ## Coding Standards
 See docs/ai/coding-standards.md
 
+## MCP Schema Endpoint
+Route `POST /api/v1/mcp/schema` (`api_schema_mcp`) — exposed via `ApiMcpServiceProvider` when `SP_API_MCP_ENABLED=true`.
+See `docs/ai/architecture.md` and `docs/guide/modules/module-mcp.md`.
+
 ## Architecture
 See docs/ai/architecture.md
 

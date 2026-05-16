@@ -31,22 +31,20 @@ class PermissionRegistrar
 
     public function registerPermissions(): void
     {
-        Permission::query()->chunk(200, function (Collection $permissions) {
-            foreach ($permissions as $permission) {
-                $this->gate->define($permission->name, function (Model $user) use ($permission) {
-                    if ($this->userHasTrait($user)) {
-                        return $user->hasPermissionTo($permission->name);
-                    }
+        Permission::query()->pluck('name')->each(function (string $name) {
+            $this->gate->define($name, function (Model $user) use ($name) {
+                if ($this->userHasTrait($user)) {
+                    return $user->hasPermissionTo($name);
+                }
 
-                    return false;
-                });
-            }
+                return false;
+            });
         });
     }
 
     public function autoRegisterFromConfig(): void
     {
-        if (!config('permission.auto_register', true)) {
+        if (!config('permissions.auto_register', true)) {
             return;
         }
 
@@ -72,7 +70,7 @@ class PermissionRegistrar
             }
         }
 
-        if (config('permission.auto_register_functions', true)) {
+        if (config('permissions.auto_register_functions', true)) {
             $this->autoRegisterFunctionPermissions($tables, $separator);
         }
 
@@ -90,27 +88,38 @@ class PermissionRegistrar
     {
         $key = $this->getCacheKey($user);
 
-        return $this->cache->remember($key, config('permission.cache_ttl', 3600), function () use ($user) {
-            $permissions = collect();
+        $cached = $this->cache->get($key);
+        if ($cached instanceof Collection) {
+            return $cached;
+        }
 
-            $rolePermissions = Permission::query()
-                ->whereIn('id', function ($query) use ($user) {
-                    $query->select('sp_role_permissions.permission_id')
-                        ->from('sp_role_permissions')
-                        ->join('sp_model_roles', 'sp_role_permissions.role_id', '=', 'sp_model_roles.role_id')
-                        ->where('sp_model_roles.model_type', get_class($user))
-                        ->where('sp_model_roles.model_id', $user->getKey());
-                })
-                ->get();
+        $permissions = $this->resolveUserPermissions($user);
+        $this->cache->put($key, $permissions, config('permissions.cache_ttl', 3600));
 
-            $permissions = $permissions->merge($rolePermissions);
+        return $permissions;
+    }
 
-            $directPermissions = $user->permissions()->get();
+    protected function resolveUserPermissions(Model $user): Collection
+    {
+        $permissions = collect();
 
-            $permissions = $permissions->merge($directPermissions);
+        $rolePermissionNames = Permission::query()
+            ->whereIn('id', function ($query) use ($user) {
+                $query->select('sp_role_permissions.permission_id')
+                    ->from('sp_role_permissions')
+                    ->join('sp_model_has_roles', 'sp_role_permissions.role_id', '=', 'sp_model_has_roles.role_id')
+                    ->where('sp_model_has_roles.model_type', get_class($user))
+                    ->where('sp_model_has_roles.model_id', $user->getKey());
+            })
+            ->pluck('name');
 
-            return $permissions->unique('id')->values();
-        });
+        $permissions = $permissions->merge($rolePermissionNames);
+
+        $directPermissionNames = $user->permissions()->pluck('name');
+
+        $permissions = $permissions->merge($directPermissionNames);
+
+        return $permissions->unique()->values();
     }
 
     public function forgetPermissions(Model $user): void
@@ -130,7 +139,7 @@ class PermissionRegistrar
         $version = $this->getCacheVersion();
         $tenantId = '';
 
-        if (config('permission.tenant_scoped', false)) {
+        if (config('permissions.tenant_scoped', false)) {
             $tenantId = '_' . ($user->tenant_id ?? 'global');
         }
 

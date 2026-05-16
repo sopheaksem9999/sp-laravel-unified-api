@@ -11,9 +11,11 @@ use Sopheak\Core\Types\RecordHasManyThroughType;
 use Sopheak\Core\Types\RecordHasManyType;
 use Sopheak\Core\Types\RecordMetaBelongsToManyType;
 use Sopheak\Core\Types\RecordMetaHasManyThroughType;
+use Sopheak\Core\Types\RecordMorphToManyType;
 use Sopheak\Core\Types\RecordSpatiePermissionType;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Sopheak\Core\Utilities\TimeUtils;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
@@ -368,35 +370,61 @@ class RelationshipResolverUtils
                     return $result;
                 }
 
-                // Handle RecordSpatiePermissionType
+                // Handle RecordSpatiePermissionType (external Spatie\Permission integration)
                 if ($rel instanceof RecordSpatiePermissionType) {
-                    if (!class_exists('Spatie\\Permission\\PermissionServiceProvider')) {
-                        throw new RuntimeException('Spatie permission relationship configured but spatie/laravel-permission is not installed.');
-                    }
-
                     $result = [
                         'type' => 'morphToMany',
-                        // Use the relationship alias as the logical table key so it matches SchemaRegistry
-                        // and RecordTableType configuration (e.g. 'roles'). The actual Eloquent model
-                        // class is provided separately via the 'relation' key.
                         'table' => $alias,
                         'pivot_table' => $rel->table,
-                        'foreign_pivot_key' => $rel->foreignPivotKey ?? config('permission.column_names.model_morph_key'),
-                        'related_pivot_key' => $rel->relatedPivotKey ?? config('permission.column_names.role_pivot_key', 'role_id'),
+                        'foreign_pivot_key' => $rel->foreignPivotKey ?? config('permissions.column_names.model_morph_key'),
+                        'related_pivot_key' => $rel->relatedPivotKey ?? config('permissions.column_names.role_pivot_key', 'role_id'),
                         'parent_key' => $rel->parentKey ?? $localPk,
                         'related_key' => $rel->relatedKey ?? 'id',
                         'relation' => $rel->relation ?? 'model',
                         'morph_type' => 'model_type',
-                        'morph_id' => config('permission.column_names.model_morph_key'),
+                        'morph_id' => config('permissions.column_names.model_morph_key'),
                         'with_pivot' => $rel->withPivot ?? ['model_type'],
                         'where_pivot' => $rel->wherePivot ?? [],
                         'with_timestamps' => $rel->withTimestamps ?? false,
                         'teams_enabled' => $rel->teamsEnabled ?? false,
-                        'teams_key' => $rel->teamsKey ?? config('permission.column_names.team_foreign_key', 'team_id'),
+                        'teams_key' => $rel->teamsKey ?? config('permissions.column_names.team_foreign_key', 'team_id'),
                         'selectable' => ['*'],
                     ];
 
-                    // Normalize relation to FQCN if provided as 'model' placeholder or missing
+                    if (!isset($result['relation']) || $result['relation'] === 'model') {
+                        $result['relation'] = 'App\\Models\\' . Str::studly(Str::singular($mainTable));
+                    }
+
+                    self::$resolveCache[$cacheKey] = $result;
+
+                    return $result;
+                }
+
+                // Handle RecordMorphToManyType (built-in morphToMany)
+                if ($rel instanceof RecordMorphToManyType) {
+                    $relatedTableName = $rel->related && class_exists($rel->related)
+                        ? (new $rel->related)->getTable()
+                        : $alias;
+
+                    $result = [
+                        'type' => 'morphToMany',
+                        'table' => $relatedTableName,
+                        'pivot_table' => $rel->table,
+                        'foreign_pivot_key' => $rel->foreignPivotKey ?? 'model_id',
+                        'related_pivot_key' => $rel->relatedPivotKey ?? 'role_id',
+                        'parent_key' => $rel->parentKey ?? $localPk,
+                        'related_key' => $rel->relatedKey ?? 'id',
+                        'relation' => $rel->relation ?? 'model',
+                        'morph_type' => 'model_type',
+                        'morph_id' => 'model_id',
+                        'with_pivot' => $rel->withPivot ?? ['model_type'],
+                        'where_pivot' => $rel->wherePivot ?? [],
+                        'with_timestamps' => $rel->withTimestamps ?? false,
+                        'teams_enabled' => $rel->teamsEnabled ?? false,
+                        'teams_key' => $rel->teamsKey ?? null,
+                        'selectable' => ['*'],
+                    ];
+
                     if (!isset($result['relation']) || $result['relation'] === 'model') {
                         $result['relation'] = 'App\\Models\\' . Str::studly(Str::singular($mainTable));
                     }
@@ -945,34 +973,78 @@ class RelationshipResolverUtils
         $foreignKey = $config['foreign_key'];
         $ownerKey = $config['owner_key'] ?? 'id';
         $enableTenantId = RecordConfigService::enableTenantId();
+        $driver = DB::getDriverName();
 
         // Get actual table names from schema
         $actualMainTableName = $schema[$table]->table ?? $table;
         $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
 
         // Use alias for subquery to avoid conflicts when main table = related table
-        $subqueryAlias = $actualRelatedTableName === $actualMainTableName ? $actualRelatedTableName . '_sub' : $actualRelatedTableName;
-        // Build column selection for JSON object
-        $jsonObjectExpr = self::buildJsonObjectExpression($columns, $schema[$relatedTable]->columns ?? [], $subqueryAlias);
+        $subAlias = $actualRelatedTableName === $actualMainTableName ? $actualRelatedTableName . '_sub' : $actualRelatedTableName;
 
-        $subquery = DB::table($actualRelatedTableName . ' as ' . $subqueryAlias)
-            ->selectRaw($jsonObjectExpr)
-            ->whereColumn(sprintf('%s.%s', $subqueryAlias, $ownerKey), sprintf('%s.%s', $actualMainTableName, $foreignKey));
+        // Build column refs for the inner SELECT
+        $validColumns = self::resolveJsonObjectColumns($columns, $schema[$relatedTable]->columns ?? []);
+        if ([] === $validColumns) {
+            $validColumns = ['id'];
+        }
 
-        // Apply tenant filtering if enabled
+        $innerCols = [];
+        foreach ($validColumns as $col) {
+            $innerCols[] = sprintf('%s.%s AS %s', $subAlias, $col, $col);
+        }
+        $innerSelect = implode(', ', $innerCols);
+
+        // Build the inner query: SELECT cols FROM related AS alias WHERE correlation AND filters LIMIT 1
+        $innerSql = "SELECT {$innerSelect} FROM {$actualRelatedTableName} AS {$subAlias}"
+                   . " WHERE {$subAlias}.{$ownerKey} = {$actualMainTableName}.{$foreignKey}";
+
         $tenantCol = RecordConfigService::tenantColumn();
         if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
-            $subquery->where($subqueryAlias . '.' . $tenantCol, $tenantId);
+            $innerSql .= " AND {$subAlias}.{$tenantCol} = " . (int) $tenantId;
         }
 
-        // Apply soft delete filtering
         if ($schema[$relatedTable]->softDeletes ?? false) {
-            $subquery->whereNull($subqueryAlias . '.deleted_at');
+            $innerSql .= " AND {$subAlias}.deleted_at IS NULL";
         }
 
-        $subquery->limit(1);
+        $innerSql .= ' LIMIT 1';
 
-        $builder->addSelect([$alias => $subquery]);
+        // Wrap in a single-level scalar subquery: (SELECT row_to_json(__sp_obj) FROM (inner) AS __sp_obj)
+        if ('pgsql' === $driver) {
+            $rawSql = "(SELECT row_to_json(__sp_obj) FROM ({$innerSql}) AS __sp_obj) AS \"{$alias}\"";
+        } elseif ('sqlite' === $driver) {
+            $jsonPairs = [];
+            foreach ($validColumns as $col) {
+                $jsonPairs[] = "'{$col}', {$subAlias}.{$col}";
+            }
+            $rawSql = "(SELECT json_object(" . implode(', ', $jsonPairs) . ") FROM {$actualRelatedTableName} AS {$subAlias}"
+                    . " WHERE {$subAlias}.{$ownerKey} = {$actualMainTableName}.{$foreignKey}";
+
+            if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
+                $rawSql .= " AND {$subAlias}.{$tenantCol} = " . (int) $tenantId;
+            }
+            if ($schema[$relatedTable]->softDeletes ?? false) {
+                $rawSql .= " AND {$subAlias}.deleted_at IS NULL";
+            }
+            $rawSql .= " LIMIT 1) AS \"{$alias}\"";
+        } else {
+            $jsonPairs = [];
+            foreach ($validColumns as $col) {
+                $jsonPairs[] = "'{$col}', {$subAlias}.{$col}";
+            }
+            $rawSql = "(SELECT JSON_OBJECT(" . implode(', ', $jsonPairs) . ") FROM {$actualRelatedTableName} AS {$subAlias}"
+                    . " WHERE {$subAlias}.{$ownerKey} = {$actualMainTableName}.{$foreignKey}";
+
+            if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
+                $rawSql .= " AND {$subAlias}.{$tenantCol} = " . (int) $tenantId;
+            }
+            if ($schema[$relatedTable]->softDeletes ?? false) {
+                $rawSql .= " AND {$subAlias}.deleted_at IS NULL";
+            }
+            $rawSql .= " LIMIT 1) AS \"{$alias}\"";
+        }
+
+        $builder->selectRaw($rawSql);
 
         return $builder;
     }
@@ -1074,6 +1146,8 @@ class RelationshipResolverUtils
 
             if (isset($schema[$pivotTable]->columns[$tenantCol])) {
                 $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualPivotTableName, $tenantId);
+            } elseif (Schema::hasColumn($actualPivotTableName, $tenantCol)) {
+                $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualPivotTableName, $tenantId);
             }
         }
 
@@ -1096,7 +1170,6 @@ class RelationshipResolverUtils
 
     /**
      * Add morphToMany relationship subquery with JSON array aggregation.
-     * Specifically supports Spatie Permission-style tables (model_has_roles, etc.).
      */
     private static function addMorphToManySubquery(Builder $builder, string $table, string $alias, array $config, array $columns, mixed $tenantId, array $schema): Builder
     {
@@ -1152,6 +1225,8 @@ class RelationshipResolverUtils
             }
 
             if (isset($schema[$pivotTable]->columns[$tenantCol])) {
+                $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualPivotTableName, $tenantId);
+            } elseif (Schema::hasColumn($actualPivotTableName, $tenantCol)) {
                 $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualPivotTableName, $tenantId);
             }
         }
@@ -1912,7 +1987,7 @@ class RelationshipResolverUtils
         // Apply tenant scoping only if enabled
         $tenantCol = RecordConfigService::tenantColumn();
         if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
-            $builder->where($tenantCol, $tenantId);
+            $builder->where($actualRelatedTableName . '.' . $tenantCol, $tenantId);
         }
 
         // Apply soft delete filtering
@@ -1951,7 +2026,7 @@ class RelationshipResolverUtils
             // Apply tenant scoping only if enabled
             $tenantCol = RecordConfigService::tenantColumn();
             if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
-                $builder->where($tenantCol, $tenantId);
+                $builder->where($relatedTableName . '.' . $tenantCol, $tenantId);
             }
 
             // Apply soft delete filtering
@@ -2002,8 +2077,13 @@ class RelationshipResolverUtils
                 $chunkQuery = clone $builder;
 
                 $chunkQuery->join($pivotTable, $relatedTableName . '.id', '=', $pivotTable . '.' . $relatedKey)
-                    ->whereIn($pivotTable . '.' . $parentKey, $chunk)
-                    ->addSelect($pivotTable . '.' . $parentKey . ' as pivot_parent_key');
+                    ->whereIn($pivotTable . '.' . $parentKey, $chunk);
+
+                if ($enableTenantId && $tenantId && isset($schema[$pivotTable]->columns[$tenantCol])) {
+                    $chunkQuery->where($pivotTable . '.' . $tenantCol, $tenantId);
+                }
+
+                $chunkQuery->addSelect($pivotTable . '.' . $parentKey . ' as pivot_parent_key');
 
                 // Apply column selection for related table respecting requested columns
                 if (in_array('*', $effectiveColumns, true)) {
@@ -2014,7 +2094,7 @@ class RelationshipResolverUtils
                     }
                 }
 
-                // Add model_type condition and pivot columns for morphToMany relationships (like Spatie permission system)
+                // Add model_type condition and pivot columns for morphToMany relationships
                 if ('morphToMany' === $type && isset($relationshipConfig['morph_type'])) {
                     $morphType = $relationshipConfig['morph_type'];
                     $modelClass = config('auth.providers.users.model');
@@ -2029,7 +2109,7 @@ class RelationshipResolverUtils
                         ->addSelect($pivotTable . '.' . $relatedKey . ' as pivot_role_id')
                         ->addSelect($pivotTable . '.' . $morphType . ' as pivot_model_type');
                 } elseif (str_contains((string) $pivotTable, 'model_has_')) {
-                    // Fallback for legacy Spatie permission tables
+                    // Fallback for legacy permission tables
                     $modelClass = config('auth.providers.users.model');
                     if (!is_string($modelClass) || '' === $modelClass) {
                         $modelClass = User::class;

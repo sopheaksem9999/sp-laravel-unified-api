@@ -1,5 +1,6 @@
 <?php
 
+use Sopheak\Core\Types\RecordMetaBelongsToManyType;
 use Sopheak\Core\Types\RecordTableType;
 
 return [
@@ -85,17 +86,35 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Migrate From Spatie
+    | Super-Admin Bypass
     |--------------------------------------------------------------------------
     |
-    | When set to true, the sp-laravel-api:migrate-from-spatie command is
-    | available to migrate data from spatie/laravel-permission tables to the
-    | built-in sp_* tables.
+    | When set to a callable, users for whom this callback returns true will
+    | implicitly have all permissions — the DB permission check is bypassed.
     |
-    | Old Spatie tables are never modified or dropped by the migration.
+    | The callback receives the authenticated user and must return bool.
+    |
+    | Example (Passport super-admin scope + is_admin flag):
+    | 'super_admin_callback' => fn ($user) => $user->tokenCan('super-admin') || $user->is_admin,
+    |
+    | Default: null (no bypass — all users must have explicit permissions).
     |
     */
-    'migrate_from_spatie' => env('SP_PERMISSION_MIGRATE_FROM_SPATIE', false),
+    'super_admin_callback' => null,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Migrate From Legacy
+    |--------------------------------------------------------------------------
+    |
+    | When set to true, the sp-laravel-api:migrate-from-legacy command is
+    | available to migrate data from legacy permission tables (e.g. from
+    | spatie/laravel-permission) to the built-in sp_* tables.
+    |
+    | Old legacy tables are never modified or dropped by the migration.
+    |
+    */
+    'migrate_from_legacy' => env('SP_PERMISSION_MIGRATE_FROM_LEGACY', false),
 
     /*
     |--------------------------------------------------------------------------
@@ -131,13 +150,24 @@ return [
                 'guard_name' => ['type' => 'string', 'nullable' => false],
                 'description' => ['type' => 'text', 'nullable' => true],
             ],
+            relationships: [
+                'roles' => new RecordMetaBelongsToManyType(
+                    related: 'sp_roles',
+                    table: 'sp_role_permissions',
+                    foreignPivotKey: 'permission_id',
+                    relatedPivotKey: 'role_id',
+                    parentKey: 'id',
+                    relatedKey: 'id',
+                    withTimestamps: true,
+                ),
+            ],
         ),
         'sp_roles' => new RecordTableType(
             table: 'sp_roles',
             pmsName: 'role',
             primaryKey: 'id',
             softDeletes: false,
-            hasTenantId: false,
+            hasTenantId: config('record.enable_tenant_id', false),
             isAuthRead: true,
             isAuthWrite: true,
             canRead: true,
@@ -145,12 +175,31 @@ return [
             canUpdate: true,
             canDelete: true,
             canUpsert: false,
-            columns: [
-                'id' => ['type' => 'bigIncrements', 'nullable' => false],
-                'name' => ['type' => 'string', 'nullable' => false],
-                'guard_name' => ['type' => 'string', 'nullable' => false],
-                'description' => ['type' => 'text', 'nullable' => true],
-                'is_system' => ['type' => 'boolean', 'nullable' => false],
+            columns: array_merge(
+                [
+                    'id' => ['type' => 'bigIncrements', 'nullable' => false],
+                    'name' => ['type' => 'string', 'nullable' => false],
+                    'key' => ['type' => 'string', 'nullable' => true],
+                    'guard_name' => ['type' => 'string', 'nullable' => true, 'default' => 'api'],
+                    'description' => ['type' => 'text', 'nullable' => true],
+                    'is_system' => ['type' => 'boolean', 'nullable' => false, 'default' => false],
+                    'is_master' => ['type' => 'boolean', 'nullable' => false, 'default' => false],
+                    'is_default' => ['type' => 'boolean', 'nullable' => false, 'default' => false],
+                ],
+                config('record.enable_tenant_id', false)
+                    ? [config('record.tenant_column', 'tenant_id') => ['type' => 'string', 'nullable' => true]]
+                    : []
+            ),
+            relationships: [
+                'permissions' => new RecordMetaBelongsToManyType(
+                    related: 'sp_permissions',
+                    table: 'sp_role_permissions',
+                    foreignPivotKey: 'role_id',
+                    relatedPivotKey: 'permission_id',
+                    parentKey: 'id',
+                    relatedKey: 'id',
+                    withTimestamps: true,
+                ),
             ],
         ),
     ],

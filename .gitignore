@@ -38,3 +38,5 @@ build/*
 build
 .claude/
 .php-cs-fixer.cache
+/.opencode
+.opencode/

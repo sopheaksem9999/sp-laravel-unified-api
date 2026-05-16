@@ -20,8 +20,8 @@ class PermissionUtils
 
         $tableConfig = $tables[$table];
 
-        $readActions = [RecordConstants::READ, RecordConstants::WRITE];
-        $writeActions = [RecordConstants::ACTION_CREATE, RecordConstants::ACTION_UPDATE, RecordConstants::ACTION_DELETE, RecordConstants::ACTION_RESTORE, 'force_delete'];
+        $readActions = [RecordConstants::READ];
+        $writeActions = [RecordConstants::WRITE, RecordConstants::ACTION_CREATE, RecordConstants::ACTION_UPDATE, RecordConstants::ACTION_DELETE, RecordConstants::ACTION_RESTORE, 'force_delete'];
 
         if (is_object($tableConfig) && in_array($action, $readActions, true) && property_exists($tableConfig, 'isAuthRead')) {
             return !(bool) $tableConfig->isAuthRead;

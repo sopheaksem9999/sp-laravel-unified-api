@@ -392,7 +392,7 @@ class SetupPackageCommand extends Command
             use Sopheak\Core\Types\RecordHasManyThroughType;
             use Sopheak\Core\Types\RecordHasManyType;
             use Sopheak\Core\Types\RecordMetaBelongsToManyType;
-            use Sopheak\Core\Types\RecordSpatiePermissionType;
+            use Sopheak\Core\Types\RecordMorphToManyType;
             use Sopheak\Core\Types\RecordTableType;
             use Sopheak\Core\Types\RecordTableTriggerType;
 

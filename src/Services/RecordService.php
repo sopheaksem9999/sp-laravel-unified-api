@@ -1487,6 +1487,39 @@ class RecordService
         return RecordUtils::resolveTenantIdFromRequest($request);
     }
 
+    /**
+     * Resolve tenant ID for relationship subqueries independently of the main table's hasTenantId.
+     * When the main table isn't tenant-scoped (e.g., users), pivot tables like sp_model_has_roles
+     * may still need tenant filtering.
+     */
+    private function resolveRelationshipTenantId(Request $request, mixed $tenantId): mixed
+    {
+        if (!RecordUtils::isTenantIdMissing($tenantId)) {
+            return $tenantId;
+        }
+
+        if (!$this->isTenantIdEnabled()) {
+            return null;
+        }
+
+        $fromAttr = $request->attributes->get(self::TENANT_ATTRIBUTE_KEY);
+        if (!RecordUtils::isTenantIdMissing($fromAttr)) {
+            return $fromAttr;
+        }
+
+        $fromHeader = $request->header(RecordConfigService::tenantHeader());
+        if (!RecordUtils::isTenantIdMissing($fromHeader)) {
+            return $fromHeader;
+        }
+
+        $fromInput = $request->input(RecordConfigService::tenantColumn());
+        if (!RecordUtils::isTenantIdMissing($fromInput)) {
+            return $fromInput;
+        }
+
+        return null;
+    }
+
     public function applyTenantFilter(mixed $query, string $table, mixed $tenantId): void
     {
         $tenantId = $this->normalizeTenantId($tenantId);
@@ -1603,8 +1636,6 @@ class RecordService
 
         if ($skipTotal) {
             $total = 0;
-            $headers['X-Total-Count'] = '0';
-            $meta = ['total' => 0];
         } else {
             $countQuery = clone $builder;
             $total = $countQuery->count();
@@ -1612,11 +1643,14 @@ class RecordService
         }
 
         $data = $builder->forPage($page, $perPage)->get()->all();
-        $actualCount = count($data);
 
         $paginationRequested = $request->has('page') || $request->has('per_page');
 
-        if (!$skipTotal && $total > 0) {
+        if ($skipTotal) {
+            $meta = $paginationRequested
+                ? ['page' => $page, 'per_page' => $perPage]
+                : [];
+        } elseif ($total > 0) {
             $lastPage = (int) ceil($total / $perPage);
             if ($paginationRequested) {
                 $headers['X-Page'] = (string) $page;
@@ -1631,7 +1665,7 @@ class RecordService
                 $meta = ['total' => $total];
             }
         } else {
-            $meta = ['total' => $actualCount];
+            $meta = ['total' => 0];
         }
 
         return [$data, $meta, $headers, $total];
@@ -1654,24 +1688,86 @@ class RecordService
         $direction = $request->input('direction', 'next');
         $cursorColumn = $request->input('cursor_column', RecordConfigService::cursorDefaultColumn());
 
-        $cursorOperator = $direction === 'next' ? '>' : '<';
-        $sortOrder = $direction === 'next' ? 'asc' : 'desc';
+        $table = $builder->from;
+        $isUuidColumn = self::detectUuidCursorColumn($builder, $cursorColumn);
+        // First page has no cursor filter — use null so frontend sends cursor=
+        $firstCursorDefault = null;
 
-        if (RecordConfigService::cursorCompositeEnabled() && $cursorColumn !== $primaryKey) {
-            // Composite cursor: use (cursor_column, primary_key) for stable ordering
-            // when sort column may have non-unique values
-            $builder->where(function ($q) use ($cursorColumn, $primaryKey, $cursor, $cursorOperator) {
-                $q->where($cursorColumn, $cursorOperator, $cursor)
-                  ->orWhere(function ($q2) use ($cursorColumn, $primaryKey, $cursor, $cursorOperator) {
-                      $q2->where($cursorColumn, '=', $cursor)
-                         ->where($primaryKey, $cursor === 'next' ? '>=' : '<=', $cursor);
-                  });
-            });
-            $builder->orderBy($cursorColumn, $sortOrder)
+        // Normalize cursor: cast numeric strings to int so PostgreSQL uses index-friendly comparisons (skip UUID columns)
+        if (!$isUuidColumn && null !== $cursor && '' !== $cursor && ctype_digit((string) $cursor)) {
+            $cursor = (int) $cursor;
+        }
+
+        // Count total matching records before cursor filtering
+        $skipTotal = $request->boolean('skip_total', RecordConfigService::skipTotalDefault());
+        $total = 0;
+        $firstCursor = $firstCursorDefault;
+        $lastCursor = null;
+
+        if (!$skipTotal) {
+            $total = (clone $builder)->count();
+
+            if ($total > $perPage && RecordConfigService::cursorBoundaryEnabled()) {
+
+                $lastPageSize = $total % $perPage;
+                $lastPageSize = 0 === $lastPageSize ? $perPage : $lastPageSize;
+
+                // Get the cursor at the start of the last page using O(per_page) query:
+                // ORDER BY id DESC LIMIT last_page_size + 1, then pick the MIN
+                $boundaryRows = (clone $builder)
+                    ->select($cursorColumn)
+                    ->reorder()
+                    ->orderBy($cursorColumn, 'desc')
+                    ->limit($lastPageSize + 1)
+                    ->get();
+
+                $boundaryMin = $boundaryRows->min($cursorColumn);
+                $lastCursor = null !== $boundaryMin ? $boundaryMin : null;
+            }
+        }
+
+        $hasCursor = null !== $cursor && '' !== $cursor && 0 !== $cursor;
+
+        // For UUID columns, only apply cursor filter when the cursor is a valid UUID
+        if ($isUuidColumn && $hasCursor) {
+            if (!is_string($cursor) || !preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', (string) $cursor)) {
+                $hasCursor = false;
+                $cursor = null;
+            }
+        }
+
+        if ($hasCursor) {
+            $builder->reorder();
+
+            // Default sort: created_at DESC (matches applySort behavior)
+            $sortOrder = $request->input('order', 'desc');
+            $sortOrder = in_array(strtolower($sortOrder), ['asc', 'desc'], true) ? strtolower($sortOrder) : 'desc';
+
+            // Cursor operator depends on sort direction:
+            // ASC + next → >  |  ASC + prev → <
+            // DESC + next → <  |  DESC + prev → >
+            $cursorOperator = match (true) {
+                'asc' === $sortOrder && 'next' === $direction => '>',
+                'asc' === $sortOrder && 'prev' === $direction => '<',
+                'desc' === $sortOrder && 'next' === $direction => '<',
+                'desc' === $sortOrder && 'prev' === $direction => '>',
+                default => '>',
+            };
+
+            if (RecordConfigService::cursorCompositeEnabled() && $cursorColumn !== $primaryKey) {
+                $builder->where(function ($q) use ($cursorColumn, $primaryKey, $cursor, $cursorOperator) {
+                    $q->where($cursorColumn, $cursorOperator, $cursor)
+                        ->orWhere(function ($q2) use ($cursorColumn, $primaryKey, $cursor, $cursorOperator) {
+                            $q2->where($cursorColumn, '=', $cursor)
+                                ->where($primaryKey, $cursorOperator === '>' ? '>=' : '<=', $cursor);
+                        });
+                });
+                $builder->orderBy($cursorColumn, $sortOrder)
                     ->orderBy($primaryKey, $sortOrder);
-        } else {
-            $builder->where($cursorColumn, $cursorOperator, $cursor)
+            } else {
+                $builder->where($cursorColumn, $cursorOperator, $cursor)
                     ->orderBy($cursorColumn, $sortOrder);
+            }
         }
 
         $data = $builder->limit($perPage)->get()->all();
@@ -1687,9 +1783,12 @@ class RecordService
             'cursor' => $nextCursor,
             'direction' => $direction,
             'cursor_column' => $cursorColumn,
+            'total' => $total,
+            'first_cursor' => $firstCursor,
+            'last_cursor' => $lastCursor,
         ];
 
-        return [$data, $meta, $headers, 0];
+        return [$data, $meta, $headers, $total];
     }
 
     /**
@@ -1729,7 +1828,7 @@ class RecordService
 
         $actualTableName = $tableSchema->table ?? $table;
 
-        $filters = $request->except(['page', 'per_page', 'limit', 'cursor', 'cursor_column', 'direction', 'skip_total', 'explain']);
+        $filters = $request->except(['page', 'per_page', 'limit', 'cursor', 'cursor_column', 'direction', 'skip_total', 'add_total', 'explain']);
 
         $selectParam = $request->query('select', '');
         $effectiveSelectParam = self::getCombinedSelectParam($request);
@@ -1825,9 +1924,12 @@ class RecordService
         } elseif ($request->has('limit') && !$request->has('per_page')) {
             $limit = max(1, min((int) $request->input('limit'), RecordConfigService::limitMax()));
             $data = $builder->limit($limit)->get()->all();
-            $total = count($data);
-            $headers['X-Total-Count'] = (string) $total;
-            $meta = ['total' => $total];
+
+            if ($request->boolean('add_total')) {
+                $total = count($data);
+                $headers['X-Total-Count'] = (string) $total;
+                $meta = ['total' => $total];
+            }
         } else {
             [$data, $meta, $headers, $total] = $this->executePagination($builder, $request, $tableSchema->primaryKey ?? 'id');
         }
@@ -1946,7 +2048,7 @@ class RecordService
                         $optimizedBuilder,
                         $table,
                         $includes,
-                        $this->shouldApplyTenantId($tableSchema) ? $tenantId : null
+                        $this->resolveRelationshipTenantId($request, $tenantId)
                     );
 
                     // Re-apply sorting to optimized query to ensure consistent order
@@ -1960,7 +2062,7 @@ class RecordService
                     $data,
                     $table,
                     $effectiveSelectParam,
-                    $this->shouldApplyTenantId($tableSchema) ? $tenantId : null
+                    $this->resolveRelationshipTenantId($request, $tenantId)
                 );
             }
         }
@@ -2103,7 +2205,12 @@ class RecordService
             throw new RuntimeException('Failed to create record or retrieve inserted ID for table: ' . $table);
         }
 
-        $record = self::executeGetById($table, $result['id'], $queryParams, $tenantId);
+        $record = self::executeGetById(
+            table: $table,
+            id: $result['id'],
+            queryParams: $queryParams,
+            tenantId: $tenantId
+        );
 
         $request = request();
         $auditContext = [
@@ -2137,7 +2244,12 @@ class RecordService
     {
         $service = app(self::class);
 
-        $oldRecord = self::executeGetById($table, $id, [], $tenantId);
+        $oldRecord = self::executeGetById(
+            table: $table,
+            id: $id,
+            queryParams: [],
+            tenantId: $tenantId
+        );
         $oldPayload = $oldRecord['data'] ?? [];
         if (!is_array($oldPayload)) {
             $oldPayload = json_decode(json_encode($oldPayload), true) ?: [];
@@ -2204,7 +2316,12 @@ class RecordService
         }
 
         // Fetch the record before deleting it
-        $record = self::executeGetById($table, $id, $queryParams, $tenantId);
+        $record = self::executeGetById(
+            table: $table,
+            id: $id,
+            queryParams: $queryParams,
+            tenantId: $tenantId
+        );
         $oldPayload = $record['data'] ?? [];
         if (!is_array($oldPayload)) {
             $oldPayload = json_decode(json_encode($oldPayload), true) ?: [];
@@ -2348,7 +2465,7 @@ class RecordService
             $tenantId = RecordUtils::resolveTenantIdFromRequest($request);
         }
 
-        $filters = $request->except(['page', 'per_page', 'limit', 'cursor', 'cursor_column', 'direction', 'skip_total', 'explain']);
+        $filters = $request->except(['page', 'per_page', 'limit', 'cursor', 'cursor_column', 'direction', 'skip_total', 'add_total', 'explain']);
         $includes = $request->query('select', []);
         if (is_string($includes)) {
             $includes = explode(',', $includes);
@@ -2566,7 +2683,7 @@ class RecordService
                         $optimizedBuilder,
                         $table,
                         $includes,
-                        $tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema) ? $tenantId : null
+                        $service->resolveRelationshipTenantId($request, $tenantId)
                     );
 
                     // Re-apply sorting to optimized query to ensure consistent order
@@ -2580,7 +2697,7 @@ class RecordService
                     $data,
                     $table,
                     $effectiveSelectParam,
-                    $tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema) ? $tenantId : null
+                    $service->resolveRelationshipTenantId($request, $tenantId)
                 );
             }
         }
@@ -2751,7 +2868,7 @@ class RecordService
                     $optimizedBuilder,
                     $table,
                     $includes,
-                    $this->shouldApplyTenantId($tableSchema) ? $tenantId : null
+                    $this->resolveRelationshipTenantId($request, $tenantId)
                 );
 
                 $optimizedRecord = $optimizedBuilder->where($pk, $id)->first();
@@ -2765,7 +2882,7 @@ class RecordService
                     [$record],
                     $table,
                     $effectiveSelectParam,
-                    $this->shouldApplyTenantId($tableSchema) ? $tenantId : null
+                    $this->resolveRelationshipTenantId($request, $tenantId)
                 );
                 $record = $data[0] ?? $record;
             }
@@ -2892,6 +3009,12 @@ class RecordService
 
             if ($result instanceof JsonResponse) {
                 $responseData = $result->getData();
+
+                // If already a standard API response (has success + error_code), return as-is
+                if (is_object($responseData) && property_exists($responseData, 'success') && property_exists($responseData, 'error_code')) {
+                    return $result;
+                }
+
                 $statusCode = $result->getStatusCode();
                 $meta = [];
                 $records = null;
@@ -2900,8 +3023,7 @@ class RecordService
                     $records = $responseData;
                 } else {
                     $records = $responseData->data;
-                    unset($meta->data);
-                    $meta = json_decode(json_encode($meta), true);
+                    $meta = [];
                 }
 
                 $errorCode = null;
@@ -3067,5 +3189,35 @@ class RecordService
         }
 
         return $recordIds;
+    }
+
+    private static function detectUuidCursorColumn(Builder $builder, string $column): bool
+    {
+        $table = $builder->from;
+
+        // Try schema registry first
+        $schema = SchemaRegistryUtils::get();
+        if (is_string($table) && isset($schema[$table])) {
+            $tableSchema = $schema[$table];
+            if ($tableSchema instanceof RecordTableType) {
+                $colDef = $tableSchema->columns[$column] ?? null;
+                if ($colDef !== null) {
+                    return ($colDef['type'] ?? '') === 'uuid' || ($colDef['udt_name'] ?? '') === 'uuid';
+                }
+            }
+        }
+
+        // Fallback: sample a row to detect non-numeric IDs
+        if (is_string($table)) {
+            try {
+                $sample = (clone $builder)->select($column)->limit(1)->first();
+                if ($sample && isset($sample->{$column}) && is_string($sample->{$column})) {
+                    return !ctype_digit((string) $sample->{$column});
+                }
+            } catch (\Throwable) {
+            }
+        }
+
+        return false;
     }
 }
