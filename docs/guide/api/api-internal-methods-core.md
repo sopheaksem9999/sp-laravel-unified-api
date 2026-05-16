@@ -98,9 +98,13 @@ You can pass query parameters as an array or a URL-encoded string.
 use Sopheak\Core\Services\RecordService;
 
 // Using array syntax
-$invoice = RecordService::executeGetById('invoices', 1, [
-    'select' => '*,customer(*),items(*,product(*))'
-]);
+$invoice = RecordService::executeGetById(
+    table: 'invoices',
+    id: 1,
+    queryParams: [
+        'select' => '*,customer(*),items(*,product(*))'
+    ]
+);
 
 // Using string syntax
 $activeUsers = RecordService::executeGetByFilter('users', 'select=*,profile(*)&status=eq.active');

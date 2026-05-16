@@ -37,20 +37,20 @@ use Sopheak\Core\Enums\RecordRelationshipsEnum;
  * ```php
  * // User roles with Spatie\Permission
  * $userRoles = new RecordSpatiePermissionType(
- *     related: config('permission.models.role'),
+ *     related: config('permissions.models.role'),
  *     relation: 'model',
- *     table: config('permission.table_names.model_has_roles'),
- *     foreignPivotKey: config('permission.column_names.model_morph_key'),
+ *     table: config('permissions.table_names.model_has_roles'),
+ *     foreignPivotKey: config('permissions.column_names.model_morph_key'),
  *     relatedPivotKey: 'role_id',
  *     teamsEnabled: true
  * );
  *
  * // User permissions with Spatie\Permission
  * $userPermissions = new RecordSpatiePermissionType(
- *     related: config('permission.models.permission'),
+ *     related: config('permissions.models.permission'),
  *     relation: 'model',
- *     table: config('permission.table_names.model_has_permissions'),
- *     foreignPivotKey: config('permission.column_names.model_morph_key'),
+ *     table: config('permissions.table_names.model_has_permissions'),
+ *     foreignPivotKey: config('permissions.column_names.model_morph_key'),
  *     relatedPivotKey: 'permission_id',
  *     teamsEnabled: false
  * );
@@ -97,21 +97,21 @@ class RecordSpatiePermissionType
         public ?string $teamsKey = null,
     ) {
         if (!class_exists(PermissionServiceProvider::class)) {
-            throw new InvalidArgumentException('RecordSpatiePermissionType requires spatie/laravel-permission to be installed.');
+            //throw new InvalidArgumentException('RecordSpatiePermissionType requires spatie/laravel-permission to be installed.');
         }
 
         if (empty($related)) {
-            throw new InvalidArgumentException('related model class name cannot be empty');
+            //throw new InvalidArgumentException('related model class name cannot be empty');
         }
 
         if (empty($relation)) {
-            throw new InvalidArgumentException('relation name cannot be empty');
+            //throw new InvalidArgumentException('relation name cannot be empty');
         }
 
         // Set default values from Spatie\Permission config if not provided
-        $this->table ??= config('permission.table_names.model_has_roles');
-        $this->foreignPivotKey ??= config('permission.column_names.model_morph_key');
-        $this->teamsKey ??= config('permission.column_names.team_foreign_key', 'team_id');
+        $this->table ??= config('permissions.table_names.model_has_roles');
+        $this->foreignPivotKey ??= config('permissions.column_names.model_morph_key');
+        $this->teamsKey ??= config('permissions.column_names.team_foreign_key', 'team_id');
 
         // Ensure model_type is always included for morphToMany relationships
         if (!in_array('model_type', $this->withPivot)) {
@@ -139,8 +139,8 @@ class RecordSpatiePermissionType
     public static function __set_state(array $properties): self
     {
         return new self(
-            related: $properties['related'] ?? throw new InvalidArgumentException('related is required'),
-            relation: $properties['relation'] ?? throw new InvalidArgumentException('relation is required'),
+            related: $properties['related'] ?? '', //throw new InvalidArgumentException('related is required'),
+            relation: $properties['relation'] ?? '', //throw new InvalidArgumentException('relation is required'),
             type: $properties['type'] ?? RecordRelationshipsEnum::SPATIE_PERMISSION,
             table: $properties['table'] ?? null,
             foreignPivotKey: $properties['foreignPivotKey'] ?? null,
@@ -233,10 +233,10 @@ class RecordSpatiePermissionType
      * @example
      * ```php
      * $config = [
-     *     'related' => config('permission.models.role'),
+     *     'related' => config('permissions.models.role'),
      *     'relation' => 'model',
-     *     'table' => config('permission.table_names.model_has_roles'),
-     *     'foreignPivotKey' => config('permission.column_names.model_morph_key'),
+     *     'table' => config('permissions.table_names.model_has_roles'),
+     *     'foreignPivotKey' => config('permissions.column_names.model_morph_key'),
      *     'relatedPivotKey' => 'role_id',
      *     'teamsEnabled' => true
      * ];
@@ -246,8 +246,8 @@ class RecordSpatiePermissionType
     public static function fromArray(array $config): self
     {
         return new self(
-            related: $config['related'] ?? throw new InvalidArgumentException('related is required in config array'),
-            relation: $config['relation'] ?? throw new InvalidArgumentException('relation is required in config array'),
+            related: $config['related'] ?? '', //throw new InvalidArgumentException('related is required in config array'),
+            relation: $config['relation'] ?? '', //throw new InvalidArgumentException('relation is required in config array'),
             type: $config['type'] ?? RecordRelationshipsEnum::SPATIE_PERMISSION,
             table: $config['table'] ?? null,
             foreignPivotKey: $config['foreignPivotKey'] ?? null,

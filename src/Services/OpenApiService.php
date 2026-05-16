@@ -98,6 +98,8 @@ class OpenApiService
         $tenantHeader = RecordConfigService::tenantHeader();
         $tenantColumn = RecordConfigService::tenantColumn();
 
+        $maxPerPage = RecordConfigService::perPageMax();
+
         $schemas = [];
         foreach ($tables as $recordName => $config) {
             $columns = $config->columns ?? [];
@@ -332,11 +334,12 @@ Full relationship examples and payload guides: https://sp-laravel-api-docs.verce
 
 ### Pagination
 - **Traditional**: `page=1&per_page=25` (offset-based for small datasets)
-- **Cursor-Based**: `cursor=12345&direction=next` (high-performance for large datasets)
+- **Cursor-Based**: `cursor=12345&direction=next` (high-performance for large datasets — use when cursor parameter present, or when `pagination.default_mode=cursor`)
 - **Auto-Detection**: Automatically switches to cursor pagination for tables >10,000 rows
-- **Custom Cursor**: `cursor_column=created_at` (use different cursor column)
-- **Composite**: `composite_cursor=true&sortby=created_at` (multi-column cursors)
-- **Limits**: `per_page` max 100, default 25
+- **Custom Cursor**: `cursor_column=created_at` (use different cursor column; configurable default via `pagination.cursor.default_column`)
+- **Composite**: `composite_cursor=true&sortby=created_at` (multi-column cursors; configurable via `pagination.cursor.composite_enabled`)
+- **Skip Total**: `skip_total=true` (omit total count for performance; default configurable via `pagination.skip_total_default`)
+- **Limits**: `per_page` max ' . $maxPerPage . ', default 25
 
 ### Bulk Operations (Available for All Tables)
 
@@ -651,10 +654,75 @@ Accepts an array of IDs or an array of objects with the primary key.
             // Generate relationship description
             $relationshipDescription = self::generateRelationshipDescription($recordName, $config);
 
+            $maxPerPage = RecordConfigService::perPageMax();
+            $defaultPerPage = 25;
+            $defaultMode = RecordConfigService::paginationDefaultMode();
+            $skipTotalDefault = RecordConfigService::skipTotalDefault();
+            $defaultCursorColumn = RecordConfigService::cursorDefaultColumn();
+
             // List & create (API endpoints use record name, but descriptions reference actual table)
             $basePath = '/' . $apiPrefix . '/' . $recordName;
+            $listParameters = array_merge($tenantHeaderParameters, [
+                [
+                    'name' => 'page',
+                    'in' => 'query',
+                    'required' => false,
+                    'description' => "Page number (offset pagination, default: 1). Not used when `cursor` is provided.",
+                    'schema' => ['type' => 'integer', 'minimum' => 1, 'default' => 1],
+                ],
+                [
+                    'name' => 'per_page',
+                    'in' => 'query',
+                    'required' => false,
+                    'description' => "Items per page (default: {$defaultPerPage}, max: {$maxPerPage})",
+                    'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => $maxPerPage, 'default' => $defaultPerPage],
+                ],
+                [
+                    'name' => 'cursor',
+                    'in' => 'query',
+                    'required' => false,
+                    'description' => "Cursor value for cursor-based pagination. When present, `page` is ignored. See [pagination docs](#description/-pagination).",
+                    'schema' => ['type' => 'string'],
+                ],
+                [
+                    'name' => 'direction',
+                    'in' => 'query',
+                    'required' => false,
+                    'description' => "Cursor direction (default: `next`). Only used with `cursor`.",
+                    'schema' => ['type' => 'string', 'enum' => ['next', 'prev'], 'default' => 'next'],
+                ],
+                [
+                    'name' => 'cursor_column',
+                    'in' => 'query',
+                    'required' => false,
+                    'description' => "Column to use for cursor pagination (default: `{$defaultCursorColumn}`). Only used with `cursor`.",
+                    'schema' => ['type' => 'string', 'default' => $defaultCursorColumn],
+                ],
+                [
+                    'name' => 'skip_total',
+                    'in' => 'query',
+                    'required' => false,
+                    'description' => "Skip the total count query for performance (default: " . ($skipTotalDefault ? 'true' : 'false') . ", configurable via `pagination.skip_total_default`). When `true`, `total`, `last_page`, `from`, `to` are omitted from meta.",
+                    'schema' => ['type' => 'boolean', 'default' => $skipTotalDefault],
+                ],
+            ]);
+
+            $listMetaProperties = [
+                'request_id' => ['type' => 'string'],
+                'total' => ['type' => 'integer', 'description' => 'Total records. Omitted when skip_total=true.'],
+                'per_page' => ['type' => 'integer'],
+                'current_page' => ['type' => 'integer', 'description' => 'Current page (offset pagination). Omitted during cursor pagination.'],
+                'last_page' => ['type' => 'integer', 'description' => 'Last page number (offset pagination). Omitted during cursor pagination or skip_total=true.'],
+                'from' => ['type' => 'integer', 'description' => 'Starting record number (offset pagination). Omitted during cursor pagination or skip_total=true.'],
+                'to' => ['type' => 'integer', 'description' => 'Ending record number (offset pagination). Omitted during cursor pagination or skip_total=true.'],
+                'cursor' => ['type' => 'string', 'description' => 'Next cursor value (cursor pagination). Omitted during offset pagination.'],
+                'direction' => ['type' => 'string', 'description' => 'Cursor direction (cursor pagination). Omitted during offset pagination.'],
+                'cursor_column' => ['type' => 'string', 'description' => 'Cursor column used (cursor pagination). Omitted during offset pagination.'],
+                'first_cursor' => ['type' => 'string', 'description' => 'Cursor to jump to first page (cursor pagination). Omitted when skip_total=true.'],
+                'last_cursor' => ['type' => 'string', 'description' => 'Cursor to jump to last page (cursor pagination). Omitted when skip_total=true.'],
+            ];
             $paths[$basePath] = array_filter([
-                'parameters' => $tenantHeaderParameters,
+                'parameters' => $listParameters,
                 'get' => $canRead ? [
                     'tags' => [$formattedRecordName],
                     'summary' => 'List ' . $formattedRecordName,
@@ -675,15 +743,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                             ],
                                             'meta' => [
                                                 'type' => 'object',
-                                                'properties' => [
-                                                    'request_id' => ['type' => 'string'],
-                                                    'total' => ['type' => 'integer'],
-                                                    'per_page' => ['type' => 'integer'],
-                                                    'current_page' => ['type' => 'integer'],
-                                                    'last_page' => ['type' => 'integer'],
-                                                    'from' => ['type' => 'integer'],
-                                                    'to' => ['type' => 'integer'],
-                                                ],
+                                                'properties' => $listMetaProperties,
                                             ],
                                         ],
                                         'required' => ['success', 'error_code', 'data', 'meta'],

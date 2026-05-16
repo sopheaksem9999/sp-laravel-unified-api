@@ -22,21 +22,32 @@ keywords:
 
 ### Cursor Pagination (`?cursor=`)
 
-For large datasets, cursor-based (keyset) pagination is **O(1) per page** regardless of total row count, unlike offset pagination which gets progressively slower:
+For large datasets, cursor-based (keyset) pagination is **O(1) per page** regardless of total row count, unlike offset pagination which gets progressively slower. Default sort: `created_at DESC` (matching offset pagination).
 
 ```bash
-# Offset (slow on large pages) — scans all previous rows:
-GET /api/v1/invoices?page=10000&per_page=25
+# First page — send empty cursor:
+GET /api/v1/invoices?cursor=&direction=next&per_page=25
 
-# Cursor (fast, O(1) per page) — uses WHERE id > ?:
+# Subsequent pages — use cursor from previous response:
 GET /api/v1/invoices?cursor=250000&direction=next&per_page=25
 ```
 
-Response headers omit `X-Total-Pages` (unknowable without a full count) and include `X-Cursor` instead:
+Response meta:
 
+```json
+{
+  "meta": {
+    "cursor": "250025",
+    "direction": "next",
+    "cursor_column": "created_at",
+    "total": 500000,
+    "first_cursor": null,
+    "last_cursor": "99985"
+  }
+}
 ```
-X-Cursor: 250025
-```
+
+`total` and `last_cursor` are computed via separate queries (COUNT + O(per_page) DESC LIMIT). Skip both with `skip_total=true`:
 
 **Supported parameters:**
 
@@ -51,10 +62,14 @@ Composite cursors (`cursor_column` != primary key) generate stable ordering via 
 
 ### Skip Total COUNT (`?skip_total=true`)
 
-The `COUNT(*)` query on paginated endpoints can be expensive on large filtered datasets. Skip it when you don't need exact totals:
+The `COUNT(*)` query on paginated endpoints can be expensive on large filtered datasets. Skip it when you don't need exact totals. Works for both offset and cursor pagination:
 
 ```bash
+# Offset
 GET /api/v1/invoices?page=1&per_page=25&skip_total=true
+
+# Cursor
+GET /api/v1/invoices?cursor=250000&per_page=25&skip_total=true
 ```
 
 When skipped, the response uses an approximate count from `INFORMATION_SCHEMA.TABLES` (MySQL) or `pg_class.reltuples` (PostgreSQL), or returns `"total": 0` with only the actual row count.

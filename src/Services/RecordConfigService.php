@@ -16,6 +16,11 @@ class RecordConfigService
         return (string) config('record.tenant_column', 'tenant_id');
     }
 
+    public static function tenantColumnType(): string
+    {
+        return (string) config('record.tenant_column_type', 'string');
+    }
+
     public static function tenantHeader(): string
     {
         return (string) config('record.tenant_header', 'X-Tenant-ID');
@@ -211,8 +216,9 @@ class RecordConfigService
         $webhookTables = $webhookEnabled ? (array) config('webhooks.tables', []) : [];
         $auditEnabled = (bool) config('audit.enabled', false);
         $auditTables = $auditEnabled ? (array) config('audit.tables', []) : [];
+        $permissionTables = (array) config('permissions.tables', []);
 
-        $tables = array_merge($webhookTables, $attachmentTables, $auditTables, $recordTables);
+        $tables = array_merge($webhookTables, $attachmentTables, $auditTables, $permissionTables, $recordTables);
 
         if ($table !== null) {
             return $tables[$table] ?? null;
@@ -262,12 +268,17 @@ class RecordConfigService
 
     public static function cursorDefaultColumn(): string
     {
-        return (string) config('record.pagination.cursor.default_column', 'id');
+        return (string) config('record.pagination.cursor.default_column', 'created_at');
     }
 
     public static function cursorCompositeEnabled(): bool
     {
         return (bool) config('record.pagination.cursor.composite_enabled', true);
+    }
+
+    public static function cursorBoundaryEnabled(): bool
+    {
+        return (bool) config('record.pagination.cursor.boundary_cursors', true);
     }
 
     public static function skipTotalDefault(): bool

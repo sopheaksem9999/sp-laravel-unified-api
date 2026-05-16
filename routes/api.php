@@ -32,22 +32,6 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
 Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'])->group(function (): void {
 
     $tableWhere = '[a-zA-Z0-9_\-]+';
-    $configuredTables = [];
-    foreach (SchemaRegistryUtils::get() as $configKey => $config) {
-        if (!($config instanceof RecordTableType)) {
-            continue;
-        }
-
-        foreach (SchemaRegistryUtils::tableAliases((string) $configKey, $config) as $alias) {
-            $configuredTables[] = $alias;
-        }
-    }
-
-    $configuredTables = array_values(array_unique(array_filter($configuredTables, static fn($value): bool => is_string($value) && $value !== '')));
-    if (!empty($configuredTables)) {
-        $escaped = array_map(static fn(string $table): string => preg_quote($table, '/'), $configuredTables);
-        $tableWhere = '(?:' . implode('|', $escaped) . ')';
-    }
 
     $globalFunctionWhere = '(?!)';
     $configuredGlobalFunctions = array_keys(RecordConfigService::globalFunctions());
@@ -104,6 +88,30 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
         Route::get('llms.mdx', $llmsMdxResponse);
         Route::get('llms.txt', $llmsMdxResponse);
     });
+
+     /*
+    |--------------------------------------------------------------------------
+    | API Schema MCP Endpoint (Schema-only Model Context Protocol)
+    |--------------------------------------------------------------------------
+    */
+    if (config('sp-api-mcp.enabled', false)) {
+        Route::post('mcp/schema', [\Sopheak\Core\Http\Controllers\ApiSchemaMcpController::class, 'handle'])
+            ->name('api_schema_mcp')
+            ->middleware(['throttle:api-reads']);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Data MCP Endpoints (Model Context Protocol — full CRUD)
+    |--------------------------------------------------------------------------
+    */
+    if (config('record.mcp.enabled', false)) {
+        Route::prefix('mcp')->middleware(config('record.mcp.middleware', []))->group(function () {
+            Route::get('sse', [\Sopheak\Core\Http\Controllers\McpHttpController::class, 'handleSse'])->name('mcp.sse');
+            Route::post('message', [\Sopheak\Core\Http\Controllers\McpHttpController::class, 'handlePost'])->name('mcp.message');
+        });
+    }
+    
 
     /*
     |--------------------------------------------------------------------------

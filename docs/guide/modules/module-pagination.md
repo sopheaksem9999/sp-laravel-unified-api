@@ -46,23 +46,51 @@ X-Total-Pages: 50
 
 ## Cursor Pagination
 
-Cursor (keyset) pagination provides **O(1) performance** per page regardless of how many total rows exist. Use it for large datasets where offset pagination becomes slow.
+Cursor (keyset) pagination provides **O(1) performance** per page regardless of how many total rows exist. Default sort: `created_at DESC` (same as offset pagination).
 
 ```bash
-# First page (no cursor needed if pagination.default_mode = 'offset')
-GET /api/v1/invoices?cursor=1000&direction=next&per_page=25
+# First page — send empty cursor
+GET /api/v1/invoices?cursor=&direction=next&per_page=25
+
+# Subsequent pages — use the cursor value from the previous response
+GET /api/v1/invoices?cursor=1025&direction=next&per_page=25
+
+# Override cursor column
+GET /api/v1/invoices?cursor=1025&direction=next&cursor_column=id
 ```
+
+### Sort vs Operator
+
+| Sort | Direction | Operator |
+|---|---|---|
+| ASC | next | `>` |
+| ASC | prev | `<` |
+| DESC | next | `<` |
+| DESC | prev | `>` |
 
 ### Response Meta
 
 ```json
 {
   "meta": {
-    "cursor": "1025",
+    "cursor": "2026-05-15 10:30:00",
     "direction": "next",
-    "cursor_column": "id"
+    "cursor_column": "created_at",
+    "total": 1240,
+    "first_cursor": null,
+    "last_cursor": "99985"
   }
 }
+```
+
+- `first_cursor` — `null`; send `cursor=` for the first page
+- `last_cursor` — computed via O(per_page) query; sends you to the final page. Omitted when `skip_total=true` or `boundary_cursors=false`
+- `total` — full matching count. Omitted with `skip_total=true`
+
+`total` reflects the full matching record count before cursor filtering. Add `skip_total=true` to omit it and avoid the `COUNT(*)` query:
+
+```bash
+GET /api/v1/invoices?cursor=1025&direction=next&per_page=25&skip_total=true
 ```
 
 ### Headers

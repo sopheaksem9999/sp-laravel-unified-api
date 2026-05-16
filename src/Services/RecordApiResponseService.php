@@ -23,6 +23,34 @@ class RecordApiResponseService
 {
     private static array $castResolverCache = [];
 
+    private static array $extraMeta = [];
+
+    private static array $metaProviders = [];
+
+    public static function addMeta(string $key, mixed $value): void
+    {
+        self::$extraMeta[$key] = $value;
+    }
+
+    public static function addMetaProvider(callable $provider): void
+    {
+        self::$metaProviders[] = $provider;
+    }
+
+    private static function resolveExtraMeta(): array
+    {
+        $meta = self::$extraMeta;
+
+        foreach (self::$metaProviders as $provider) {
+            $resolved = $provider();
+            if (is_array($resolved)) {
+                $meta = array_merge($meta, $resolved);
+            }
+        }
+
+        return $meta;
+    }
+
     /**
      * Create a simple JSON response for API v1 compatibility
      * Returns only data and status code to maintain backward compatibility.
@@ -930,10 +958,10 @@ class RecordApiResponseService
         return $trimmed;
     }
 
-    public static function successWrapped(mixed $data, array $meta = [], int $status = RecordApiJsonResponseEnum::SUCCESS->value, array $headers = [], ?int $error_code = null): JsonResponse
+    public static function successWrapped(mixed $data, array $meta = [], string $status = RecordApiJsonResponseEnum::SUCCESS->value, array $headers = [], ?int $error_code = null): JsonResponse
     {
         $requestId = request()->attributes->get('request_id');
-        $meta = array_merge(['request_id' => $requestId], $meta);
+        $meta = array_merge(['request_id' => $requestId], $meta, self::resolveExtraMeta());
         $data = static::removeDeletedAtFields($data);
 
         return response()->json([
@@ -944,7 +972,7 @@ class RecordApiResponseService
         ], $status, $headers);
     }
 
-    public static function errorWrapped(string $message, int $status = RecordApiJsonResponseEnum::ERROR->value, array $errors = [], ?int $error_code = null, ?array $debug = null): JsonResponse
+    public static function errorWrapped(string $message, string $status = RecordApiJsonResponseEnum::ERROR->value, array $errors = [], ?int $error_code = null, ?array $debug = null): JsonResponse
     {
         $requestId = request()->attributes->get('request_id');
 
@@ -959,7 +987,7 @@ class RecordApiResponseService
 
         $meta = [
             'request_id' => $requestId,
-        ];
+        ] + self::resolveExtraMeta();
 
         if (is_array($debug) && [] !== $debug && self::shouldIncludeDebugDetails()) {
             $meta['debug'] = $debug;
@@ -987,7 +1015,7 @@ class RecordApiResponseService
         ], $status);
     }
 
-    public static function errorFromException(Throwable $exception, string $message = 'An error occurred', int $status = RecordApiJsonResponseEnum::SERVER_ERROR->value, array $errors = [], ?int $error_code = null): JsonResponse
+    public static function errorFromException(Throwable $exception, string $message = 'An error occurred', string $status = RecordApiJsonResponseEnum::SERVER_ERROR->value, array $errors = [], ?int $error_code = null): JsonResponse
     {
         $debug = null;
         if (self::shouldIncludeDebugDetails()) {
@@ -1028,9 +1056,9 @@ class RecordApiResponseService
      *
      * @param mixed $data The data to return
      */
-    public static function success(mixed $data = null): JsonResponse
+    public static function success(mixed $data = null, array $meta = []): JsonResponse
     {
-        return static::jsonResponse(data: $data, statusCode: RecordApiJsonResponseEnum::SUCCESS);
+        return static::successWrapped(data: $data, meta: $meta);
     }
 
     /**

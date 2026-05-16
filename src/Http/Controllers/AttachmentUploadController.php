@@ -456,7 +456,12 @@ class AttachmentUploadController extends Controller
 
         // Check if attachment exists
         try {
-            $attachmentResult = RecordService::executeGetById('sp_attachments', $attachmentId, [], $tenantId);
+            $attachmentResult = RecordService::executeGetById(
+                table: 'sp_attachments',
+                id: $attachmentId,
+                queryParams: [],
+                tenantId: $tenantId
+            );
             $attachment = $this->extractRecordPayload($attachmentResult);
             if (empty($attachment)) {
                 return response()->json(['message' => 'Attachment not found'], 404);
@@ -655,7 +660,12 @@ class AttachmentUploadController extends Controller
         $sourceId = (string) $request->input('attachment_id');
 
         try {
-            $sourceAttachment = RecordService::executeGetById('sp_attachments', $sourceId, [], $tenantId);
+            $sourceAttachment = RecordService::executeGetById(
+                table: 'sp_attachments',
+                id: $sourceId,
+                queryParams: [],
+                tenantId: $tenantId
+            );
             $sourceAttachment = $this->extractRecordPayload($sourceAttachment);
         } catch (Exception) {
             return response()->json(['message' => 'Attachment not found'], 404);
@@ -723,7 +733,12 @@ class AttachmentUploadController extends Controller
         $tenantId = $this->resolveTenantId($request);
 
         try {
-            $attachment = RecordService::executeGetById('sp_attachments', $id, [], $tenantId);
+            $attachment = RecordService::executeGetById(
+                table: 'sp_attachments',
+                id: $id,
+                queryParams: [],
+                tenantId: $tenantId
+            );
             $attachment = $this->extractRecordPayload($attachment);
         } catch (Exception) {
             return response()->json(['message' => 'Attachment not found'], 404);

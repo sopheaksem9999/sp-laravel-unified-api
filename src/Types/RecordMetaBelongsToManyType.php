@@ -42,10 +42,10 @@ use Sopheak\Core\Enums\RecordRelationshipsEnum;
  *
  * // Morph many-to-many with pivot data (like Laravel Permission)
  * $modelRoles = new RecordMetaBelongsToManyType(
- *     related: config('permission.models.role'),
+ *     related: config('permissions.models.role'),
  *     relation: 'model',
- *     table: config('permission.table_names.model_has_roles'),
- *     foreignPivotKey: config('permission.column_names.model_morph_key'),
+ *     table: config('permissions.table_names.model_has_roles'),
+ *     foreignPivotKey: config('permissions.column_names.model_morph_key'),
  *     relatedPivotKey: 'role_id',
  *     withPivot: ['team_id'],
  *     wherePivot: ['team_id' => 1]
