@@ -64,7 +64,7 @@ class McpHttpControllerTest extends TestCase
     /** @test */
     public function it_can_handle_sse_connection(): void
     {
-        $response = $this->get('/mcp/sse');
+        $response = $this->get('/api/mcp/sse');
 
         $response->assertStatus(200);
         $response->assertHeader('Content-Type', 'text/event-stream; charset=UTF-8');
@@ -83,7 +83,7 @@ class McpHttpControllerTest extends TestCase
             'params' => [],
         ];
 
-        $response = $this->postJson('/mcp/message', $payload);
+        $response = $this->postJson('/api/mcp/message', $payload);
 
         $response->assertStatus(200)
             ->assertJson([
@@ -105,7 +105,7 @@ class McpHttpControllerTest extends TestCase
             'params' => [],
         ];
 
-        $response = $this->postJson('/mcp/message', $payload);
+        $response = $this->postJson('/api/mcp/message', $payload);
 
         $response->assertStatus(200);
 
@@ -141,7 +141,7 @@ class McpHttpControllerTest extends TestCase
             ],
         ];
 
-        $response = $this->postJson('/mcp/message', $payload);
+        $response = $this->postJson('/api/mcp/message', $payload);
 
         $response->assertStatus(200);
 
@@ -167,7 +167,7 @@ class McpHttpControllerTest extends TestCase
             'params' => [],
         ];
 
-        $listResponse = $this->postJson('/mcp/message', $listPayload);
+        $listResponse = $this->postJson('/api/mcp/message', $listPayload);
         $tools = $listResponse->json('result.tools');
         $toolNames = collect($tools)->pluck('name')->toArray();
 
@@ -190,7 +190,7 @@ class McpHttpControllerTest extends TestCase
             ],
         ];
 
-        $createResponse = $this->postJson('/mcp/message', $createPayload);
+        $createResponse = $this->postJson('/api/mcp/message', $createPayload);
 
         $createResponse->assertStatus(200);
         $this->assertArrayHasKey('error', $createResponse->json());
@@ -214,7 +214,7 @@ class McpHttpControllerTest extends TestCase
             ],
         ];
 
-        $response = $this->postJson('/mcp/message', $payload);
+        $response = $this->postJson('/api/mcp/message', $payload);
 
         $response->assertStatus(200);
 

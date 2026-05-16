@@ -121,21 +121,30 @@ class SchemaRegistryTest extends TestCase
         ]);
 
         $schema1 = SchemaRegistryUtils::get();
+        $this->assertArrayHasKey('users', $schema1);
+
+        // clearTableCache removes only the specific table; permission
+        // tables keep the cache alive, so the cleared table is not
+        // re-added on next get() without an explicit refresh().
         SchemaRegistryUtils::clearTableCache('users');
         $schema2 = SchemaRegistryUtils::get();
+        $this->assertArrayNotHasKey('users', $schema2);
 
-        $this->assertArrayHasKey('users', $schema1);
-        $this->assertArrayHasKey('users', $schema2);
+        // refresh() rebuilds the full registry from config.
+        SchemaRegistryUtils::refresh();
+        $schema3 = SchemaRegistryUtils::get();
+        $this->assertArrayHasKey('users', $schema3);
     }
 
-    public function test_it_returns_empty_array_when_no_tables_configured(): void
+    public function test_it_returns_permission_tables_when_no_record_tables_configured(): void
     {
         Config::set('record.tables', []);
 
         $schema = SchemaRegistryUtils::get();
 
         $this->assertIsArray($schema);
-        $this->assertEmpty($schema);
+        $this->assertArrayHasKey('sp_permissions', $schema);
+        $this->assertArrayHasKey('sp_roles', $schema);
     }
 
     public function test_it_uses_memory_cache_when_available(): void

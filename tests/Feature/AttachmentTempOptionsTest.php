@@ -125,8 +125,9 @@ class AttachmentTempOptionsTest extends TestCase
         $this->assertSame(200, $response->getStatusCode());
 
         $payload = $response->getData(true);
-        $this->assertSame('temp_private', $payload['visibility']);
-        $this->assertSame('2026-04-03 10:30:00', Carbon::parse((string) $payload['temp_timeout'])->toDateTimeString());
+        $data = $payload['data'] ?? $payload;
+        $this->assertSame('temp_private', $data['visibility']);
+        $this->assertSame('2026-04-03 10:30:00', Carbon::parse((string) $data['temp_timeout'])->toDateTimeString());
 
         Carbon::setTestNow();
     }
@@ -154,7 +155,8 @@ class AttachmentTempOptionsTest extends TestCase
 
         $this->assertSame(200, $response->getStatusCode());
         $payload = $response->getData(true);
-        $this->assertSame('private', $payload['visibility']);
+        $data = $payload['data'] ?? $payload;
+        $this->assertSame('private', $data['visibility']);
 
         Carbon::setTestNow();
     }
@@ -197,12 +199,13 @@ class AttachmentTempOptionsTest extends TestCase
 
         $this->assertSame(200, $response->getStatusCode());
         $payload = $response->getData(true);
+        $data = $payload['data'] ?? $payload;
 
-        $this->assertNotSame($sourceId, $payload['id']);
-        $this->assertSame('temp_public', $payload['visibility']);
-        $this->assertSame('2026-04-03 12:15:00', Carbon::parse((string) $payload['temp_timeout'])->toDateTimeString());
-        $this->assertTrue(Storage::disk('public')->exists($payload['path']));
-        $this->assertSame('temp-clone-source', Storage::disk('public')->get($payload['path']));
+        $this->assertNotSame($sourceId, $data['id']);
+        $this->assertSame('temp_public', $data['visibility']);
+        $this->assertSame('2026-04-03 12:15:00', Carbon::parse((string) $data['temp_timeout'])->toDateTimeString());
+        $this->assertTrue(Storage::disk('public')->exists($data['path']));
+        $this->assertSame('temp-clone-source', Storage::disk('public')->get($data['path']));
 
         Carbon::setTestNow();
     }
@@ -246,8 +249,9 @@ class AttachmentTempOptionsTest extends TestCase
 
         $this->assertSame(200, $response->getStatusCode());
         $payload = $response->getData(true);
-        $this->assertSame('temp_public', $payload['visibility']);
-        $this->assertStringContainsString('/api/' . config('attachments.route_prefix', 'attachments') . '/' . $payload['id'] . '/view', (string) $payload['url']);
+        $data = $payload['data'] ?? $payload;
+        $this->assertSame('temp_public', $data['visibility']);
+        $this->assertStringContainsString('/api/' . config('attachments.route_prefix', 'attachments') . '/' . $data['id'] . '/view', (string) $data['url']);
 
         Carbon::setTestNow();
     }

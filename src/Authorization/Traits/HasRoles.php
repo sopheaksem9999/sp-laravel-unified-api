@@ -17,10 +17,14 @@ trait HasRoles
         $relation = $this->morphToMany(
             Role::class,
             'model',
-            'sp_model_roles',
+            'sp_model_has_roles',
             'model_id',
             'role_id'
         )->withTimestamps();
+
+        if (config('permissions.tenant_scoped', false)) {
+            $relation->withPivot(RecordConfigService::tenantColumn());
+        }
 
         return $this->applyTenantScope($relation);
     }
@@ -35,6 +39,10 @@ trait HasRoles
             'permission_id'
         )->withTimestamps();
 
+        if (config('permissions.tenant_scoped', false)) {
+            $relation->withPivot(RecordConfigService::tenantColumn());
+        }
+
         return $this->applyTenantScope($relation);
     }
 
@@ -42,7 +50,7 @@ trait HasRoles
     {
         $roleIds = $this->resolveRoleIds($roles);
 
-        $this->roles()->syncWithoutDetaching($roleIds);
+        $this->roles()->syncWithoutDetaching($this->withPivotData($roleIds));
 
         app(PermissionRegistrar::class)->forgetAllCachedPermissions();
 
@@ -64,7 +72,7 @@ trait HasRoles
     {
         $roleIds = $this->resolveRoleIds($roles);
 
-        $this->roles()->sync($roleIds);
+        $this->roles()->sync($this->withPivotData($roleIds));
 
         app(PermissionRegistrar::class)->forgetAllCachedPermissions();
 
@@ -135,14 +143,14 @@ trait HasRoles
     {
         $permissionName = $permission instanceof Permission ? $permission->name : $permission;
 
-        return $this->getAllPermissions()->contains('name', $permissionName);
+        return $this->getAllPermissions()->contains($permissionName);
     }
 
     public function hasAnyPermission(string|array|Permission ...$permissions): bool
     {
         $permissionNames = $this->flattenPermissions(...$permissions);
 
-        $userPermissions = $this->getAllPermissions()->pluck('name')->toArray();
+        $userPermissions = $this->getAllPermissions()->toArray();
 
         return !empty(array_intersect($permissionNames, $userPermissions));
     }
@@ -151,7 +159,7 @@ trait HasRoles
     {
         $permissionNames = $this->flattenPermissions(...$permissions);
 
-        $userPermissions = $this->getAllPermissions()->pluck('name')->toArray();
+        $userPermissions = $this->getAllPermissions()->toArray();
 
         return empty(array_diff($permissionNames, $userPermissions));
     }
@@ -167,7 +175,17 @@ trait HasRoles
     {
         $names = $this->flattenRoles(...$roles);
 
-        return Role::query()->whereIn('name', $names)->pluck('id')->toArray();
+        $query = Role::query()->whereIn('name', $names);
+
+        if (config('permissions.tenant_scoped', false) && RecordConfigService::enableTenantId()) {
+            $tenantColumn = RecordConfigService::tenantColumn();
+            $tenantId = $this->resolveTenantId();
+            if (null !== $tenantId) {
+                $query->where($tenantColumn, $tenantId);
+            }
+        }
+
+        return $query->pluck('id')->toArray();
     }
 
     private function resolvePermissionIds(array $permissions): array
@@ -175,6 +193,26 @@ trait HasRoles
         $names = $this->flattenPermissions(...$permissions);
 
         return Permission::query()->whereIn('name', $names)->pluck('id')->toArray();
+    }
+
+    private function withPivotData(array $ids): array
+    {
+        if (!config('permissions.tenant_scoped', false) || !RecordConfigService::enableTenantId()) {
+            return $ids;
+        }
+
+        $tenantId = $this->resolveTenantId();
+        if (null === $tenantId) {
+            return $ids;
+        }
+
+        $tenantColumn = RecordConfigService::tenantColumn();
+        $result = [];
+        foreach ($ids as $id) {
+            $result[$id] = [$tenantColumn => $tenantId];
+        }
+
+        return $result;
     }
 
     private function flattenRoles(...$roles): array
@@ -213,7 +251,7 @@ trait HasRoles
 
     private function applyTenantScope(MorphToMany $relation): MorphToMany
     {
-        if (!config('permission.tenant_scoped', false)) {
+        if (!config('permissions.tenant_scoped', false)) {
             return $relation;
         }
 

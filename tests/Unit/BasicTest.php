@@ -187,7 +187,7 @@ class BasicTest extends TestCase
         $response->assertStatus(401);
         $response->assertJsonPath('success', false);
         $response->assertJsonPath('message', 'Unauthenticated');
-        $response->assertJsonPath('error_code', 10000);
+        $response->assertJsonPath('error_code', 10002);
     }
 
     /** @test */

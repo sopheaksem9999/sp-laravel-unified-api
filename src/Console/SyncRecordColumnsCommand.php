@@ -82,6 +82,8 @@ class SyncRecordColumnsCommand extends Command
                 'sp_webhook_deliveries',
                 'sp_audit_logs',
                 'audit_logs',
+                'sp_roles',
+                'sp_permissions',
 
                 // Standard Laravel Tables
                 'migrations',

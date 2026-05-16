@@ -183,6 +183,14 @@ trait HasControllerHelpers
             $perms = PermissionUtils::mapPermissions($table, $action);
         }
 
+        $superAdminCallback = config('permissions.super_admin_callback');
+        if (null !== $superAdminCallback) {
+            $granted = (bool) $superAdminCallback($user);
+            if ($granted) {
+                return;
+            }
+        }
+
         $allowed = false;
         $authHandler = config('record.authorization');
         $gate = $authHandler === null ? Gate::forUser($user) : null;
@@ -193,7 +201,7 @@ trait HasControllerHelpers
                 $granted = is_string($authHandler)
                     ? (bool) app($authHandler)->handle($user, $perm, $table, $action)
                     : (bool) $authHandler($user, $perm, $table, $action);
-            } elseif (config('permission.enabled', false)) {
+            } elseif (config('permissions.enabled', false)) {
                 $permissionService ??= app(PermissionService::class);
                 $granted = $permissionService->userHasPermission($user, $perm);
             } else {

@@ -109,13 +109,11 @@ class PermissionService
             return false;
         }
 
-        $role = Role::query()->where('name', $roleName)->first();
-
-        if (!$role) {
+        if (!Role::query()->where('name', $roleName)->exists()) {
             return false;
         }
 
-        $user->assignRole($role);
+        $user->assignRole($roleName);
 
         return true;
     }
@@ -126,13 +124,11 @@ class PermissionService
             return false;
         }
 
-        $permission = Permission::query()->where('name', $permissionName)->first();
-
-        if (!$permission) {
+        if (!Permission::query()->where('name', $permissionName)->exists()) {
             return false;
         }
 
-        $user->givePermissionTo($permission);
+        $user->givePermissionTo($permissionName);
 
         return true;
     }
@@ -161,6 +157,6 @@ class PermissionService
 
     public function isBuiltInPermissionEnabled(): bool
     {
-        return (bool) config('permission.enabled', false);
+        return (bool) config('permissions.enabled', false);
     }
 }

@@ -32,6 +32,9 @@ final class RecordPayloadExtractor
      * @param object|null      $classModel  Optional model instance to hydrate with extracted values
      * @param callable|null    $transform   Optional callback: function (string $field, mixed $value,
      *                                      Request|array $source): mixed
+     * @param string[]|null    $unset       Field names to strip from the final payload
+     * @param bool             $stripEmpty  On create (!isUpdate), remove fields whose value is null or '' so
+     *                                      database column defaults take effect
      *
      * @return array The array of extracted and transformed field data
      */
@@ -44,6 +47,8 @@ final class RecordPayloadExtractor
         mixed $classModel = null,
         ?callable $transform = null,
         ?RecordTableType $recordTableSchema = null,
+        ?array $unset = null,
+        bool $stripEmpty = false,
     ): array {
         $tableSchema = $recordTableSchema;
         if (!$tableSchema && !empty($recordTable)) {
@@ -78,7 +83,20 @@ final class RecordPayloadExtractor
         }
 
         if (!empty($fields)) {
-            $fields = array_values(array_filter($fields, static fn($field): bool => 'id' !== $field));
+            $pk = ($tableSchema instanceof RecordTableType && !empty($tableSchema->primaryKey))
+                ? $tableSchema->primaryKey
+                : 'id';
+            $fields = array_values(array_filter($fields, static fn($field): bool => $field !== $pk));
+        }
+
+        // Track which fields have column defaults so we can fill them later
+        $columnDefaults = [];
+        if (!$isUpdate && $tableSchema instanceof RecordTableType) {
+            foreach ($tableSchema->columns ?? [] as $field => $info) {
+                if (array_key_exists('default', $info) && $info['default'] !== null) {
+                    $columnDefaults[$field] = $info['default'];
+                }
+            }
         }
 
         $data = $baseData;
@@ -123,10 +141,24 @@ final class RecordPayloadExtractor
             }
         }
 
+        $overrideTimestamps = $tableSchema->overrideTimestamps ?? false;
+
+        // Strip primary key and auto-managed timestamps on create
+        // to prevent clients from setting them manually.
+        // Must run before auto-timestamp logic so server values are set correctly.
+        if (!$isUpdate) {
+            $pk = ($tableSchema instanceof RecordTableType && !empty($tableSchema->primaryKey))
+                ? $tableSchema->primaryKey
+                : 'id';
+            unset($data[$pk]);
+
+            if (!$overrideTimestamps) {
+                unset($data['created_at'], $data['updated_at'], $data['deleted_at']);
+            }
+        }
+
         if ($hasChanges) {
             $now = TimeUtils::now();
-            // allow overriding timestamps if explicitly provided, otherwise set them based on operation type
-            $overrideTimestamps = $tableSchema->overrideTimestamps ?? false;
             $overrideUserstamps = $tableSchema->overrideUserstamps ?? false;
 
             $hasUpdatedAt = false;
@@ -244,6 +276,34 @@ final class RecordPayloadExtractor
             }
         }
 
+        // Fill column defaults for any fields not present in the payload
+        if ([] !== $columnDefaults) {
+            $pk = ($tableSchema instanceof RecordTableType && !empty($tableSchema->primaryKey))
+                ? $tableSchema->primaryKey
+                : 'id';
+            foreach ($columnDefaults as $field => $value) {
+                if (!array_key_exists($field, $data) && $field !== $pk) {
+                    $data[$field] = $value;
+                }
+            }
+        }
+
+        // Strip empty values on create so database defaults take effect
+        if ($stripEmpty && !$isUpdate) {
+            foreach ($data as $field => $value) {
+                if ($value === null || $value === '') {
+                    unset($data[$field]);
+                }
+            }
+        }
+
+        // Strip caller-requested fields from the final payload
+        if (!empty($unset)) {
+            foreach ($unset as $field) {
+                unset($data[$field]);
+            }
+        }
+
         return $data;
     }
 
@@ -256,6 +316,8 @@ final class RecordPayloadExtractor
         mixed $classModel = null,
         ?callable $transform = null,
         ?RecordTableType $recordTableSchema = null,
+        ?array $unset = null,
+        bool $stripEmpty = false,
     ): array {
         return self::extract(
             request: $request,
@@ -266,6 +328,8 @@ final class RecordPayloadExtractor
             classModel: $classModel,
             transform: $transform,
             recordTableSchema: $recordTableSchema,
+            unset: $unset,
+            stripEmpty: $stripEmpty,
         );
     }
 
@@ -278,6 +342,8 @@ final class RecordPayloadExtractor
         mixed $classModel = null,
         ?callable $transform = null,
         ?RecordTableType $recordTableSchema = null,
+        ?array $unset = null,
+        bool $stripEmpty = false,
     ): array {
         return self::extract(
             request: $data,
@@ -288,6 +354,8 @@ final class RecordPayloadExtractor
             classModel: $classModel,
             transform: $transform,
             recordTableSchema: $recordTableSchema,
+            unset: $unset,
+            stripEmpty: $stripEmpty,
         );
     }
 
@@ -299,6 +367,8 @@ final class RecordPayloadExtractor
         string $recordTable = '',
         ?callable $transform = null,
         ?RecordTableType $recordTableSchema = null,
+        ?array $unset = null,
+        bool $stripEmpty = false,
     ): array {
         $source = method_exists($model, 'toArray') ? $model->toArray() : get_object_vars($model);
 
@@ -311,6 +381,8 @@ final class RecordPayloadExtractor
             classModel: $model,
             transform: $transform,
             recordTableSchema: $recordTableSchema,
+            unset: $unset,
+            stripEmpty: $stripEmpty,
         );
     }
 
@@ -323,6 +395,8 @@ final class RecordPayloadExtractor
         mixed $classModel = null,
         ?callable $transform = null,
         ?RecordTableType $recordTableSchema = null,
+        ?array $unset = null,
+        bool $stripEmpty = false,
     ): array {
         return self::extract(
             request: $row,
@@ -333,6 +407,8 @@ final class RecordPayloadExtractor
             classModel: $classModel,
             transform: $transform,
             recordTableSchema: $recordTableSchema,
+            unset: $unset,
+            stripEmpty: $stripEmpty,
         );
     }
 
@@ -345,6 +421,8 @@ final class RecordPayloadExtractor
         mixed $classModel = null,
         ?callable $transform = null,
         ?RecordTableType $recordTableSchema = null,
+        ?array $unset = null,
+        bool $stripEmpty = false,
     ): array {
         $body = $response->getData(true);
         $source = is_array($body) && array_key_exists('data', $body) ? $body['data'] : $body;
@@ -358,6 +436,8 @@ final class RecordPayloadExtractor
             classModel: $classModel,
             transform: $transform,
             recordTableSchema: $recordTableSchema,
+            unset: $unset,
+            stripEmpty: $stripEmpty,
         );
     }
 }

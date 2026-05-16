@@ -6,20 +6,21 @@ use Exception;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Sopheak\Core\Authorization\Models\Role;
 use Sopheak\Core\Services\RecordConfigService;
 
-class MigrateFromSpatieCommand extends Command
+class MigrateFromLegacyCommand extends Command
 {
-    protected $signature = 'sp-laravel-api:migrate-from-spatie
+    protected $signature = 'sp-laravel-api:migrate-from-legacy
                             {--force : Skip confirmation prompt}';
 
-    protected $description = 'Migrate data from spatie/laravel-permission tables to the built-in sp_* permission tables';
+    protected $description = 'Migrate data from legacy permission tables to the built-in sp_* permission tables';
 
     public function handle(): int
     {
-        if (!config('permission.migrate_from_spatie', false) && !$this->option('force')) {
-            $this->warn('Migration from Spatie is not enabled in config/permission.php.');
-            $this->warn('Set SP_PERMISSION_MIGRATE_FROM_SPATIE=true or migrate_from_spatie to true.');
+        if (!config('permissions.migrate_from_legacy', false) && !$this->option('force')) {
+            $this->warn('Legacy migration is not enabled in config/permissions.php.');
+            $this->warn('Set SP_PERMISSION_MIGRATE_FROM_LEGACY=true or migrate_from_legacy to true.');
             $this->warn('Use --force to skip this check.');
 
             if (!$this->confirm('Do you want to proceed anyway?')) {
@@ -27,22 +28,22 @@ class MigrateFromSpatieCommand extends Command
             }
         }
 
-        $spatieTables = ['permissions', 'roles', 'model_has_permissions', 'model_has_roles', 'role_has_permissions'];
+        $legacyTables = ['permissions', 'roles', 'model_has_permissions', 'model_has_roles', 'role_has_permissions'];
         $existing = [];
 
-        foreach ($spatieTables as $table) {
+        foreach ($legacyTables as $table) {
             if (Schema::hasTable($table)) {
                 $existing[] = $table;
             }
         }
 
         if (empty($existing)) {
-            $this->warn('No Spatie permission tables found. Nothing to migrate.');
+            $this->warn('No legacy permission tables found. Nothing to migrate.');
 
             return Command::SUCCESS;
         }
 
-        $this->info('Found Spatie tables: ' . implode(', ', $existing));
+        $this->info('Found legacy tables: ' . implode(', ', $existing));
 
         if (!Schema::hasTable('sp_permissions')) {
             $this->error('sp_permissions table does not exist. Run php artisan migrate first.');
@@ -50,12 +51,14 @@ class MigrateFromSpatieCommand extends Command
             return Command::FAILURE;
         }
 
-        $spatieTeamColumn = config('permission.column_names.team_foreign_key', 'team_id');
+        $legacyTeamColumn = config('permissions.column_names.team_foreign_key', 'team_id');
         $targetTenantColumn = RecordConfigService::tenantColumn();
-        $enableTenant = RecordConfigService::enableTenantId();
+        $enableTenant = Schema::hasColumn('sp_roles', $targetTenantColumn);
 
         if ($enableTenant) {
-            $this->info("Mapping Spatie {$spatieTeamColumn} → sp_* {$targetTenantColumn}");
+            $this->info("Mapping legacy {$legacyTeamColumn} → sp_* {$targetTenantColumn}");
+        } else {
+            $this->warn("Tenant column '{$targetTenantColumn}' not found on sp_roles — skipping tenant mapping.");
         }
 
         DB::beginTransaction();
@@ -74,19 +77,19 @@ class MigrateFromSpatieCommand extends Command
             }
 
             if (in_array('roles', $existing, true)) {
-                $stats['roles'] = $this->migrateRoles();
+                $stats['roles'] = $this->migrateRoles($legacyTeamColumn, $targetTenantColumn, $enableTenant);
             }
 
             if (in_array('role_has_permissions', $existing, true)) {
-                $stats['role_permissions'] = $this->migrateRolePermissions();
+                $stats['role_permissions'] = $this->migrateRolePermissions($legacyTeamColumn, $targetTenantColumn, $enableTenant);
             }
 
             if (in_array('model_has_roles', $existing, true)) {
-                $stats['model_roles'] = $this->migrateModelRoles($spatieTeamColumn, $targetTenantColumn, $enableTenant);
+                $stats['model_roles'] = $this->migrateModelRoles($legacyTeamColumn, $targetTenantColumn, $enableTenant);
             }
 
             if (in_array('model_has_permissions', $existing, true)) {
-                $stats['model_permissions'] = $this->migrateModelPermissions($spatieTeamColumn, $targetTenantColumn, $enableTenant);
+                $stats['model_permissions'] = $this->migrateModelPermissions($legacyTeamColumn, $targetTenantColumn, $enableTenant);
             }
 
             DB::commit();
@@ -98,12 +101,12 @@ class MigrateFromSpatieCommand extends Command
                     ['sp_permissions', $stats['permissions']],
                     ['sp_roles', $stats['roles']],
                     ['sp_role_permissions', $stats['role_permissions']],
-                    ['sp_model_roles', $stats['model_roles']],
+                    ['sp_model_has_roles', $stats['model_roles']],
                     ['sp_model_permissions', $stats['model_permissions']],
                 ]
             );
 
-            $this->warn('Old Spatie tables have been left untouched for safety.');
+            $this->warn('Old permission tables have been left untouched for safety.');
             $this->warn('You can drop them manually after verifying the migration.');
             $this->warn('  - permissions, roles, role_has_permissions, model_has_roles, model_has_permissions');
 
@@ -145,23 +148,29 @@ class MigrateFromSpatieCommand extends Command
         return $count;
     }
 
-    protected function migrateRoles(): int
+    protected function migrateRoles(string $legacyTeamColumn, string $targetTenantColumn, bool $enableTenant): int
     {
         $count = 0;
         $guardName = config('sp-laravel-api.auth.guard', 'api');
 
-        DB::table('roles')->orderBy('id')->chunk(200, function ($roles) use (&$count, $guardName) {
+        DB::table('roles')->orderBy('id')->chunk(200, function ($roles) use (&$count, $guardName, $legacyTeamColumn, $targetTenantColumn, $enableTenant) {
             foreach ($roles as $role) {
-                DB::table('sp_roles')->updateOrInsert(
-                    ['name' => $role->name],
-                    [
-                        'guard_name' => $role->guard_name ?? $guardName,
-                        'description' => null,
-                        'is_system' => false,
-                        'created_at' => $role->created_at ?? now(),
-                        'updated_at' => $role->updated_at ?? now(),
-                    ]
-                );
+                $identity = ['name' => $role->name];
+                $data = [
+                    'guard_name' => $role->guard_name ?? $guardName,
+                    'description' => null,
+                    'is_system' => false,
+                    'created_at' => $role->created_at ?? now(),
+                    'updated_at' => $role->updated_at ?? now(),
+                ];
+
+                if ($enableTenant && isset($role->{$legacyTeamColumn})) {
+                    $identity[$targetTenantColumn] = $role->{$legacyTeamColumn};
+                    $data[$targetTenantColumn] = $role->{$legacyTeamColumn};
+                }
+
+                // Use Eloquent so the creating event fires (auto-generates `key` from name)
+                Role::query()->updateOrCreate($identity, $data);
 
                 $count++;
             }
@@ -170,55 +179,26 @@ class MigrateFromSpatieCommand extends Command
         return $count;
     }
 
-    protected function migrateRolePermissions(): int
+    protected function migrateRolePermissions(string $legacyTeamColumn, string $targetTenantColumn, bool $enableTenant): int
     {
         $count = 0;
 
-        DB::table('role_has_permissions')->orderBy('permission_id')->chunk(200, function ($pivots) use (&$count) {
+        DB::table('role_has_permissions')->orderBy('permission_id')->chunk(200, function ($pivots) use (&$count, $legacyTeamColumn, $targetTenantColumn, $enableTenant) {
             foreach ($pivots as $pivot) {
-                $roleId = $this->findNewRoleId($pivot->role_id);
+                $roleResult = $this->findNewRoleId($pivot->role_id, $legacyTeamColumn, $targetTenantColumn, $enableTenant);
                 $permId = $this->findNewPermissionId($pivot->permission_id);
 
-                if ($roleId && $permId) {
-                    DB::table('sp_role_permissions')->updateOrInsert(
-                        [
-                            'role_id' => $roleId,
-                            'permission_id' => $permId,
-                        ],
-                        [
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ]
-                    );
-
-                    $count++;
-                }
-            }
-        });
-
-        return $count;
-    }
-
-    protected function migrateModelRoles(string $spatieTeamColumn, string $targetTenantColumn, bool $enableTenant): int
-    {
-        $count = 0;
-
-        DB::table('model_has_roles')->orderBy('role_id')->chunk(200, function ($pivots) use (&$count, $spatieTeamColumn, $targetTenantColumn, $enableTenant) {
-            foreach ($pivots as $pivot) {
-                $roleId = $this->findNewRoleId($pivot->role_id);
-
-                if ($roleId) {
+                if ($roleResult && $permId) {
                     $data = [
-                        'model_type' => $pivot->model_type,
-                        'model_id' => $pivot->model_id,
-                        'role_id' => $roleId,
+                        'role_id' => $roleResult->id,
+                        'permission_id' => $permId,
                     ];
 
-                    if ($enableTenant && isset($pivot->{$spatieTeamColumn})) {
-                        $data[$targetTenantColumn] = $pivot->{$spatieTeamColumn};
+                    if ($enableTenant && $roleResult->tenantValue !== null) {
+                        $data[$targetTenantColumn] = $roleResult->tenantValue;
                     }
 
-                    DB::table('sp_model_roles')->updateOrInsert(
+                    DB::table('sp_role_permissions')->updateOrInsert(
                         $data,
                         [
                             'created_at' => now(),
@@ -234,11 +214,46 @@ class MigrateFromSpatieCommand extends Command
         return $count;
     }
 
-    protected function migrateModelPermissions(string $spatieTeamColumn, string $targetTenantColumn, bool $enableTenant): int
+    protected function migrateModelRoles(string $legacyTeamColumn, string $targetTenantColumn, bool $enableTenant): int
     {
         $count = 0;
 
-        DB::table('model_has_permissions')->orderBy('permission_id')->chunk(200, function ($pivots) use (&$count, $spatieTeamColumn, $targetTenantColumn, $enableTenant) {
+        DB::table('model_has_roles')->orderBy('role_id')->chunk(200, function ($pivots) use (&$count, $legacyTeamColumn, $targetTenantColumn, $enableTenant) {
+            foreach ($pivots as $pivot) {
+                $result = $this->findNewRoleId($pivot->role_id, $legacyTeamColumn, $targetTenantColumn, $enableTenant);
+
+                if ($result) {
+                    $data = [
+                        'model_type' => $pivot->model_type,
+                        'model_id' => $pivot->model_id,
+                        'role_id' => $result->id,
+                    ];
+
+                    if ($enableTenant && $result->tenantValue !== null) {
+                        $data[$targetTenantColumn] = $result->tenantValue;
+                    }
+
+                    DB::table('sp_model_has_roles')->updateOrInsert(
+                        $data,
+                        [
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]
+                    );
+
+                    $count++;
+                }
+            }
+        });
+
+        return $count;
+    }
+
+    protected function migrateModelPermissions(string $legacyTeamColumn, string $targetTenantColumn, bool $enableTenant): int
+    {
+        $count = 0;
+
+        DB::table('model_has_permissions')->orderBy('permission_id')->chunk(200, function ($pivots) use (&$count, $legacyTeamColumn, $targetTenantColumn, $enableTenant) {
             foreach ($pivots as $pivot) {
                 $permId = $this->findNewPermissionId($pivot->permission_id);
 
@@ -249,8 +264,8 @@ class MigrateFromSpatieCommand extends Command
                         'permission_id' => $permId,
                     ];
 
-                    if ($enableTenant && isset($pivot->{$spatieTeamColumn})) {
-                        $data[$targetTenantColumn] = $pivot->{$spatieTeamColumn};
+                    if ($enableTenant && isset($pivot->{$legacyTeamColumn})) {
+                        $data[$targetTenantColumn] = $pivot->{$legacyTeamColumn};
                     }
 
                     DB::table('sp_model_permissions')->updateOrInsert(
@@ -269,7 +284,7 @@ class MigrateFromSpatieCommand extends Command
         return $count;
     }
 
-    protected function findNewRoleId(int $oldRoleId): ?int
+    protected function findNewRoleId(int $oldRoleId, ?string $legacyTeamColumn = null, ?string $targetTenantColumn = null, bool $enableTenant = false): ?object
     {
         $oldRole = DB::table('roles')->where('id', $oldRoleId)->first();
 
@@ -277,9 +292,22 @@ class MigrateFromSpatieCommand extends Command
             return null;
         }
 
-        $newRole = DB::table('sp_roles')->where('name', $oldRole->name)->first();
+        $query = DB::table('sp_roles')->where('name', $oldRole->name);
 
-        return $newRole?->id;
+        if ($enableTenant && $legacyTeamColumn && $targetTenantColumn && isset($oldRole->{$legacyTeamColumn})) {
+            $query->where($targetTenantColumn, $oldRole->{$legacyTeamColumn});
+        }
+
+        $newRole = $query->first();
+
+        if (!$newRole) {
+            return null;
+        }
+
+        return (object) [
+            'id' => $newRole->id,
+            'tenantValue' => $oldRole->{$legacyTeamColumn} ?? null,
+        ];
     }
 
     protected function findNewPermissionId(int $oldPermissionId): ?int

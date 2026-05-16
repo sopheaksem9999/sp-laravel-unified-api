@@ -45,6 +45,10 @@ class GenerateRecordTablesFromDatabaseCommand extends Command
             'sp_webhook_endpoints',
             'sp_webhook_subscriptions',
             'sp_webhook_deliveries',
+            'sp_roles',
+            'sp_permissions',
+            'sp_model_has_roles',
+            'sp_model_has_permissions',
             'sp_audit_logs',
             'audit_logs',
 

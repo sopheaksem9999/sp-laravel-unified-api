@@ -1,6 +1,6 @@
 ---
 title: "Built-in Role/Permission"
-description: "Built-in role/permission system with Spatie-compatible API, auto-registration from config/record.php, PermissionRegistrar, PermissionService, HasRoles trait, version-based cache invalidation, system role protection, config hash boot optimization, migration from spatie/laravel-permission, and zero-breaking-change opt-in design."
+description: "Built-in role/permission system with Spatie-compatible API, auto-registration from config/record.php, PermissionRegistrar, PermissionService, HasRoles trait, version-based cache invalidation, system role protection, config hash boot optimization, legacy permission migration, and zero-breaking-change opt-in design."
 keywords:
   - permission
   - role
@@ -10,7 +10,7 @@ keywords:
   - hasPermissionTo
   - PermissionRegistrar
   - PermissionService
-  - spatie migration
+  - legacy migration
   - access control
   - gate
   - cache invalidation
@@ -28,7 +28,7 @@ When enabled, it replaces the default `Gate::forUser()->allows()` flow with an i
 ```mermaid
 flowchart TB
     subgraph Config["Configuration Layer"]
-        RP["config/permission.php"]
+        RP["config/permissions.php"]
         RR["config/record.php<br/>(pmsName + can* flags)"]
     end
 
@@ -55,7 +55,7 @@ flowchart TB
         SP["sp_permissions"]
         SR["sp_roles"]
         SRP["sp_role_permissions"]
-        SMR["sp_model_roles"]
+        SMR["sp_model_has_roles"]
         SMP["sp_model_permissions"]
     end
 
@@ -87,7 +87,7 @@ flowchart TB
 SP_PERMISSION_ENABLED=true
 ```
 
-Or in `config/permission.php`:
+Or in `config/permissions.php`:
 
 ```php
 'enabled' => true,
@@ -96,14 +96,15 @@ Or in `config/permission.php`:
 ### Full Config Reference
 
 ```php
-// config/permission.php (published after php artisan vendor:publish --tag=sp-laravel-api-config)
+// config/permissions.php (published after php artisan vendor:publish --tag=sp-laravel-api-config)
 return [
-    'enabled'                => env('SP_PERMISSION_ENABLED', false),
-    'auto_register'          => env('SP_PERMISSION_AUTO_REGISTER', true),
+    'enabled'                 => env('SP_PERMISSION_ENABLED', false),
+    'auto_register'           => env('SP_PERMISSION_AUTO_REGISTER', true),
     'auto_register_functions' => env('SP_PERMISSION_AUTO_REGISTER_FUNCTIONS', true),
-    'cache_ttl'              => env('SP_PERMISSION_CACHE_TTL', 3600),
-    'tenant_scoped'          => env('SP_PERMISSION_TENANT_SCOPED', false),
-    'migrate_from_spatie'    => env('SP_PERMISSION_MIGRATE_FROM_SPATIE', false),
+    'cache_ttl'               => env('SP_PERMISSION_CACHE_TTL', 3600),
+    'tenant_scoped'           => env('SP_PERMISSION_TENANT_SCOPED', false),
+    'super_admin_callback'    => null, // fn ($user) => $user->tokenCan('super-admin') || $user->is_admin,
+    'migrate_from_legacy'     => env('SP_PERMISSION_MIGRATE_FROM_LEGACY', false),
 ];
 ```
 
@@ -158,7 +159,7 @@ sequenceDiagram
         PS->>PR: getPermissions(user)
         PR->>Cache: remember(cacheKey, ttl)
         alt cache miss
-            PR->>DB: query sp_model_roles + sp_role_permissions<br/>query sp_model_permissions (direct)
+            PR->>DB: query sp_model_has_roles + sp_role_permissions<br/>query sp_model_permissions (direct)
             DB-->>PR: merged permission collection
             PR->>Cache: store result
         end
@@ -214,6 +215,60 @@ flowchart LR
 
 ---
 
+## Super-Admin Bypass
+
+Users who should have **unrestricted access** (e.g., root admins, Passport `super-admin` scope) can bypass the entire permission check without assigning every permission explicitly.
+
+Configure a callback in `config/permissions.php`:
+
+```php
+'super_admin_callback' => fn ($user) => $user->tokenCan('super-admin') || $user->is_admin,
+```
+
+The callback receives the authenticated user and **must return `bool`**. When `true`, `authorizeAction()` returns immediately — no DB queries for roles/permissions are executed.
+
+```php
+// Default: null — all users must have explicit permissions
+'super_admin_callback' => null,
+```
+
+The callback runs **after** authentication and permission name resolution but **before** the permission lookup loop. This means:
+- Unauthenticated requests still get 401 (bypass only applies after `auth()->user()` resolves)
+- Permission names are still resolved (for logging/debugging), but checking is skipped
+- No Gate/DB queries are executed for bypassed users
+
+### Example: Passport + Admin Flag
+
+```php
+'super_admin_callback' => function ($user) {
+    // Passport token scope
+    if ($user->tokenCan('super-admin')) {
+        return true;
+    }
+
+    // Application-level admin flag
+    if (!empty($user->is_admin)) {
+        return true;
+    }
+
+    return false;
+},
+```
+
+### Example: Check via Role Model
+
+```php
+use Sopheak\Core\Authorization\Models\Role;
+
+'super_admin_callback' => function ($user) {
+    return $user->hasRole('super-admin');
+},
+```
+
+> **Note:** The role-based example above queries the DB every request — it partially defeats the purpose of the bypass. Prefer scope/attribute-based checks when possible.
+
+---
+
 ## Tables
 
 Five tables are created by the migration `2026_05_13_000000_create_sp_permissions_tables.php`:
@@ -221,14 +276,16 @@ Five tables are created by the migration `2026_05_13_000000_create_sp_permission
 | Table | Purpose |
 |-------|---------|
 | `sp_permissions` | Permission registry (id, name, group, guard_name, description) |
-| `sp_roles` | Role definitions (id, name, guard_name, description, is_system) |
-| `sp_role_permissions` | Role ↔ Permission pivot (role_id, permission_id) |
-| `sp_model_roles` | Polymorphic model ↔ Role pivot (model_type, model_id, role_id, tenant_id) |
+| `sp_roles` | Role definitions (id, name, key, guard_name, description, is_system, is_master, is_default, tenant_id*) |
+| `sp_role_permissions` | Role ↔ Permission pivot (role_id, permission_id, tenant_id*) |
+| `sp_model_has_roles` | Polymorphic model ↔ Role pivot (model_type, model_id, role_id, tenant_id) |
 | `sp_model_permissions` | Polymorphic model ↔ Permission pivot (model_type, model_id, permission_id, tenant_id) |
 
 `sp_permissions` and `sp_roles` are auto-exposed as CRUD endpoints via `RecordTableType`:
 - `sp_permissions`: `canCreate: false` (auto-registered), `canUpdate: true`, `canDelete: false`
 - `sp_roles`: `canCreate: true`, `canUpdate: true`, `canDelete: true`
+
+*`tenant_id` is only added when `record.enable_tenant_id = true`. See [multi-tenant config](#tenant-scoping) below.
 
 ---
 
@@ -354,7 +411,7 @@ trait HasRoles
 
 | Method | Description |
 |--------|-------------|
-| `roles()` | `MorphToMany` relation to `sp_roles` via `sp_model_roles` pivot. Auto-filters by `tenant_id` when `permission.tenant_scoped = true`. |
+| `roles()` | `MorphToMany` relation to `sp_roles` via `sp_model_has_roles` pivot. Auto-filters by `tenant_id` when `permission.tenant_scoped = true`. |
 | `permissions()` | `MorphToMany` relation to `sp_permissions` via `sp_model_permissions` pivot (direct permissions only, not role-inherited). Auto-filters by `tenant_id` when scoped. |
 | `assignRole()` | Syncs role IDs without detaching existing ones. Calls `forgetAllCachedPermissions()`. Accepts string name(s), Role instance(s), or array. |
 | `removeRole()` | Detaches role IDs. Calls `forgetAllCachedPermissions()`. |
@@ -423,6 +480,22 @@ The version counter is incremented (invalidating all cached permissions) by:
 | `HasRoles::givePermissionTo()` | Trait method — explicit call |
 | `HasRoles::revokePermissionTo()` | Trait method — explicit call |
 | `HasRoles::syncPermissions()` | Trait method — explicit call |
+
+---
+
+## Performance
+
+The permission system is optimized for the authorization hot path (every CRUD request):
+
+| Optimization | Detail |
+|-------------|--------|
+| **Name-only caching** | `getPermissions()` caches only permission name strings (not full Eloquent models). Cache memory footprint is ~6x smaller, with no model serialization overhead. |
+| **Version-based invalidation** | Permission changes increment a version counter instead of flushing the entire cache store. Old entries expire naturally via TTL. |
+| **Config hash skip** | `autoRegisterFromConfig()` computes a hash of table config and skips `firstOrCreate` queries on repeated boots when config is unchanged. |
+| **Pluck queries** | `registerPermissions()` and `getPermissions()` use `->pluck('name')` instead of `->get()` — only the `name` column is transferred from the database. |
+| **Exists checks** | `PermissionService::assignRoleToUser()` and `givePermissionToUser()` use `->exists()` instead of loading full Eloquent models. |
+
+The `getPermissions()` result is cached per user under a version-scoped key, so the database is queried at most once per cache TTL (default 3600s) per user.
 
 ---
 
@@ -516,7 +589,7 @@ $service->syncUserPermissions($user, ['view:invoice', 'create:invoice']);
 
 ## Tenant Scoping
 
-When `permission.tenant_scoped = true`, the `tenant_id` column on `sp_model_roles` and `sp_model_permissions` is used to scope assignments per tenant.
+When `permission.tenant_scoped = true`, the `tenant_id` column on `sp_model_has_roles` and `sp_model_permissions` is used to scope assignments per tenant.
 
 The `HasRoles` trait applies `wherePivot($tenantColumn, $tenantId)` on both `roles()` and `permissions()` morphToMany relations automatically.
 
@@ -537,22 +610,140 @@ When `tenant_scoped = false` (default), `tenant_id` is nullable and unused — r
 
 ---
 
-## Migration from Spatie
+## Migration from Legacy Permission Tables
+
+If you have existing permission tables from `spatie/laravel-permission` (or any legacy system with the same structure: `permissions`, `roles`, `model_has_permissions`, `model_has_roles`, `role_has_permissions`), you can migrate the data:
 
 ```bash
-php artisan sp-laravel-api:migrate-from-spatie
+php artisan sp-laravel-api:migrate-from-legacy
 ```
 
 This command:
-1. Reads from existing `spatie/laravel-permission` tables (`permissions`, `roles`, `model_has_permissions`, `model_has_roles`, `role_has_permissions`)
+1. Reads from legacy tables (`permissions`, `roles`, `model_has_permissions`, `model_has_roles`, `role_has_permissions`)
 2. Writes data into `sp_*` tables, preserving all relationships
 3. Infers `group` from permission naming convention (e.g., `view:invoice` → group `invoice`)
-4. Maps Spatie's configurable `team_foreign_key` → `tenant_id` (uses `RecordConfigService::tenantColumn()`)
-5. **Never modifies or drops** old Spatie tables — safe rollback path
+4. Maps legacy `team_foreign_key` → `tenant_id` when multi-tenant is enabled (uses `RecordConfigService::tenantColumn()`)
+5. **Never modifies or drops** legacy tables — safe rollback path
 
-Safe to run multiple times (idempotent). Requires `migrate_from_spatie = true` in config (or `--force` flag).
+Safe to run multiple times (idempotent). Requires `migrate_from_legacy = true` in config (or `--force` flag).
+
+### Multi-Company / Tenant-Scoped Roles
+
+When migrating roles with duplicate names across companies (e.g., Company A and Company B both have "Property Admin"), the command uses `(name, team_foreign_key)` as the identity pair when multi-tenant is enabled:
+
+```php
+// config/record.php
+'enable_tenant_id' => true,
+'tenant_column' => 'company_id',
+```
+
+Each role receives its own row in `sp_roles` with the scoped tenant column. The `key` column auto-generates unique slugs per tenant on creation.
+
+```bash
+SP_PERMISSION_ENABLED=true SP_PERMISSION_MIGRATE_FROM_LEGACY=true php artisan sp-laravel-api:migrate-from-legacy
+```
+
+### Custom Columns
+
+Legacy `roles` table columns (`is_master`, `is_default`, `key`) are **not** auto-mapped by the migration command — they are specific to the new built-in schema. If your legacy `roles` table has these columns, you'll need a custom migration script to copy them. Otherwise, they default to `false`/`null` and can be updated after migration.
+
+### Updating `config/record.php` Relationship Definitions
+
+If your `config/record.php` uses `RecordSpatiePermissionType` to define role/permission relationships (e.g., for exposing them via the dynamic API), replace them with the built-in equivalent.
+
+**Before (Spatie integration):**
+
+```php
+use Sopheak\Core\Types\RecordSpatiePermissionType;
+
+'users' => new RecordTableType(
+    table: 'users',
+    pmsName: 'user',
+    // ...
+    relationships: [
+        'roles' => new RecordSpatiePermissionType(
+            related: 'roles',
+            relation: User::class,
+            table: config('permission.table_names.model_has_roles'),
+            foreignPivotKey: config('permission.column_names.model_morph_key'),
+            relatedPivotKey: 'role_id',
+            parentKey: 'id',
+            relatedKey: 'id',
+            teamsEnabled: config('permission.teams', false),
+        ),
+        'permissions' => new RecordSpatiePermissionType(
+            related: 'permissions',
+            relation: User::class,
+            table: config('permission.table_names.model_has_permissions'),
+            foreignPivotKey: config('permission.column_names.model_morph_key'),
+            relatedPivotKey: 'permission_id',
+            parentKey: 'id',
+            relatedKey: 'id',
+            teamsEnabled: config('permission.teams', false),
+        ),
+    ],
+),
+```
+
+**Option A — Remove the relationship entries entirely (recommended):**
+
+Add the `HasRoles` trait to your User model instead. The `roles()` and `permissions()` morphToMany relations are defined in the trait — no config entry needed.
+
+```php
+use Sopheak\Core\Authorization\Traits\HasRoles;
+
+class User extends Authenticatable
+{
+    use HasRoles;
+}
+```
+
+Then remove the `relationships` entries from `config/record.php`. All role/permission methods (`assignRole()`, `hasRole()`, `givePermissionTo()`, `getAllPermissions()`, etc.) work via the trait.
+
+**Option B — Use `RecordMorphToManyType` (keep relationship visible in dynamic API):**
+
+```php
+use Sopheak\Core\Authorization\Models\Role;
+use Sopheak\Core\Authorization\Models\Permission;
+use Sopheak\Core\Types\RecordMorphToManyType;
+
+'users' => new RecordTableType(
+    table: 'users',
+    pmsName: 'user',
+    // ...
+    relationships: [
+        'roles' => new RecordMorphToManyType(
+            related: Role::class,
+            relation: User::class,
+            table: 'sp_model_has_roles',
+            foreignPivotKey: 'model_id',
+            relatedPivotKey: 'role_id',
+            parentKey: 'id',
+            relatedKey: 'id',
+        ),
+        'permissions' => new RecordMorphToManyType(
+            related: Permission::class,
+            relation: User::class,
+            table: 'sp_model_permissions',
+            foreignPivotKey: 'model_id',
+            relatedPivotKey: 'permission_id',
+            parentKey: 'id',
+            relatedKey: 'id',
+        ),
+    ],
+),
+```
+
+| Aspect | `RecordSpatiePermissionType` | `RecordMorphToManyType` |
+|---|---|---|
+| Target tables | Spatie's config-based table names | `sp_model_has_roles` / `sp_model_permissions` |
+| `foreignPivotKey` | `config('permission.column_names.model_morph_key')` | `'model_id'` |
+| `related` class | string `'roles'` | FQCN `Role::class` |
+| `teamsEnabled` / `teamsKey` | reads Spatie config | not needed — built-in tenant scoping handled by `HasRoles` trait |
 
 ---
+
+
 
 ## Validating Setup
 
@@ -563,7 +754,7 @@ php artisan sp-laravel-api:validate
 The validation command checks for:
 - `sp_*` permission tables exist
 - Permission system enabled/disabled status
-- Detection of legacy Spatie tables with migration hint
+- Detection of legacy permission tables with migration hint
 
 ---
 
