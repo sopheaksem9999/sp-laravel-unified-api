@@ -725,6 +725,8 @@ class RelationshipResolverUtils
         $secondLocalKey = $config['second_local_key'];
         $ownerColumn = $config['owner_column'] ?? null;
         $ownerValue = $config['owner_value'] ?? null;
+        $targetColumn = $config['target_column'] ?? null;
+        $targetValue = $config['target_value'] ?? null;
         $targetTable = $config['table'];
         $targetSchema = $schema[$targetTable] ?? null;
         $targetPk = $targetSchema->primaryKey ?? 'id';
@@ -746,6 +748,10 @@ class RelationshipResolverUtils
 
                     if ($ownerColumn && null !== $ownerValue) {
                         $deleteQuery->where($ownerColumn, $ownerValue);
+                    }
+
+                    if ($targetColumn && null !== $targetValue) {
+                        $deleteQuery->where($targetColumn, $targetValue);
                     }
 
                     $deleteQuery->delete();
@@ -787,6 +793,10 @@ class RelationshipResolverUtils
                     $existsQuery->where($ownerColumn, $ownerValue);
                 }
 
+                if ($targetColumn && null !== $targetValue) {
+                    $existsQuery->where($targetColumn, $targetValue);
+                }
+
                 $exists = $existsQuery->exists();
 
                 if (!$exists && $allowCreate) {
@@ -797,6 +807,10 @@ class RelationshipResolverUtils
 
                     if ($ownerColumn && null !== $ownerValue) {
                         $insertData[$ownerColumn] = $ownerValue;
+                    }
+
+                    if ($targetColumn && null !== $targetValue) {
+                        $insertData[$targetColumn] = $targetValue;
                     }
 
                     DB::table($throughTable)->insert($insertData);
