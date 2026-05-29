@@ -40,3 +40,4 @@ build
 .php-cs-fixer.cache
 /.opencode
 .opencode/
+graphify-out/
