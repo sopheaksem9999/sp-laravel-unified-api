@@ -3,6 +3,7 @@
 namespace Sopheak\Core\Tests\Feature;
 
 use Illuminate\Support\Facades\Config;
+use Sopheak\Core\Services\ApiClient\ExportFolder;
 use Sopheak\Core\Services\ApiClient\ApiClientEmitterInterface;
 use Sopheak\Core\Services\ApiClient\ExportResult;
 use Sopheak\Core\Services\ApiClientExportService;
@@ -31,7 +32,7 @@ class ApiClientExportServiceTest extends TestCase
     {
         $spec = $this->buildFixtureSpec();
 
-        $result = $this->service->build($spec, null, null, $this->brunoEmitter([]));
+        $result = $this->service->build($spec, null, null, $this->brunoEmitter());
 
         $this->assertCount(3, $result->added);
         $this->assertContains('List Users', $result->added);
@@ -51,7 +52,7 @@ class ApiClientExportServiceTest extends TestCase
             ],
         ];
 
-        $result = $this->service->build($spec, $existing, null, $this->brunoEmitter($existing));
+        $result = $this->service->build($spec, $existing, null, $this->brunoEmitter());
 
         $this->assertContains('List Users', $result->skipped);
         $this->assertContains('Create Users', $result->added);
@@ -70,7 +71,7 @@ class ApiClientExportServiceTest extends TestCase
             ],
         ];
 
-        $result = $this->service->build($spec, $existing, ['users'], $this->brunoEmitter($existing));
+        $result = $this->service->build($spec, $existing, ['users'], $this->brunoEmitter());
 
         $this->assertContains('List Users', $result->regenerated);
         $this->assertContains('Create Users', $result->added);
@@ -88,7 +89,7 @@ class ApiClientExportServiceTest extends TestCase
             ],
         ];
 
-        $result = $this->service->build($spec, $existing, ['all'], $this->brunoEmitter($existing));
+        $result = $this->service->build($spec, $existing, ['all'], $this->brunoEmitter());
 
         $this->assertContains('List Users', $result->regenerated);
         $this->assertContains('Create Users', $result->regenerated);
@@ -101,7 +102,7 @@ class ApiClientExportServiceTest extends TestCase
     {
         $spec = $this->buildFixtureSpec();
 
-        $result = $this->service->build($spec, null, ['users'], $this->brunoEmitter([]));
+        $result = $this->service->build($spec, null, ['users'], $this->brunoEmitter());
 
         $this->assertContains('Orders', $result->suggestions);
         $this->assertContains('List Users', $result->added);
@@ -121,9 +122,9 @@ class ApiClientExportServiceTest extends TestCase
             ],
         ];
 
-        $result = $this->service->build($spec, null, null, $this->brunoEmitter([]));
+        $result = $this->service->build($spec, null, null, $this->brunoEmitter());
 
-        $folderNames = array_map(static fn ($f) => $f->name, $result->folders);
+        $folderNames = array_map(static fn (ExportFolder $f): string => $f->name, $result->folders);
         $this->assertSame(['Users', 'Orders', 'RPC'], $folderNames);
     }
 
@@ -143,7 +144,7 @@ class ApiClientExportServiceTest extends TestCase
             ],
         ];
 
-        $result = $this->service->build($spec, $existing, ['users'], $this->brunoEmitter($existing));
+        $result = $this->service->build($spec, $existing, ['users'], $this->brunoEmitter());
 
         $this->assertContains('RPC - Auth Login', $result->skipped);
     }
@@ -164,7 +165,7 @@ class ApiClientExportServiceTest extends TestCase
             ],
         ];
 
-        $result = $this->service->build($spec, null, null, $this->brunoEmitter([]));
+        $result = $this->service->build($spec, null, null, $this->brunoEmitter());
 
         $this->assertContains('listUsersFallback', $result->added);
     }
@@ -188,7 +189,7 @@ class ApiClientExportServiceTest extends TestCase
             ],
         ];
 
-        $result = $this->service->build($spec, null, null, $this->brunoEmitter([]));
+        $result = $this->service->build($spec, null, null, $this->brunoEmitter());
         $request = $result->folders[0]->requests[0];
 
         $this->assertSame('{{baseUrl}}{{apiPrefix}}/users/{id}', $request->urlTemplate);
@@ -215,7 +216,7 @@ class ApiClientExportServiceTest extends TestCase
             ],
         ];
 
-        $result = $this->service->build($spec, null, null, $this->brunoEmitter([]));
+        $result = $this->service->build($spec, null, null, $this->brunoEmitter());
         $queryParams = $result->folders[0]->requests[0]->queryParams;
 
         $this->assertCount(2, $queryParams);
@@ -223,7 +224,7 @@ class ApiClientExportServiceTest extends TestCase
         $this->assertContains('page', $names);
         $this->assertContains('per_page', $names);
 
-        $page = array_values(array_filter($queryParams, static fn ($p) => $p['name'] === 'page'))[0];
+        $page = array_values(array_filter($queryParams, static fn (array $p): bool => $p['name'] === 'page'))[0];
         $this->assertSame('1', (string) $page['value']);
         $this->assertTrue($page['enabled']);
     }
@@ -232,7 +233,7 @@ class ApiClientExportServiceTest extends TestCase
     {
         $spec = $this->buildFixtureSpec();
 
-        $result = $this->service->build($spec, null, null, $this->brunoEmitter([]));
+        $result = $this->service->build($spec, null, null, $this->brunoEmitter());
 
         $this->assertSame('TestApp', $result->appName);
         $this->assertSame('http://localhost', $result->baseUrl);
@@ -282,19 +283,10 @@ class ApiClientExportServiceTest extends TestCase
 
     /**
      * Build an anonymous emitter that parses Bruno v3 collection shape.
-     *
-     * @param array<string, mixed> $existing
      */
-    private function brunoEmitter(array $existing): ApiClientEmitterInterface
+    private function brunoEmitter(): ApiClientEmitterInterface
     {
-        return new class($existing) implements ApiClientEmitterInterface {
-            /**
-             * @param array<string, mixed> $existing
-             */
-            public function __construct(private readonly array $existing)
-            {
-            }
-
+        return new class implements ApiClientEmitterInterface {
             public function render(ExportResult $result): array
             {
                 return [];

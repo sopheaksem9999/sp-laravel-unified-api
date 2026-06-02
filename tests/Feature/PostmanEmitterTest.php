@@ -119,7 +119,6 @@ class PostmanEmitterTest extends TestCase
             pathParams: [],
             queryParams: [],
             headers: [],
-            bodyJson: null,
         );
 
         $result = $this->buildResult(folders: [new ExportFolder('Users', [$request])]);
@@ -255,7 +254,6 @@ class PostmanEmitterTest extends TestCase
             pathParams: [],
             queryParams: $queryParams,
             headers: [],
-            bodyJson: null,
         );
     }
 }

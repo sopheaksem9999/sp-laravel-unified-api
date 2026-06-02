@@ -84,7 +84,6 @@ class BrunoEmitterTest extends TestCase
             headers: [
                 ['name' => 'Accept', 'value' => 'application/json', 'enabled' => true],
             ],
-            bodyJson: null,
         );
 
         $result = $this->buildResult(folders: [new ExportFolder('Users', [$request])]);
@@ -113,7 +112,7 @@ class BrunoEmitterTest extends TestCase
         $params = $output['folders'][0]['requests'][0]['params'];
 
         $this->assertCount(2, $params);
-        $select = array_values(array_filter($params, static fn ($p) => $p['name'] === 'select'))[0];
+        $select = array_values(array_filter($params, static fn (array $p): bool => $p['name'] === 'select'))[0];
         $this->assertSame('', $select['value']);
         $this->assertFalse($select['enabled']);
         $this->assertSame('query', $select['type']);
@@ -234,7 +233,6 @@ class BrunoEmitterTest extends TestCase
             pathParams: [],
             queryParams: $queryParams,
             headers: [],
-            bodyJson: null,
         );
     }
 }
