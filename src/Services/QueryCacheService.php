@@ -168,9 +168,24 @@ class QueryCacheService
         return 1;
     }
 
+    /**
+     * Read the current namespace version for a given scope/name/tenant/record combination.
+     * Exposed for the cache:status artisan command and external inspection tools.
+     */
+    public static function inspectNamespaceVersion(string $scope, string $name, ?string $tenantKey = null, ?string $recordId = null): int
+    {
+        return self::getNamespaceVersion(scope: $scope, name: $name, tenantKey: $tenantKey, recordId: $recordId);
+    }
+
     public static function invalidateRecordForTenant(string $table, mixed $id, string $tenantKey): int
     {
-        return self::invalidateTableForTenant($table, $tenantKey);
+        if (!self::isCacheEnabled()) {
+            return 0;
+        }
+
+        self::bumpNamespace(scope: 'record', name: $table, tenantKey: $tenantKey, recordId: (string) $id);
+
+        return 1;
     }
 
     public static function invalidateTableFunctionForTenant(string $table, string $functionName, string $tenantKey): int
@@ -202,12 +217,27 @@ class QueryCacheService
             $tenantVersion = self::getNamespaceVersion(scope: $parsed['scope'], name: $parsed['name'], tenantKey: $parsed['tenant']);
         }
 
+        if ('record' === $parsed['scope'] && isset($parsed['record_id'])) {
+            $recordVersion = self::getNamespaceVersion(
+                scope: 'record',
+                name: $parsed['name'],
+                tenantKey: '' !== $parsed['tenant'] ? $parsed['tenant'] : null,
+                recordId: $parsed['record_id']
+            );
+
+            return sprintf('v%s.%s.%s', $globalVersion, $tenantVersion, $recordVersion);
+        }
+
         return sprintf('v%s.%s', $globalVersion, $tenantVersion);
     }
 
     private static function parseScopeFromKey(string $key): ?array
     {
-        if (preg_match('/^record_(?:index|show|func):table:([^:]+):.*tenant:([^:]*):/', $key, $matches)) {
+        if (preg_match('/^record_show:table:([^:]+):id:([^:]+):.*tenant:([^:]*):/', $key, $matches)) {
+            return ['scope' => 'record', 'name' => $matches[1], 'record_id' => $matches[2], 'tenant' => $matches[3]];
+        }
+
+        if (preg_match('/^record_(?:index|func):table:([^:]+):.*tenant:([^:]*):/', $key, $matches)) {
             return ['scope' => 'table', 'name' => $matches[1], 'tenant' => $matches[2]];
         }
 
@@ -218,8 +248,13 @@ class QueryCacheService
         return null;
     }
 
-    private static function namespaceKey(string $scope, string $name, ?string $tenantKey = null): string
+    private static function namespaceKey(string $scope, string $name, ?string $tenantKey = null, ?string $recordId = null): string
     {
+        if ('record' === $scope && null !== $recordId) {
+            $tenantSegment = null !== $tenantKey ? sprintf(':tenant:%s', $tenantKey) : '';
+            return self::getCachePrefix() . sprintf('ns:%s:%s:%s%s', $scope, $name, $recordId, $tenantSegment);
+        }
+
         if (null === $tenantKey) {
             return self::getCachePrefix() . sprintf('ns:%s:%s', $scope, $name);
         }
@@ -227,19 +262,19 @@ class QueryCacheService
         return self::getCachePrefix() . sprintf('ns:%s:%s:tenant:%s', $scope, $name, $tenantKey);
     }
 
-    private static function bumpNamespace(string $scope, string $name, ?string $tenantKey = null): void
+    private static function bumpNamespace(string $scope, string $name, ?string $tenantKey = null, ?string $recordId = null): void
     {
         try {
-            $key = self::namespaceKey(scope: $scope, name: $name, tenantKey: $tenantKey);
-            $current = self::getNamespaceVersion(scope: $scope, name: $name, tenantKey: $tenantKey);
+            $key = self::namespaceKey(scope: $scope, name: $name, tenantKey: $tenantKey, recordId: $recordId);
+            $current = self::getNamespaceVersion(scope: $scope, name: $name, tenantKey: $tenantKey, recordId: $recordId);
             Cache::forever($key, $current + 1);
         } catch (Exception) {
         }
     }
 
-    private static function getNamespaceVersion(string $scope, string $name, ?string $tenantKey = null): int
+    private static function getNamespaceVersion(string $scope, string $name, ?string $tenantKey = null, ?string $recordId = null): int
     {
-        $key = self::namespaceKey(scope: $scope, name: $name, tenantKey: $tenantKey);
+        $key = self::namespaceKey(scope: $scope, name: $name, tenantKey: $tenantKey, recordId: $recordId);
 
         try {
             $value = Cache::get($key);

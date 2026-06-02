@@ -2,7 +2,10 @@
 
 namespace Sopheak\Core;
 
+use Sopheak\Core\Console\CacheStatusCommand;
 use Sopheak\Core\Console\CleanTempAttachmentsCommand;
+use Sopheak\Core\Console\ExportBrunoCommand;
+use Sopheak\Core\Console\ExportPostmanCommand;
 use Sopheak\Core\Console\MigrateFromLegacyCommand;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
@@ -91,7 +94,10 @@ class CoreSpLaravelApiProvider extends ServiceProvider
                 MakeRecordTableCommand::class,
                 GenerateRecordTablesFromDatabaseCommand::class,
                 ExportOpenApiCommand::class,
+                ExportBrunoCommand::class,
+                ExportPostmanCommand::class,
                 ListTablesCommand::class,
+                CacheStatusCommand::class,
                 CleanTempAttachmentsCommand::class,
                 EnablePgsqlRlsCommand::class,
             ];

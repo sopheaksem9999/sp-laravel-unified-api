@@ -62,6 +62,7 @@
       "composer *": "allow",
       "php artisan *": "allow",
       "git *": "allow",
+      "graphify *": "allow",
       "*": "ask"
     },
     "edit": "allow",
