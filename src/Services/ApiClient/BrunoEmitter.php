@@ -44,7 +44,7 @@ class BrunoEmitter implements ApiClientEmitterInterface
                 static fn (ExportFolder $folder): array => [
                     'name' => $folder->name,
                     'requests' => array_map(
-                        static fn (ExportRequest $req): array => self::renderRequest($req),
+                        self::renderRequest(...),
                         $folder->requests,
                     ),
                 ],

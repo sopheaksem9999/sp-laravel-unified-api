@@ -36,7 +36,7 @@ class ApiClientExportService
         $regenKeysProvided = $regenKeys !== null;
         $regenAll = $regenKeysProvided && in_array('all', $regenKeys, true);
         $regenSet = ($regenKeysProvided && ! $regenAll)
-            ? array_flip(array_map('strtolower', $regenKeys))
+            ? array_flip(array_map(strtolower(...), $regenKeys))
             : [];
 
         $foldersAccumulator = [];
@@ -48,11 +48,11 @@ class ApiClientExportService
 
         foreach ($allRequests as $req) {
             $tag = $req['tag'];
-            $isRpc = str_starts_with($tag, 'RPC');
+            $isRpc = str_starts_with((string) $tag, 'RPC');
             $tableKey = $isRpc ? 'RPC' : $tag;
             $folderName = $isRpc ? 'RPC' : $tag;
 
-            $inRegenSet = $regenAll || isset($regenSet[strtolower($tableKey)]);
+            $inRegenSet = $regenAll || isset($regenSet[strtolower((string) $tableKey)]);
             $inExisting = in_array($req['name'], $existingNames, true);
 
             // Default mode (no --regen) processes everything.
@@ -102,6 +102,7 @@ class ApiClientExportService
                 $orderedFolders[] = new ExportFolder($name, $foldersAccumulator[$name]);
             }
         }
+
         if (isset($foldersAccumulator['RPC'])) {
             $orderedFolders[] = new ExportFolder('RPC', $foldersAccumulator['RPC']);
         }
@@ -109,10 +110,11 @@ class ApiClientExportService
         // Suggestions = all non-RPC table names in spec that have no generated requests.
         $allTableNames = [];
         foreach ($allRequests as $req) {
-            if (! str_starts_with($req['tag'], 'RPC')) {
+            if (! str_starts_with((string) $req['tag'], 'RPC')) {
                 $allTableNames[$req['tag']] = true;
             }
         }
+
         $suggestions = array_values(array_keys(array_diff_key($allTableNames, $generatedTableNames)));
 
         return new ExportResult(
@@ -147,6 +149,7 @@ class ApiClientExportService
                 if (! is_array($op)) {
                     continue;
                 }
+
                 $methodUpper = strtoupper((string) $method);
                 if (! in_array($methodUpper, $validMethods, true)) {
                     continue;
@@ -213,6 +216,7 @@ class ApiClientExportService
         if ($requestBody === null) {
             return null;
         }
+
         $schema = $requestBody['content']['application/json']['schema'] ?? null;
         if ($schema === null) {
             return null;
@@ -246,6 +250,7 @@ class ApiClientExportService
                 $out[(string) $name] = null;
                 continue;
             }
+
             $type = (string) ($prop['type'] ?? 'string');
             $out[(string) $name] = match ($type) {
                 'string' => '',

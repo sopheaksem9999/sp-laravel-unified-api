@@ -5,6 +5,7 @@ namespace Sopheak\Core\Services\ApiClient;
 class PostmanEmitter implements ApiClientEmitterInterface
 {
     private const SCHEMA_URL = 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json';
+
     private const RELATIONSHIP_TIP = 'Tip: append ?select=*,customer:customers(id,name),items(*) to test relationship loading.';
 
     /**
@@ -32,7 +33,7 @@ class PostmanEmitter implements ApiClientEmitterInterface
                 static fn (ExportFolder $folder): array => [
                     'name' => $folder->name,
                     'item' => array_map(
-                        static fn (ExportRequest $req): array => self::renderItem($req),
+                        self::renderItem(...),
                         $folder->requests,
                     ),
                 ],
@@ -114,9 +115,10 @@ class PostmanEmitter implements ApiClientEmitterInterface
         if (str_starts_with($urlTemplate, $host)) {
             $pathPart = substr($urlTemplate, strlen($host));
         }
+
         $pathSegments = $pathPart === '' || $pathPart === '/'
             ? []
-            : array_values(array_filter(explode('/', $pathPart), static fn (string $s) => $s !== ''));
+            : array_values(array_filter(explode('/', $pathPart), static fn (string $s): bool => $s !== ''));
 
         $query = array_map(
             static fn (array $p): array => [

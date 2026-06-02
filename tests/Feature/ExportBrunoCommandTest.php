@@ -49,6 +49,7 @@ class ExportBrunoCommandTest extends TestCase
         if (is_file($this->outputPath)) {
             unlink($this->outputPath);
         }
+
         parent::tearDown();
     }
 
