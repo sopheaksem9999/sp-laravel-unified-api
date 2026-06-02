@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core;
 
+use Sopheak\Core\Console\CacheStatusCommand;
 use Sopheak\Core\Console\CleanTempAttachmentsCommand;
 use Sopheak\Core\Console\ExportBrunoCommand;
 use Sopheak\Core\Console\ExportPostmanCommand;
@@ -96,6 +97,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
                 ExportBrunoCommand::class,
                 ExportPostmanCommand::class,
                 ListTablesCommand::class,
+                CacheStatusCommand::class,
                 CleanTempAttachmentsCommand::class,
                 EnablePgsqlRlsCommand::class,
             ];

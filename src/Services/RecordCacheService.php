@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sopheak\Core\Services;
 
 use Illuminate\Http\Request;
+use InvalidArgumentException;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Utilities\RecordUtils;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
@@ -138,6 +139,15 @@ class RecordCacheService
         $tableSchema = SchemaRegistryUtils::getTable($table);
         $tenantEnabled = $tableSchema instanceof RecordTableType ? RecordUtils::shouldApplyTenantId($tableSchema) : RecordConfigService::enableTenantId();
         $cacheTenantId = $tenantEnabled ? RecordUtils::normalizeTenantId($tenantId) : null;
+
+        if ($tenantEnabled && (null === $cacheTenantId || '' === $cacheTenantId)) {
+            throw new InvalidArgumentException(sprintf(
+                'Cannot clear cache for table [%s]: tenant is enabled but no tenantId was provided. '
+                .'Pass the resolved tenant id (e.g. from the request via RecordUtils::resolveTenantIdFromRequest).',
+                $table
+            ));
+        }
+
         $this->invalidateTableCache($table, $cacheTenantId, $tenantEnabled);
     }
 
