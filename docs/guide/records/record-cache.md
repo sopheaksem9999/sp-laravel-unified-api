@@ -34,12 +34,6 @@ Main config is in `config/record.php`:
 ],
 ```
 
-Legacy key still exists for backward compatibility:
-
-```php
-'cache_ttl' => env('SP_LARAVEL_API_CACHE_API_TTL', 3600),
-```
-
 ## When Requests Are Cacheable
 
 A request is cacheable only when all conditions are true:

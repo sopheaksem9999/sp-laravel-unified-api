@@ -2,9 +2,9 @@
 
 namespace Sopheak\Core\Services\Queries;
 
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Utilities\QueryBuilderFiltersUtils;
@@ -32,9 +32,9 @@ class RecordQueryBuilder
     public function buildBaseQuery(array $requestedFields = []): static
     {
         $connection = RecordConfigService::readConnection();
-        $this->builder = $connection
-            ? DB::connection($connection)->table($this->table)
-            : DB::table($this->table);
+        /** @var ConnectionInterface $database */
+        $database = $connection ? app('db')->connection($connection) : app('db')->connection();
+        $this->builder = $database->table($this->table);
 
         if ($this->config->hasTenantId && $this->tenantId) {
             $tenantColumn = $this->config->tenantColumn ?? 'company_id';
@@ -119,13 +119,30 @@ class RecordQueryBuilder
 
     public function applyIndexHint(string $context = 'list'): static
     {
+        if ('mysql' !== $this->getBuilderDriverName()) {
+            return $this;
+        }
+
         $hints = RecordConfigService::tableIndexHints($this->table);
         $index = $hints[$context] ?? null;
         if ($index !== null) {
-            $this->builder->from(DB::raw($this->builder->from . ' FORCE INDEX (' . $index . ')'));
+            $this->builder->from($this->builder->getConnection()->raw($this->builder->from . ' FORCE INDEX (' . $index . ')'));
         }
 
         return $this;
+    }
+
+    private function getBuilderDriverName(): ?string
+    {
+        $connection = $this->builder->getConnection();
+
+        if (method_exists($connection, 'getDriverName')) {
+            $driverName = call_user_func([$connection, 'getDriverName']);
+
+            return is_string($driverName) ? $driverName : null;
+        }
+
+        return null;
     }
 
     public function cursorPaginate(?string $cursor, string $direction = 'next', ?string $cursorColumn = null, int $perPage = 25, bool $skipTotal = false, string $sortOrder = 'desc'): array

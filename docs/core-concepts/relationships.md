@@ -174,8 +174,7 @@ or
 To prevent performance issues and memory exhaustion from deeply nested or overly broad queries, you can configure the following limits in `config/record.php`:
 
 - **`max_depth`** (default: 10): The maximum nesting depth for relationship queries.
-- **`max_relations`** (default: 20): The maximum number of relationships that can be loaded in a single query.
-- **`max_relation_items`** (default: 500): The maximum number of items retrieved for a single relationship collection (e.g., a `hasMany` or `belongsToMany` relation).
+- **`subquery_optimization_max_records`** (default: 100): The maximum list size that uses relationship subquery JSON optimization before falling back to bulk loading.
 
 ### Supported Relationship Types
 
@@ -538,4 +537,3 @@ Do not send:
 - Array relationship aliases are accepted only when declared in table `relationships` config.
 - For `BELONGS_TO`, the payload should use root FK scalar fields, not nested objects.
 - `_delete` / `_destroy` can be used on alias-array items where relationship handling supports detach/remove.
-

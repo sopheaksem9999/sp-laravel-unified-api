@@ -21,7 +21,7 @@
  * - Comprehensive audit logging for all operations
  *
  * Structure:
- * - Global settings (per_page_max, cache_ttl, etc.)
+ * - Global settings (per_page_max, cache.ttl, etc.)
  * - Table configurations with permissions, metadata, and relationships
  * - Relationship types: belongsTo, hasMany, hasManyThrough, belongsToMany
  *
@@ -148,6 +148,34 @@ return [
             // 'sp_audit_logs' => 600,
             // 'real_time_data' => 120,
         ],
+        'admission' => [
+            // Optional cache admission controls for avoiding low-hit dynamic queries.
+            // These rules are inactive while all arrays are empty.
+            'only_tables' => [],
+            'except_tables' => [],
+            'only_actions' => [],
+            'except_actions' => [],
+            'skip_query_params' => [],
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | PostgreSQL Tenant Context
+    |--------------------------------------------------------------------------
+    |
+    | Controls the optional pgsql.tenant middleware behavior. The default
+    | remains session-scoped for backward compatibility.
+    |
+    | Supported modes:
+    | - session: existing SET SESSION behavior
+    | - session_once: SET SESSION once per request/tenant/connection
+    | - transaction_local: request-scoped set_config(..., true), for transaction-wrapped queries
+    | - off: skip tenant context SQL
+    |
+    */
+    'pgsql_tenant_context' => [
+        'mode' => env('SP_PGSQL_TENANT_CONTEXT_MODE', 'session'),
     ],
 
     /*
@@ -170,17 +198,8 @@ return [
         'email' => env('SP_LARAVEL_API_DOCS_EMAIL'),
     ],
 
-    // Legacy cache_ttl for backward compatibility (deprecated, use cache.ttl instead)
-    'cache_ttl' => env('SP_LARAVEL_API_CACHE_API_TTL', 3600),
-
     // Maximum nesting depth to prevent performance issues (default: 10)
     'max_depth' => 10,
-
-    // Maximum number of relationships to load per query (prevents N+1 / memory exhaustion)
-    'max_relations' => 20,
-
-    // Maximum number of items in a single relationship (e.g., belongsToMany pivot)
-    'max_relation_items' => 500,
 
     // Maximum records for subquery JSON optimization before falling back to
     // the N+1 bulk-loading path. Set higher (e.g. 500) for larger pages with
@@ -259,13 +278,6 @@ return [
     'profiling' => [
         // Enable the ?explain=true feature (disabled by default for security)
         'enabled' => env('SP_QUERY_PROFILING_ENABLED', false),
-    ],
-
-    // Default cascade behavior for nested writes (can be overridden per endpoint)
-    'default_cascade' => [
-        'create' => false,  // allow nested create on store
-        'update' => false,  // allow nested update on update
-        'upsert' => false,  // upsert by primary key when provided
     ],
 
     // Include debug details in API error responses when enabled.

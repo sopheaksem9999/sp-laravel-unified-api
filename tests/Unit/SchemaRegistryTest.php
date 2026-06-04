@@ -237,6 +237,105 @@ class SchemaRegistryTest extends TestCase
         $this->assertTrue($service->isCacheableRequest($request, 'users'));
     }
 
+    public function test_cache_admission_can_limit_cache_to_specific_tables(): void
+    {
+        Config::set('record.cache.enabled', true);
+        Config::set('record.cache.per_table', []);
+        Config::set('record.cache.admission', [
+            'only_tables' => ['users'],
+            'except_tables' => [],
+            'only_actions' => [],
+            'except_actions' => [],
+            'skip_query_params' => [],
+        ]);
+        Config::set('record.tables', [
+            'users' => new RecordTableType(
+                table: 'users',
+                pmsName: 'users',
+                hasTenantId: false,
+                softDeletes: false,
+                public: new RecordTablePublic(read: true, write: true),
+                relationships: [],
+            ),
+            'products' => new RecordTableType(
+                table: 'products',
+                pmsName: 'products',
+                hasTenantId: false,
+                softDeletes: false,
+                public: new RecordTablePublic(read: true, write: true),
+                relationships: [],
+            ),
+        ]);
+
+        SchemaRegistryUtils::refresh();
+        $service = new RecordService();
+
+        $this->assertTrue($service->isCacheableRequest(Request::create('/api/users', 'GET'), 'users'));
+        $this->assertFalse($service->isCacheableRequest(Request::create('/api/products', 'GET'), 'products'));
+    }
+
+    public function test_cache_admission_can_skip_high_cardinality_query_params(): void
+    {
+        Config::set('record.cache.enabled', true);
+        Config::set('record.cache.per_table', []);
+        Config::set('record.cache.admission', [
+            'only_tables' => [],
+            'except_tables' => [],
+            'only_actions' => [],
+            'except_actions' => [],
+            'skip_query_params' => ['nonce', 'timestamp'],
+        ]);
+        Config::set('record.tables', [
+            'users' => new RecordTableType(
+                table: 'users',
+                pmsName: 'users',
+                hasTenantId: false,
+                softDeletes: false,
+                public: new RecordTablePublic(read: true, write: true),
+                relationships: [],
+            ),
+        ]);
+
+        SchemaRegistryUtils::refresh();
+        $service = new RecordService();
+
+        $this->assertFalse($service->isCacheableRequest(Request::create('/api/users?nonce=abc', 'GET'), 'users'));
+        $this->assertTrue($service->isCacheableRequest(Request::create('/api/users?status=active', 'GET'), 'users'));
+    }
+
+    public function test_cache_admission_can_limit_cache_to_specific_actions(): void
+    {
+        Config::set('record.cache.enabled', true);
+        Config::set('record.cache.per_table', []);
+        Config::set('record.cache.admission', [
+            'only_tables' => [],
+            'except_tables' => [],
+            'only_actions' => ['show'],
+            'except_actions' => [],
+            'skip_query_params' => [],
+        ]);
+        Config::set('record.tables', [
+            'users' => new RecordTableType(
+                table: 'users',
+                pmsName: 'users',
+                hasTenantId: false,
+                softDeletes: false,
+                public: new RecordTablePublic(read: true, write: true),
+                relationships: [],
+            ),
+        ]);
+
+        SchemaRegistryUtils::refresh();
+        $service = new RecordService();
+        $showRequest = Request::create('/api/users/1', 'GET');
+        $showRequest->attributes->set('record_cache_action', 'show');
+        $listRequest = Request::create('/api/users', 'GET');
+        $listRequest->attributes->set('record_cache_action', 'list');
+
+        $this->assertTrue($service->isCacheableRequest($showRequest, 'users'));
+        $this->assertFalse($service->isCacheableRequest($listRequest, 'users'));
+    }
+
     public function test_cache_keys_include_tenant_when_enabled(): void
     {
         Config::set('record.tenant_column', 'tenant_id');

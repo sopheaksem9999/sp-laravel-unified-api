@@ -24,9 +24,11 @@ class RecordCacheService
 
         $schemaTableName = null;
         if (is_object($tableSchema)) {
-            $schemaTableName = $tableSchema->table ?? null;
+            $candidateTableName = $tableSchema->table ?? null;
+            $schemaTableName = is_string($candidateTableName) && '' !== $candidateTableName ? $candidateTableName : null;
         } elseif (is_array($tableSchema)) {
-            $schemaTableName = $tableSchema['table'] ?? null;
+            $candidateTableName = $tableSchema['table'] ?? null;
+            $schemaTableName = is_string($candidateTableName) && '' !== $candidateTableName ? $candidateTableName : null;
         }
 
         if ((isset($perTableCache[$table]) && false === $perTableCache[$table]) || (null !== $schemaTableName && isset($perTableCache[$schemaTableName]) && false === $perTableCache[$schemaTableName])) {
@@ -48,7 +50,83 @@ class RecordCacheService
             return false;
         }
 
-        return !$request->has(['search', 'filter', 'where']);
+        if ($request->has(['search', 'filter', 'where'])) {
+            return false;
+        }
+
+        if (!$this->passesAdmissionRules($request, $table, $schemaTableName)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function passesAdmissionRules(Request $request, string $table, ?string $schemaTableName): bool
+    {
+        if (!RecordConfigService::cacheAdmissionEnabled()) {
+            return true;
+        }
+
+        $tableNames = array_values(array_filter([$table, $schemaTableName], static fn(?string $value): bool => null !== $value && '' !== $value));
+
+        $onlyTables = array_filter(array_map('strval', RecordConfigService::cacheAdmissionOnlyTables()));
+        if ([] !== $onlyTables && [] === array_intersect($tableNames, $onlyTables)) {
+            return false;
+        }
+
+        $exceptTables = array_filter(array_map('strval', RecordConfigService::cacheAdmissionExceptTables()));
+        if ([] !== $exceptTables && [] !== array_intersect($tableNames, $exceptTables)) {
+            return false;
+        }
+
+        $action = $this->resolveCacheAction($request);
+        $onlyActions = array_filter(array_map('strval', RecordConfigService::cacheAdmissionOnlyActions()));
+        if ([] !== $onlyActions && (null === $action || !in_array($action, $onlyActions, true))) {
+            return false;
+        }
+
+        $exceptActions = array_filter(array_map('strval', RecordConfigService::cacheAdmissionExceptActions()));
+        if (null !== $action && [] !== $exceptActions && in_array($action, $exceptActions, true)) {
+            return false;
+        }
+
+        foreach (RecordConfigService::cacheAdmissionSkipQueryParams() as $param) {
+            if (!is_string($param) && !is_int($param)) {
+                continue;
+            }
+
+            if ($request->query->has((string) $param)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function resolveCacheAction(Request $request): ?string
+    {
+        $attributeAction = $request->attributes->get('record_cache_action');
+        if (is_string($attributeAction) && '' !== $attributeAction) {
+            return $attributeAction;
+        }
+
+        $route = $request->route();
+        if (!is_object($route) || !method_exists($route, 'getActionMethod')) {
+            return null;
+        }
+
+        $actionMethod = call_user_func([$route, 'getActionMethod']);
+        if (!is_string($actionMethod)) {
+            return null;
+        }
+
+        return match ($actionMethod) {
+            'listRecords' => 'list',
+            'getRecordById' => 'show',
+            'executeTableFunction', 'executeTableFunctionWithId' => 'table_function',
+            'executeGlobalFunction' => 'global_function',
+            default => null,
+        };
     }
 
     public function generateOptimizedCacheKey(string $table, array $filters, array $includes, int $page, int $limit, bool $tenantEnabled): string
@@ -191,7 +269,7 @@ class RecordCacheService
 
     public function calculateOptimalCacheTTL(string $table, int $recordCount, bool $hasRelationships): int
     {
-        $baseTTL = RecordConfigService::cacheDefaultTtl();
+        $baseTTL = RecordConfigService::cacheTtl();
         if ($recordCount > 100) {
             $baseTTL = (int) ($baseTTL * 0.5);
         }

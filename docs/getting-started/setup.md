@@ -67,7 +67,7 @@ This creates (or updates) common paths like:
 - `config/attachments.php`
 - `config/webhooks.php`
 - `config/records/tables/*`
-- `config/records/globalFunctions/*`
+- `config/records/global-functions/*`
 
 It also attempts to inject default rate limiters into `app/Providers/AppServiceProvider.php`:
 

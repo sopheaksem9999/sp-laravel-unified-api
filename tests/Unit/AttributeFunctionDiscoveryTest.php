@@ -3,6 +3,7 @@
 namespace Sopheak\Core\Tests\Unit;
 
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\File;
 use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordFunctionType;
@@ -24,6 +25,9 @@ class AttributeFunctionDiscoveryTest extends TestCase
 
     protected function tearDown(): void
     {
+        $this->deleteTestConfigFile(config_path('records/test-tables-folder/customers.php'));
+        $this->deleteTestConfigFile(config_path('records/global-functions/zz_test_reports.php'));
+        $this->deleteTestConfigFile(config_path('records/globalFunctions/zz_test_legacy.php'));
         SchemaRegistryUtils::refresh();
 
         parent::tearDown();
@@ -87,5 +91,77 @@ class AttributeFunctionDiscoveryTest extends TestCase
         $this->assertInstanceOf(RecordFunctionType::class, $functions['health']);
         $this->assertSame('healthFromConfig', $functions['health']->functionName);
         $this->assertSame('ping', $functions['ping']->functionName);
+    }
+
+    public function test_it_loads_table_configs_from_folder_pattern(): void
+    {
+        Config::set('record.table_config_path', 'records/test-tables-folder');
+        $path = config_path('records/test-tables-folder/customers.php');
+        File::ensureDirectoryExists(dirname($path));
+        file_put_contents($path, <<<'PHP'
+            <?php
+
+            use Sopheak\Core\Types\RecordTableType;
+
+            return new RecordTableType(
+                table: 'customers',
+                pmsName: 'customers',
+                hasTenantId: false,
+            );
+            PHP);
+
+        SchemaRegistryUtils::refresh();
+        $schema = SchemaRegistryUtils::get();
+
+        $this->assertArrayHasKey('customers', $schema);
+        $this->assertSame('customers', $schema['customers']->table);
+    }
+
+    public function test_it_loads_global_functions_from_preferred_and_legacy_folders(): void
+    {
+        $preferredPath = config_path('records/global-functions/zz_test_reports.php');
+        $legacyPath = config_path('records/globalFunctions/zz_test_legacy.php');
+        File::ensureDirectoryExists(dirname($preferredPath));
+        File::ensureDirectoryExists(dirname($legacyPath));
+
+        file_put_contents($preferredPath, <<<'PHP'
+            <?php
+
+            use Sopheak\Core\Types\RecordFunctionType;
+
+            return [
+                'summary' => new RecordFunctionType(
+                    httpMethod: ['GET'],
+                    class: 'App\\Reports',
+                    functionName: 'summary',
+                ),
+            ];
+            PHP);
+
+        file_put_contents($legacyPath, <<<'PHP'
+            <?php
+
+            use Sopheak\Core\Types\RecordFunctionType;
+
+            return [
+                'ping' => new RecordFunctionType(
+                    httpMethod: ['GET'],
+                    class: 'App\\Legacy',
+                    functionName: 'ping',
+                ),
+            ];
+            PHP);
+
+        $functions = RecordConfigService::globalFunctions();
+
+        $this->assertArrayHasKey('zz_test_reports/summary', $functions);
+        $this->assertArrayHasKey('zz_test_legacy/ping', $functions);
+    }
+
+    private function deleteTestConfigFile(string $path): void
+    {
+        if (File::exists($path)) {
+            File::delete($path);
+        }
     }
 }

@@ -105,7 +105,7 @@ Use this pattern when the AI call may take a long time.
 
 ### 1) Configure a global function endpoint
 
-In `config/records/globalFunctions/ai.php`:
+In `config/records/global-functions/ai.php`:
 
 ```php
 <?php
@@ -172,4 +172,3 @@ GET /api/v1/ai_jobs?filter[job_id]=...
 ## Caching Notes
 
 AI function responses are normal function responses. If caching is enabled for function endpoints, ensure you invalidate cache when underlying data changes.
-

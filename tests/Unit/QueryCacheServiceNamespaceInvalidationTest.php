@@ -70,5 +70,29 @@ class QueryCacheServiceNamespaceInvalidationTest extends TestCase
         $this->assertNull(QueryCacheService::get($keyTenant1));
         $this->assertSame('t2', QueryCacheService::get($keyTenant2));
     }
-}
 
+    public function test_it_memoizes_namespace_versions_within_the_current_request(): void
+    {
+        $key = 'record_index:table:users:tenant:tenant-1:hash:abc';
+
+        QueryCacheService::put($key, 'cached', 3600);
+        QueryCacheService::get($key);
+        QueryCacheService::get($key);
+
+        $stats = QueryCacheService::requestStats();
+
+        $this->assertGreaterThan(0, $stats['namespace_memo_hits']);
+    }
+
+    public function test_it_dedupes_repeated_namespace_bumps_in_the_current_request(): void
+    {
+        QueryCacheService::invalidateTableForTenant('users', 'tenant-1');
+        QueryCacheService::invalidateTableForTenant('users', 'tenant-1');
+
+        $this->assertSame(2, QueryCacheService::inspectNamespaceVersion('table', 'users', 'tenant-1'));
+
+        $stats = QueryCacheService::requestStats();
+
+        $this->assertSame(1, $stats['invalidation_dedupe_hits']);
+    }
+}
