@@ -99,7 +99,6 @@ When skipped, the response uses an approximate count from `INFORMATION_SCHEMA.TA
 
 - Prefer loading only needed relationships (`select=*,customer(id,name)`).
 - Keep relationship depth small and predictable (`max_depth` is your safety valve, default 10).
-- Prevent N+1 memory exhaustion by relying on `max_relations` (default 20) and `max_relation_items` (default 500) set in `config/record.php`.
 - Avoid joining multiple high-cardinality relations on list endpoints unless required.
 - Subquery JSON optimization is used for <= `subquery_optimization_max_records` (default 100) records to batch-load relationships in a single query.
 

@@ -20,6 +20,7 @@ use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\NullOutput;
 use Sopheak\Core\Console\SyncRecordColumnsCommand;
 use Sopheak\Core\Services\RecordApiResponseService;
+use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Http\Controllers\CoreRecordController;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
@@ -54,6 +55,18 @@ class BasicTest extends TestCase
     public function it_can_access_config(): void
     {
         $this->assertIsArray(config('record.tables'));
+    }
+
+    /** @test */
+    public function config_service_fallbacks_match_slim_default_config(): void
+    {
+        config()->offsetUnset('record.default_validation.enabled');
+        config()->offsetUnset('record.pagination.cursor.default_column');
+        config()->offsetUnset('record.rpc_prefix');
+
+        $this->assertFalse(RecordConfigService::defaultValidationEnabled());
+        $this->assertSame('id', RecordConfigService::cursorDefaultColumn());
+        $this->assertSame('rpc', RecordConfigService::rpcPrefix());
     }
 
     /** @test */

@@ -335,7 +335,6 @@ Full relationship examples and payload guides: https://sp-laravel-api-docs.verce
 ### Pagination
 - **Traditional**: `page=1&per_page=25` (offset-based for small datasets)
 - **Cursor-Based**: `cursor=12345&direction=next` (high-performance for large datasets — use when cursor parameter present, or when `pagination.default_mode=cursor`)
-- **Auto-Detection**: Automatically switches to cursor pagination for tables >10,000 rows
 - **Custom Cursor**: `cursor_column=created_at` (use different cursor column; configurable default via `pagination.cursor.default_column`)
 - **Composite**: `composite_cursor=true&sortby=created_at` (multi-column cursors; configurable via `pagination.cursor.composite_enabled`)
 - **Skip Total**: `skip_total=true` (omit total count for performance; default configurable via `pagination.skip_total_default`)

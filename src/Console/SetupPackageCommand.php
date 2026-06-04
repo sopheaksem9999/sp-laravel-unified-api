@@ -13,7 +13,7 @@ class SetupPackageCommand extends Command
 {
     protected $signature = 'sp-laravel-api:setup {--force : Overwrite existing configs}';
 
-    protected $description = 'Setup SP Laravel API package: publish configs and create record/audit configurations using config/record.php + config/records/tables/*.php + config/records/globalFunctions/*.php.';
+    protected $description = 'Setup SP Laravel API package: publish configs and create record/audit configurations using config/record.php + config/records/tables/*.php + config/records/global-functions/*.php.';
 
     public function handle(): int
     {
@@ -41,9 +41,10 @@ class SetupPackageCommand extends Command
 
         try {
             $this->ensureDirectory('config/records/tables');
-            $this->ensureDirectory('config/records/globalFunctions');
+            $this->ensureDirectory('config/records/global-functions');
             $created += $this->ensureFile('config/records/tables/README.md', $this->defaultRecordTablesReadme(), $force);
-            $created += $this->ensureFile('config/records/globalFunctions/README.md', $this->defaultRecordGlobalFunctionsReadme(), $force);
+            $created += $this->ensureFile('config/records/tables/users.php', $this->defaultUsersTableConfig(), $force);
+            $created += $this->ensureFile('config/records/global-functions/README.md', $this->defaultRecordGlobalFunctionsReadme(), $force);
             $created += $this->ensureFile('config/record.php', $this->defaultRecordConfig(), $force);
             $created += $this->ensureFile('config/audit.php', $this->defaultAuditConfig(), $force);
             $created += $this->ensureFile('config/attachments.php', $this->defaultAttachmentsConfig(), $force);
@@ -62,7 +63,7 @@ class SetupPackageCommand extends Command
             $this->line('📋 Next steps:');
             $this->line('  1. Review and customize the generated configuration files');
             $this->line('  2. Set up your environment variables (.env file)');
-            $this->line('  3. Configure tables in config/records/tables and global functions in config/records/globalFunctions');
+            $this->line('  3. Configure tables in config/records/tables and global functions in config/records/global-functions');
         }
 
         if (!$force && $created === 0) {
@@ -359,7 +360,7 @@ class SetupPackageCommand extends Command
 
             ## Example
 
-            Create `config/records/globalFunctions/auth.php`:
+            Create `config/records/global-functions/auth.php`:
 
             ```php
             <?php
@@ -378,117 +379,45 @@ class SetupPackageCommand extends Command
             MD;
     }
 
-    private function defaultRecordConfig(): string
+    private function defaultUsersTableConfig(): string
     {
         return <<<'PHP'
             <?php
 
             use Illuminate\Http\Request;
             use Illuminate\Contracts\Validation\Validator;
-            use RecursiveDirectoryIterator;
-            use RecursiveIteratorIterator;
-            use Sopheak\Core\Types\RecordBelongsToType;
-            use Sopheak\Core\Types\RecordFunctionType;
-            use Sopheak\Core\Types\RecordHasManyThroughType;
-            use Sopheak\Core\Types\RecordHasManyType;
-            use Sopheak\Core\Types\RecordMetaBelongsToManyType;
-            use Sopheak\Core\Types\RecordMorphToManyType;
             use Sopheak\Core\Types\RecordTableType;
-            use Sopheak\Core\Types\RecordTableTriggerType;
 
-            $tables = [
-                'users' => new RecordTableType(
-                    pmsName: 'user',
-                    table: 'users',
-                    isAuthRead: true,
-                    isAuthWrite: true,
-                    relationships: [],
-                    functions: [],
-                    softDeletes: false,
-                    hasTenantId: false,
-                    createValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make($request->all(), [
-                        'name' => 'required|string|max:255',
-                        'email' => 'required|email',
-                        'password' => 'required|string|min:8',
-                    ]),
-                    updateValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make($request->all(), [
-                        'name' => 'sometimes|required|string|max:255',
-                        'email' => 'sometimes|required|email',
-                        'password' => 'sometimes|required|string|min:8',
-                    ]),
-                    deleteValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make(['id' => $id], [
-                        'id' => 'required|integer',
-                    ]),
-                ),
-            ];
+            return new RecordTableType(
+                pmsName: 'user',
+                table: 'users',
+                isAuthRead: true,
+                isAuthWrite: true,
+                relationships: [],
+                functions: [],
+                softDeletes: false,
+                hasTenantId: false,
+                createValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make($request->all(), [
+                    'name' => 'required|string|max:255',
+                    'email' => 'required|email',
+                    'password' => 'required|string|min:8',
+                ]),
+                updateValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make($request->all(), [
+                    'name' => 'sometimes|required|string|max:255',
+                    'email' => 'sometimes|required|email',
+                    'password' => 'sometimes|required|string|min:8',
+                ]),
+                deleteValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make(['id' => $id], [
+                    'id' => 'required|integer',
+                ]),
+            );
+            PHP;
+    }
 
-            $globalFunctions = [];
-            $tablesDirectory = __DIR__ . '/records/tables';
-            $globalFunctionsDirectory = __DIR__ . '/records/globalFunctions';
-
-            if (is_dir($tablesDirectory)) {
-                $directoryIterator = new RecursiveIteratorIterator(
-                    new RecursiveDirectoryIterator($tablesDirectory)
-                );
-
-                foreach ($directoryIterator as $file) {
-                    if (!$file->isFile()) {
-                        continue;
-                    }
-
-                    if ($file->getExtension() !== 'php') {
-                        continue;
-                    }
-
-                    $path = $file->getPathname();
-                    $config = require $path;
-
-                    if ($config instanceof RecordTableType) {
-                        $name = pathinfo($path, PATHINFO_FILENAME);
-                        $tables[$name] = $config;
-                    } elseif (is_array($config)) {
-                        $tables = array_merge($tables, $config);
-                    }
-                }
-            }
-
-            if (is_dir($globalFunctionsDirectory)) {
-                $globalFunctionsDirectoryIterator = new RecursiveIteratorIterator(
-                    new RecursiveDirectoryIterator($globalFunctionsDirectory)
-                );
-
-                foreach ($globalFunctionsDirectoryIterator as $file) {
-                    if (!$file->isFile()) {
-                        continue;
-                    }
-
-                    if ($file->getExtension() !== 'php') {
-                        continue;
-                    }
-
-                    $path = $file->getPathname();
-                    $config = require $path;
-
-                    if (!is_array($config)) {
-                        continue;
-                    }
-
-                    $group = pathinfo((string) $path, PATHINFO_FILENAME);
-
-                    foreach ($config as $functionName => $functionConfig) {
-                        if (!is_string($functionName) || $functionName === '') {
-                            continue;
-                        }
-
-                        $normalizedFunctionName = ltrim($functionName, '/');
-                        $prefixedFunctionName = str_contains($normalizedFunctionName, '/')
-                            ? $normalizedFunctionName
-                            : $group . '/' . $normalizedFunctionName;
-
-                        $globalFunctions[$prefixedFunctionName] = $functionConfig;
-                    }
-                }
-            }
+    private function defaultRecordConfig(): string
+    {
+        return <<<'PHP'
+            <?php
 
             return [
                 /*
@@ -507,6 +436,7 @@ class SetupPackageCommand extends Command
                 */
                 'enable_tenant_id' => false,
                 'tenant_column' => 'tenant_id',
+                'tenant_column_type' => 'string',
                 'tenant_header' => 'X-Tenant-ID',
                 'table_config_path' => 'records/tables',
 
@@ -569,7 +499,7 @@ class SetupPackageCommand extends Command
                 | By default, routes are registered under 'rpc' (e.g., /api/v1/rpc/my_function).
                 |
                 */
-                'rpc_prefix' => '',
+                'rpc_prefix' => 'rpc',
 
                 // Maximum items returned per page for list endpoints
                 'per_page_max' => 10000,
@@ -580,13 +510,24 @@ class SetupPackageCommand extends Command
                 // Maximum items per bulk operation
                 'bulk_max' => 1000,
 
+                'rate_limits' => [
+                    // Per-table rate limits (empty = use global defaults)
+                ],
+
+                // Enable or disable bulk operation endpoints
+                'bulk_operations' => env('SP_BULK_OPERATIONS', true),
+
+                // Real-time broadcast events
+                'broadcast_events' => env('SP_BROADCAST_EVENTS', false),
+                'broadcast_tables' => [],
+
                 // Cache configuration
                 'cache' => [
                     // Enable/disable caching globally for the Records API
                     'enabled' => env('SP_LARAVEL_API_CACHE_API', false),
 
                     // Cache TTL for query results (seconds)
-                    'ttl' => 3600,
+                    'ttl' => env('SP_LARAVEL_API_CACHE_API_TTL', 3600),
 
                     // Cache key prefix for Records API
                     'prefix' => 'sp_laravel_api',
@@ -602,23 +543,47 @@ class SetupPackageCommand extends Command
                         // 'audit_logs' => 600,
                         // 'real_time_data' => 120,
                     ],
+                    'admission' => [
+                        // These rules are inactive while all arrays are empty.
+                        'only_tables' => [],
+                        'except_tables' => [],
+                        'only_actions' => [],
+                        'except_actions' => [],
+                        'skip_query_params' => [],
+                    ],
                 ],
 
-                // Legacy cache_ttl for backward compatibility (deprecated, use cache.ttl instead)
-                'cache_ttl' => 3600,
+                'pgsql_tenant_context' => [
+                    'mode' => env('SP_PGSQL_TENANT_CONTEXT_MODE', 'session'),
+                ],
 
-                // Maximum nesting depth to prevent performance issues (default: 2)
+                // Maximum nesting depth to prevent performance issues (default: 10)
                 'max_depth' => 10,
 
-                // Default cascade behavior for nested writes (can be overridden per endpoint)
-                'default_cascade' => [
-                    'create' => false,  // allow nested create on store
-                    'update' => false,  // allow nested update on update
-                    'upsert' => false,  // upsert by primary key when provided
+                'subquery_optimization_max_records' => 100,
+
+                'pagination' => [
+                    'default_mode' => env('SP_PAGINATION_DEFAULT_MODE', 'offset'),
+                    'cursor' => [
+                        'default_column' => 'id',
+                        'composite_enabled' => true,
+                    ],
+                    'skip_total_default' => env('SP_PAGINATION_SKIP_TOTAL', false),
+                ],
+
+                'database' => [
+                    'read_connection' => env('DB_READ_CONNECTION'),
+                    'write_connection' => env('DB_WRITE_CONNECTION'),
+                ],
+
+                'index_hints' => [],
+
+                'profiling' => [
+                    'enabled' => env('SP_QUERY_PROFILING_ENABLED', false),
                 ],
 
                 // Include debug details in API error responses.
-                'debug' => false,
+                'debug' => env('SP_LARAVEL_API_DEBUG', false),
 
                 // permission 
                 'permission_separator' => ':', // separator for permission ex: view:invoice
@@ -637,10 +602,28 @@ class SetupPackageCommand extends Command
                     ],
                 ],
 
-                'global_functions' => $globalFunctions,
+                // Global RPC functions can also be defined in config/records/global-functions/*.php.
+                'global_functions' => [
+                ],
 
-                // Table configurations
-                'tables' => $tables,
+                'global_triggers' => [
+                ],
+
+                'casting' => [
+                ],
+
+                'default_validation' => [
+                    'enabled' => false,
+                    'only_when_missing' => true,
+                    'required' => true,
+                    'types' => true,
+                    'unique' => true,
+                    'foreign_keys' => true,
+                ],
+
+                // Table configurations can also be defined in config/records/tables/*.php.
+                'tables' => [
+                ],
             ];
             PHP;
     }

@@ -68,13 +68,25 @@ trait HasControllerHelpers
         $this->recordService->attachRequestContext(
             request: $request,
             table: (string) ($request->route('table') ?? ''),
-            action: (string) ($request->route()?->getActionMethod() ?? ''),
+            action: $this->resolveRouteAction($request),
             tableSchema: $tableSchema,
             tenantId: $tenantId
         );
         $error = $this->validateTenantIdRequired($tableSchema, $tenantId);
 
         return [$tenantId, $error];
+    }
+
+    private function resolveRouteAction(Request $request): string
+    {
+        $route = $request->route();
+        if (!is_object($route) || !method_exists($route, 'getActionMethod')) {
+            return '';
+        }
+
+        $action = call_user_func([$route, 'getActionMethod']);
+
+        return is_string($action) ? $action : '';
     }
 
     private function validateTenantIdRequired(object $tableSchema, mixed $tenantId): ?JsonResponse

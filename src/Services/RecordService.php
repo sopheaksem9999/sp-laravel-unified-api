@@ -1567,13 +1567,37 @@ class RecordService
         return $connection ? DB::connection($connection) : null;
     }
 
+    private function createReadBuilder(string $table): Builder
+    {
+        $readConn = $this->getReadConnection();
+
+        return $readConn !== null ? $readConn->table($table) : DB::table($table);
+    }
+
     private function applyIndexHint(Builder $builder, string $table, string $context = 'list'): void
     {
+        if ('mysql' !== $this->getBuilderDriverName($builder)) {
+            return;
+        }
+
         $hints = RecordConfigService::tableIndexHints($table);
         $index = $hints[$context] ?? null;
         if ($index !== null) {
-            $builder->from(DB::raw($builder->from . ' FORCE INDEX (' . $index . ')'));
+            $builder->from($builder->getConnection()->raw($builder->from . ' FORCE INDEX (' . $index . ')'));
         }
+    }
+
+    private function getBuilderDriverName(Builder $builder): ?string
+    {
+        $connection = $builder->getConnection();
+
+        if (method_exists($connection, 'getDriverName')) {
+            $driverName = call_user_func([$connection, 'getDriverName']);
+
+            return is_string($driverName) ? $driverName : null;
+        }
+
+        return null;
     }
 
     private function getApproximateCount(string $actualTableName): int
@@ -1798,11 +1822,16 @@ class RecordService
      */
     private function executePagination(Builder $builder, Request $request, string $primaryKey): array
     {
-        if ($request->has('cursor')) {
+        if ($this->shouldUseCursorPagination($request)) {
             return $this->executeCursorPagination($builder, $request, $primaryKey);
         }
 
         return $this->executeOffsetPagination($builder, $request);
+    }
+
+    private function shouldUseCursorPagination(Request $request): bool
+    {
+        return $request->has('cursor') || 'cursor' === RecordConfigService::paginationDefaultMode();
     }
 
     /**
@@ -1841,7 +1870,7 @@ class RecordService
 
         $isCacheable = $this->isCacheableRequest(request: $request, table: $table);
         $cacheKey = null;
-        $isCursor = $request->has('cursor');
+        $isCursor = $this->shouldUseCursorPagination($request);
 
         if ($isCacheable) {
             $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
@@ -1879,11 +1908,7 @@ class RecordService
             }
         }
 
-        $builder = DB::table($actualTableName);
-        $readConn = $this->getReadConnection();
-        if ($readConn !== null) {
-            $builder = $readConn->table($actualTableName);
-        }
+        $builder = $this->createReadBuilder($actualTableName);
 
         $this->applyTenantFilter($builder, $actualTableName, $tenantId);
 
@@ -2024,7 +2049,7 @@ class RecordService
                 $recordIds = self::extractRecordIds($data, $primaryKey);
 
                 if ([] !== $recordIds) {
-                    $optimizedBuilder = DB::table($actualTableName);
+                    $optimizedBuilder = $this->createReadBuilder($actualTableName);
                     $mainCols = RelationshipResolverUtils::getMainTableColumns(is_string($selectParam) ? $selectParam : '');
                     // Strip computed attribute keys — they are not real DB columns
                     $attributeKeys = array_keys($tableSchema->attributes ?? []);
@@ -2092,6 +2117,11 @@ class RecordService
 
         if ($this->shouldIncludeDebug($request)) {
             $meta['debug']['lazy_stats'] = QueryBuilderFiltersUtils::getLazyStats();
+            $meta['debug']['cache_stats'] = QueryCacheService::requestStats();
+            $tenantContextStats = $request->attributes->get('record_pgsql_tenant_context_stats');
+            if (is_array($tenantContextStats)) {
+                $meta['debug']['pgsql_tenant_context'] = $tenantContextStats;
+            }
         }
 
         if ($explainResult !== null) {
@@ -2474,7 +2504,7 @@ class RecordService
         $page = max((int) $request->input('page', 1), 1);
         $perPage = $request->has('per_page') ? max(1, min((int) $request->input('per_page', 25), RecordConfigService::perPageMax())) : null;
         $limit = $request->has('limit') ? max(1, min((int) $request->input('limit'), RecordConfigService::limitMax())) : RecordConfigService::limitMax();
-        $isCursor = $request->has('cursor');
+        $isCursor = $service->shouldUseCursorPagination($request);
 
         // Disable cache if using builder as we can't easily key the builder state
         $isCacheable = !$builder && $service->isCacheableRequest($request, $table);
@@ -2517,11 +2547,7 @@ class RecordService
         }
 
         if (!$builder instanceof Builder) {
-            $builder = DB::table($actualTableName);
-            $readConn = $service->getReadConnection();
-            if ($readConn !== null) {
-                $builder = $readConn->table($actualTableName);
-            }
+            $builder = $service->createReadBuilder($actualTableName);
             $service->applyTenantFilter($builder, $actualTableName, $tenantId);
 
             if ($tableSchema instanceof RecordTableType && $tableSchema->softDeletes) {
@@ -2659,7 +2685,7 @@ class RecordService
                 $recordIds = self::extractRecordIds($data, $primaryKey);
 
                 if ([] !== $recordIds) {
-                    $optimizedBuilder = DB::table($actualTableName);
+                    $optimizedBuilder = $service->createReadBuilder($actualTableName);
                     $mainCols = RelationshipResolverUtils::getMainTableColumns(is_string($selectParam) ? $selectParam : '');
                     // Strip computed attribute keys — they are not real DB columns
                     $attributeKeys = $tableSchema instanceof RecordTableType ? array_keys($tableSchema->attributes ?? []) : [];
@@ -2727,6 +2753,11 @@ class RecordService
 
         if ($service->shouldIncludeDebug($request)) {
             $meta['debug']['lazy_stats'] = QueryBuilderFiltersUtils::getLazyStats();
+            $meta['debug']['cache_stats'] = QueryCacheService::requestStats();
+            $tenantContextStats = $request->attributes->get('record_pgsql_tenant_context_stats');
+            if (is_array($tenantContextStats)) {
+                $meta['debug']['pgsql_tenant_context'] = $tenantContextStats;
+            }
         }
 
         if ($explainResult !== null) {
@@ -2790,7 +2821,7 @@ class RecordService
             }
         }
 
-        $builder = DB::table($actualTableName);
+        $builder = $this->createReadBuilder($actualTableName);
         $this->applyTenantFilter($builder, $actualTableName, $tenantId);
 
         if ($tableSchema->softDeletes && !$request->boolean('with_trashed')) {
@@ -2850,7 +2881,7 @@ class RecordService
             }
 
             if ($useSubqueryOptimization && [] !== $includes) {
-                $optimizedBuilder = DB::table($actualTableName);
+                $optimizedBuilder = $this->createReadBuilder($actualTableName);
                 if ([] !== $dbMainCols) {
                     $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $dbMainCols);
                     $optimizedBuilder->select($prefixedCols);
