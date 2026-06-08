@@ -2,18 +2,21 @@
 
 namespace Sopheak\Core\Http\Controllers;
 
-use Illuminate\Filesystem\FilesystemAdapter;
 use Exception;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Support\Carbon;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Gd\Driver;
+use Sopheak\Core\Services\AttachmentAccessService;
+use Sopheak\Core\Services\AttachmentUrlService;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Services\RecordApiResponseService;
@@ -40,6 +43,53 @@ class AttachmentUploadController extends Controller
         return is_array($result) ? $result : [];
     }
 
+    /**
+     * @param array<int|string, mixed> $records
+     * @return array<int, array<string, mixed>>
+     */
+    private function normalizeRecordList(array $records): array
+    {
+        $normalized = [];
+        foreach ($records as $record) {
+            $normalized[] = $this->normalizeRecord($record);
+        }
+
+        return array_values(array_filter($normalized, fn(array $record): bool => [] !== $record));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function normalizeRecord(mixed $record): array
+    {
+        if (is_array($record)) {
+            return $record;
+        }
+
+        if (is_object($record)) {
+            return (array) $record;
+        }
+
+        return [];
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function onlyExistingColumns(string $table, array $payload): array
+    {
+        if (!Schema::hasTable($table)) {
+            return $payload;
+        }
+
+        return array_filter(
+            $payload,
+            fn(string $column): bool => Schema::hasColumn($table, $column),
+            ARRAY_FILTER_USE_KEY
+        );
+    }
+
     private function normalizeBooleanInputs(Request $request, array $keys): void
     {
         foreach ($keys as $key) {
@@ -61,6 +111,21 @@ class AttachmentUploadController extends Controller
         }
     }
 
+    private function urlService(): AttachmentUrlService
+    {
+        return app(AttachmentUrlService::class);
+    }
+
+    private function accessService(): AttachmentAccessService
+    {
+        return app(AttachmentAccessService::class);
+    }
+
+    private function storageDisk(string $disk): FilesystemAdapter
+    {
+        return Storage::disk($disk);
+    }
+
     private function resolveTenantId(Request $request): mixed
     {
         if (!RecordConfigService::enableTenantId()) {
@@ -77,47 +142,7 @@ class AttachmentUploadController extends Controller
 
     private function appendUrlToAttachment(array $attachment): array
     {
-        $visibility = (string) ($attachment['visibility'] ?? 'private');
-
-        $attachmentPrefix = config('attachments.route_prefix', 'attachments');
-        $baseApiUrl = url(RecordConfigService::apiPrefix() . '/' . $attachmentPrefix . '/' . (($attachment['id'] ?? '')));
-
-        $attachment['download_url'] = $baseApiUrl . '/download';
-
-        if ($this->shouldUseDirectAssetUrl($visibility)) {
-            $diskName = (string) ($attachment['disk'] ?? 'local');
-            /** @var FilesystemAdapter $disk */
-            $disk = Storage::disk($diskName);
-
-            $path = (string) ($attachment['path'] ?? '');
-            if (Str::startsWith($path, '/')) {
-                $path = ltrim($path, '/');
-            }
-
-            if (in_array($diskName, ['local', 'public'], true)) {
-                $attachment['url'] = asset('storage/' . $path);
-            } else {
-                // For cloud disks like s3, use the native disk URL generator
-                $attachment['url'] = $disk->url($path);
-            }
-        } else {
-            $attachment['url'] = $baseApiUrl . '/view';
-        }
-
-        return $attachment;
-    }
-
-    private function shouldUseDirectAssetUrl(string $visibility): bool
-    {
-        if ('public' === $visibility) {
-            return true;
-        }
-
-        if ('temp_public' === $visibility) {
-            return !(bool) config('attachments.protect_temp_public_via_download', false);
-        }
-
-        return false;
+        return $this->urlService()->appendUrls($attachment);
     }
 
     private function isTemporaryVisibility(string $visibility): bool
@@ -219,6 +244,42 @@ class AttachmentUploadController extends Controller
         return Carbon::now()->addMinutes($fallbackMinutes)->toDateTimeString();
     }
 
+    private function tempTimeoutAtExceedsMaximum(Request $request): bool
+    {
+        $timeoutAt = $request->input('temp_timeout_at');
+        if (!is_string($timeoutAt) || '' === trim($timeoutAt)) {
+            return false;
+        }
+
+        $maxTempTimeoutMinutes = max(1, (int) config('attachments.max_temp_timeout_minutes', 43200));
+
+        try {
+            return Carbon::parse($timeoutAt)->greaterThan(Carbon::now()->addMinutes($maxTempTimeoutMinutes));
+        } catch (Exception) {
+            return false;
+        }
+    }
+
+    private function validateRequestedRecordLink(Request $request, mixed $tenantId): ?JsonResponse
+    {
+        if (!$request->filled(['record_id', 'record_type'])) {
+            return null;
+        }
+
+        $recordType = (string) $request->input('record_type');
+        $recordId = $request->input('record_id');
+
+        if (!$this->accessService()->targetRecordAuthorized($request, 'link', $recordType, $recordId, $tenantId)) {
+            return response()->json(['message' => 'Attachment access denied'], Response::HTTP_FORBIDDEN);
+        }
+
+        if (!$this->accessService()->targetRecordExists($recordType, $recordId, $tenantId)) {
+            return response()->json(['message' => 'Target record not found'], 404);
+        }
+
+        return null;
+    }
+
     private function generateAttachmentStoragePath(string $visibility, ?string $extension = null): string
     {
         $filename = Str::uuid()->toString();
@@ -275,6 +336,14 @@ class AttachmentUploadController extends Controller
             return;
         }
 
+        if (!$this->accessService()->targetRecordAuthorized($request, 'link', (string) $request->input('record_type'), $request->input('record_id'), $tenantId)) {
+            throw new Exception('Attachment access denied', Response::HTTP_FORBIDDEN);
+        }
+
+        if (!$this->accessService()->targetRecordExists((string) $request->input('record_type'), $request->input('record_id'), $tenantId)) {
+            throw new Exception('Target record not found');
+        }
+
         $collectionName = $request->input('collection_name', 'default');
         $tenantColumn = RecordConfigService::tenantColumn();
 
@@ -286,16 +355,25 @@ class AttachmentUploadController extends Controller
             ], $tenantId);
 
             if (!empty($existingLinks['data'])) {
-                foreach ($existingLinks['data'] as $oldLink) {
+                foreach ($this->normalizeRecordList($existingLinks['data']) as $oldLink) {
                     RecordService::executeDelete('sp_attachment_links', $oldLink['id'], [], $tenantId);
 
                     if (!empty($oldLink['attachment_id'])) {
+                        $hasOtherLinks = $this->accessService()->attachmentHasOtherLinks(
+                            (string) $oldLink['attachment_id'],
+                            $oldLink['id'] ?? null,
+                            $tenantId
+                        );
+                        if ($hasOtherLinks) {
+                            continue;
+                        }
+
                         $oldAttachments = RecordService::executeGetByFilter('sp_attachments', [
                             'id' => 'eq.' . $oldLink['attachment_id'],
                         ], $tenantId);
 
                         if (!empty($oldAttachments['data'][0])) {
-                            $oldAttachment = $oldAttachments['data'][0];
+                            $oldAttachment = $this->normalizeRecord($oldAttachments['data'][0]);
                             Storage::disk($oldAttachment['disk'])->delete($oldAttachment['path']);
                             RecordService::executeDelete('sp_attachments', $oldAttachment['id'], [], $tenantId);
                         }
@@ -358,15 +436,29 @@ class AttachmentUploadController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'parent_id' => 'nullable|string',
+            'scope' => 'nullable|string|max:64',
+            'visibility' => 'nullable|in:private,public,temp_private,temp_public',
+            'owner_type' => 'nullable|string|max:255',
+            'owner_id' => 'nullable|string|max:255',
+            'metadata' => 'nullable|array',
         ]);
 
         $tenantId = $this->resolveTenantId($request);
+        if (!$this->accessService()->folderExists($request->input('parent_id'), $tenantId)) {
+            return RecordApiResponseService::errorWrapped('Parent folder not found', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
         $tenantColumn = RecordConfigService::tenantColumn();
-        $payload = [
+        $payload = $this->onlyExistingColumns('sp_document_folders', [
             'id' => Str::uuid()->toString(),
             'name' => $request->input('name'),
             'parent_id' => $request->input('parent_id'),
-        ];
+            'scope' => $request->input('scope', 'internal'),
+            'visibility' => $request->input('visibility', 'private'),
+            'owner_type' => $request->input('owner_type'),
+            'owner_id' => $request->input('owner_id'),
+            'metadata' => $request->input('metadata'),
+        ]);
 
         if (RecordConfigService::enableTenantId() && null !== $tenantId && '' !== $tenantId) {
             $payload[$tenantColumn] = $tenantId;
@@ -383,10 +475,22 @@ class AttachmentUploadController extends Controller
         $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'parent_id' => 'nullable|string',
+            'scope' => 'sometimes|string|max:64',
+            'visibility' => 'sometimes|in:private,public,temp_private,temp_public',
+            'owner_type' => 'nullable|string|max:255',
+            'owner_id' => 'nullable|string|max:255',
+            'metadata' => 'nullable|array',
         ]);
 
         $tenantId = $this->resolveTenantId($request);
-        $payload = $request->only(['name', 'parent_id']);
+        if (!$this->accessService()->folderExists($request->input('parent_id'), $tenantId)) {
+            return RecordApiResponseService::errorWrapped('Parent folder not found', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $payload = $this->onlyExistingColumns(
+            'sp_document_folders',
+            $request->only(['name', 'parent_id', 'scope', 'visibility', 'owner_type', 'owner_id', 'metadata'])
+        );
         $folder = RecordService::executeUpdate('sp_document_folders', $id, $payload, [], $tenantId);
         $folder = $this->extractRecordPayload($folder);
 
@@ -396,6 +500,10 @@ class AttachmentUploadController extends Controller
     public function deleteFolder(Request $request, string $id): JsonResponse
     {
         $tenantId = $this->resolveTenantId($request);
+        if (!$this->accessService()->canDeleteFolder($id, $tenantId)) {
+            return RecordApiResponseService::errorWrapped('Folder is not empty', Response::HTTP_CONFLICT);
+        }
+
         RecordService::executeDelete('sp_document_folders', $id, [], $tenantId);
 
         return RecordApiResponseService::success();
@@ -404,6 +512,13 @@ class AttachmentUploadController extends Controller
     public function getForRecord(Request $request, string $table, string $recordId): JsonResponse
     {
         $tenantId = $this->resolveTenantId($request);
+        if (!$this->accessService()->targetRecordAuthorized($request, 'read', $table, $recordId, $tenantId)) {
+            return response()->json(['message' => 'Attachment access denied'], Response::HTTP_FORBIDDEN);
+        }
+
+        if (!$this->accessService()->targetRecordExists($table, $recordId, $tenantId)) {
+            return response()->json(['message' => 'Target record not found'], 404);
+        }
 
         $collectionName = $request->query('collection_name');
 
@@ -450,6 +565,13 @@ class AttachmentUploadController extends Controller
         ]);
 
         $tenantId = $this->resolveTenantId($request);
+        if (!$this->accessService()->targetRecordAuthorized($request, 'link', $table, $recordId, $tenantId)) {
+            return response()->json(['message' => 'Attachment access denied'], Response::HTTP_FORBIDDEN);
+        }
+
+        if (!$this->accessService()->targetRecordExists($table, $recordId, $tenantId)) {
+            return response()->json(['message' => 'Target record not found'], 404);
+        }
 
         $attachmentId = $request->input('attachment_id');
         $collectionName = $request->input('collection_name', 'default');
@@ -502,6 +624,13 @@ class AttachmentUploadController extends Controller
     public function unlinkFromRecord(Request $request, string $table, string $recordId, string $attachmentId): JsonResponse
     {
         $tenantId = $this->resolveTenantId($request);
+        if (!$this->accessService()->targetRecordAuthorized($request, 'unlink', $table, $recordId, $tenantId)) {
+            return response()->json(['message' => 'Attachment access denied'], Response::HTTP_FORBIDDEN);
+        }
+
+        if (!$this->accessService()->targetRecordExists($table, $recordId, $tenantId)) {
+            return response()->json(['message' => 'Target record not found'], 404);
+        }
 
         $collectionName = $request->query('collection_name');
 
@@ -554,9 +683,23 @@ class AttachmentUploadController extends Controller
             'temp_timeout_at' => 'nullable|date',
         ]);
 
+        if ($this->tempTimeoutAtExceedsMaximum($request)) {
+            return RecordApiResponseService::errorWrapped('Temporary timeout exceeds maximum allowed minutes', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
         $file = $request->file('file');
         if (!$file) {
             return response()->json(['message' => 'File is required'], 422);
+        }
+
+        $tenantId = $this->resolveTenantId($request);
+        if (!$this->accessService()->folderExists($request->input('folder_id'), $tenantId)) {
+            return RecordApiResponseService::errorWrapped('Folder not found', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $recordLinkError = $this->validateRequestedRecordLink($request, $tenantId);
+        if ($recordLinkError instanceof JsonResponse) {
+            return $recordLinkError;
         }
 
         $visibility = $this->resolveVisibility($request, 'private');
@@ -602,7 +745,6 @@ class AttachmentUploadController extends Controller
 
         // 2. Resolve Dynamic Tenant Configuration
         $tenantColumn = RecordConfigService::tenantColumn();
-        $tenantId = $this->resolveTenantId($request);
         $tempTimeout = $this->resolveTempTimeout($request, $visibility);
 
         // 3. Prepare Payload with Dynamic Tenant Column
@@ -630,7 +772,11 @@ class AttachmentUploadController extends Controller
         $attachment = $this->appendUrlToAttachment($attachment);
 
         // 5. Handle Linking & Replace Old (Avatar use-case)
-        $this->linkAttachmentIfRequested($request, (string) $attachment['id'], $tenantId);
+        try {
+            $this->linkAttachmentIfRequested($request, (string) $attachment['id'], $tenantId);
+        } catch (Exception $exception) {
+            return response()->json(['message' => $exception->getMessage()], $exception->getCode() > 0 ? $exception->getCode() : 404);
+        }
 
         return RecordApiResponseService::success($attachment);
     }
@@ -656,7 +802,20 @@ class AttachmentUploadController extends Controller
             'replace_old' => 'nullable|boolean',
         ]);
 
+        if ($this->tempTimeoutAtExceedsMaximum($request)) {
+            return RecordApiResponseService::errorWrapped('Temporary timeout exceeds maximum allowed minutes', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
         $tenantId = $this->resolveTenantId($request);
+        if (!$this->accessService()->folderExists($request->input('folder_id'), $tenantId)) {
+            return RecordApiResponseService::errorWrapped('Folder not found', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $recordLinkError = $this->validateRequestedRecordLink($request, $tenantId);
+        if ($recordLinkError instanceof JsonResponse) {
+            return $recordLinkError;
+        }
+
         $sourceId = (string) $request->input('attachment_id');
 
         try {
@@ -713,7 +872,11 @@ class AttachmentUploadController extends Controller
         $attachment = RecordService::executeCreate('sp_attachments', $attachmentPayload, [], $tenantId);
         $attachment = $this->extractRecordPayload($attachment);
         $attachment = $this->appendUrlToAttachment($attachment);
-        $this->linkAttachmentIfRequested($request, (string) $attachment['id'], $tenantId);
+        try {
+            $this->linkAttachmentIfRequested($request, (string) $attachment['id'], $tenantId);
+        } catch (Exception $exception) {
+            return response()->json(['message' => $exception->getMessage()], $exception->getCode() > 0 ? $exception->getCode() : 404);
+        }
 
         return RecordApiResponseService::success($attachment);
     }
@@ -752,16 +915,15 @@ class AttachmentUploadController extends Controller
             return RecordApiResponseService::errorWrapped('Attachment has expired', Response::HTTP_GONE);
         }
 
-        if (!Storage::disk($attachment['disk'])->exists($attachment['path'])) {
+        $disk = $this->storageDisk((string) $attachment['disk']);
+
+        if (!$disk->exists((string) $attachment['path'])) {
             return response()->json(['message' => 'File not found on disk'], 404);
         }
 
-        /** @var FilesystemAdapter $disk */
-        $disk = Storage::disk($attachment['disk']);
-
         if ($inline) {
             $mimeType = (string) ($attachment['mime_type'] ?? 'application/octet-stream');
-            $response = $disk->response($attachment['path']);
+            $response = $disk->response((string) $attachment['path']);
             if (method_exists($response, 'header')) {
                 $response->header('Content-Type', $mimeType);
             }
@@ -769,6 +931,6 @@ class AttachmentUploadController extends Controller
             return $response;
         }
 
-        return $disk->download($attachment['path'], $attachment['filename']);
+        return $disk->download((string) $attachment['path'], (string) $attachment['filename']);
     }
 }

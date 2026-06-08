@@ -8,24 +8,35 @@ use Sopheak\Core\Services\RecordConfigService;
 return new class extends Migration {
     public function up(): void
     {
+        if (!(bool) config('attachments.enabled', true)) {
+            return;
+        }
+
         $tenantColumn = RecordConfigService::tenantColumn();
         $enableTenantId = RecordConfigService::enableTenantId();
 
-        Schema::create('sp_document_folders', function (Blueprint $table) use ($tenantColumn, $enableTenantId) {
+        Schema::create('sp_document_folders', function (Blueprint $table) use ($tenantColumn, $enableTenantId): void {
             $table->uuid('id')->primary();
             if ($enableTenantId) {
                 $table->string($tenantColumn)->nullable()->index();
             }
+
             $table->string('name');
             $table->uuid('parent_id')->nullable()->index();
+            $table->string('scope')->default('internal')->index();
+            $table->string('visibility')->default('private')->index();
+            $table->string('owner_type')->nullable()->index();
+            $table->string('owner_id')->nullable()->index();
+            $table->json('metadata')->nullable();
             $table->timestamps();
         });
 
-        Schema::create('sp_attachments', function (Blueprint $table) use ($tenantColumn, $enableTenantId) {
+        Schema::create('sp_attachments', function (Blueprint $table) use ($tenantColumn, $enableTenantId): void {
             $table->uuid('id')->primary();
             if ($enableTenantId) {
                 $table->string($tenantColumn)->nullable()->index();
             }
+
             $table->uuid('folder_id')->nullable()->index();
             $table->string('title')->nullable();
             $table->text('caption')->nullable();
@@ -39,16 +50,19 @@ return new class extends Migration {
             $table->timestamps();
         });
 
-        Schema::create('sp_attachment_links', function (Blueprint $table) use ($tenantColumn, $enableTenantId) {
+        Schema::create('sp_attachment_links', function (Blueprint $table) use ($tenantColumn, $enableTenantId): void {
             $table->id();
             if ($enableTenantId) {
                 $table->string($tenantColumn)->nullable()->index();
             }
+
             $table->uuid('attachment_id')->index();
-            $table->uuid('record_id')->index();
+            $table->string('record_id')->index();
             $table->string('record_type')->index();
             $table->string('collection_name')->nullable()->index();
             $table->timestamps();
+
+            $table->index(['record_type', 'record_id', 'collection_name']);
         });
     }
 

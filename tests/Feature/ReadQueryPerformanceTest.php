@@ -29,7 +29,7 @@ class ReadQueryPerformanceTest extends TestCase
         Config::set('record.cache.enabled', false);
         Config::set('record.pagination.default_mode', 'offset');
         Config::set('record.pagination.skip_total_default', false);
-        Config::set('record.database.read_connection', null);
+        Config::set('record.database.read_connection');
         Config::set('record.index_hints', []);
     }
 
@@ -84,7 +84,7 @@ class ReadQueryPerformanceTest extends TestCase
 
         $queries = [];
         DB::listen(static function ($event) use (&$queries): void {
-            $queries[] = strtolower($event->sql);
+            $queries[] = strtolower((string) $event->sql);
         });
 
         app(RecordService::class)->listRecords(
@@ -125,8 +125,8 @@ class ReadQueryPerformanceTest extends TestCase
         $this->assertSame('read-post', $show['data']->title);
 
         $withRelation = $service->listRecords(Request::create('/api/posts?select=*,user(*)&per_page=1', 'GET'), 'posts', null);
-        $this->assertSame('read-post', $withRelation['data'][0]->title);
-        $this->assertSame('read-user', $withRelation['data'][0]->user->name);
+        $this->assertSame('read-post', data_get($withRelation, 'data.0.title'));
+        $this->assertSame('read-user', data_get($withRelation, 'data.0.user.name'));
     }
 
     public function test_index_hints_are_ignored_on_non_mysql_drivers(): void
@@ -145,7 +145,7 @@ class ReadQueryPerformanceTest extends TestCase
 
         $queries = [];
         DB::listen(static function ($event) use (&$queries): void {
-            $queries[] = strtolower($event->sql);
+            $queries[] = strtolower((string) $event->sql);
         });
 
         $result = app(RecordService::class)->listRecords(Request::create('/api/tasks?per_page=1', 'GET'), 'tasks', null);

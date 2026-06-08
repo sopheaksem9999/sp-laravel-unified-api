@@ -2,6 +2,7 @@
 
 namespace Sopheak\Core\Services;
 
+use Throwable;
 use Sopheak\Core\Jobs\AuditLogJob;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -41,7 +42,9 @@ class RecordConfigService
 
     public static function rpcPrefix(): string
     {
-        return (string) config('record.rpc_prefix', 'rpc');
+        $prefix = config('record.rpc_prefix');
+
+        return is_string($prefix) ? $prefix : 'rpc';
     }
 
     public static function perPageMax(): int
@@ -111,11 +114,23 @@ class RecordConfigService
             return (bool) $enabled;
         }
 
-        return self::cacheAdmissionOnlyTables() !== []
-            || self::cacheAdmissionExceptTables() !== []
-            || self::cacheAdmissionOnlyActions() !== []
-            || self::cacheAdmissionExceptActions() !== []
-            || self::cacheAdmissionSkipQueryParams() !== [];
+        if (self::cacheAdmissionOnlyTables() !== []) {
+            return true;
+        }
+
+        if (self::cacheAdmissionExceptTables() !== []) {
+            return true;
+        }
+
+        if (self::cacheAdmissionOnlyActions() !== []) {
+            return true;
+        }
+
+        if (self::cacheAdmissionExceptActions() !== []) {
+            return true;
+        }
+
+        return self::cacheAdmissionSkipQueryParams() !== [];
     }
 
     public static function cacheAdmissionOnlyTables(): array
@@ -204,7 +219,7 @@ class RecordConfigService
 
         try {
             $discovered = AttributeDiscoveryService::discoverGlobalFunctions();
-        } catch (\Throwable) {
+        } catch (Throwable) {
             $discovered = [];
         }
 
@@ -326,7 +341,11 @@ class RecordConfigService
 
                 $group = pathinfo($path, PATHINFO_FILENAME);
                 foreach ($config as $functionName => $functionConfig) {
-                    if (!is_string($functionName) || $functionName === '') {
+                    if (!is_string($functionName)) {
+                        continue;
+                    }
+
+                    if ($functionName === '') {
                         continue;
                     }
 
@@ -363,7 +382,11 @@ class RecordConfigService
         $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory));
 
         foreach ($iterator as $file) {
-            if (!$file->isFile() || $file->getExtension() !== 'php') {
+            if (!$file->isFile()) {
+                continue;
+            }
+
+            if ($file->getExtension() !== 'php') {
                 continue;
             }
 
@@ -387,7 +410,9 @@ class RecordConfigService
 
     public static function cursorDefaultColumn(): string
     {
-        return (string) config('record.pagination.cursor.default_column', 'id');
+        $column = config('record.pagination.cursor.default_column');
+
+        return is_string($column) && '' !== trim($column) ? $column : 'id';
     }
 
     public static function cursorCompositeEnabled(): bool
