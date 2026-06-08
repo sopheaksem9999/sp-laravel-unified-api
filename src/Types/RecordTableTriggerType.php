@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Types;
 
 use InvalidArgumentException;
@@ -20,6 +22,9 @@ class RecordTableTriggerType
         }
     }
 
+    /**
+     * @param array<string, mixed> $properties
+     */
     public static function __set_state(array $properties): self
     {
         return new self(

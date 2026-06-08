@@ -1,7 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Authorization\Models;
 
+use RuntimeException;
+use Sopheak\Core\Authorization\PermissionRegistrar;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Str;
@@ -41,7 +45,7 @@ class Role extends Model
 
     protected static function booted(): void
     {
-        static::creating(function (self $role) {
+        static::creating(function (self $role): void {
             if ($role->guard_name === null) {
                 $role->guard_name = RecordConfigService::authGuard();
             }
@@ -74,18 +78,18 @@ class Role extends Model
             }
         });
 
-        static::deleting(function (self $role) {
+        static::deleting(function (self $role): void {
             if ($role->is_system) {
-                throw new \RuntimeException('Cannot delete system role: ' . $role->name);
+                throw new RuntimeException('Cannot delete system role: ' . $role->name);
             }
         });
 
-        static::saved(function () {
-            app(\Sopheak\Core\Authorization\PermissionRegistrar::class)->forgetAllCachedPermissions();
+        static::saved(function (): void {
+            app(PermissionRegistrar::class)->forgetAllCachedPermissions();
         });
 
-        static::deleted(function () {
-            app(\Sopheak\Core\Authorization\PermissionRegistrar::class)->forgetAllCachedPermissions();
+        static::deleted(function (): void {
+            app(PermissionRegistrar::class)->forgetAllCachedPermissions();
         });
     }
 

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Utilities;
 
 use Throwable;
@@ -472,6 +474,9 @@ class SchemaRegistryUtils
         return $foreignKeys;
     }
 
+    /**
+     * @return string[]
+     */
     private static function getCompositeTypeFields(string $schema, string $typeName): array
     {
         $rows = DB::select(

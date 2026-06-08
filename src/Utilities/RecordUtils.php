@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Utilities;
 
 use Illuminate\Http\Request;
@@ -151,6 +153,9 @@ class RecordUtils
         return array_values($value);
     }
 
+    /**
+     * @param mixed[] $values
+     */
     private static function buildCompositeSql(string $typeName, array $values, PDO $pdo): string
     {
         $parts = array_map(static function (mixed $value) use ($pdo): string {

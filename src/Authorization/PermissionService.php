@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Authorization;
 
 use Illuminate\Database\Eloquent\Model;

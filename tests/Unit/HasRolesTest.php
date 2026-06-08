@@ -1,7 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests\Unit;
 
+use RuntimeException;
+use Sopheak\Core\Authorization\PermissionRegistrar;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -16,7 +20,9 @@ class TestUserWithRoles extends Model
     use HasRoles;
 
     protected $table = 'users';
+
     protected $guarded = [];
+
     public $timestamps = false;
 }
 
@@ -37,7 +43,7 @@ class HasRolesTest extends TestCase
     /** @test */
     public function it_can_assign_role_to_user(): void
     {
-        $role = Role::query()->create(['name' => 'admin', 'guard_name' => 'api']);
+        Role::query()->create(['name' => 'admin', 'guard_name' => 'api']);
         $user = $this->createUserWithTrait();
 
         $user->assignRole('admin');
@@ -61,7 +67,7 @@ class HasRolesTest extends TestCase
     /** @test */
     public function it_can_remove_role(): void
     {
-        $role = Role::query()->create(['name' => 'admin', 'guard_name' => 'api']);
+        Role::query()->create(['name' => 'admin', 'guard_name' => 'api']);
         $user = $this->createUserWithTrait();
 
         $user->assignRole('admin');
@@ -186,7 +192,7 @@ class HasRolesTest extends TestCase
     /** @test */
     public function it_gets_permissions_from_roles(): void
     {
-        $perm = Permission::query()->create(['name' => 'view:invoice', 'guard_name' => 'api']);
+        Permission::query()->create(['name' => 'view:invoice', 'guard_name' => 'api']);
         $role = Role::query()->create(['name' => 'admin', 'guard_name' => 'api']);
         $role->givePermissionTo('view:invoice');
 
@@ -218,7 +224,7 @@ class HasRolesTest extends TestCase
     /** @test */
     public function it_does_not_duplicate_permissions(): void
     {
-        $perm = Permission::query()->create(['name' => 'view:invoice', 'guard_name' => 'api']);
+        Permission::query()->create(['name' => 'view:invoice', 'guard_name' => 'api']);
         $role = Role::query()->create(['name' => 'admin', 'guard_name' => 'api']);
         $role->givePermissionTo('view:invoice');
 
@@ -247,7 +253,7 @@ class HasRolesTest extends TestCase
     {
         $role = Role::query()->create(['name' => 'superadmin', 'guard_name' => 'api', 'is_system' => true]);
 
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Cannot delete system role: superadmin');
 
         $role->delete();
@@ -267,7 +273,7 @@ class HasRolesTest extends TestCase
     public function it_invalidates_cache_when_permission_is_created(): void
     {
         $user = $this->createUserWithTrait();
-        $registrar = $this->app->make(\Sopheak\Core\Authorization\PermissionRegistrar::class);
+        $registrar = $this->app->make(PermissionRegistrar::class);
 
         // Pre-warm cache
         $this->assertCount(0, $user->getAllPermissions());
@@ -292,12 +298,12 @@ class HasRolesTest extends TestCase
     public function it_invalidates_cache_when_role_is_created(): void
     {
         $user = $this->createUserWithTrait();
-        $registrar = $this->app->make(\Sopheak\Core\Authorization\PermissionRegistrar::class);
+        $registrar = $this->app->make(PermissionRegistrar::class);
 
-        $versionBefore = $registrar->getCacheVersion();
+        $registrar->getCacheVersion();
 
         // Create a new permission and assign it to the role
-        $perm = Permission::query()->create(['name' => 'view:invoice', 'guard_name' => 'api']);
+        Permission::query()->create(['name' => 'view:invoice', 'guard_name' => 'api']);
 
         // Pre-warm cache
         $this->assertCount(0, $user->getAllPermissions());
@@ -305,6 +311,7 @@ class HasRolesTest extends TestCase
         // Create a role and give it the permission
         $role = Role::query()->create(['name' => 'admin', 'guard_name' => 'api']);
         $role->givePermissionTo('view:invoice');
+
         $user->assignRole('admin');
 
         // getAllPermissions should now reflect the role-based permission
@@ -327,13 +334,13 @@ class HasRolesTest extends TestCase
     protected function createPermissionTables(): void
     {
         if (!Schema::hasTable('users')) {
-            Schema::create('users', function (Blueprint $table) {
+            Schema::create('users', function (Blueprint $table): void {
                 $table->id();
             });
         }
 
         if (!Schema::hasTable('sp_permissions')) {
-            Schema::create('sp_permissions', function (Blueprint $table) {
+            Schema::create('sp_permissions', function (Blueprint $table): void {
                 $table->bigIncrements('id');
                 $table->string('name')->unique();
                 $table->string('group')->nullable();
@@ -344,7 +351,7 @@ class HasRolesTest extends TestCase
         }
 
         if (!Schema::hasTable('sp_roles')) {
-            Schema::create('sp_roles', function (Blueprint $table) {
+            Schema::create('sp_roles', function (Blueprint $table): void {
                 $table->bigIncrements('id');
                 $table->string('name');
                 $table->string('key')->nullable();
@@ -359,7 +366,7 @@ class HasRolesTest extends TestCase
         }
 
         if (!Schema::hasTable('sp_role_permissions')) {
-            Schema::create('sp_role_permissions', function (Blueprint $table) {
+            Schema::create('sp_role_permissions', function (Blueprint $table): void {
                 $table->bigIncrements('id');
                 $table->unsignedBigInteger('role_id');
                 $table->unsignedBigInteger('permission_id');
@@ -369,7 +376,7 @@ class HasRolesTest extends TestCase
         }
 
         if (!Schema::hasTable('sp_model_has_roles')) {
-            Schema::create('sp_model_has_roles', function (Blueprint $table) {
+            Schema::create('sp_model_has_roles', function (Blueprint $table): void {
                 $table->bigIncrements('id');
                 $table->string('model_type');
                 $table->unsignedBigInteger('model_id');
@@ -381,7 +388,7 @@ class HasRolesTest extends TestCase
         }
 
         if (!Schema::hasTable('sp_model_permissions')) {
-            Schema::create('sp_model_permissions', function (Blueprint $table) {
+            Schema::create('sp_model_permissions', function (Blueprint $table): void {
                 $table->bigIncrements('id');
                 $table->string('model_type');
                 $table->unsignedBigInteger('model_id');

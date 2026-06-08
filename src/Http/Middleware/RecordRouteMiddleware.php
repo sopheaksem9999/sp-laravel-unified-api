@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Http\Middleware;
 
 use Closure;
@@ -59,6 +61,9 @@ class RecordRouteMiddleware
         return $this->sanitizeMiddlewares($middlewares);
     }
 
+    /**
+     * @param array<string, mixed> $map
+     */
     private function resolveMapForAction(array $map, string $action): array
     {
         $group = $this->resolveActionGroup($action);

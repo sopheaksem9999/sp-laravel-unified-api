@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Triggers;
 
 use Illuminate\Http\Request;
@@ -38,7 +40,6 @@ abstract class RecordTriggerBase
      * @param Request $request The incoming HTTP request
      * @param string $table The table name
      * @param array $context Additional context (filters, tenant_id, etc.)
-     * @return void
      */
     public static function beforeRead(Request $request, string $table, array $context): void
     {
@@ -52,7 +53,6 @@ abstract class RecordTriggerBase
      * @param Request $request The incoming HTTP request
      * @param string $table The table name
      * @param array $context Contains 'data', 'response', 'records', 'tenant_id'
-     * @return void
      */
     public static function afterRead(Request $request, string $table, array $context): void
     {
@@ -66,7 +66,6 @@ abstract class RecordTriggerBase
      * @param Request $request The incoming HTTP request
      * @param string $table The table name
      * @param array $context Contains 'tenant_id', 'payload'
-     * @return void
      */
     public static function beforeCreate(Request $request, string $table, array $context): void
     {
@@ -79,7 +78,6 @@ abstract class RecordTriggerBase
      * @param Request $request The incoming HTTP request
      * @param string $table The table name
      * @param array $context Contains 'id', 'payload', 'tenant_id', 'data'
-     * @return void
      */
     public static function afterCreate(Request $request, string $table, array $context): void
     {
@@ -92,7 +90,6 @@ abstract class RecordTriggerBase
      * @param Request $request The incoming HTTP request
      * @param string $table The table name
      * @param array $context Contains 'id', 'payload', 'tenant_id'
-     * @return void
      */
     public static function beforeUpdate(Request $request, string $table, array $context): void
     {
@@ -105,7 +102,6 @@ abstract class RecordTriggerBase
      * @param Request $request The incoming HTTP request
      * @param string $table The table name
      * @param array $context Contains 'id', 'payload', 'tenant_id', 'old_data', 'data'
-     * @return void
      */
     public static function afterUpdate(Request $request, string $table, array $context): void
     {
@@ -118,7 +114,6 @@ abstract class RecordTriggerBase
      * @param Request $request The incoming HTTP request
      * @param string $table The table name
      * @param array $context Contains 'id', 'tenant_id', 'record'
-     * @return void
      */
     public static function beforeDelete(Request $request, string $table, array $context): void
     {
@@ -131,7 +126,6 @@ abstract class RecordTriggerBase
      * @param Request $request The incoming HTTP request
      * @param string $table The table name
      * @param array $context Contains 'id', 'tenant_id', 'old_data'
-     * @return void
      */
     public static function afterDelete(Request $request, string $table, array $context): void
     {
@@ -144,7 +138,6 @@ abstract class RecordTriggerBase
      * @param Request $request The incoming HTTP request
      * @param string $table The table name
      * @param array $context Contains 'id', 'tenant_id'
-     * @return void
      */
     public static function beforeRestore(Request $request, string $table, array $context): void
     {
@@ -157,7 +150,6 @@ abstract class RecordTriggerBase
      * @param Request $request The incoming HTTP request
      * @param string $table The table name
      * @param array $context Contains 'id', 'tenant_id', 'data'
-     * @return void
      */
     public static function afterRestore(Request $request, string $table, array $context): void
     {
@@ -170,7 +162,6 @@ abstract class RecordTriggerBase
      * @param Request $request The incoming HTTP request
      * @param string $table The table name
      * @param array $context Contains 'id', 'tenant_id'
-     * @return void
      */
     public static function beforeForceDelete(Request $request, string $table, array $context): void
     {
@@ -183,7 +174,6 @@ abstract class RecordTriggerBase
      * @param Request $request The incoming HTTP request
      * @param string $table The table name
      * @param array $context Contains 'id', 'tenant_id', 'old_data'
-     * @return void
      */
     public static function afterForceDelete(Request $request, string $table, array $context): void
     {

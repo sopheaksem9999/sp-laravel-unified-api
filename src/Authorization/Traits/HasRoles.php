@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Authorization\Traits;
 
 use Illuminate\Database\Eloquent\Relations\MorphToMany;

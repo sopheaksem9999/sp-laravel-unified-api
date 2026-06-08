@@ -54,11 +54,7 @@ class RecordCacheService
             return false;
         }
 
-        if (!$this->passesAdmissionRules($request, $table, $schemaTableName)) {
-            return false;
-        }
-
-        return true;
+        return $this->passesAdmissionRules($request, $table, $schemaTableName);
     }
 
     private function passesAdmissionRules(Request $request, string $table, ?string $schemaTableName): bool
@@ -69,23 +65,23 @@ class RecordCacheService
 
         $tableNames = array_values(array_filter([$table, $schemaTableName], static fn(?string $value): bool => null !== $value && '' !== $value));
 
-        $onlyTables = array_filter(array_map('strval', RecordConfigService::cacheAdmissionOnlyTables()));
+        $onlyTables = array_filter(array_map(strval(...), RecordConfigService::cacheAdmissionOnlyTables()));
         if ([] !== $onlyTables && [] === array_intersect($tableNames, $onlyTables)) {
             return false;
         }
 
-        $exceptTables = array_filter(array_map('strval', RecordConfigService::cacheAdmissionExceptTables()));
+        $exceptTables = array_filter(array_map(strval(...), RecordConfigService::cacheAdmissionExceptTables()));
         if ([] !== $exceptTables && [] !== array_intersect($tableNames, $exceptTables)) {
             return false;
         }
 
         $action = $this->resolveCacheAction($request);
-        $onlyActions = array_filter(array_map('strval', RecordConfigService::cacheAdmissionOnlyActions()));
+        $onlyActions = array_filter(array_map(strval(...), RecordConfigService::cacheAdmissionOnlyActions()));
         if ([] !== $onlyActions && (null === $action || !in_array($action, $onlyActions, true))) {
             return false;
         }
 
-        $exceptActions = array_filter(array_map('strval', RecordConfigService::cacheAdmissionExceptActions()));
+        $exceptActions = array_filter(array_map(strval(...), RecordConfigService::cacheAdmissionExceptActions()));
         if (null !== $action && [] !== $exceptActions && in_array($action, $exceptActions, true)) {
             return false;
         }
@@ -115,7 +111,7 @@ class RecordCacheService
             return null;
         }
 
-        $actionMethod = call_user_func([$route, 'getActionMethod']);
+        $actionMethod = $route->getActionMethod();
         if (!is_string($actionMethod)) {
             return null;
         }
@@ -129,6 +125,9 @@ class RecordCacheService
         };
     }
 
+    /**
+     * @param array<string, mixed> $filters
+     */
     public function generateOptimizedCacheKey(string $table, array $filters, array $includes, int $page, int $limit, bool $tenantEnabled): string
     {
         $tenantColumn = RecordConfigService::tenantColumn();
@@ -146,6 +145,9 @@ class RecordCacheService
         return sprintf('record_index:table:%s:tenant:%s:hash:%s', $table, $tenantKey, md5(serialize($keyData)));
     }
 
+    /**
+     * @param array<string, mixed> $filters
+     */
     public function generateCursorCacheKey(string $table, array $filters, array $includes, string $cursor, string $direction, string $cursorColumn, int $limit, bool $tenantEnabled): string
     {
         $tenantColumn = RecordConfigService::tenantColumn();
@@ -171,6 +173,7 @@ class RecordCacheService
         if (is_array($select)) {
             $this->recursiveKsort($select);
         }
+
         $keyData = [
             'id' => $id,
             'select' => $select,
@@ -299,6 +302,9 @@ class RecordCacheService
         return (string) $tenantId;
     }
 
+    /**
+     * @param array<string, mixed> $array
+     */
     private function recursiveKsort(array &$array): void
     {
         foreach ($array as &$value) {

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests\Feature;
 
 use Illuminate\Database\Schema\Blueprint;
@@ -33,6 +35,9 @@ class DeleteHookSpy
         self::$capturedContext = null;
     }
 
+    /**
+     * @param array<string, mixed> $context
+     */
     public static function beforeDelete(Request $request, string $table, array $context): ?Request
     {
         self::$calls[]        = 'beforeDelete';
@@ -74,6 +79,9 @@ class DeleteHooksTest extends TestCase
         });
     }
 
+    /**
+     * @param array<string, RecordTableTriggerType> $triggers
+     */
     private function registerTable(array $triggers = []): void
     {
         Config::set('record.tables', [

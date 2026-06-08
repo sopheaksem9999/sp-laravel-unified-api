@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests\Unit;
 
 use Exception;
@@ -1087,6 +1089,9 @@ class BasicTest extends TestCase
 
 class TestTriggerHandler
 {
+    /**
+     * @return array<string, string>
+     */
     public static function handle(Request $request, string $table, array $context): array
     {
         return ['foo' => 'bar'];
@@ -1123,6 +1128,10 @@ class TestTriggerResponseHandler
 
 class TestTriggerContextHandler
 {
+    /**
+     * @param array<string, mixed> $context
+     * @return array<string, mixed>
+     */
     public static function handle(Request $request, string $table, array $context): array
     {
         $requestContext = $context['request_context'] ?? [];

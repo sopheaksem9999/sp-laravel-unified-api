@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Resources;
 
 use Sopheak\Core\Interfaces\RecordResourceInterface;

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Types;
 
 use Sopheak\Core\Enums\RecordRelationshipsEnum;
@@ -53,6 +55,7 @@ class RecordHasManyType
     /**
      * Handle var_export() for configuration caching.
      * This method is required for Laravel's config:cache command.
+     * @param array<string, mixed> $properties
      */
     public static function __set_state(array $properties): self
     {

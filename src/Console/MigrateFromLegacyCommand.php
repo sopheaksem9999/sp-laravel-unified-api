@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Console;
 
 use Exception;
@@ -56,9 +58,9 @@ class MigrateFromLegacyCommand extends Command
         $enableTenant = Schema::hasColumn('sp_roles', $targetTenantColumn);
 
         if ($enableTenant) {
-            $this->info("Mapping legacy {$legacyTeamColumn} → sp_* {$targetTenantColumn}");
+            $this->info(sprintf('Mapping legacy %s → sp_* %s', $legacyTeamColumn, $targetTenantColumn));
         } else {
-            $this->warn("Tenant column '{$targetTenantColumn}' not found on sp_roles — skipping tenant mapping.");
+            $this->warn(sprintf("Tenant column '%s' not found on sp_roles — skipping tenant mapping.", $targetTenantColumn));
         }
 
         DB::beginTransaction();
@@ -111,10 +113,10 @@ class MigrateFromLegacyCommand extends Command
             $this->warn('  - permissions, roles, role_has_permissions, model_has_roles, model_has_permissions');
 
             return Command::SUCCESS;
-        } catch (Exception $e) {
+        } catch (Exception $exception) {
             DB::rollBack();
 
-            $this->error('Migration failed: ' . $e->getMessage());
+            $this->error('Migration failed: ' . $exception->getMessage());
 
             return Command::FAILURE;
         }
@@ -126,7 +128,7 @@ class MigrateFromLegacyCommand extends Command
         $guardName = config('sp-laravel-api.auth.guard', 'api');
         $separator = config('record.permission_separator', ':');
 
-        DB::table('permissions')->orderBy('id')->chunk(200, function ($permissions) use (&$count, $guardName, $separator) {
+        DB::table('permissions')->orderBy('id')->chunk(200, function ($permissions) use (&$count, $guardName, $separator): void {
             foreach ($permissions as $perm) {
                 $group = $this->inferGroup($perm->name, $separator);
 
@@ -153,7 +155,7 @@ class MigrateFromLegacyCommand extends Command
         $count = 0;
         $guardName = config('sp-laravel-api.auth.guard', 'api');
 
-        DB::table('roles')->orderBy('id')->chunk(200, function ($roles) use (&$count, $guardName, $legacyTeamColumn, $targetTenantColumn, $enableTenant) {
+        DB::table('roles')->orderBy('id')->chunk(200, function ($roles) use (&$count, $guardName, $legacyTeamColumn, $targetTenantColumn, $enableTenant): void {
             foreach ($roles as $role) {
                 $identity = ['name' => $role->name];
                 $data = [
@@ -183,7 +185,7 @@ class MigrateFromLegacyCommand extends Command
     {
         $count = 0;
 
-        DB::table('role_has_permissions')->orderBy('permission_id')->chunk(200, function ($pivots) use (&$count, $legacyTeamColumn, $targetTenantColumn, $enableTenant) {
+        DB::table('role_has_permissions')->orderBy('permission_id')->chunk(200, function ($pivots) use (&$count, $legacyTeamColumn, $targetTenantColumn, $enableTenant): void {
             foreach ($pivots as $pivot) {
                 $roleResult = $this->findNewRoleId($pivot->role_id, $legacyTeamColumn, $targetTenantColumn, $enableTenant);
                 $permId = $this->findNewPermissionId($pivot->permission_id);
@@ -218,11 +220,11 @@ class MigrateFromLegacyCommand extends Command
     {
         $count = 0;
 
-        DB::table('model_has_roles')->orderBy('role_id')->chunk(200, function ($pivots) use (&$count, $legacyTeamColumn, $targetTenantColumn, $enableTenant) {
+        DB::table('model_has_roles')->orderBy('role_id')->chunk(200, function ($pivots) use (&$count, $legacyTeamColumn, $targetTenantColumn, $enableTenant): void {
             foreach ($pivots as $pivot) {
                 $result = $this->findNewRoleId($pivot->role_id, $legacyTeamColumn, $targetTenantColumn, $enableTenant);
 
-                if ($result) {
+                if ($result !== null) {
                     $data = [
                         'model_type' => $pivot->model_type,
                         'model_id' => $pivot->model_id,
@@ -253,7 +255,7 @@ class MigrateFromLegacyCommand extends Command
     {
         $count = 0;
 
-        DB::table('model_has_permissions')->orderBy('permission_id')->chunk(200, function ($pivots) use (&$count, $legacyTeamColumn, $targetTenantColumn, $enableTenant) {
+        DB::table('model_has_permissions')->orderBy('permission_id')->chunk(200, function ($pivots) use (&$count, $legacyTeamColumn, $targetTenantColumn, $enableTenant): void {
             foreach ($pivots as $pivot) {
                 $permId = $this->findNewPermissionId($pivot->permission_id);
 

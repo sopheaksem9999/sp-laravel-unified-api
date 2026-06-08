@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Utilities;
 
 use Illuminate\Support\Str;
@@ -67,6 +69,9 @@ class PermissionUtils
         return $permissions[0] ?? '';
     }
 
+    /**
+     * @return string[]
+     */
     public static function mapPermissions(string $table, string $action): array
     {
         // Get resource name from config pmsName or fallback to table name

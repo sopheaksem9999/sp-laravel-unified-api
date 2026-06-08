@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Services\Queries;
 
 use Illuminate\Database\ConnectionInterface;
@@ -137,7 +139,7 @@ class RecordQueryBuilder
         $connection = $this->builder->getConnection();
 
         if (method_exists($connection, 'getDriverName')) {
-            $driverName = call_user_func([$connection, 'getDriverName']);
+            $driverName = $connection->getDriverName();
 
             return is_string($driverName) ? $driverName : null;
         }
@@ -151,10 +153,10 @@ class RecordQueryBuilder
         $maxPerPage = RecordConfigService::perPageMax();
         $perPage = max(1, min($perPage, $maxPerPage));
 
-        $isUuidColumn = self::isUuidColumn($this->config, $cursorColumn);
+        $isUuidColumn = $this->isUuidColumn($this->config, $cursorColumn);
 
         // Normalize cursor: cast numeric strings to int for index-friendly comparisons (skip UUID columns)
-        if (!$isUuidColumn && null !== $cursor && '' !== $cursor && ctype_digit((string) $cursor)) {
+        if (!$isUuidColumn && null !== $cursor && '' !== $cursor && ctype_digit($cursor)) {
             $cursor = (int) $cursor;
         }
 
@@ -179,18 +181,16 @@ class RecordQueryBuilder
                     ->get();
 
                 $boundaryMin = $boundaryRows->min($cursorColumn);
-                $lastCursor = null !== $boundaryMin ? $boundaryMin : null;
+                $lastCursor = $boundaryMin ?? null;
             }
         }
 
         $hasCursor = null !== $cursor && '' !== $cursor && 0 !== $cursor;
 
         // For UUID columns, only apply cursor filter when the cursor is a valid UUID
-        if ($isUuidColumn && $hasCursor) {
-            if (!is_string($cursor) || !preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', (string) $cursor)) {
-                $hasCursor = false;
-                $cursor = null;
-            }
+        if ($isUuidColumn && $hasCursor && (!is_string($cursor) || !preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $cursor))) {
+            $hasCursor = false;
+            $cursor = null;
         }
 
         if ($hasCursor) {
@@ -207,9 +207,9 @@ class RecordQueryBuilder
             };
 
             if (RecordConfigService::cursorCompositeEnabled() && $cursorColumn !== $this->primaryKey) {
-                $this->builder->where(function ($q) use ($cursorColumn, $cursor, $cursorOperator) {
+                $this->builder->where(function ($q) use ($cursorColumn, $cursor, $cursorOperator): void {
                     $q->where($cursorColumn, $cursorOperator, $cursor)
-                      ->orWhere(function ($q2) use ($cursorColumn, $cursor, $cursorOperator) {
+                      ->orWhere(function ($q2) use ($cursorColumn, $cursor, $cursorOperator): void {
                           $q2->where($cursorColumn, '=', $cursor)
                              ->where($this->primaryKey, $cursorOperator === '>' ? '>=' : '<=', $cursor);
                       });
@@ -278,7 +278,6 @@ class RecordQueryBuilder
 
     public function paginate(Request $request): array
     {
-        $pKey = $this->config->primaryKey ?? 'id';
         $defaultMode = RecordConfigService::paginationDefaultMode();
 
         $useCursor = $request->has('cursor') || $defaultMode === 'cursor';
@@ -323,9 +322,9 @@ class RecordQueryBuilder
         return $this->config;
     }
 
-    private static function isUuidColumn(?RecordTableType $config, string $column): bool
+    private function isUuidColumn(?RecordTableType $config, string $column): bool
     {
-        if ($config === null) {
+        if (!$config instanceof RecordTableType) {
             return false;
         }
 

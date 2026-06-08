@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Jobs;
 
 use Illuminate\Http\Client\Response;

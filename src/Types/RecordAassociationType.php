@@ -37,6 +37,9 @@ class RecordAassociationType
         }
     }
 
+    /**
+     * @param array<string, mixed> $properties
+     */
     public static function __set_state(array $properties): self
     {
         return new self(
@@ -81,6 +84,9 @@ class RecordAassociationType
         return $config;
     }
 
+    /**
+     * @param array<string, mixed> $config
+     */
     public static function fromArray(array $config): self
     {
         return new self(

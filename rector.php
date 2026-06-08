@@ -3,6 +3,7 @@
 use Rector\CodeQuality\Rector\Empty_\SimplifyEmptyCheckOnEmptyArrayRector;
 use Rector\Config\RectorConfig;
 use Rector\Strict\Rector\Empty_\DisallowedEmptyRuleFixerRector;
+use Rector\TypeDeclaration\Rector\StmtsAwareInterface\DeclareStrictTypesRector;
 
 return RectorConfig::configure()
     ->withSkip([
@@ -13,6 +14,9 @@ return RectorConfig::configure()
     ->withPaths([
         __DIR__ . '/src',
         __DIR__ . '/tests',
+    ])
+    ->withRules([
+        DeclareStrictTypesRector::class,
     ])
     ->withPhpSets(php84: true)
     ->withImportNames(importNames: true, removeUnusedImports: true)
@@ -27,5 +31,6 @@ return RectorConfig::configure()
         instanceOf: true,
         earlyReturn: true,
         doctrineCodeQuality: true,
+        typeDeclarationDocblocks: true,
     )
 ;

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests\Feature;
 
 use Illuminate\Support\Facades\Config;
@@ -47,6 +49,7 @@ class ExportPostmanCommandTest extends TestCase
         if (is_file($this->outputPath)) {
             unlink($this->outputPath);
         }
+
         parent::tearDown();
     }
 
@@ -75,7 +78,7 @@ class ExportPostmanCommandTest extends TestCase
 
         $this->assertContains('Users', $folderNames);
 
-        $usersFolder = array_values(array_filter($decoded['item'], static fn ($f) => $f['name'] === 'Users'))[0];
+        $usersFolder = array_values(array_filter($decoded['item'], static fn (array $f): bool => $f['name'] === 'Users'))[0];
         $requestNames = array_column($usersFolder['item'], 'name');
         $this->assertContains('List Users', $requestNames);
     }
@@ -87,8 +90,8 @@ class ExportPostmanCommandTest extends TestCase
         ])->assertExitCode(0);
 
         $decoded = json_decode((string) file_get_contents($this->outputPath), true);
-        $usersFolder = array_values(array_filter($decoded['item'], static fn ($f) => $f['name'] === 'Users'))[0];
-        $listUsers = array_values(array_filter($usersFolder['item'], static fn ($r) => $r['name'] === 'List Users'))[0];
+        $usersFolder = array_values(array_filter($decoded['item'], static fn (array $f): bool => $f['name'] === 'Users'))[0];
+        $listUsers = array_values(array_filter($usersFolder['item'], static fn (array $r): bool => $r['name'] === 'List Users'))[0];
 
         $queryParamNames = array_column($listUsers['request']['url']['query'] ?? [], 'key');
         $this->assertNotContains('select', $queryParamNames);
@@ -122,7 +125,7 @@ class ExportPostmanCommandTest extends TestCase
         ])->assertExitCode(0);
 
         $decoded = json_decode((string) file_get_contents($this->outputPath), true);
-        $usersFolder = array_values(array_filter($decoded['item'], static fn ($f) => $f['name'] === 'Users'))[0];
+        $usersFolder = array_values(array_filter($decoded['item'], static fn (array $f): bool => $f['name'] === 'Users'))[0];
         $requestNames = array_column($usersFolder['item'], 'name');
         $this->assertContains('List Users', $requestNames);
     }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Traits;
 
 use Illuminate\Database\Eloquent\Builder;
@@ -431,7 +433,7 @@ trait QueryHelpersTrait
      * @param string $selectParam The select parameter value
      * @param string $tableName   The main table name for prefixing columns
      *
-     * @return array Array containing 'main' columns and 'relationships' data
+     * @return array<string, mixed[]> Array containing 'main' columns and 'relationships' data
      */
     private function parseSelectColumns(string $selectParam, string $tableName): array
     {
@@ -543,6 +545,9 @@ trait QueryHelpersTrait
         return $base;
     }
 
+    /**
+     * @return int[]|string[]
+     */
     private function buildWithArray(array $withMap): array
     {
         $with = [];
@@ -579,6 +584,9 @@ trait QueryHelpersTrait
         return $columns;
     }
 
+    /**
+     * @param string[] $columns
+     */
     private function qualifyRelationColumns(Builder|Relation $query, array $columns): array
     {
         if (['*'] === $columns) {

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests\Feature;
 
 use Closure;
@@ -192,6 +194,9 @@ class PerRpcMiddlewareTest extends TestCase
 class RpcEchoHandler
 {
     // Returning a plain array is fine — RecordService wraps it in a 200 JsonResponse.
+    /**
+     * @return array<string, bool>
+     */
     public function handle(Request $request): array
     {
         return ['ok' => true];

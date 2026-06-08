@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests\Feature;
 
 use Illuminate\Support\Facades\Config;
@@ -81,7 +83,7 @@ class ExportBrunoCommandTest extends TestCase
 
         $this->assertContains('Users', $folderNames);
 
-        $usersFolder = array_values(array_filter($decoded['folders'], static fn ($f) => $f['name'] === 'Users'))[0];
+        $usersFolder = array_values(array_filter($decoded['folders'], static fn (array $f): bool => $f['name'] === 'Users'))[0];
         $requestNames = array_column($usersFolder['requests'], 'name');
         $this->assertContains('List Users', $requestNames);
     }
@@ -93,10 +95,10 @@ class ExportBrunoCommandTest extends TestCase
         ])->assertExitCode(0);
 
         $decoded = json_decode((string) file_get_contents($this->outputPath), true);
-        $usersFolder = array_values(array_filter($decoded['folders'], static fn ($f) => $f['name'] === 'Users'))[0];
-        $listUsers = array_values(array_filter($usersFolder['requests'], static fn ($r) => $r['name'] === 'List Users'))[0];
+        $usersFolder = array_values(array_filter($decoded['folders'], static fn (array $f): bool => $f['name'] === 'Users'))[0];
+        $listUsers = array_values(array_filter($usersFolder['requests'], static fn (array $r): bool => $r['name'] === 'List Users'))[0];
 
-        $select = array_values(array_filter($listUsers['params'], static fn ($p) => $p['name'] === 'select'))[0];
+        $select = array_values(array_filter($listUsers['params'], static fn (array $p): bool => $p['name'] === 'select'))[0];
         $this->assertFalse($select['enabled']);
         $this->assertSame('', $select['value']);
     }
@@ -162,7 +164,7 @@ class ExportBrunoCommandTest extends TestCase
         // But our emitter always rewrites the collection; the var is re-rendered each run.
         // The user's expectation is that "List Users" stays in skipped[].
         $decoded = json_decode((string) file_get_contents($this->outputPath), true);
-        $usersFolder = array_values(array_filter($decoded['folders'], static fn ($f) => $f['name'] === 'Users'))[0];
+        $usersFolder = array_values(array_filter($decoded['folders'], static fn (array $f): bool => $f['name'] === 'Users'))[0];
         $requestNames = array_column($usersFolder['requests'], 'name');
         $this->assertContains('List Users', $requestNames);
     }
@@ -205,14 +207,21 @@ class ExportBrunoCommandTest extends TestCase
         if (! is_dir($path)) {
             return;
         }
+
         $files = scandir($path);
         if ($files === false) {
             return;
         }
+
         foreach ($files as $file) {
-            if ($file === '.' || $file === '..') {
+            if ($file === '.') {
                 continue;
             }
+
+            if ($file === '..') {
+                continue;
+            }
+
             $fullPath = $path . DIRECTORY_SEPARATOR . $file;
             if (is_dir($fullPath)) {
                 $this->cleanupDir($fullPath);
@@ -220,6 +229,7 @@ class ExportBrunoCommandTest extends TestCase
                 @unlink($fullPath);
             }
         }
+
         @rmdir($path);
     }
 }
