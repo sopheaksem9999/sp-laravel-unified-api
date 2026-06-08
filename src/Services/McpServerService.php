@@ -1,7 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Services;
 
+use Throwable;
+use Closure;
 use Exception;
 use Sopheak\Core\Authorization\PermissionService;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
@@ -11,6 +15,7 @@ use Sopheak\Core\Types\RecordValidationType;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Utilities\PermissionUtils;
 use Sopheak\Core\Services\RecordConfigService;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Gate;
 use Sopheak\Core\Constants\RecordConstants;
 
@@ -22,6 +27,7 @@ class McpServerService
      * Handle an incoming JSON-RPC request payload.
      *
      * @return array|null The JSON-RPC response payload, or null if it's a notification
+     * @param array<string, mixed> $payload
      */
     public function handleRequest(array $payload): ?array
     {
@@ -70,10 +76,13 @@ class McpServerService
             'resources/read' => $this->handleResourcesRead($params),
             'tools/list' => $this->handleToolsList($params),
             'tools/call' => $this->handleToolsCall($params),
-            default => throw new Exception('Method not found', -32601),
+            default => throw new Exception(message: 'Method not found', code: -32601),
         };
     }
 
+    /**
+     * @return array<string, array<string, array<string, bool>>|array<string, string>|string>
+     */
     protected function handleInitialize(array $params): array
     {
         return [
@@ -94,6 +103,9 @@ class McpServerService
         ];
     }
 
+    /**
+     * @return array<string, list<array<string, string>>>
+     */
     protected function handleResourcesList(array $params): array
     {
         SchemaRegistryUtils::refresh();
@@ -117,6 +129,10 @@ class McpServerService
         ];
     }
 
+    /**
+     * @param array<string, mixed> $params
+     * @return array<string, array<int, array<string, mixed>>>
+     */
     protected function handleResourcesRead(array $params): array
     {
         $uri = $params['uri'] ?? '';
@@ -294,6 +310,9 @@ class McpServerService
         return ['tools' => $tools];
     }
 
+    /**
+     * @param array<string, mixed> $params
+     */
     protected function handleToolsCall(array $params): array
     {
         $name = $params['name'] ?? '';
@@ -331,12 +350,12 @@ class McpServerService
 
         // Schema-only mode: reject any non-schema tool
         if ($this->schemaOnly) {
-            throw new Exception('Tool not found: ' . $name, -32601);
+            throw new Exception(message: 'Tool not found: ' . $name, code: -32601);
         }
 
-        $parts = explode('_', $name, 2);
+        $parts = explode('_', (string) $name, 2);
         if (count($parts) !== 2) {
-            throw new Exception('Tool not found: ' . $name, -32601);
+            throw new Exception(message: 'Tool not found: ' . $name, code: -32601);
         }
 
         $action = $parts[0];
@@ -344,12 +363,12 @@ class McpServerService
 
         $readOnly = config('record.mcp.read_only', true);
         if ($readOnly && in_array($action, ['create', 'update', 'delete'])) {
-            throw new Exception('Tool not found or read-only mode is enabled: ' . $name, -32601);
+            throw new Exception(message: 'Tool not found or read-only mode is enabled: ' . $name, code: -32601);
         }
 
         $validActions = ['list', 'read', 'create', 'update', 'delete'];
         if (!in_array($action, $validActions)) {
-            throw new Exception('Tool not found: ' . $name, -32601);
+            throw new Exception(message: 'Tool not found: ' . $name, code: -32601);
         }
 
         $authAction = match ($action) {
@@ -404,7 +423,7 @@ class McpServerService
         $guard = RecordConfigService::authGuard();
         $user = auth($guard)->user();
         if (!$user) {
-            throw new Exception('Unauthenticated', -32001);
+            throw new Exception(message: 'Unauthenticated', code: -32001);
         }
 
         $tableSchema = SchemaRegistryUtils::getTable($table);
@@ -430,6 +449,7 @@ class McpServerService
         $authHandler = config('record.authorization');
         $gate = $authHandler === null ? Gate::forUser($user) : null;
         $permissionService = null;
+        $permissionUser = $user instanceof Model ? $user : null;
 
         foreach ($perms as $perm) {
             if ($authHandler !== null) {
@@ -438,7 +458,7 @@ class McpServerService
                     : (bool) $authHandler($user, $perm, $table, $action);
             } elseif (config('permissions.enabled', false)) {
                 $permissionService ??= app(PermissionService::class);
-                $granted = $permissionService->userHasPermission($user, $perm);
+                $granted = $permissionUser instanceof Model && $permissionService->userHasPermission($permissionUser, $perm);
             } else {
                 $granted = $gate->allows($perm);
             }
@@ -450,10 +470,13 @@ class McpServerService
         }
 
         if (!$allowed) {
-            throw new Exception('Forbidden', -32002);
+            throw new Exception(message: 'Forbidden', code: -32002);
         }
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     protected function successResponse(mixed $id, mixed $result): array
     {
         return [
@@ -463,6 +486,9 @@ class McpServerService
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     protected function errorResponse(mixed $id, int $code, string $message): array
     {
         return [
@@ -476,7 +502,9 @@ class McpServerService
     }
 
     // ─── Schema Discovery Tool Handlers ─────────────────────────────────────
-
+    /**
+     * @param array<string, mixed> $args
+     */
     protected function handleSchemaListEndpoints(array $args): array
     {
         SchemaRegistryUtils::refresh();
@@ -512,6 +540,7 @@ class McpServerService
                     $detailMethods[] = 'PUT';
                     $detailMethods[] = 'PATCH';
                 }
+
                 if ($config->canDelete) {
                     $detailMethods[] = 'DELETE';
                 }
@@ -520,6 +549,7 @@ class McpServerService
                 if ($config->canUpdate) {
                     $rawActions[] = 'update';
                 }
+
                 if ($config->canDelete) {
                     $rawActions[] = 'delete';
                 }
@@ -575,14 +605,12 @@ class McpServerService
                     if (str_contains(mb_strtolower($ep['name']), $search)) {
                         return true;
                     }
+
                     if (str_contains(mb_strtolower($ep['uri']), $search)) {
                         return true;
                     }
-                    if (str_contains(mb_strtolower($table), $search)) {
-                        return true;
-                    }
 
-                    return false;
+                    return str_contains(mb_strtolower($table), $search);
                 }));
             }
 
@@ -612,6 +640,10 @@ class McpServerService
         return $endpoints;
     }
 
+    /**
+     * @param array<string, mixed> $args
+     * @return array<string, bool|string|mixed[]|null>
+     */
     protected function handleSchemaGetEndpoint(array $args): array
     {
         $endpoint = $args['endpoint'] ?? null;
@@ -621,7 +653,7 @@ class McpServerService
 
         SchemaRegistryUtils::refresh();
         $config = SchemaRegistryUtils::getTable($endpoint);
-        if (!$config || !($config instanceof RecordTableType)) {
+        if (!$config instanceof RecordTableType || !($config instanceof RecordTableType)) {
             throw new Exception('Endpoint not found: ' . $endpoint);
         }
 
@@ -634,12 +666,15 @@ class McpServerService
             $actions['list'] = ['method' => 'GET', 'uri' => '/' . $apiPrefix . '/' . $config->table];
             $actions['read'] = ['method' => 'GET', 'uri' => '/' . $apiPrefix . '/' . $config->table . '/{id}'];
         }
+
         if ($config->canCreate) {
             $actions['create'] = ['method' => 'POST', 'uri' => '/' . $apiPrefix . '/' . $config->table];
         }
+
         if ($config->canUpdate) {
             $actions['update'] = ['method' => ['PUT', 'PATCH'], 'uri' => '/' . $apiPrefix . '/' . $config->table . '/{id}'];
         }
+
         if ($config->canDelete) {
             $actions['delete'] = ['method' => 'DELETE', 'uri' => '/' . $apiPrefix . '/' . $config->table . '/{id}'];
         }
@@ -651,10 +686,12 @@ class McpServerService
                 if (is_string($colDef)) {
                     $colDef = ['type' => $colDef];
                 }
+
                 $in = ['read'];
                 if (!in_array($colName, (array) ($config->columnWriteDisabled ?? []), true)) {
                     $in[] = 'write';
                 }
+
                 $field = [
                     'name' => $colName,
                     'type' => $colDef['type'] ?? 'string',
@@ -664,6 +701,7 @@ class McpServerService
                 if (isset($colDef['enum'])) {
                     $field['enum'] = $colDef['enum'];
                 }
+
                 $fields[] = $field;
             }
         }
@@ -700,6 +738,7 @@ class McpServerService
                 if (!empty($fnConfig['description'])) {
                     $rf['description'] = $fnConfig['description'];
                 }
+
                 $rpcFunctions[] = $rf;
             }
         }
@@ -711,6 +750,7 @@ class McpServerService
                 if (is_string($colDef)) {
                     $colDef = ['type' => $colDef];
                 }
+
                 $type = $colDef['type'] ?? 'string';
                 $operators = $this->filterOperatorsForType($type);
                 if (!empty($operators)) {
@@ -741,7 +781,7 @@ class McpServerService
                 if (!empty($mapped)) {
                     $perms[$key] = $mapped;
                 }
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 // Skip if mapping fails
             }
         }
@@ -762,9 +802,11 @@ class McpServerService
         if ($config->createValidator !== null) {
             $validation['create'] = $this->describeValidator($config->createValidator);
         }
+
         if ($config->updateValidator !== null) {
             $validation['update'] = $this->describeValidator($config->updateValidator);
         }
+
         if ($config->deleteValidator !== null) {
             $validation['delete'] = $this->describeValidator($config->deleteValidator);
         }
@@ -811,7 +853,7 @@ class McpServerService
             'force_delete',
         ];
 
-        foreach (SchemaRegistryUtils::get() as $table => $config) {
+        foreach (SchemaRegistryUtils::get() as $config) {
             if (!($config instanceof RecordTableType)) {
                 continue;
             }
@@ -826,7 +868,7 @@ class McpServerService
                             'table' => $config->table,
                         ];
                     }
-                } catch (\Throwable) {
+                } catch (Throwable) {
                     // Skip if mapping fails
                 }
             }
@@ -856,6 +898,7 @@ class McpServerService
             if (isset($seen[$key])) {
                 return false;
             }
+
             $seen[$key] = true;
 
             return true;
@@ -887,13 +930,13 @@ class McpServerService
         };
     }
 
-    private function describeValidator(mixed $validator): string|array
+    private function describeValidator(mixed $validator): string
     {
         if ($validator === null) {
             return 'none';
         }
 
-        if ($validator instanceof \Closure) {
+        if ($validator instanceof Closure) {
             return 'custom (Closure)';
         }
 
@@ -902,7 +945,7 @@ class McpServerService
         }
 
         if (is_array($validator) && count($validator) === 2) {
-            $class = is_object($validator[0]) ? get_class($validator[0]) : $validator[0];
+            $class = is_object($validator[0]) ? $validator[0]::class : $validator[0];
 
             return $class . '@' . $validator[1];
         }

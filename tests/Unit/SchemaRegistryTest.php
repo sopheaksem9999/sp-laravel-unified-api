@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests\Unit;
 
 use Illuminate\Cache\RedisStore;
@@ -329,6 +331,7 @@ class SchemaRegistryTest extends TestCase
         $service = new RecordService();
         $showRequest = Request::create('/api/users/1', 'GET');
         $showRequest->attributes->set('record_cache_action', 'show');
+
         $listRequest = Request::create('/api/users', 'GET');
         $listRequest->attributes->set('record_cache_action', 'list');
 

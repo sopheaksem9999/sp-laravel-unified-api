@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Services;
 
+use Throwable;
 use Exception;
 use Illuminate\Support\Facades\Cache;
 
@@ -361,7 +364,7 @@ class QueryCacheService
     {
         try {
             return request()->attributes->get($key, $default);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return $default;
         }
     }
@@ -370,7 +373,7 @@ class QueryCacheService
     {
         try {
             request()->attributes->set($key, $value);
-        } catch (\Throwable) {
+        } catch (Throwable) {
         }
     }
 }

@@ -1,12 +1,15 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core;
 
+use Sopheak\Core\Http\Middleware\SetPostgresTenantContext;
+use Throwable;
 use Sopheak\Core\Console\CacheStatusCommand;
 use Sopheak\Core\Console\CleanTempAttachmentsCommand;
 use Sopheak\Core\Console\ExportBrunoCommand;
 use Sopheak\Core\Console\ExportPostmanCommand;
-use Sopheak\Core\Console\MigrateFromLegacyCommand;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Router;
@@ -110,7 +113,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
         $router = $this->app->make('router');
         $router->aliasMiddleware('request.id', RequestId::class);
         $router->aliasMiddleware('record.route.middleware', RecordRouteMiddleware::class);
-        $router->aliasMiddleware('pgsql.tenant', \Sopheak\Core\Http\Middleware\SetPostgresTenantContext::class);
+        $router->aliasMiddleware('pgsql.tenant', SetPostgresTenantContext::class);
 
         Event::listen([RecordCreated::class, RecordUpdated::class, RecordDeleted::class], InvalidateRecordCacheListener::class);
         Event::listen([RecordCreated::class, RecordUpdated::class, RecordDeleted::class], LogRecordAuditListener::class);
@@ -118,21 +121,21 @@ class CoreSpLaravelApiProvider extends ServiceProvider
         if (config('permissions.enabled', false)) {
             $this->app->singleton(PermissionRegistrar::class);
 
-            $this->app->booted(function () {
+            $this->app->booted(function (): void {
                 try {
                     $registrar = app(PermissionRegistrar::class);
                     $registrar->autoRegisterFromConfig();
                     $registrar->registerPermissions();
-                } catch (\Throwable $e) {
+                } catch (Throwable) {
                     // Permission tables may not exist yet (pre-migration)
                     // Silently skip — auto-registration will happen on next boot
                 }
             });
         }
 
-        Route::bind('table', function (string $value) {
+        Route::bind('table', function (string $value): string {
             $tableConfig = RecordConfigService::getTableConfig($value);
-            abort_if(! $tableConfig, 404, "Dynamic Table [{$value}] not found.");
+            abort_if(! $tableConfig, 404, sprintf('Dynamic Table [%s] not found.', $value));
 
             return $value;
         });

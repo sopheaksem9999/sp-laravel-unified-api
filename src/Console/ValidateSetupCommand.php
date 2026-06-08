@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Console;
 
 use Exception;
@@ -543,6 +545,7 @@ class ValidateSetupCommand extends Command
 
     /**
      * Get first table name from results.
+     * @param array<int, mixed> $tables
      */
     private function getFirstTableName(array $tables, string $driver): string
     {

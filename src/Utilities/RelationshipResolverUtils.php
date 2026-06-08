@@ -1,10 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Utilities;
 
 use Illuminate\Foundation\Auth\User;
 use Sopheak\Core\Enums\RecordRelationshipsEnum;
-use RuntimeException;
 use Sopheak\Core\Types\RecordAassociationType;
 use Sopheak\Core\Types\RecordBelongsToType;
 use Sopheak\Core\Types\RecordHasManyThroughType;
@@ -223,6 +224,7 @@ class RelationshipResolverUtils
      * Examples:
      * - "*,customer(*),items(id,qty)" => ['*']
      * - "id,ref_number,customer:customers(id,name)" => ['id','ref_number'].
+     * @return string[]
      */
     public static function getMainTableColumns(?string $selectParam): array
     {
@@ -544,7 +546,7 @@ class RelationshipResolverUtils
             }
 
             if (!$recordId) {
-                abort(RecordApiJsonResponseEnum::VALIDATION_ERROR->value, 'Missing main record identifier for nested update');
+                abort((int) RecordApiJsonResponseEnum::VALIDATION_ERROR->value, 'Missing main record identifier for nested update');
             }
 
             // Allowed columns
@@ -623,6 +625,9 @@ class RelationshipResolverUtils
         return $payload;
     }
 
+    /**
+     * @param array<string, mixed> $config
+     */
     private static function processBelongsToManyOperation(array $data, mixed $mainId, array $config, array $schema, mixed $tenantId, bool $allowCreate, bool $allowUpdate, bool $allowDelete): void
     {
         $pivotTable = $config['pivot_table'];
@@ -718,6 +723,9 @@ class RelationshipResolverUtils
         }
     }
 
+    /**
+     * @param array<string, mixed> $config
+     */
     private static function processHasManyThroughOperation(array $data, mixed $mainId, array $config, array $schema, mixed $tenantId, bool $allowCreate, bool $allowUpdate, bool $allowDelete): void
     {
         $throughTable = $config['through_table'];
@@ -958,6 +966,7 @@ class RelationshipResolverUtils
 
     /**
      * Generate a safe alias that doesn't conflict with main table columns.
+     * @param int[]|string[] $mainTableColumns
      */
     private static function generateSafeAlias(string $alias, array $mainTableColumns): string
     {
@@ -980,6 +989,7 @@ class RelationshipResolverUtils
 
     /**
      * Add belongsTo relationship subquery.
+     * @param array<string, mixed> $config
      */
     private static function addBelongsToSubquery(Builder $builder, string $table, string $alias, array $config, array $columns, mixed $tenantId, array $schema): Builder
     {
@@ -1006,56 +1016,63 @@ class RelationshipResolverUtils
         foreach ($validColumns as $col) {
             $innerCols[] = sprintf('%s.%s AS %s', $subAlias, $col, $col);
         }
+
         $innerSelect = implode(', ', $innerCols);
 
         // Build the inner query: SELECT cols FROM related AS alias WHERE correlation AND filters LIMIT 1
-        $innerSql = "SELECT {$innerSelect} FROM {$actualRelatedTableName} AS {$subAlias}"
-                   . " WHERE {$subAlias}.{$ownerKey} = {$actualMainTableName}.{$foreignKey}";
+        $innerSql = sprintf('SELECT %s FROM %s AS %s', $innerSelect, $actualRelatedTableName, $subAlias)
+                   . sprintf(' WHERE %s.%s = %s.%s', $subAlias, $ownerKey, $actualMainTableName, $foreignKey);
 
         $tenantCol = RecordConfigService::tenantColumn();
         if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
-            $innerSql .= " AND {$subAlias}.{$tenantCol} = " . (int) $tenantId;
+            $innerSql .= sprintf(' AND %s.%s = ', $subAlias, $tenantCol) . (int) $tenantId;
         }
 
         if ($schema[$relatedTable]->softDeletes ?? false) {
-            $innerSql .= " AND {$subAlias}.deleted_at IS NULL";
+            $innerSql .= sprintf(' AND %s.deleted_at IS NULL', $subAlias);
         }
 
         $innerSql .= ' LIMIT 1';
 
         // Wrap in a single-level scalar subquery: (SELECT row_to_json(__sp_obj) FROM (inner) AS __sp_obj)
         if ('pgsql' === $driver) {
-            $rawSql = "(SELECT row_to_json(__sp_obj) FROM ({$innerSql}) AS __sp_obj) AS \"{$alias}\"";
+            $rawSql = sprintf('(SELECT row_to_json(__sp_obj) FROM (%s) AS __sp_obj) AS "%s"', $innerSql, $alias);
         } elseif ('sqlite' === $driver) {
             $jsonPairs = [];
             foreach ($validColumns as $col) {
-                $jsonPairs[] = "'{$col}', {$subAlias}.{$col}";
+                $jsonPairs[] = sprintf("'%s', %s.%s", $col, $subAlias, $col);
             }
-            $rawSql = "(SELECT json_object(" . implode(', ', $jsonPairs) . ") FROM {$actualRelatedTableName} AS {$subAlias}"
-                    . " WHERE {$subAlias}.{$ownerKey} = {$actualMainTableName}.{$foreignKey}";
+
+            $rawSql = "(SELECT json_object(" . implode(', ', $jsonPairs) . sprintf(') FROM %s AS %s', $actualRelatedTableName, $subAlias)
+                    . sprintf(' WHERE %s.%s = %s.%s', $subAlias, $ownerKey, $actualMainTableName, $foreignKey);
 
             if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
-                $rawSql .= " AND {$subAlias}.{$tenantCol} = " . (int) $tenantId;
+                $rawSql .= sprintf(' AND %s.%s = ', $subAlias, $tenantCol) . (int) $tenantId;
             }
+
             if ($schema[$relatedTable]->softDeletes ?? false) {
-                $rawSql .= " AND {$subAlias}.deleted_at IS NULL";
+                $rawSql .= sprintf(' AND %s.deleted_at IS NULL', $subAlias);
             }
-            $rawSql .= " LIMIT 1) AS \"{$alias}\"";
+
+            $rawSql .= sprintf(' LIMIT 1) AS "%s"', $alias);
         } else {
             $jsonPairs = [];
             foreach ($validColumns as $col) {
-                $jsonPairs[] = "'{$col}', {$subAlias}.{$col}";
+                $jsonPairs[] = sprintf("'%s', %s.%s", $col, $subAlias, $col);
             }
-            $rawSql = "(SELECT JSON_OBJECT(" . implode(', ', $jsonPairs) . ") FROM {$actualRelatedTableName} AS {$subAlias}"
-                    . " WHERE {$subAlias}.{$ownerKey} = {$actualMainTableName}.{$foreignKey}";
+
+            $rawSql = "(SELECT JSON_OBJECT(" . implode(', ', $jsonPairs) . sprintf(') FROM %s AS %s', $actualRelatedTableName, $subAlias)
+                    . sprintf(' WHERE %s.%s = %s.%s', $subAlias, $ownerKey, $actualMainTableName, $foreignKey);
 
             if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
-                $rawSql .= " AND {$subAlias}.{$tenantCol} = " . (int) $tenantId;
+                $rawSql .= sprintf(' AND %s.%s = ', $subAlias, $tenantCol) . (int) $tenantId;
             }
+
             if ($schema[$relatedTable]->softDeletes ?? false) {
-                $rawSql .= " AND {$subAlias}.deleted_at IS NULL";
+                $rawSql .= sprintf(' AND %s.deleted_at IS NULL', $subAlias);
             }
-            $rawSql .= " LIMIT 1) AS \"{$alias}\"";
+
+            $rawSql .= sprintf(' LIMIT 1) AS "%s"', $alias);
         }
 
         $builder->selectRaw($rawSql);
@@ -1065,6 +1082,7 @@ class RelationshipResolverUtils
 
     /**
      * Add hasMany relationship subquery with JSON array aggregation.
+     * @param array<string, mixed> $config
      */
     private static function addHasManySubquery(Builder $builder, string $table, string $alias, array $config, array $columns, mixed $tenantId, array $schema): Builder
     {
@@ -1108,6 +1126,7 @@ class RelationshipResolverUtils
     /**
      * Add belongsToMany relationship subquery with JSON array aggregation.
      * Handles many-to-many relationships through pivot tables.
+     * @param array<string, mixed> $config
      */
     private static function addBelongsToManySubquery(Builder $builder, string $table, string $alias, array $config, array $columns, mixed $tenantId, array $schema): Builder
     {
@@ -1184,6 +1203,7 @@ class RelationshipResolverUtils
 
     /**
      * Add morphToMany relationship subquery with JSON array aggregation.
+     * @param array<string, mixed> $config
      */
     private static function addMorphToManySubquery(Builder $builder, string $table, string $alias, array $config, array $columns, mixed $tenantId, array $schema): Builder
     {
@@ -1264,6 +1284,7 @@ class RelationshipResolverUtils
 
     /**
      * Add hasManyThrough relationship subquery with JSON array aggregation.
+     * @param array<string, mixed> $config
      */
     private static function addHasManyThroughSubquery(Builder $builder, string $table, string $alias, array $config, array $columns, mixed $tenantId, array $schema): Builder
     {
@@ -1368,6 +1389,7 @@ class RelationshipResolverUtils
             $columnRef = $tableName !== '' && $tableName !== '0' ? sprintf('%s.%s', $tableName, $validColumn) : $validColumn;
             $jsonPairs[] = sprintf("'%s', %s", $validColumn, $columnRef);
         }
+
         $jsonColumns = implode(', ', $jsonPairs);
 
         return 'sqlite' === $driver
@@ -1406,6 +1428,7 @@ class RelationshipResolverUtils
 
     /**
      * Parse select segments, respecting parentheses nesting.
+     * @return string[]
      */
     private static function parseSelectSegments(string $selectParam): array
     {
@@ -1449,6 +1472,7 @@ class RelationshipResolverUtils
      * - Smart caching of intermediate results
      *
      * @param null|mixed $tenantId
+     * @param array<string, mixed> $config
      */
     private static function loadRelatedRecords(array $records, array $config, array $columns, $tenantId = null): array
     {
@@ -1672,7 +1696,7 @@ class RelationshipResolverUtils
      * - Implements O(1) duplicate checking for target IDs
      * - Applies tenant filtering only when enabled in configuration
      *
-     * @param array $config      Relationship configuration with through table details
+     * @param array<string, mixed> $config Relationship configuration with through table details
      * @param array $matchValues Parent record IDs to match against
      * @param array $columns     Columns to select from related table (can include filters)
      * @param mixed $tenantId    Tenant ID for multi-tenant filtering (if enabled)
@@ -1872,7 +1896,7 @@ class RelationshipResolverUtils
                 $selectColumns[] = $secondKey;
             }
 
-            $prefixedColumns = array_map(fn($col) => str_contains((string) $col, '.') ? $col : $actualRelatedTableName . '.' . $col, $selectColumns);
+            $prefixedColumns = array_map(fn($col): mixed => str_contains((string) $col, '.') ? $col : $actualRelatedTableName . '.' . $col, $selectColumns);
 
             $relatedBuilder->select($prefixedColumns);
         }
@@ -1966,6 +1990,7 @@ class RelationshipResolverUtils
      * @param array  $schema       Database schema information for validation
      *
      * @return array Grouped related records indexed by relationship key
+     * @param array<string, mixed> $relationshipConfig
      */
     private static function loadStandardRelationshipOptimized(string $type, string $relatedTable, string $foreignKey, string $ownerKey, array $matchValues, array $columns, mixed $tenantId, array $schema, array $relationshipConfig = []): array
     {

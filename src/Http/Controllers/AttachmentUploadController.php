@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Http\Controllers;
 
 use Exception;
@@ -90,6 +92,9 @@ class AttachmentUploadController extends Controller
         );
     }
 
+    /**
+     * @param string[] $keys
+     */
     private function normalizeBooleanInputs(Request $request, array $keys): void
     {
         foreach ($keys as $key) {
@@ -150,6 +155,9 @@ class AttachmentUploadController extends Controller
         return in_array($visibility, ['temp_private', 'temp_public'], true);
     }
 
+    /**
+     * @param array<string, mixed> $attachment
+     */
     private function resolveTempExpirationAt(array $attachment): ?Carbon
     {
         $tempTimeout = $attachment['temp_timeout'] ?? null;
@@ -178,6 +186,9 @@ class AttachmentUploadController extends Controller
         }
     }
 
+    /**
+     * @param array<string, mixed> $attachment
+     */
     private function hasAttachmentExpired(array $attachment): bool
     {
         $visibility = (string) ($attachment['visibility'] ?? '');
@@ -292,6 +303,9 @@ class AttachmentUploadController extends Controller
         return $baseDir . '/' . date('Y/m/d') . '/' . $filename;
     }
 
+    /**
+     * @param array<string, mixed> $sourceAttachment
+     */
     private function copyAttachmentFile(array $sourceAttachment, string $targetDisk, string $targetPath): void
     {
         $sourceDiskName = (string) ($sourceAttachment['disk'] ?? 'local');
@@ -337,7 +351,7 @@ class AttachmentUploadController extends Controller
         }
 
         if (!$this->accessService()->targetRecordAuthorized($request, 'link', (string) $request->input('record_type'), $request->input('record_id'), $tenantId)) {
-            throw new Exception('Attachment access denied', Response::HTTP_FORBIDDEN);
+            throw new Exception(message: 'Attachment access denied', code: Response::HTTP_FORBIDDEN);
         }
 
         if (!$this->accessService()->targetRecordExists((string) $request->input('record_type'), $request->input('record_id'), $tenantId)) {

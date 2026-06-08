@@ -1,7 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests\Unit;
 
+use Illuminate\Contracts\Routing\ResponseFactory;
+use Illuminate\Http\Response;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -27,7 +31,7 @@ class PostgresTenantContextMiddlewareTest extends TestCase
 
         $request = Request::create('/api/users', 'GET', [], [], [], ['HTTP_X_TENANT_ID' => 'acme']);
 
-        $response = app(SetPostgresTenantContext::class)->handle($request, fn() => response('ok'));
+        $response = app(SetPostgresTenantContext::class)->handle($request, fn(): ResponseFactory|Response => response('ok'));
 
         $this->assertSame('ok', $response->getContent());
     }
@@ -44,8 +48,8 @@ class PostgresTenantContextMiddlewareTest extends TestCase
         $middleware = app(SetPostgresTenantContext::class);
         $request = Request::create('/api/users', 'GET', [], [], [], ['HTTP_X_TENANT_ID' => 'acme']);
 
-        $middleware->handle($request, fn() => response('first'));
-        $middleware->handle($request, fn() => response('second'));
+        $middleware->handle($request, fn(): ResponseFactory|Response => response('first'));
+        $middleware->handle($request, fn(): ResponseFactory|Response => response('second'));
 
         $stats = $request->attributes->get('record_pgsql_tenant_context_stats');
 
@@ -63,7 +67,7 @@ class PostgresTenantContextMiddlewareTest extends TestCase
 
         $request = Request::create('/api/users', 'GET', [], [], [], ['HTTP_X_TENANT_ID' => 'acme']);
 
-        $response = app(SetPostgresTenantContext::class)->handle($request, fn() => response('ok'));
+        $response = app(SetPostgresTenantContext::class)->handle($request, fn(): ResponseFactory|Response => response('ok'));
 
         $this->assertSame('ok', $response->getContent());
     }
@@ -79,7 +83,7 @@ class PostgresTenantContextMiddlewareTest extends TestCase
 
         $request = Request::create('/api/users', 'GET', [], [], [], ['HTTP_X_TENANT_ID' => 'acme']);
 
-        $response = app(SetPostgresTenantContext::class)->handle($request, fn() => response('ok'));
+        $response = app(SetPostgresTenantContext::class)->handle($request, fn(): ResponseFactory|Response => response('ok'));
 
         $this->assertSame('ok', $response->getContent());
     }

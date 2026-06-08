@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Console;
 
 use Illuminate\Console\Command;
@@ -54,6 +56,7 @@ abstract class AbstractExportCommand extends Command
 
                     return self::FAILURE;
                 }
+
                 $existing = $decoded;
             }
         }
@@ -89,7 +92,7 @@ abstract class AbstractExportCommand extends Command
     {
         $output = (string) ($this->option('output') ?: $this->defaultOutputPath());
         if (! str_starts_with($output, '/')) {
-            $output = base_path($output);
+            return base_path($output);
         }
 
         return $output;
@@ -105,7 +108,7 @@ abstract class AbstractExportCommand extends Command
             return null;
         }
 
-        return array_values(array_filter(array_map('trim', explode(',', (string) $raw))));
+        return array_values(array_filter(array_map(trim(...), explode(',', (string) $raw))));
     }
 
     /**
@@ -120,7 +123,7 @@ abstract class AbstractExportCommand extends Command
         }
 
         $available = $this->collectSpecTags($spec);
-        $invalid = array_values(array_filter($regenKeys, static fn ($k) => ! isset($available[strtolower($k)])));
+        $invalid = array_values(array_filter($regenKeys, static fn (string $k): bool => ! isset($available[strtolower($k)])));
 
         if ($invalid !== []) {
             $this->error('Invalid --regen value(s): ' . implode(', ', $invalid));
@@ -144,6 +147,7 @@ abstract class AbstractExportCommand extends Command
                 if (! is_array($op)) {
                     continue;
                 }
+
                 foreach ($op['tags'] ?? [] as $tag) {
                     $tags[strtolower((string) $tag)] = true;
                 }

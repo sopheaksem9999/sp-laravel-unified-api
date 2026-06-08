@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests\Unit;
 
 use Illuminate\Database\Schema\Blueprint;

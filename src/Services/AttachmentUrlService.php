@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Services;
 
 use Illuminate\Filesystem\FilesystemAdapter;
@@ -23,6 +25,9 @@ class AttachmentUrlService
         return $attachment;
     }
 
+    /**
+     * @param array<string, mixed> $attachment
+     */
     private function resolveUrl(array $attachment, string $baseApiUrl): string
     {
         $visibility = (string) ($attachment['visibility'] ?? 'private');

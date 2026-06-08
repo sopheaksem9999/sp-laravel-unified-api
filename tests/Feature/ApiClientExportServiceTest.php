@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests\Feature;
 
 use Illuminate\Support\Facades\Config;
@@ -287,6 +289,9 @@ class ApiClientExportServiceTest extends TestCase
     private function brunoEmitter(): ApiClientEmitterInterface
     {
         return new class implements ApiClientEmitterInterface {
+            /**
+             * @return array{}
+             */
             public function render(ExportResult $result): array
             {
                 return [];

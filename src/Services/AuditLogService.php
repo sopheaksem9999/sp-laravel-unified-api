@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Services;
 
 use Throwable;
@@ -21,6 +23,7 @@ class AuditLogService
      *
      * Only persists update events when there are actual changes between
      * the old and new data snapshots.
+     * @param array<string, mixed> $queryData
      */
     public static function handleAuditDataEntry(AuditLogEventEnum $event, string $entityName, string $entityType, array $queryData, ?string $subject = null, ?string $recap = null, mixed $tenantId = null): void
     {
@@ -101,6 +104,7 @@ class AuditLogService
      * Persist a formatted audit log entry.
      *
      * Includes an additional guard to avoid storing update entries with no changes.
+     * @param array<string, mixed> $data
      */
     public static function createAuditLogEntry(array $data): void
     {
@@ -286,6 +290,7 @@ class AuditLogService
 
     /**
      * Log an audit event (wrapper for instance calls).
+     * @param array<string, mixed> $auditContext
      */
     public function log(AuditLogEventEnum $event, string $table, array $auditContext): void
     {
@@ -695,6 +700,7 @@ class AuditLogService
 
     /**
      * Normalize mapper query data for audit logging.
+     * @param array<string, mixed> $queryData
      */
     public static function handleMapperQueryData(array $queryData): array
     {
@@ -738,6 +744,7 @@ class AuditLogService
 
     /**
      * Build item-level changes for nested items arrays.
+     * @param array<string, mixed> $prevMetadata
      */
     private static function getItemChanges(array $oldItems, array $newItems, array $prevMetadata = [], bool $isCreateEvent = false, ?string $globalPrevIso = null, mixed $prevEntryUserId = null): array
     {
@@ -838,6 +845,9 @@ class AuditLogService
         return $itemChanges;
     }
 
+    /**
+     * @param array<string, mixed> $prevMetadata
+     */
     private static function resolveGlobalPrevTimestamp(array $prevMetadata, ?Carbon $prevEntryCreatedAt = null): ?Carbon
     {
         try {
@@ -919,7 +929,7 @@ class AuditLogService
     /**
      * Format item addition/removal changes.
      *
-     * @param array $changes The changes array containing item modifications.
+     * @param array<string, mixed> $changes The changes array containing item modifications.
      *
      * @return array Array of formatted item change descriptions.
      */
@@ -1221,7 +1231,8 @@ class AuditLogService
     /**
      * Get aggregated statistics of audit logs based on filters.
      *
-     * @param array $filters Filters for querying stats (e.g. tenant_id, start_date, end_date, user_id, entity_type, event)
+     * @param array<string, mixed> $filters Filters for querying stats (e.g. tenant_id, start_date, end_date, user_id, entity_type, event)
+     * @return array<string, int|mixed[]>
      */
     public static function getAuditStats(array $filters = []): array
     {
@@ -1345,6 +1356,7 @@ class AuditLogService
      * @param string $entityType The entity type or table name.
      * @param int $entityId The ID of the entity.
      * @param string $field The field name to aggregate stats for.
+     * @return array<string, mixed>
      */
     public static function getFieldStats(string $entityType, int $entityId, string $field): array
     {

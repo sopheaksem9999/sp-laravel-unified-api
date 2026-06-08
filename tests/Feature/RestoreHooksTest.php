@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests\Feature;
 
 use Illuminate\Database\Schema\Blueprint;
@@ -78,6 +80,9 @@ class RestoreHooksTest extends TestCase
         });
     }
 
+    /**
+     * @param array<string, RecordTableTriggerType> $triggers
+     */
     private function registerTable(array $triggers = []): void
     {
         Config::set('record.tables', [

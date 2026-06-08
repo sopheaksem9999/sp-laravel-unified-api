@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Types;
 
 use InvalidArgumentException;
@@ -116,7 +118,7 @@ class RecordMetaBelongsToManyType
      * This method is required for Laravel's config:cache command to properly
      * serialize and deserialize the object when caching configurations.
      *
-     * @param array $properties The properties array from var_export
+     * @param array<string, mixed> $properties The properties array from var_export
      *
      * @return static A new instance of RecordMetaBelongsToManyType
      *
@@ -215,7 +217,7 @@ class RecordMetaBelongsToManyType
      * This is useful for loading configuration from files, databases, or
      * when deserializing configuration data from external sources.
      *
-     * @param array $config The configuration array containing relationship parameters
+     * @param array<string, mixed> $config The configuration array containing relationship parameters
      *
      * @return static A new instance of RecordMetaBelongsToManyType
      *

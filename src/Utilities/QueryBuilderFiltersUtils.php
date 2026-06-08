@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Utilities;
 
 use InvalidArgumentException;
@@ -318,6 +320,7 @@ class QueryBuilderFiltersUtils
 
     /**
      * Check if lazy loading is enabled for current request.
+     * @param array<string, mixed> $params
      */
     public static function isLazyEnabled(array $params): bool
     {
@@ -326,6 +329,7 @@ class QueryBuilderFiltersUtils
 
     /**
      * Get lazy operation statistics for debugging.
+     * @return array<string, float|int>
      */
     public static function getLazyStats(): array
     {
@@ -434,6 +438,8 @@ class QueryBuilderFiltersUtils
 
     /**
      * Apply a single relationship filter using EXISTS subquery.
+     * @param object[] $schema
+     * @param array<string, mixed> $config
      */
     private static function applyRelationshipFilter(Builder $builder, string $table, array $config, string $column, string $operator, ?string $value, mixed $tenantId, array $schema, ?string $modifier = null): void
     {
@@ -1290,6 +1296,9 @@ class QueryBuilderFiltersUtils
         }
     }
 
+    /**
+     * @param string[] $columns
+     */
     private static function applyCompare(Builder $builder, string $table, array $columns, string $op, string $value, bool $isMultiple): void
     {
         if ($isMultiple) {
@@ -1303,6 +1312,9 @@ class QueryBuilderFiltersUtils
         }
     }
 
+    /**
+     * @return array<string, list<string>>
+     */
     private static function parseSelectColumns(string $selectParam, string $table, array $allowedCols): array
     {
         // Only include main table columns; ignore relationship segments like alias:table(col,...)
@@ -1679,8 +1691,8 @@ class QueryBuilderFiltersUtils
                 } elseif (preg_match('/^compare\.(eq|neq|gt|lt|gte|lte)\.(.+)$/', $raw, $m)) {
                     $left = $key;
                     $right = $m[2];
-                    if (str_contains((string) $left, '.')) {
-                        $left = explode('.', (string) $left)[1];
+                    if (str_contains($left, '.')) {
+                        $left = explode('.', $left)[1];
                     }
 
                     if (str_contains($right, '.')) {
@@ -1721,7 +1733,7 @@ class QueryBuilderFiltersUtils
      * @param Builder $builder     Laravel query builder instance
      * @param string  $table       Target table name for schema validation
      * @param array   $allowedCols Allowed columns for security validation
-     * @param array   $params      Query parameters containing filter operations
+     * @param array<string, mixed> $params Query parameters containing filter operations
      */
     private static function executeOperatorsOptimized(Builder $builder, string $table, array $allowedCols, array $params): void
     {
@@ -1782,7 +1794,7 @@ class QueryBuilderFiltersUtils
                     $modifier = $parsedOperator['modifier'];
 
                     // Check if this is a relationship filter (contains dot)
-                    if (str_contains((string) $key, '.')) {
+                    if (str_contains($key, '.')) {
                         // This is a relationship filter
                         if (!isset($relationshipFilters[$key])) {
                             $relationshipFilters[$key] = [];
@@ -1832,6 +1844,9 @@ class QueryBuilderFiltersUtils
         }
     }
 
+    /**
+     * @param array<string, mixed> $params
+     */
     private static function extractGroupedFilters(array &$params): array
     {
         $grouped = [];
@@ -1871,6 +1886,9 @@ class QueryBuilderFiltersUtils
         return $grouped;
     }
 
+    /**
+     * @param array<string, mixed> $params
+     */
     private static function extractConfiguredSearchFilters(array &$params, string $table): array
     {
         if (!array_key_exists('search', $params)) {
@@ -1992,6 +2010,9 @@ class QueryBuilderFiltersUtils
         ];
     }
 
+    /**
+     * @return string[]
+     */
     private static function splitGroupedLogicParts(string $value): array
     {
         $parts = [];
@@ -2035,6 +2056,9 @@ class QueryBuilderFiltersUtils
         }
     }
 
+    /**
+     * @param array<string, mixed> $node
+     */
     private static function applyGroupedLogicNode(Builder $builder, string $table, array $allowedCols, array $node, string $boolean, mixed $tenantId): void
     {
         if (($node['type'] ?? null) === 'condition') {
@@ -2065,6 +2089,9 @@ class QueryBuilderFiltersUtils
         });
     }
 
+    /**
+     * @param array<string, mixed> $condition
+     */
     private static function applyGroupedCondition(Builder $builder, string $table, array $allowedCols, array $condition, string $boolean, mixed $tenantId): void
     {
         $column = $condition['column'] ?? null;
@@ -2230,6 +2257,9 @@ class QueryBuilderFiltersUtils
         return array_values(array_filter($parts, static fn(string $part): bool => '' !== $part));
     }
 
+    /**
+     * @param string[] $supportedDrivers
+     */
     private static function assertOperatorDriverSupported(string $operator, array $supportedDrivers): void
     {
         $driver = DB::getDriverName();
@@ -2263,6 +2293,9 @@ class QueryBuilderFiltersUtils
         );
     }
 
+    /**
+     * @param string[] $columns
+     */
     private static function applyRegexOperator(Builder $builder, string $table, array $columns, string $value, string $operator, bool $isMultiple): void
     {
         $driver = DB::getDriverName();
@@ -2302,6 +2335,9 @@ class QueryBuilderFiltersUtils
         $apply($builder, $table . '.' . $columns[0]);
     }
 
+    /**
+     * @param string[] $columns
+     */
     private static function applyPgsqlFullTextOperator(Builder $builder, string $table, array $columns, string $value, string $operator, bool $isMultiple): void
     {
         $negated = str_starts_with($operator, 'not_');
@@ -2335,6 +2371,9 @@ class QueryBuilderFiltersUtils
         $apply($builder, $table . '.' . $columns[0]);
     }
 
+    /**
+     * @param string[] $columns
+     */
     private static function applyPgsqlNativeOperator(Builder $builder, string $table, array $columns, string $value, string $operator, bool $isMultiple): void
     {
         $negated = str_starts_with($operator, 'not_');

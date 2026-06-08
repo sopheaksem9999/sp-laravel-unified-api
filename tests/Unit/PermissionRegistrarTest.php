@@ -1,7 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests\Unit;
 
+use ReflectionClass;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
@@ -168,8 +172,8 @@ class PermissionRegistrarTest extends TestCase
         $this->assertDatabaseHas('sp_permissions', ['name' => 'view:invoice']);
 
         // Manually assert the hash was stored
-        $configHashKey = (new \ReflectionClass($registrar))->getProperty('configHashKey');
-        $configHashKey->setAccessible(true);
+        $configHashKey = (new ReflectionClass($registrar))->getProperty('configHashKey');
+
         $hash = $this->app['cache']->get($configHashKey->getValue($registrar));
         $this->assertNotEmpty($hash);
 
@@ -220,14 +224,15 @@ class PermissionRegistrarTest extends TestCase
     {
         Permission::query()->create(['name' => 'view:invoice', 'guard_name' => 'api']);
 
-        $user = new class extends \Illuminate\Database\Eloquent\Model {
+        $user = new class extends Model {
             protected $table = 'users';
+
             public $timestamps = false;
         };
 
         // Need users table
-        if (!\Illuminate\Support\Facades\Schema::hasTable('users')) {
-            \Illuminate\Support\Facades\Schema::create('users', function (\Illuminate\Database\Schema\Blueprint $table) {
+        if (!Schema::hasTable('users')) {
+            Schema::create('users', function (Blueprint $table): void {
                 $table->id();
             });
         }
@@ -250,7 +255,7 @@ class PermissionRegistrarTest extends TestCase
     protected function createPermissionTables(): void
     {
         if (!Schema::hasTable('sp_permissions')) {
-            Schema::create('sp_permissions', function (Blueprint $table) {
+            Schema::create('sp_permissions', function (Blueprint $table): void {
                 $table->bigIncrements('id');
                 $table->string('name')->unique();
                 $table->string('group')->nullable();
@@ -261,7 +266,7 @@ class PermissionRegistrarTest extends TestCase
         }
 
         if (!Schema::hasTable('sp_roles')) {
-            Schema::create('sp_roles', function (Blueprint $table) {
+            Schema::create('sp_roles', function (Blueprint $table): void {
                 $table->bigIncrements('id');
                 $table->string('name');
                 $table->string('key')->nullable();
@@ -276,7 +281,7 @@ class PermissionRegistrarTest extends TestCase
         }
 
         if (!Schema::hasTable('sp_role_permissions')) {
-            Schema::create('sp_role_permissions', function (Blueprint $table) {
+            Schema::create('sp_role_permissions', function (Blueprint $table): void {
                 $table->bigIncrements('id');
                 $table->unsignedBigInteger('role_id');
                 $table->unsignedBigInteger('permission_id');
@@ -286,7 +291,7 @@ class PermissionRegistrarTest extends TestCase
         }
 
         if (!Schema::hasTable('sp_model_has_roles')) {
-            Schema::create('sp_model_has_roles', function (Blueprint $table) {
+            Schema::create('sp_model_has_roles', function (Blueprint $table): void {
                 $table->bigIncrements('id');
                 $table->string('model_type');
                 $table->unsignedBigInteger('model_id');
@@ -298,7 +303,7 @@ class PermissionRegistrarTest extends TestCase
         }
 
         if (!Schema::hasTable('sp_model_permissions')) {
-            Schema::create('sp_model_permissions', function (Blueprint $table) {
+            Schema::create('sp_model_permissions', function (Blueprint $table): void {
                 $table->bigIncrements('id');
                 $table->string('model_type');
                 $table->unsignedBigInteger('model_id');

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Triggers;
 
 use Illuminate\Http\JsonResponse;
@@ -51,6 +53,9 @@ class WebhookTrigger extends RecordTriggerBase
         self::dispatchWebhooks($table, 'deleted', $oldData, $tenantId);
     }
 
+    /**
+     * @param array<string, mixed> $context
+     */
     private static function extractDataFromContext(array $context): array
     {
         $data = $context['data'] ?? $context['response'] ?? [];

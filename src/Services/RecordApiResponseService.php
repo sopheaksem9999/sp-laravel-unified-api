@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Services;
 
 use ArgumentCountError;
@@ -716,6 +718,9 @@ class RecordApiResponseService
         return ['builtin' => $builtin];
     }
 
+    /**
+     * @param array<string, mixed> $meta
+     */
     private static function inferBuiltinCastFromColumnMeta(array $meta): ?string
     {
         $type = strtolower((string) ($meta['type'] ?? $meta['data_type'] ?? ''));
@@ -958,8 +963,9 @@ class RecordApiResponseService
         return $trimmed;
     }
 
-    public static function successWrapped(mixed $data, array $meta = [], string $status = RecordApiJsonResponseEnum::SUCCESS->value, array $headers = [], ?int $error_code = null): JsonResponse
+    public static function successWrapped(mixed $data, array $meta = [], int|string $status = RecordApiJsonResponseEnum::SUCCESS->value, array $headers = [], ?int $error_code = null): JsonResponse
     {
+        $httpStatus = self::normalizeHttpStatus($status, RecordApiJsonResponseEnum::SUCCESS->value);
         $requestId = request()->attributes->get('request_id');
         $meta = array_merge(['request_id' => $requestId], $meta, self::resolveExtraMeta());
         $data = static::removeDeletedAtFields($data);
@@ -969,11 +975,13 @@ class RecordApiResponseService
             'error_code' => $error_code ?? HttpErrorCodeConstant::SUCCESS,
             'data' => $data,
             'meta' => $meta,
-        ], $status, $headers);
+        ], $httpStatus, $headers);
     }
 
-    public static function errorWrapped(string $message, string $status = RecordApiJsonResponseEnum::ERROR->value, array $errors = [], ?int $error_code = null, ?array $debug = null): JsonResponse
+    public static function errorWrapped(string $message, int|string $status = RecordApiJsonResponseEnum::ERROR->value, array $errors = [], ?int $error_code = null, ?array $debug = null): JsonResponse
     {
+        $status = self::normalizeStatusString($status, RecordApiJsonResponseEnum::ERROR->value);
+        $httpStatus = self::normalizeHttpStatus($status, RecordApiJsonResponseEnum::ERROR->value);
         $requestId = request()->attributes->get('request_id');
 
         $resolvedErrorCode = $error_code ?? match ($status) {
@@ -1012,10 +1020,10 @@ class RecordApiResponseService
             'message' => $message,
             'errors' => $errors,
             'meta' => $meta,
-        ], $status);
+        ], $httpStatus);
     }
 
-    public static function errorFromException(Throwable $exception, string $message = 'An error occurred', string $status = RecordApiJsonResponseEnum::SERVER_ERROR->value, array $errors = [], ?int $error_code = null): JsonResponse
+    public static function errorFromException(Throwable $exception, string $message = 'An error occurred', int|string $status = RecordApiJsonResponseEnum::SERVER_ERROR->value, array $errors = [], ?int $error_code = null): JsonResponse
     {
         $debug = null;
         if (self::shouldIncludeDebugDetails()) {
@@ -1035,6 +1043,18 @@ class RecordApiResponseService
             error_code: $error_code,
             debug: $debug
         );
+    }
+
+    private static function normalizeStatusString(int|string $status, string $fallback): string
+    {
+        $status = is_int($status) ? (string) $status : $status;
+
+        return ctype_digit($status) ? $status : $fallback;
+    }
+
+    private static function normalizeHttpStatus(int|string $status, string $fallback): int
+    {
+        return (int) self::normalizeStatusString($status, $fallback);
     }
 
     private static function shouldIncludeDebugDetails(): bool

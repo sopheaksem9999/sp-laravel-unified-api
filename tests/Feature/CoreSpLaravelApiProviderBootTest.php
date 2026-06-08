@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests\Feature;
 
+use Sopheak\Core\Http\Middleware\SetPostgresTenantContext;
 use Illuminate\Routing\Router;
 use Sopheak\Core\Http\Middleware\RecordRouteMiddleware;
 use Sopheak\Core\Http\Middleware\RequestId;
@@ -16,6 +19,6 @@ class CoreSpLaravelApiProviderBootTest extends TestCase
 
         $this->assertSame(RequestId::class, $router->getMiddleware()['request.id'] ?? null);
         $this->assertSame(RecordRouteMiddleware::class, $router->getMiddleware()['record.route.middleware'] ?? null);
-        $this->assertSame(\Sopheak\Core\Http\Middleware\SetPostgresTenantContext::class, $router->getMiddleware()['pgsql.tenant'] ?? null);
+        $this->assertSame(SetPostgresTenantContext::class, $router->getMiddleware()['pgsql.tenant'] ?? null);
     }
 }
