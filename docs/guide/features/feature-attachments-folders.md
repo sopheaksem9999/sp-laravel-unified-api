@@ -27,5 +27,14 @@ Folders are stored in `sp_document_folders` with:
 - `id`
 - `name`
 - `parent_id`
+- `scope` (`internal` by default)
+- `visibility` (`private` by default)
+- `owner_type` / `owner_id`
+- `metadata`
 
-The model supports simple tree-like grouping through `parent_id`.
+The model supports simple tree-like grouping through `parent_id`, plus optional public/internal resource organization through `scope` and `visibility`.
+
+## Safety Options
+
+- `attachments.access.validate_folder_exists=false` by default preserves legacy behavior. Set it to `true` to reject uploads or folder updates that reference a missing folder.
+- `attachments.folder_delete_strategy=legacy` preserves existing delete behavior. Set it to `restrict` to block deleting folders that still contain child folders or attachments.

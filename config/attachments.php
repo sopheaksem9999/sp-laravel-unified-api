@@ -1,10 +1,11 @@
 <?php
 
+use Sopheak\Core\Triggers\AttachmentTrigger;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Http\Controllers\AttachmentUploadController;
 
-$routePrefix = (string) 'sp_attachments';
+$routePrefix = 'sp_attachments';
 
 return [
     /*
@@ -37,6 +38,12 @@ return [
     | - max_temp_timeout_minutes: Maximum allowed custom temp timeout minutes.
     | - protect_temp_public_via_download: Force temp_public URLs to use API download endpoint
     |   so timeout checks are enforced before file access.
+    | - url_strategy: auto keeps existing public URL behavior, api forces API view URLs,
+    |   temporary uses driver temporaryUrl() when available, direct always asks the disk
+    |   for direct public URLs.
+    | - folder_delete_strategy: legacy keeps existing delete behavior, restrict blocks
+    |   deletes when the folder still has child folders or attachments.
+    | - access: Optional safety checks. Defaults preserve existing loose behavior.
     | - image_sizes: Define predefined image sizes that can be requested during upload.
     |   If a client requests a size that is not defined here, it will be rejected
     |   unless you allow arbitrary sizes.
@@ -49,6 +56,15 @@ return [
     'default_temp_visibility' => 'temp_private',
     'max_temp_timeout_minutes' => 43200, // 30 days
     'protect_temp_public_via_download' => false,
+    'url_strategy' => 'auto', // auto, api, temporary, direct
+    'temporary_url_ttl_minutes' => 5,
+    'folder_delete_strategy' => 'legacy', // legacy, restrict
+    'access' => [
+        'validate_folder_exists' => false,
+        'validate_record_exists' => false,
+        'fail_unknown_record_tables' => false,
+        'record_authorizer' => null,
+    ],
     'image_sizes' => [
         // Example:
         // 'thumbnail' => ['w' => 150, 'h' => 150, 'fit' => 'crop'],
@@ -69,15 +85,15 @@ return [
         'sp_attachments' => new RecordTableType(
             table: 'sp_attachments',
             pmsName: array_values(array_unique(array_filter([$routePrefix, 'attachment']))),
-            primaryKey: 'id',
-            softDeletes: false,
             hasTenantId: true,
-            isAuthRead: true,
-            isAuthWrite: true,
+            softDeletes: false,
             canCreate: false,
             canUpdate: true,
             canDelete: true,
             canUpsert: true,
+            isAuthRead: true,
+            isAuthWrite: true,
+            primaryKey: 'id',
             columns: [
                 'id' => ['type' => 'string', 'nullable' => false],
                 'folder_id' => ['type' => 'string', 'nullable' => true],
@@ -91,14 +107,11 @@ return [
                 'visibility' => ['type' => 'string', 'nullable' => false],
                 'temp_timeout' => ['type' => 'datetime', 'nullable' => true],
             ],
-            triggers: [
-                \Sopheak\Core\Triggers\AttachmentTrigger::class,
-            ],
             functions: [
                 'upload' => new RecordFunctionType(
+                    httpMethod: ['POST'],
                     class: AttachmentUploadController::class,
                     functionName: 'upload',
-                    httpMethod: ['POST'],
                     description: 'Upload a new attachment',
                     payloadSchema: [
                         'type' => 'object',
@@ -131,9 +144,9 @@ return [
                     ]
                 ),
                 'clone-temp' => new RecordFunctionType(
+                    httpMethod: ['POST'],
                     class: AttachmentUploadController::class,
                     functionName: 'cloneTemp',
-                    httpMethod: ['POST'],
                     description: 'Clone an existing attachment as temporary attachment',
                     payloadSchema: [
                         'type' => 'object',
@@ -159,9 +172,9 @@ return [
                     ]
                 ),
                 '{id}/download' => new RecordFunctionType(
+                    httpMethod: ['GET'],
                     class: AttachmentUploadController::class,
                     functionName: 'download',
-                    httpMethod: ['GET'],
                     description: 'Download an attachment',
                     responseSchema: [
                         'type' => 'string',
@@ -169,9 +182,9 @@ return [
                     ]
                 ),
                 '{id}/view' => new RecordFunctionType(
+                    httpMethod: ['GET'],
                     class: AttachmentUploadController::class,
                     functionName: 'view',
-                    httpMethod: ['GET'],
                     description: 'View an attachment inline',
                     responseSchema: [
                         'type' => 'string',
@@ -179,9 +192,9 @@ return [
                     ]
                 ),
                 'folders' => new RecordFunctionType(
+                    httpMethod: ['GET', 'POST'],
                     class: AttachmentUploadController::class,
                     functionName: 'folders',
-                    httpMethod: ['GET', 'POST'],
                     description: 'List or create folders',
                     querySchema: [
                         'type' => 'object',
@@ -194,6 +207,11 @@ return [
                         'properties' => [
                             'name' => ['type' => 'string', 'description' => 'Folder name (required for POST)'],
                             'parent_id' => ['type' => 'string', 'description' => 'Parent folder ID'],
+                            'scope' => ['type' => 'string', 'description' => 'Resource scope such as internal or public'],
+                            'visibility' => ['type' => 'string', 'enum' => ['private', 'public', 'temp_private', 'temp_public'], 'description' => 'Default visibility for resources organized under this folder'],
+                            'owner_type' => ['type' => 'string', 'description' => 'Optional owner type for application-specific folder ownership'],
+                            'owner_id' => ['type' => 'string', 'description' => 'Optional owner ID for application-specific folder ownership'],
+                            'metadata' => ['type' => 'object', 'description' => 'Optional folder metadata'],
                         ],
                         'required' => ['name'],
                     ],
@@ -205,27 +223,37 @@ return [
                                 'id' => ['type' => 'string'],
                                 'name' => ['type' => 'string'],
                                 'parent_id' => ['type' => 'string'],
+                                'scope' => ['type' => 'string'],
+                                'visibility' => ['type' => 'string'],
+                                'owner_type' => ['type' => 'string'],
+                                'owner_id' => ['type' => 'string'],
+                                'metadata' => ['type' => 'object'],
                             ],
                         ],
                     ]
                 ),
                 'folders/{id}' => new RecordFunctionType(
+                    httpMethod: ['PUT', 'PATCH', 'DELETE'],
                     class: AttachmentUploadController::class,
                     functionName: 'folderItem',
-                    httpMethod: ['PUT', 'PATCH', 'DELETE'],
                     description: 'Update or delete folder',
                     payloadSchema: [
                         'type' => 'object',
                         'properties' => [
                             'name' => ['type' => 'string', 'description' => 'New folder name'],
                             'parent_id' => ['type' => 'string', 'description' => 'New parent folder ID'],
+                            'scope' => ['type' => 'string', 'description' => 'Resource scope such as internal or public'],
+                            'visibility' => ['type' => 'string', 'enum' => ['private', 'public', 'temp_private', 'temp_public'], 'description' => 'Default visibility for resources organized under this folder'],
+                            'owner_type' => ['type' => 'string', 'description' => 'Optional owner type for application-specific folder ownership'],
+                            'owner_id' => ['type' => 'string', 'description' => 'Optional owner ID for application-specific folder ownership'],
+                            'metadata' => ['type' => 'object', 'description' => 'Optional folder metadata'],
                         ],
                     ]
                 ),
                 'record/{table}/{record_id}' => new RecordFunctionType(
+                    httpMethod: ['GET', 'POST'],
                     class: AttachmentUploadController::class,
                     functionName: 'record',
-                    httpMethod: ['GET', 'POST'],
                     description: 'Get or link attachments for a specific record',
                     querySchema: [
                         'type' => 'object',
@@ -243,35 +271,43 @@ return [
                     ]
                 ),
                 'record/{table}/{record_id}/{attachment_id}' => new RecordFunctionType(
+                    httpMethod: ['DELETE'],
                     class: AttachmentUploadController::class,
                     functionName: 'unlinkFromRecord',
-                    httpMethod: ['DELETE'],
                     description: 'Unlink an attachment from a record'
                 ),
+            ],
+            triggers: [
+                AttachmentTrigger::class,
             ]
         ),
         'sp_document_folders' => new RecordTableType(
             table: 'sp_document_folders',
             pmsName: 'attachment',
-            primaryKey: 'id',
-            softDeletes: false,
             hasTenantId: true,
+            softDeletes: false,
             isAuthRead: true,
             isAuthWrite: true,
+            primaryKey: 'id',
             columns: [
                 'id' => ['type' => 'string', 'nullable' => false],
                 'name' => ['type' => 'string', 'nullable' => false],
                 'parent_id' => ['type' => 'string', 'nullable' => true],
+                'scope' => ['type' => 'string', 'nullable' => false],
+                'visibility' => ['type' => 'string', 'nullable' => false],
+                'owner_type' => ['type' => 'string', 'nullable' => true],
+                'owner_id' => ['type' => 'string', 'nullable' => true],
+                'metadata' => ['type' => 'json', 'nullable' => true],
             ],
         ),
         'sp_attachment_links' => new RecordTableType(
             table: 'sp_attachment_links',
             pmsName: 'attachment',
-            primaryKey: 'id',
-            softDeletes: false,
             hasTenantId: true,
+            softDeletes: false,
             isAuthRead: true,
             isAuthWrite: true,
+            primaryKey: 'id',
             columns: [
                 'id' => ['type' => 'integer', 'nullable' => false],
                 'attachment_id' => ['type' => 'string', 'nullable' => false],

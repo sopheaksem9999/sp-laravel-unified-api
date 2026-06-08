@@ -37,6 +37,15 @@ If a `private` attachment can be opened by concatenating `APP_URL` + `path`, it 
 
 For S3 (or any cloud disk), `public` attachments will typically return a bucket/CDN URL (via `disk->url()`), while `private` attachments should still return API-proxied URLs (`/view` and `/download`) so authentication + tenant scope + expiry checks are enforced.
 
+## URL Strategy
+
+Use `attachments.url_strategy` to choose how the `url` field is generated:
+
+- `auto` (default): keeps existing behavior, returning direct URLs for public visibility and API URLs for private visibility.
+- `api`: always returns the API `/view` URL.
+- `temporary`: uses the disk driver's `temporaryUrl()` when available, otherwise falls back to API `/view`.
+- `direct`: returns direct public disk URLs.
+
 ## Protection Option for temp_public
 
 Use `attachments.protect_temp_public_via_download`:
@@ -49,3 +58,5 @@ Use `attachments.protect_temp_public_via_download`:
 Download endpoint denies expired temp files with HTTP `410 Gone`.
 
 This protects access immediately, even before scheduled cleanup removes stale files.
+
+`temp_timeout_at` is capped by `attachments.max_temp_timeout_minutes`, matching the existing cap for `temp_timeout_minutes`.
