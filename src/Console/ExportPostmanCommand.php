@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Console;
 
 use Sopheak\Core\Services\ApiClient\ApiClientEmitterInterface;

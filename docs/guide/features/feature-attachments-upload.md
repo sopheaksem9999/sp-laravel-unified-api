@@ -36,4 +36,5 @@ Clone creates a new attachment record and copies the source asset into a new pat
 ## Notes
 
 - Temp timeout resolves in this order: `temp_timeout_at` -> `temp_timeout_minutes` -> `attachments.temp_lifetime` fallback.
+- `temp_timeout_at` and `temp_timeout_minutes` are both capped by `attachments.max_temp_timeout_minutes`.
 - Disk mapping is visibility-driven (`public`/`temp_public` on public disk; others on local disk).

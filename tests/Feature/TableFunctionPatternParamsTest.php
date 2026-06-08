@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests\Feature;
 
 use Illuminate\Http\Request;
@@ -48,6 +50,9 @@ class TableFunctionPatternParamsTest extends TestCase
 
 class TableFunctionPatternHandler
 {
+    /**
+     * @return array<string, string>
+     */
     public function handle(Request $request, string $table, string $recordId, string $attachmentId): array
     {
         return [

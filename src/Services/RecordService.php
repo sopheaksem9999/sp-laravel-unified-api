@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Services;
 
+use Illuminate\Database\ConnectionInterface;
 use RuntimeException;
 use Sopheak\Core\Events\RecordMutated;
 use Sopheak\Core\Events\RecordCreated;
@@ -149,7 +152,7 @@ class RecordService
     /**
      * Delete a record with all related processing.
      *
-     * @return array Returns ['id' => mixed, 'affected' => int]
+     * @return array<string, mixed> Returns ['id' => mixed, 'affected' => int]
      */
     public function deleteRecord(string $table, mixed $id, mixed $tenantId): array
     {
@@ -177,7 +180,7 @@ class RecordService
     /**
      * Restore a soft-deleted record.
      *
-     * @return array Returns ['id' => mixed, 'restored' => int]
+     * @return array<string, mixed> Returns ['id' => mixed, 'restored' => int]
      */
     public function restoreRecord(string $table, mixed $id, mixed $tenantId): array
     {
@@ -207,7 +210,7 @@ class RecordService
     /**
      * Force delete a record.
      *
-     * @return array Returns ['id' => mixed, 'deleted' => int]
+     * @return array<string, mixed> Returns ['id' => mixed, 'deleted' => int]
      */
     public function forceDeleteRecord(Request $request, string $table, mixed $id, mixed $tenantId): array
     {
@@ -236,7 +239,7 @@ class RecordService
     /**
      * Upsert a record.
      *
-     * @return array Returns ['id' => mixed, 'payload' => array]
+     * @return array<string, mixed[]|array<string, mixed>> Returns ['id' => mixed, 'payload' => array]
      */
     public function upsertRecord(Request $request, string $table, array $payload, mixed $tenantId, array $matchOn = []): array
     {
@@ -254,7 +257,10 @@ class RecordService
         }
 
         if (empty($matchOn)) {
-            throw new Exception('match_on query parameter is required for upsert operation', RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
+            throw new Exception(
+                message: 'match_on query parameter is required for upsert operation',
+                code: (int) RecordApiJsonResponseEnum::VALIDATION_ERROR->value
+            );
         }
 
         // Sanitize payload
@@ -384,6 +390,7 @@ class RecordService
     /**
      * Execute post-write logic (Triggers and Audit Logs).
      * This should be called after the DB operation (and ideally after commit for single records, or inside transaction for bulk).
+     * @param array<string, mixed> $recordContext
      */
     public function processPostWriteLogic(Request $request, string $table, string $operation, array $recordContext): void
     {
@@ -495,6 +502,7 @@ class RecordService
 
     /**
      * Fire a RecordMutated broadcast event when broadcasting is enabled.
+     * @param array<string, mixed> $recordContext
      */
     private function fireBroadcastEvent(string $table, string $operation, array $recordContext, ?RecordTableType $tableSchema): void
     {
@@ -601,7 +609,10 @@ class RecordService
         // Get schema and validate table exists
         $tableSchema = SchemaRegistryUtils::getTable($table);
         if (!$tableSchema instanceof RecordTableType) {
-            throw new Exception(sprintf("Table '%s' does not exist", $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
+            throw new Exception(
+                message: sprintf("Table '%s' does not exist", $table),
+                code: (int) RecordApiJsonResponseEnum::NOT_FOUND->value
+            );
         }
 
         // Check if function exists in table schema
@@ -619,7 +630,10 @@ class RecordService
         }
 
         if (!$functionConfig) {
-            throw new Exception(sprintf("Function '%s' not found for table '%s'", $functionName, $table), RecordApiJsonResponseEnum::NOT_FOUND->value);
+            throw new Exception(
+                message: sprintf("Function '%s' not found for table '%s'", $functionName, $table),
+                code: (int) RecordApiJsonResponseEnum::NOT_FOUND->value
+            );
         }
 
         $disableCache = false;
@@ -716,7 +730,10 @@ class RecordService
         }
 
         if (!$functionConfig) {
-            throw new Exception(sprintf("Function '%s' not found", $functionName), RecordApiJsonResponseEnum::NOT_FOUND->value);
+            throw new Exception(
+                message: sprintf("Function '%s' not found", $functionName),
+                code: (int) RecordApiJsonResponseEnum::NOT_FOUND->value
+            );
         }
 
         $disableCache = false;
@@ -784,12 +801,16 @@ class RecordService
 
     /**
      * Bulk create, update, or delete records.
+     * @return array<string, array<int|string, mixed>>
      */
     public function bulkRecord(Request $request, string $table, mixed $tenantId, ?string $legacyAction = null): array
     {
         $tableSchema = SchemaRegistryUtils::getTable($table);
         if (!$tableSchema instanceof RecordTableType) {
-            throw new Exception('Resource not available', RecordApiJsonResponseEnum::NOT_FOUND->value);
+            throw new Exception(
+                message: 'Resource not available',
+                code: (int) RecordApiJsonResponseEnum::NOT_FOUND->value
+            );
         }
 
         // Parse items
@@ -808,12 +829,18 @@ class RecordService
         }
 
         if (!is_array($items) || [] === $items) {
-            throw new Exception('Data array required', RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
+            throw new Exception(
+                message: 'Data array required',
+                code: (int) RecordApiJsonResponseEnum::VALIDATION_ERROR->value
+            );
         }
 
         $maxBatch = RecordConfigService::bulkMax();
         if (count($items) > $maxBatch) {
-            throw new Exception('Batch too large, max ' . $maxBatch, 413);
+            throw new Exception(
+                message: 'Batch too large, max ' . $maxBatch,
+                code: 413
+            );
         }
 
         $pk = $tableSchema->primaryKey ?? 'id';
@@ -957,6 +984,9 @@ class RecordService
         }
     }
 
+    /**
+     * @param array<array<string, mixed>, mixed> $context
+     */
     protected function callCustomAuditLogger(
         string|array $callback,
         AuditLogEventEnum $event,
@@ -1017,6 +1047,9 @@ class RecordService
         return true;
     }
 
+    /**
+     * @param array<mixed[], mixed> $params
+     */
     public function executeTableTrigger(mixed $trigger, array $params): array
     {
         if (isset($params[0]) && $params[0] instanceof Request) {
@@ -1112,6 +1145,9 @@ class RecordService
         ));
     }
 
+    /**
+     * @param array<int, mixed> $params
+     */
     private function executeSingleTrigger(RecordTableTriggerType $trigger, array &$params): void
     {
         $className = $trigger->class;
@@ -1193,6 +1229,9 @@ class RecordService
         return is_array($errors) ? $errors : [];
     }
 
+    /**
+     * @param array<string, mixed> $errors
+     */
     private function resolveValidationErrorMessage(array $errors): string
     {
         if (array_key_exists('message', $errors) && is_string($errors['message'])) {
@@ -1273,6 +1312,9 @@ class RecordService
         return RecordUtils::applyCompositeTypes(payload: $payload, columns: $meta->columns ?? []);
     }
 
+    /**
+     * @param array<string, mixed> $payload
+     */
     private function buildCrudPayload(array $payload, object $tableSchema, mixed $tenantId, bool $isUpdate): array
     {
         $tenantColumn = RecordConfigService::tenantColumn();
@@ -1319,6 +1361,9 @@ class RecordService
         return $this->applyTimestampsAndAuditFields($payloadMain, $tableSchema, $isUpdate);
     }
 
+    /**
+     * @param array<string, mixed> $payload
+     */
     public function applyTimestampsAndAuditFields(array $payload, object $tableSchema, bool $isUpdate = false): array
     {
         $user = auth('api')->user();
@@ -1560,35 +1605,44 @@ class RecordService
         return $this->cacheService()->generateCursorCacheKey($table, $filters, $includes, $cursor, $direction, $cursorColumn, $limit, $tenantEnabled);
     }
 
-    private function getReadConnection(): ?\Illuminate\Database\ConnectionInterface
+    private function getReadConnection(): ?ConnectionInterface
     {
         $connection = RecordConfigService::readConnection();
 
         return $connection ? DB::connection($connection) : null;
     }
 
+    private function createReadBuilder(string $table): Builder
+    {
+        $readConn = $this->getReadConnection();
+
+        return $readConn instanceof ConnectionInterface ? $readConn->table($table) : DB::table($table);
+    }
+
     private function applyIndexHint(Builder $builder, string $table, string $context = 'list'): void
     {
+        if ('mysql' !== $this->getBuilderDriverName($builder)) {
+            return;
+        }
+
         $hints = RecordConfigService::tableIndexHints($table);
         $index = $hints[$context] ?? null;
         if ($index !== null) {
-            $builder->from(DB::raw($builder->from . ' FORCE INDEX (' . $index . ')'));
+            $builder->from($builder->getConnection()->raw($builder->from . ' FORCE INDEX (' . $index . ')'));
         }
     }
 
-    private function getApproximateCount(string $actualTableName): int
+    private function getBuilderDriverName(Builder $builder): ?string
     {
-        return match (DB::getDriverName()) {
-            'mysql' => (int) (DB::select(
-                'SELECT TABLE_ROWS FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
-                [$actualTableName]
-            )[0]->TABLE_ROWS ?? 0),
-            'pgsql' => (int) (DB::select(
-                'SELECT reltuples::bigint AS estimate FROM pg_class WHERE relname = ?',
-                [$actualTableName]
-            )[0]->estimate ?? 0),
-            default => 0,
-        };
+        $connection = $builder->getConnection();
+
+        if (method_exists($connection, 'getDriverName')) {
+            $driverName = $connection->getDriverName();
+
+            return is_string($driverName) ? $driverName : null;
+        }
+
+        return null;
     }
 
     private function explainQuery(Builder $builder): array
@@ -1611,9 +1665,9 @@ class RecordService
                 'sql' => $sql,
                 'bindings' => $bindings,
             ];
-        } catch (\Throwable $e) {
+        } catch (Throwable $throwable) {
             return [
-                'error' => $e->getMessage(),
+                'error' => $throwable->getMessage(),
             ];
         }
     }
@@ -1687,9 +1741,7 @@ class RecordService
         $cursor = $request->input('cursor');
         $direction = $request->input('direction', 'next');
         $cursorColumn = $request->input('cursor_column', RecordConfigService::cursorDefaultColumn());
-
-        $table = $builder->from;
-        $isUuidColumn = self::detectUuidCursorColumn($builder, $cursorColumn);
+        $isUuidColumn = $this->detectUuidCursorColumn($builder, $cursorColumn);
         // First page has no cursor filter — use null so frontend sends cursor=
         $firstCursorDefault = null;
 
@@ -1722,18 +1774,16 @@ class RecordService
                     ->get();
 
                 $boundaryMin = $boundaryRows->min($cursorColumn);
-                $lastCursor = null !== $boundaryMin ? $boundaryMin : null;
+                $lastCursor = $boundaryMin ?? null;
             }
         }
 
         $hasCursor = null !== $cursor && '' !== $cursor && 0 !== $cursor;
 
         // For UUID columns, only apply cursor filter when the cursor is a valid UUID
-        if ($isUuidColumn && $hasCursor) {
-            if (!is_string($cursor) || !preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', (string) $cursor)) {
-                $hasCursor = false;
-                $cursor = null;
-            }
+        if ($isUuidColumn && $hasCursor && (!is_string($cursor) || !preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $cursor))) {
+            $hasCursor = false;
+            $cursor = null;
         }
 
         if ($hasCursor) {
@@ -1741,7 +1791,7 @@ class RecordService
 
             // Default sort: created_at DESC (matches applySort behavior)
             $sortOrder = $request->input('order', 'desc');
-            $sortOrder = in_array(strtolower($sortOrder), ['asc', 'desc'], true) ? strtolower($sortOrder) : 'desc';
+            $sortOrder = in_array(strtolower((string) $sortOrder), ['asc', 'desc'], true) ? strtolower((string) $sortOrder) : 'desc';
 
             // Cursor operator depends on sort direction:
             // ASC + next → >  |  ASC + prev → <
@@ -1755,9 +1805,9 @@ class RecordService
             };
 
             if (RecordConfigService::cursorCompositeEnabled() && $cursorColumn !== $primaryKey) {
-                $builder->where(function ($q) use ($cursorColumn, $primaryKey, $cursor, $cursorOperator) {
+                $builder->where(function ($q) use ($cursorColumn, $primaryKey, $cursor, $cursorOperator): void {
                     $q->where($cursorColumn, $cursorOperator, $cursor)
-                        ->orWhere(function ($q2) use ($cursorColumn, $primaryKey, $cursor, $cursorOperator) {
+                        ->orWhere(function ($q2) use ($cursorColumn, $primaryKey, $cursor, $cursorOperator): void {
                             $q2->where($cursorColumn, '=', $cursor)
                                 ->where($primaryKey, $cursorOperator === '>' ? '>=' : '<=', $cursor);
                         });
@@ -1798,11 +1848,20 @@ class RecordService
      */
     private function executePagination(Builder $builder, Request $request, string $primaryKey): array
     {
-        if ($request->has('cursor')) {
+        if ($this->shouldUseCursorPagination($request)) {
             return $this->executeCursorPagination($builder, $request, $primaryKey);
         }
 
         return $this->executeOffsetPagination($builder, $request);
+    }
+
+    private function shouldUseCursorPagination(Request $request): bool
+    {
+        if ($request->has('cursor')) {
+            return true;
+        }
+
+        return 'cursor' === RecordConfigService::paginationDefaultMode();
     }
 
     /**
@@ -1841,7 +1900,7 @@ class RecordService
 
         $isCacheable = $this->isCacheableRequest(request: $request, table: $table);
         $cacheKey = null;
-        $isCursor = $request->has('cursor');
+        $isCursor = $this->shouldUseCursorPagination($request);
 
         if ($isCacheable) {
             $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
@@ -1879,11 +1938,7 @@ class RecordService
             }
         }
 
-        $builder = DB::table($actualTableName);
-        $readConn = $this->getReadConnection();
-        if ($readConn !== null) {
-            $builder = $readConn->table($actualTableName);
-        }
+        $builder = $this->createReadBuilder($actualTableName);
 
         $this->applyTenantFilter($builder, $actualTableName, $tenantId);
 
@@ -2024,7 +2079,7 @@ class RecordService
                 $recordIds = self::extractRecordIds($data, $primaryKey);
 
                 if ([] !== $recordIds) {
-                    $optimizedBuilder = DB::table($actualTableName);
+                    $optimizedBuilder = $this->createReadBuilder($actualTableName);
                     $mainCols = RelationshipResolverUtils::getMainTableColumns(is_string($selectParam) ? $selectParam : '');
                     // Strip computed attribute keys — they are not real DB columns
                     $attributeKeys = array_keys($tableSchema->attributes ?? []);
@@ -2032,7 +2087,7 @@ class RecordService
                         ? array_values(array_diff($mainCols, $attributeKeys))
                         : $mainCols;
                     if ([] !== $dbMainCols) {
-                        $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $dbMainCols);
+                        $prefixedCols = array_map(fn($col): string => '*' === $col ? $actualTableName . '.*' : (str_contains($col, '.') ? $col : $actualTableName . '.' . $col), $dbMainCols);
                         $optimizedBuilder->select($prefixedCols);
                     } else {
                         $optimizedBuilder->select($actualTableName . '.*');
@@ -2092,6 +2147,11 @@ class RecordService
 
         if ($this->shouldIncludeDebug($request)) {
             $meta['debug']['lazy_stats'] = QueryBuilderFiltersUtils::getLazyStats();
+            $meta['debug']['cache_stats'] = QueryCacheService::requestStats();
+            $tenantContextStats = $request->attributes->get('record_pgsql_tenant_context_stats');
+            if (is_array($tenantContextStats)) {
+                $meta['debug']['pgsql_tenant_context'] = $tenantContextStats;
+            }
         }
 
         if ($explainResult !== null) {
@@ -2474,7 +2534,7 @@ class RecordService
         $page = max((int) $request->input('page', 1), 1);
         $perPage = $request->has('per_page') ? max(1, min((int) $request->input('per_page', 25), RecordConfigService::perPageMax())) : null;
         $limit = $request->has('limit') ? max(1, min((int) $request->input('limit'), RecordConfigService::limitMax())) : RecordConfigService::limitMax();
-        $isCursor = $request->has('cursor');
+        $isCursor = $service->shouldUseCursorPagination($request);
 
         // Disable cache if using builder as we can't easily key the builder state
         $isCacheable = !$builder && $service->isCacheableRequest($request, $table);
@@ -2517,11 +2577,7 @@ class RecordService
         }
 
         if (!$builder instanceof Builder) {
-            $builder = DB::table($actualTableName);
-            $readConn = $service->getReadConnection();
-            if ($readConn !== null) {
-                $builder = $readConn->table($actualTableName);
-            }
+            $builder = $service->createReadBuilder($actualTableName);
             $service->applyTenantFilter($builder, $actualTableName, $tenantId);
 
             if ($tableSchema instanceof RecordTableType && $tableSchema->softDeletes) {
@@ -2659,7 +2715,7 @@ class RecordService
                 $recordIds = self::extractRecordIds($data, $primaryKey);
 
                 if ([] !== $recordIds) {
-                    $optimizedBuilder = DB::table($actualTableName);
+                    $optimizedBuilder = $service->createReadBuilder($actualTableName);
                     $mainCols = RelationshipResolverUtils::getMainTableColumns(is_string($selectParam) ? $selectParam : '');
                     // Strip computed attribute keys — they are not real DB columns
                     $attributeKeys = $tableSchema instanceof RecordTableType ? array_keys($tableSchema->attributes ?? []) : [];
@@ -2667,7 +2723,7 @@ class RecordService
                         ? array_values(array_diff($mainCols, $attributeKeys))
                         : $mainCols;
                     if ([] !== $dbMainCols) {
-                        $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $dbMainCols);
+                        $prefixedCols = array_map(fn($col): string => '*' === $col ? $actualTableName . '.*' : (str_contains($col, '.') ? $col : $actualTableName . '.' . $col), $dbMainCols);
                         $optimizedBuilder->select($prefixedCols);
                     } else {
                         $optimizedBuilder->select($actualTableName . '.*');
@@ -2727,6 +2783,11 @@ class RecordService
 
         if ($service->shouldIncludeDebug($request)) {
             $meta['debug']['lazy_stats'] = QueryBuilderFiltersUtils::getLazyStats();
+            $meta['debug']['cache_stats'] = QueryCacheService::requestStats();
+            $tenantContextStats = $request->attributes->get('record_pgsql_tenant_context_stats');
+            if (is_array($tenantContextStats)) {
+                $meta['debug']['pgsql_tenant_context'] = $tenantContextStats;
+            }
         }
 
         if ($explainResult !== null) {
@@ -2790,7 +2851,7 @@ class RecordService
             }
         }
 
-        $builder = DB::table($actualTableName);
+        $builder = $this->createReadBuilder($actualTableName);
         $this->applyTenantFilter($builder, $actualTableName, $tenantId);
 
         if ($tableSchema->softDeletes && !$request->boolean('with_trashed')) {
@@ -2820,39 +2881,37 @@ class RecordService
             $includes = RelationshipResolverUtils::parseSelectForIncludes($effectiveSelectParam);
             $useSubqueryOptimization = true;
 
-            if ($useSubqueryOptimization) {
-                foreach ($includes as $alias => $include) {
-                    if (!empty($include['children'])) {
-                        $useSubqueryOptimization = false;
+            foreach ($includes as $alias => $include) {
+                if (!empty($include['children'])) {
+                    $useSubqueryOptimization = false;
 
-                        break;
-                    }
+                    break;
+                }
 
-                    // Check relationship type to avoid Postgres limit on json_build_object arguments
-                    // and to follow "N+1" pattern for complex relationships as requested
-                    $relConfig = RelationshipResolverUtils::resolveRelationship($table, $alias);
-                    if ($relConfig && in_array($relConfig['type'], ['belongsToMany', 'morphToMany', 'hasManyThrough'])) {
-                        $useSubqueryOptimization = false;
+                // Check relationship type to avoid Postgres limit on json_build_object arguments
+                // and to follow "N+1" pattern for complex relationships as requested
+                $relConfig = RelationshipResolverUtils::resolveRelationship($table, $alias);
+                if ($relConfig && in_array($relConfig['type'], ['belongsToMany', 'morphToMany', 'hasManyThrough'])) {
+                    $useSubqueryOptimization = false;
 
-                        break;
-                    }
+                    break;
+                }
 
-                    if (isset($include['columns']) && is_array($include['columns'])) {
-                        foreach ($include['columns'] as $col) {
-                            if (str_contains((string) $col, '=')) {
-                                $useSubqueryOptimization = false;
+                if (isset($include['columns']) && is_array($include['columns'])) {
+                    foreach ($include['columns'] as $col) {
+                        if (str_contains((string) $col, '=')) {
+                            $useSubqueryOptimization = false;
 
-                                break 2;
-                            }
+                            break 2;
                         }
                     }
                 }
             }
 
             if ($useSubqueryOptimization && [] !== $includes) {
-                $optimizedBuilder = DB::table($actualTableName);
+                $optimizedBuilder = $this->createReadBuilder($actualTableName);
                 if ([] !== $dbMainCols) {
-                    $prefixedCols = array_map(fn($col) => '*' === $col ? $actualTableName . '.*' : (str_contains((string) $col, '.') ? $col : $actualTableName . '.' . $col), $dbMainCols);
+                    $prefixedCols = array_map(fn($col): string => '*' === $col ? $actualTableName . '.*' : (str_contains($col, '.') ? $col : $actualTableName . '.' . $col), $dbMainCols);
                     $optimizedBuilder->select($prefixedCols);
                 } else {
                     $optimizedBuilder->select($actualTableName . '.*');
@@ -2908,6 +2967,7 @@ class RecordService
 
     /**
      * Execute a custom function based on its configuration.
+     * @param array<string, string> $routeParams
      */
     private function executeCustomFunction(Request $request, array|RecordFunctionType $functionConfig, array $routeParams = []): Response
     {
@@ -2989,6 +3049,8 @@ class RecordService
 
     /**
      * Execute a class-based custom function.
+     * @param array<string, mixed> $functionConfig
+     * @param array<string, string> $routeParams
      */
     private function executeClassFunction(Request $request, array $functionConfig, array $routeParams = []): Response
     {
@@ -3149,6 +3211,9 @@ class RecordService
         return $routeParams;
     }
 
+    /**
+     * @param array<string, mixed> $row
+     */
     private function determineOperation(array $row, string $pk, ?string $legacyAction): string
     {
         if (null !== $legacyAction && '' !== $legacyAction && '0' !== $legacyAction) {
@@ -3191,7 +3256,7 @@ class RecordService
         return $recordIds;
     }
 
-    private static function detectUuidCursorColumn(Builder $builder, string $column): bool
+    private function detectUuidCursorColumn(Builder $builder, string $column): bool
     {
         $table = $builder->from;
 
@@ -3214,7 +3279,7 @@ class RecordService
                 if ($sample && isset($sample->{$column}) && is_string($sample->{$column})) {
                     return !ctype_digit((string) $sample->{$column});
                 }
-            } catch (\Throwable) {
+            } catch (Throwable) {
             }
         }
 

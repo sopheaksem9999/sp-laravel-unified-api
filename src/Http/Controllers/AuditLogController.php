@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Http\Controllers;
 
 use Exception;
@@ -22,11 +24,17 @@ class AuditLogController extends Controller
         $user = $request->user();
 
         if (!$user) {
-            throw new Exception('Unauthorized.', RecordApiJsonResponseEnum::UNAUTHORIZED->value);
+            throw new Exception(
+                message: 'Unauthorized.',
+                code: (int) RecordApiJsonResponseEnum::UNAUTHORIZED->value
+            );
         }
 
         if (!Gate::forUser($user)->allows('manage-audit-logs')) {
-            throw new Exception('Forbidden. You do not have permission to manage audit logs.', RecordApiJsonResponseEnum::FORBIDDEN->value);
+            throw new Exception(
+                message: 'Forbidden. You do not have permission to manage audit logs.',
+                code: (int) RecordApiJsonResponseEnum::FORBIDDEN->value
+            );
         }
     }
 

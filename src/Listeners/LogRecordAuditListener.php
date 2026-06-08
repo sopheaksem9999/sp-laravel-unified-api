@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Listeners;
 
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -24,7 +26,7 @@ class LogRecordAuditListener implements ShouldQueue
             default => null,
         };
 
-        if (!$eventType) {
+        if ($eventType === null) {
             return;
         }
 

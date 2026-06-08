@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests\Feature;
 
 use ReflectionClass;
@@ -101,6 +103,9 @@ class TestAuditController extends Controller implements AuditQueryInterface
     // Define the property to be picked up by fallback logic
     protected $modelClass = TestModel::class;
 
+    /**
+     * @return array{}
+     */
     public static function getAuditQuery(int|string $id): array
     {
         return [];

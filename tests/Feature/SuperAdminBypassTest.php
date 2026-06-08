@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests\Feature;
 
 use Illuminate\Database\Schema\Blueprint;
@@ -25,7 +27,9 @@ class SuperAdminBypassTest extends TestCase
 
         $this->user = (new class extends Authenticatable {
             protected $table = 'users';
+
             public $timestamps = false;
+
             protected $fillable = ['id', 'name', 'is_admin'];
         });
         $this->user->forceFill(['id' => 1, 'name' => 'Test', 'is_admin' => true]);
@@ -46,7 +50,7 @@ class SuperAdminBypassTest extends TestCase
     /** @test */
     public function it_allows_super_admin_callback_to_bypass_permissions(): void
     {
-        $this->app['config']->set('permissions.super_admin_callback', fn ($user) => true);
+        $this->app['config']->set('permissions.super_admin_callback', fn ($user): true => true);
 
         $this->actingAs($this->user, 'api')
             ->getJson('/api/sp_roles')
@@ -57,7 +61,7 @@ class SuperAdminBypassTest extends TestCase
     /** @test */
     public function it_respects_super_admin_callback_returning_false(): void
     {
-        $this->app['config']->set('permissions.super_admin_callback', fn ($user) => false);
+        $this->app['config']->set('permissions.super_admin_callback', fn ($user): false => false);
 
         $this->actingAs($this->user, 'api')
             ->getJson('/api/sp_roles')
@@ -69,7 +73,7 @@ class SuperAdminBypassTest extends TestCase
     public function it_passes_authenticated_user_to_super_admin_callback(): void
     {
         $calledWith = null;
-        $this->app['config']->set('permissions.super_admin_callback', function ($user) use (&$calledWith) {
+        $this->app['config']->set('permissions.super_admin_callback', function ($user) use (&$calledWith): true {
             $calledWith = $user;
             return true;
         });
@@ -85,7 +89,7 @@ class SuperAdminBypassTest extends TestCase
     private function createPermissionTables(): void
     {
         if (!Schema::hasTable('sp_permissions')) {
-            Schema::create('sp_permissions', function (Blueprint $table) {
+            Schema::create('sp_permissions', function (Blueprint $table): void {
                 $table->bigIncrements('id');
                 $table->string('name')->unique();
                 $table->string('group')->nullable();
@@ -96,7 +100,7 @@ class SuperAdminBypassTest extends TestCase
         }
 
         if (!Schema::hasTable('sp_roles')) {
-            Schema::create('sp_roles', function (Blueprint $table) {
+            Schema::create('sp_roles', function (Blueprint $table): void {
                 $table->bigIncrements('id');
                 $table->string('name');
                 $table->string('key')->nullable();
@@ -111,7 +115,7 @@ class SuperAdminBypassTest extends TestCase
         }
 
         if (!Schema::hasTable('sp_role_permissions')) {
-            Schema::create('sp_role_permissions', function (Blueprint $table) {
+            Schema::create('sp_role_permissions', function (Blueprint $table): void {
                 $table->bigIncrements('id');
                 $table->unsignedBigInteger('role_id');
                 $table->unsignedBigInteger('permission_id');
@@ -121,7 +125,7 @@ class SuperAdminBypassTest extends TestCase
         }
 
         if (!Schema::hasTable('sp_model_has_roles')) {
-            Schema::create('sp_model_has_roles', function (Blueprint $table) {
+            Schema::create('sp_model_has_roles', function (Blueprint $table): void {
                 $table->bigIncrements('id');
                 $table->string('model_type');
                 $table->unsignedBigInteger('model_id');
@@ -133,7 +137,7 @@ class SuperAdminBypassTest extends TestCase
         }
 
         if (!Schema::hasTable('sp_model_permissions')) {
-            Schema::create('sp_model_permissions', function (Blueprint $table) {
+            Schema::create('sp_model_permissions', function (Blueprint $table): void {
                 $table->bigIncrements('id');
                 $table->string('model_type');
                 $table->unsignedBigInteger('model_id');
@@ -148,7 +152,7 @@ class SuperAdminBypassTest extends TestCase
     private function createUsersTable(): void
     {
         if (!Schema::hasTable('users')) {
-            Schema::create('users', function (Blueprint $table) {
+            Schema::create('users', function (Blueprint $table): void {
                 $table->id();
                 $table->string('name');
                 $table->boolean('is_admin')->default(false);

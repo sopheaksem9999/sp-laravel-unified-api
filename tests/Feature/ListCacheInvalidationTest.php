@@ -1,14 +1,16 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests\Feature;
 
+use Sopheak\Core\Events\RecordUpdated;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Sopheak\Core\Services\QueryCacheService;
 use Sopheak\Core\Services\RecordCacheService;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordTablePublic;
@@ -94,7 +96,7 @@ class ListCacheInvalidationTest extends TestCase
         DB::table('products')->where('id', 1)->update(['name' => 'Updated Widget']);
 
         // Dispatch the event the same way the package would after an internal update
-        \Sopheak\Core\Events\RecordUpdated::dispatch(
+        RecordUpdated::dispatch(
             'products',
             ['id' => 1, 'name' => 'Widget', 'tenant_id' => 'acme'],
             ['id' => 1, 'name' => 'Updated Widget', 'tenant_id' => 'acme'],

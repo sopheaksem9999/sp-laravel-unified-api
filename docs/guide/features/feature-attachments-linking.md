@@ -32,7 +32,14 @@ Links are stored in `sp_attachment_links` using:
 
 - `collection_name` defaults to `default`.
 - Upload and clone flows can auto-link when `record_id` and `record_type` are provided.
-- `replace_old=true` removes older links in the same collection and deletes old attachment files/rows.
+- `replace_old=true` removes older links in the same collection. Old attachment files/rows are deleted only when no other link still references that attachment.
+
+## Optional Target Record Checks
+
+By default, linking keeps legacy behavior and does not validate the target record. To make attachment links stricter:
+
+- `attachments.access.validate_record_exists=true` checks that the target record exists when the table is registered.
+- `attachments.access.record_authorizer` may be set to a callable to enforce application-specific read/link/unlink rules for the target record.
 
 ## Example: Upload Multiple Files and Link to an Invoice
 

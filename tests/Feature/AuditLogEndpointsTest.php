@@ -1,9 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests\Feature;
 
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
-use Illuminate\Support\Facades\Route;
 use Illuminate\Foundation\Auth\User;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;

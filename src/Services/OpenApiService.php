@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Services;
 
+use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Interfaces\RecordFunctionInterface;
 use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
@@ -89,7 +92,7 @@ class OpenApiService
     /**
      * Generate OpenAPI 3.0 specification dynamically from runtime configuration.
      *
-     * @return array The generated OpenAPI specification
+     * @return array<string, mixed[]|string> The generated OpenAPI specification
      */
     public static function generateInternal(): array
     {
@@ -335,7 +338,6 @@ Full relationship examples and payload guides: https://sp-laravel-api-docs.verce
 ### Pagination
 - **Traditional**: `page=1&per_page=25` (offset-based for small datasets)
 - **Cursor-Based**: `cursor=12345&direction=next` (high-performance for large datasets — use when cursor parameter present, or when `pagination.default_mode=cursor`)
-- **Auto-Detection**: Automatically switches to cursor pagination for tables >10,000 rows
 - **Custom Cursor**: `cursor_column=created_at` (use different cursor column; configurable default via `pagination.cursor.default_column`)
 - **Composite**: `composite_cursor=true&sortby=created_at` (multi-column cursors; configurable via `pagination.cursor.composite_enabled`)
 - **Skip Total**: `skip_total=true` (omit total count for performance; default configurable via `pagination.skip_total_default`)
@@ -451,6 +453,9 @@ Accepts an array of IDs or an array of objects with the primary key.
         return str_replace(['-', ' '], '_', ucwords(strtolower($table)));
     }
 
+    /**
+     * @return array<string, string|mixed[][]|int[]|string[]>
+     */
     private static function tableSchema(string $table, array $columns): array
     {
         $properties = [];
@@ -535,6 +540,9 @@ Accepts an array of IDs or an array of objects with the primary key.
         return ['type' => 'string'];
     }
 
+    /**
+     * @return array<string, string|mixed[][]|int[]|string[]>
+     */
     private static function tableSchemaRead(string $table, array $columns): array
     {
         $properties = [];
@@ -564,6 +572,9 @@ Accepts an array of IDs or an array of objects with the primary key.
         ];
     }
 
+    /**
+     * @return array<string, string|mixed[][]|int[]|string[]>
+     */
     private static function tableSchemaWrite(string $table, array $columns): array
     {
         $properties = [];
@@ -593,6 +604,9 @@ Accepts an array of IDs or an array of objects with the primary key.
         ];
     }
 
+    /**
+     * @param array<string, RecordTableType> $tables
+     */
     private static function tags(array $tables, array $globalFunctions): array
     {
         $tags = [];
@@ -632,6 +646,9 @@ Accepts an array of IDs or an array of objects with the primary key.
         return $tags;
     }
 
+    /**
+     * @param array<string, RecordTableType> $tables
+     */
     private static function paths(array $tables): array
     {
         $apiPrefix = RecordConfigService::apiPrefix();
@@ -674,7 +691,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                     'name' => 'per_page',
                     'in' => 'query',
                     'required' => false,
-                    'description' => "Items per page (default: {$defaultPerPage}, max: {$maxPerPage})",
+                    'description' => sprintf('Items per page (default: %d, max: %d)', $defaultPerPage, $maxPerPage),
                     'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => $maxPerPage, 'default' => $defaultPerPage],
                 ],
                 [
@@ -695,7 +712,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                     'name' => 'cursor_column',
                     'in' => 'query',
                     'required' => false,
-                    'description' => "Column to use for cursor pagination (default: `{$defaultCursorColumn}`). Only used with `cursor`.",
+                    'description' => sprintf('Column to use for cursor pagination (default: `%s`). Only used with `cursor`.', $defaultCursorColumn),
                     'schema' => ['type' => 'string', 'default' => $defaultCursorColumn],
                 ],
                 [
@@ -1245,6 +1262,9 @@ Accepts an array of IDs or an array of objects with the primary key.
         return $paths;
     }
 
+    /**
+     * @param array<string, RecordTableType> $tables
+     */
     private static function rpcPaths(array $tables, array $globalFunctions): array
     {
         $apiPrefix = RecordConfigService::apiPrefix();
@@ -1734,6 +1754,9 @@ Accepts an array of IDs or an array of objects with the primary key.
         return $paths;
     }
 
+    /**
+     * @param array<string, mixed> $schema
+     */
     private static function schemaToQueryParameters(array $schema): array
     {
         $parameters = [];
@@ -1753,6 +1776,9 @@ Accepts an array of IDs or an array of objects with the primary key.
         return $parameters;
     }
 
+    /**
+     * @return array<string, array<string, string>|string|bool>
+     */
     private static function pathIdParameter(): array
     {
         return [
@@ -1764,6 +1790,9 @@ Accepts an array of IDs or an array of objects with the primary key.
         ];
     }
 
+    /**
+     * @return array<string, string|bool|array<string, string>>
+     */
     private static function tenantHeaderParameter(bool $required = true): array
     {
         $tenantHeader = RecordConfigService::tenantHeader();

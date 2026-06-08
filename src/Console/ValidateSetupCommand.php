@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Console;
 
 use Exception;
@@ -120,13 +122,20 @@ class ValidateSetupCommand extends Command
             }
         }
 
-        $globalFunctionsPath = config_path('records/globalFunctions');
-        if (File::isDirectory($globalFunctionsPath)) {
-            $this->addResult('✅', 'Global function directory exists: ' . str_replace(base_path() . '/', '', $globalFunctionsPath), 'success');
-            $this->validateGlobalFunctionConfigFiles($globalFunctionsPath);
+        $globalFunctionPaths = [
+            config_path('records/global-functions'),
+            config_path('records/globalFunctions'),
+        ];
+
+        $existingGlobalFunctionPaths = array_values(array_filter($globalFunctionPaths, static fn(string $path): bool => File::isDirectory($path)));
+        if ($existingGlobalFunctionPaths !== []) {
+            foreach ($existingGlobalFunctionPaths as $globalFunctionsPath) {
+                $this->addResult('✅', 'Global function directory exists: ' . str_replace(base_path() . '/', '', $globalFunctionsPath), 'success');
+                $this->validateGlobalFunctionConfigFiles($globalFunctionsPath);
+            }
         } else {
-            $this->addResult('⚠️', 'Missing global function directory: config/records/globalFunctions', 'warning');
-            $this->addResult('ℹ️', 'Create config/records/globalFunctions/*.php files or run: php artisan sp-laravel-api:setup', 'info');
+            $this->addResult('⚠️', 'Missing global function directory: config/records/global-functions', 'warning');
+            $this->addResult('ℹ️', 'Create config/records/global-functions/*.php files or run: php artisan sp-laravel-api:setup', 'info');
             if ($this->option('fix')) {
                 $this->info('🔧 Attempting to create missing global function directory...');
                 $this->call('sp-laravel-api:setup', ['--force' => false]);
@@ -405,26 +414,12 @@ class ValidateSetupCommand extends Command
     {
         $this->info('⚖️ Checking Package Configuration Limits...');
 
-        // Check depth and relation limits
+        // Check depth limit
         $maxDepth = config('record.max_depth');
         if (is_int($maxDepth) && $maxDepth > 0) {
             $this->addResult('✅', 'max_depth is configured properly: ' . $maxDepth, 'success');
         } else {
             $this->addResult('⚠️', 'max_depth is missing or invalid in config/record.php', 'warning');
-        }
-
-        $maxRelations = config('record.max_relations');
-        if (is_int($maxRelations) && $maxRelations > 0) {
-            $this->addResult('✅', 'max_relations is configured properly: ' . $maxRelations, 'success');
-        } else {
-            $this->addResult('⚠️', 'max_relations is missing or invalid in config/record.php', 'warning');
-        }
-
-        $maxRelationItems = config('record.max_relation_items');
-        if (is_int($maxRelationItems) && $maxRelationItems > 0) {
-            $this->addResult('✅', 'max_relation_items is configured properly: ' . $maxRelationItems, 'success');
-        } else {
-            $this->addResult('⚠️', 'max_relation_items is missing or invalid in config/record.php', 'warning');
         }
 
         // Check rate_limits
@@ -550,6 +545,7 @@ class ValidateSetupCommand extends Command
 
     /**
      * Get first table name from results.
+     * @param array<int, mixed> $tables
      */
     private function getFirstTableName(array $tables, string $driver): string
     {

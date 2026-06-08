@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Types;
 
 use InvalidArgumentException;
@@ -49,6 +51,9 @@ class RecordMetaHasManyThroughType
         }
     }
 
+    /**
+     * @param array<string, mixed> $properties
+     */
     public static function __set_state(array $properties): self
     {
         return new self(
@@ -99,6 +104,9 @@ class RecordMetaHasManyThroughType
         return $config;
     }
 
+    /**
+     * @param array<string, mixed> $config
+     */
     public static function fromArray(array $config): self
     {
         return new self(

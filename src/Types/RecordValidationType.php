@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Types;
 
 use InvalidArgumentException;
@@ -19,6 +21,9 @@ class RecordValidationType
         }
     }
 
+    /**
+     * @param array<string, mixed> $properties
+     */
     public static function __set_state(array $properties): self
     {
         return new self(
@@ -27,6 +32,9 @@ class RecordValidationType
         );
     }
 
+    /**
+     * @return array<string, string>
+     */
     public function toArray(): array
     {
         return [

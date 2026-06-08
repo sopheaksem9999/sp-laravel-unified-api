@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Console;
 
 use Illuminate\Console\Command;
@@ -72,7 +74,11 @@ class EnablePgsqlRlsCommand extends Command
         $allConfigs = RecordConfigService::getTableConfig();
 
         foreach ($allConfigs as $table => $config) {
-            if (is_array($config) || !is_object($config)) {
+            if (is_array($config)) {
+                continue;
+            }
+
+            if (!is_object($config)) {
                 continue;
             }
 
@@ -100,6 +106,9 @@ class EnablePgsqlRlsCommand extends Command
         return $tables;
     }
 
+    /**
+     * @return array<int, string>
+     */
     protected function buildStatements(string $table, string $tenantColumn, string $castType): array
     {
         return [

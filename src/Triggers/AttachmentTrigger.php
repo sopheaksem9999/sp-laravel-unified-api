@@ -1,14 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Triggers;
 
 use Exception;
-use Illuminate\Filesystem\FilesystemAdapter;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\Request;
 use Sopheak\Core\Attributes\RecordTrigger;
-use Sopheak\Core\Services\RecordConfigService;
+use Sopheak\Core\Services\AttachmentUrlService;
 use Sopheak\Core\Services\RecordService;
 
 /**
@@ -82,46 +82,6 @@ class AttachmentTrigger extends RecordTriggerBase
 
     private static function appendUrlToAttachment(array $attachment): array
     {
-        $visibility = (string) ($attachment['visibility'] ?? 'private');
-
-        $attachmentPrefix = config('attachments.route_prefix', 'attachments');
-        $baseApiUrl = url(RecordConfigService::apiPrefix() . '/' . $attachmentPrefix . '/' . ($attachment['id'] ?? ''));
-
-        $attachment['download_url'] = $baseApiUrl . '/download';
-
-        if (self::shouldUseDirectAssetUrl($visibility)) {
-            $diskName = (string) ($attachment['disk'] ?? 'local');
-            /** @var FilesystemAdapter $disk */
-            $disk = Storage::disk($diskName);
-
-            $path = (string) ($attachment['path'] ?? '');
-            if (Str::startsWith($path, '/')) {
-                $path = ltrim($path, '/');
-            }
-
-            if (in_array($diskName, ['local', 'public'], true)) {
-                $attachment['url'] = asset('storage/' . $path);
-            } else {
-                // For cloud disks like s3, use the native disk URL generator
-                $attachment['url'] = $disk->url($path);
-            }
-        } else {
-            $attachment['url'] = $baseApiUrl . '/view';
-        }
-
-        return $attachment;
-    }
-
-    private static function shouldUseDirectAssetUrl(string $visibility): bool
-    {
-        if ('public' === $visibility) {
-            return true;
-        }
-
-        if ('temp_public' === $visibility) {
-            return !(bool) config('attachments.protect_temp_public_via_download', false);
-        }
-
-        return false;
+        return app(AttachmentUrlService::class)->appendUrls($attachment);
     }
 }

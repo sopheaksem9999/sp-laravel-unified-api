@@ -1,8 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Services;
 
+use Throwable;
 use Sopheak\Core\Jobs\AuditLogJob;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use Sopheak\Core\Types\RecordTableType;
 
 class RecordConfigService
 {
@@ -38,7 +44,9 @@ class RecordConfigService
 
     public static function rpcPrefix(): string
     {
-        return (string) config('record.rpc_prefix', '');
+        $prefix = config('record.rpc_prefix');
+
+        return is_string($prefix) ? $prefix : 'rpc';
     }
 
     public static function perPageMax(): int
@@ -101,6 +109,64 @@ class RecordConfigService
         return (array) config('record.cache.per_table_ttl', []);
     }
 
+    public static function cacheAdmissionEnabled(): bool
+    {
+        $enabled = config('record.cache.admission.enabled');
+        if ($enabled !== null) {
+            return (bool) $enabled;
+        }
+
+        if (self::cacheAdmissionOnlyTables() !== []) {
+            return true;
+        }
+
+        if (self::cacheAdmissionExceptTables() !== []) {
+            return true;
+        }
+
+        if (self::cacheAdmissionOnlyActions() !== []) {
+            return true;
+        }
+
+        if (self::cacheAdmissionExceptActions() !== []) {
+            return true;
+        }
+
+        return self::cacheAdmissionSkipQueryParams() !== [];
+    }
+
+    public static function cacheAdmissionOnlyTables(): array
+    {
+        return (array) config('record.cache.admission.only_tables', []);
+    }
+
+    public static function cacheAdmissionExceptTables(): array
+    {
+        return (array) config('record.cache.admission.except_tables', []);
+    }
+
+    public static function cacheAdmissionOnlyActions(): array
+    {
+        return (array) config('record.cache.admission.only_actions', []);
+    }
+
+    public static function cacheAdmissionExceptActions(): array
+    {
+        return (array) config('record.cache.admission.except_actions', []);
+    }
+
+    public static function cacheAdmissionSkipQueryParams(): array
+    {
+        return (array) config('record.cache.admission.skip_query_params', []);
+    }
+
+    public static function pgsqlTenantContextMode(): string
+    {
+        $mode = (string) config('record.pgsql_tenant_context.mode', 'session');
+
+        return in_array($mode, ['session', 'session_once', 'transaction_local', 'off'], true) ? $mode : 'session';
+    }
+
     public static function legacyCacheTtl(): int
     {
         return (int) config('record.cache_ttl', 3600);
@@ -147,7 +213,7 @@ class RecordConfigService
 
     public static function globalFunctions(): array
     {
-        $configured = (array) config('record.global_functions', []);
+        $configured = array_merge(self::globalFunctionConfigFiles(), (array) config('record.global_functions', []));
 
         if (!(bool) config('sp-laravel-api.attribute_discovery.enabled', false)) {
             return $configured;
@@ -155,7 +221,7 @@ class RecordConfigService
 
         try {
             $discovered = AttributeDiscoveryService::discoverGlobalFunctions();
-        } catch (\Throwable) {
+        } catch (Throwable) {
             $discovered = [];
         }
 
@@ -179,7 +245,7 @@ class RecordConfigService
 
     public static function defaultValidationEnabled(): bool
     {
-        return (bool) config('record.default_validation.enabled', true);
+        return (bool) config('record.default_validation.enabled', false);
     }
 
     public static function defaultValidationOnlyWhenMissing(): bool
@@ -209,7 +275,7 @@ class RecordConfigService
 
     public static function getTableConfig(?string $table = null): mixed
     {
-        $recordTables = (array) config('record.tables', []);
+        $recordTables = array_merge((array) config('record.tables', []), self::tableConfigFiles());
         $attachmentEnabled = (bool) config('attachments.enabled', true);
         $attachmentTables = $attachmentEnabled ? (array) config('attachments.tables', []) : [];
         $webhookEnabled = (bool) config('webhooks.enabled', false);
@@ -229,31 +295,109 @@ class RecordConfigService
 
     public static function table(string $table): mixed
     {
-        $recordTable = config('record.tables.' . $table);
-        if ($recordTable !== null) {
-            return $recordTable;
-        }
-
-        if ((bool) config('audit.enabled', false)) {
-            $auditTable = config('audit.tables.' . $table);
-            if ($auditTable !== null) {
-                return $auditTable;
-            }
-        }
-
-        if ((bool) config('attachments.enabled', true)) {
-            $attachmentTable = config('attachments.tables.' . $table);
-            if ($attachmentTable !== null) {
-                return $attachmentTable;
-            }
-        }
-
-        return config('webhooks.tables.' . $table, []);
+        return self::getTableConfig($table) ?? [];
     }
 
-    public static function cacheDefaultTtl(): int
+    /**
+     * @return array<string, mixed>
+     */
+    private static function tableConfigFiles(): array
     {
-        return (int) config('record.cache.default_ttl', self::cacheTtl());
+        $directory = config_path(self::tableConfigPath());
+        if (!is_dir($directory)) {
+            return [];
+        }
+
+        $tables = [];
+        foreach (self::phpFilesInDirectory($directory) as $path) {
+            $config = require $path;
+            if ($config instanceof RecordTableType) {
+                $tables[pathinfo($path, PATHINFO_FILENAME)] = $config;
+                continue;
+            }
+
+            if (is_array($config)) {
+                $tables = array_merge($tables, $config);
+            }
+        }
+
+        return $tables;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function globalFunctionConfigFiles(): array
+    {
+        $functions = [];
+        foreach (self::globalFunctionConfigDirectories() as $directory) {
+            if (!is_dir($directory)) {
+                continue;
+            }
+
+            foreach (self::phpFilesInDirectory($directory) as $path) {
+                $config = require $path;
+                if (!is_array($config)) {
+                    continue;
+                }
+
+                $group = pathinfo($path, PATHINFO_FILENAME);
+                foreach ($config as $functionName => $functionConfig) {
+                    if (!is_string($functionName)) {
+                        continue;
+                    }
+
+                    if ($functionName === '') {
+                        continue;
+                    }
+
+                    $normalizedFunctionName = ltrim($functionName, '/');
+                    $prefixedFunctionName = str_contains($normalizedFunctionName, '/')
+                        ? $normalizedFunctionName
+                        : $group . '/' . $normalizedFunctionName;
+
+                    $functions[$prefixedFunctionName] = $functionConfig;
+                }
+            }
+        }
+
+        return $functions;
+    }
+
+    /**
+     * @return string[]
+     */
+    private static function globalFunctionConfigDirectories(): array
+    {
+        return [
+            config_path('records/globalFunctions'),
+            config_path('records/global-functions'),
+        ];
+    }
+
+    /**
+     * @return string[]
+     */
+    private static function phpFilesInDirectory(string $directory): array
+    {
+        $files = [];
+        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory));
+
+        foreach ($iterator as $file) {
+            if (!$file->isFile()) {
+                continue;
+            }
+
+            if ($file->getExtension() !== 'php') {
+                continue;
+            }
+
+            $files[] = $file->getPathname();
+        }
+
+        sort($files);
+
+        return $files;
     }
 
     public static function subqueryOptimizationMaxRecords(): int
@@ -268,7 +412,9 @@ class RecordConfigService
 
     public static function cursorDefaultColumn(): string
     {
-        return (string) config('record.pagination.cursor.default_column', 'created_at');
+        $column = config('record.pagination.cursor.default_column');
+
+        return is_string($column) && '' !== trim($column) ? $column : 'id';
     }
 
     public static function cursorCompositeEnabled(): bool

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests\Unit\Services\ApiClient;
 
 use PHPUnit\Framework\TestCase;
@@ -48,7 +50,6 @@ class ExportResultTest extends TestCase
             pathParams: [],
             queryParams: [],
             headers: [],
-            bodyJson: null,
         );
         $folder = new ExportFolder(name: 'Users', requests: [$request]);
 
@@ -105,7 +106,6 @@ class ExportResultTest extends TestCase
             pathParams: [],
             queryParams: [],
             headers: [],
-            bodyJson: null,
         );
         $folder = new ExportFolder(name: 'Users', requests: [$request]);
 
@@ -121,9 +121,9 @@ class ExportResultTest extends TestCase
 
     public function test_total_request_count_sums_across_folders(): void
     {
-        $r1 = new ExportRequest('A', 'GET', '/a', 'desc', [], [], [], null);
-        $r2 = new ExportRequest('B', 'GET', '/b', 'desc', [], [], [], null);
-        $r3 = new ExportRequest('C', 'GET', '/c', 'desc', [], [], [], null);
+        $r1 = new ExportRequest('A', 'GET', '/a', 'desc', [], [], []);
+        $r2 = new ExportRequest('B', 'GET', '/b', 'desc', [], [], []);
+        $r3 = new ExportRequest('C', 'GET', '/c', 'desc', [], [], []);
 
         $f1 = new ExportFolder('Users', [$r1, $r2]);
         $f2 = new ExportFolder('Orders', [$r3]);

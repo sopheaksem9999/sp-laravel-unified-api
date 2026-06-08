@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests\Feature;
 
 use Illuminate\Http\Request;
@@ -50,6 +52,9 @@ class TableFunctionAliasTest extends TestCase
 
 class TableFunctionAliasHandler
 {
+    /**
+     * @return array<string, string>
+     */
     public function parties(Request $request): array
     {
         return [

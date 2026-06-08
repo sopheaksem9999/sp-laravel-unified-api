@@ -131,6 +131,9 @@ class GenerateRecordTablesFromDatabaseCommand extends Command
         return self::SUCCESS;
     }
 
+    /**
+     * @return string[]
+     */
     private function getDatabaseTables(): array
     {
         $driver = DB::getDriverName();

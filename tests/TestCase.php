@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Tests;
 
 use Orchestra\Testbench\TestCase as BaseTestCase;
@@ -49,7 +51,7 @@ class TestCase extends BaseTestCase
         ]);
         $app['config']->set('record.cache', [
             'enabled' => true,
-            'default_ttl' => 3600,
+            'ttl' => 3600,
             'per_table' => [],
             'per_table_ttl' => [],
         ]);

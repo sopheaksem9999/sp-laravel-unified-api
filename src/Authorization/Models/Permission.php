@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Authorization\Models;
 
+use Sopheak\Core\Authorization\PermissionRegistrar;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
@@ -18,12 +21,12 @@ class Permission extends Model
 
     protected static function booted(): void
     {
-        static::saved(function () {
-            app(\Sopheak\Core\Authorization\PermissionRegistrar::class)->forgetAllCachedPermissions();
+        static::saved(function (): void {
+            app(PermissionRegistrar::class)->forgetAllCachedPermissions();
         });
 
-        static::deleted(function () {
-            app(\Sopheak\Core\Authorization\PermissionRegistrar::class)->forgetAllCachedPermissions();
+        static::deleted(function (): void {
+            app(PermissionRegistrar::class)->forgetAllCachedPermissions();
         });
     }
 

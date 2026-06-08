@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Authorization;
 
 use Illuminate\Cache\CacheManager;
@@ -7,31 +9,24 @@ use Illuminate\Contracts\Auth\Access\Gate;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Sopheak\Core\Authorization\Models\Permission;
-use Sopheak\Core\Authorization\Models\Role;
 use Sopheak\Core\Authorization\Traits\HasRoles;
 use Sopheak\Core\Services\RecordConfigService;
 
 class PermissionRegistrar
 {
-    protected Gate $gate;
-
-    protected CacheManager $cache;
-
     protected string $cacheKey = 'sp_permissions';
 
     protected string $cacheVersionKey = 'sp_permissions_version';
 
     protected string $configHashKey = 'sp_permissions_config_hash';
 
-    public function __construct(Gate $gate, CacheManager $cache)
+    public function __construct(protected Gate $gate, protected CacheManager $cache)
     {
-        $this->gate = $gate;
-        $this->cache = $cache;
     }
 
     public function registerPermissions(): void
     {
-        Permission::query()->pluck('name')->each(function (string $name) {
+        Permission::query()->pluck('name')->each(function (string $name): void {
             $this->gate->define($name, function (Model $user) use ($name) {
                 if ($this->userHasTrait($user)) {
                     return $user->hasPermissionTo($name);
@@ -58,8 +53,12 @@ class PermissionRegistrar
 
         $separator = RecordConfigService::permissionSeparator();
 
-        foreach ($tables as $table => $config) {
-            if (is_array($config) || !is_object($config)) {
+        foreach ($tables as $config) {
+            if (is_array($config)) {
+                continue;
+            }
+
+            if (!is_object($config)) {
                 continue;
             }
 
@@ -79,9 +78,7 @@ class PermissionRegistrar
 
     public function getCacheVersion(): int
     {
-        return (int) $this->cache->rememberForever($this->cacheVersionKey, function () {
-            return 1;
-        });
+        return (int) $this->cache->rememberForever($this->cacheVersionKey, fn(): int => 1);
     }
 
     public function getPermissions(Model $user): Collection
@@ -104,11 +101,11 @@ class PermissionRegistrar
         $permissions = collect();
 
         $rolePermissionNames = Permission::query()
-            ->whereIn('id', function ($query) use ($user) {
+            ->whereIn('id', function ($query) use ($user): void {
                 $query->select('sp_role_permissions.permission_id')
                     ->from('sp_role_permissions')
                     ->join('sp_model_has_roles', 'sp_role_permissions.role_id', '=', 'sp_model_has_roles.role_id')
-                    ->where('sp_model_has_roles.model_type', get_class($user))
+                    ->where('sp_model_has_roles.model_type', $user::class)
                     ->where('sp_model_has_roles.model_id', $user->getKey());
             })
             ->pluck('name');
@@ -143,7 +140,7 @@ class PermissionRegistrar
             $tenantId = '_' . ($user->tenant_id ?? 'global');
         }
 
-        return $this->cacheKey . '_v' . $version . '_user_' . get_class($user) . '_' . $user->getKey() . $tenantId;
+        return $this->cacheKey . '_v' . $version . '_user_' . $user::class . '_' . $user->getKey() . $tenantId;
     }
 
     protected function computeConfigHash(array $tables): string
@@ -151,7 +148,11 @@ class PermissionRegistrar
         $relevant = [];
 
         foreach ($tables as $table => $config) {
-            if (is_array($config) || !is_object($config)) {
+            if (is_array($config)) {
+                continue;
+            }
+
+            if (!is_object($config)) {
                 continue;
             }
 
@@ -191,6 +192,9 @@ class PermissionRegistrar
         return in_array(HasRoles::class, class_uses_recursive($user), true);
     }
 
+    /**
+     * @return string[]
+     */
     protected function getPmsNames(object $config): array
     {
         $pmsName = $config->pmsName ?? null;
@@ -248,20 +252,20 @@ class PermissionRegistrar
                 [
                     'group' => $pmsName,
                     'guard_name' => $guardName,
-                    'description' => "Allow {$action} {$pmsName}",
+                    'description' => sprintf('Allow %s %s', $action, $pmsName),
                 ]
             );
         }
 
         if (isset($config->permissions) && is_array($config->permissions)) {
-            foreach ($config->permissions as $action => $permissionNames) {
+            foreach ($config->permissions as $permissionNames) {
                 foreach ((array) $permissionNames as $permissionName) {
                     Permission::query()->firstOrCreate(
                         ['name' => $permissionName],
                         [
                             'group' => $pmsName,
                             'guard_name' => $guardName,
-                            'description' => "Custom permission: {$permissionName}",
+                            'description' => 'Custom permission: ' . $permissionName,
                         ]
                     );
                 }
@@ -272,13 +276,20 @@ class PermissionRegistrar
     protected function autoRegisterFunctionPermissions(array $tables, string $separator): void
     {
         foreach ($tables as $config) {
-            if (is_array($config) || !is_object($config)) {
+            if (is_array($config)) {
+                continue;
+            }
+
+            if (!is_object($config)) {
                 continue;
             }
 
             $functions = $config->functions ?? [];
+            if (!is_array($functions)) {
+                continue;
+            }
 
-            if (!is_array($functions) || empty($functions)) {
+            if (empty($functions)) {
                 continue;
             }
 
@@ -300,7 +311,11 @@ class PermissionRegistrar
                 $pmsNames = is_array($pmsName) ? $pmsName : [$pmsName];
 
                 foreach ($pmsNames as $name) {
-                    if (!is_string($name) || '' === trim($name)) {
+                    if (!is_string($name)) {
+                        continue;
+                    }
+
+                    if ('' === trim($name)) {
                         continue;
                     }
 
@@ -311,7 +326,7 @@ class PermissionRegistrar
                         [
                             'group' => 'functions',
                             'guard_name' => $guardName,
-                            'description' => "Function permission: {$name}",
+                            'description' => 'Function permission: ' . $name,
                         ]
                     );
                 }

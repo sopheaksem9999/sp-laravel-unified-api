@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Types;
 
 use Sopheak\Core\Enums\RecordRelationshipsEnum;
@@ -29,6 +31,9 @@ class RecordMorphToManyType
         }
     }
 
+    /**
+     * @param array<string, mixed> $properties
+     */
     public static function __set_state(array $properties): self
     {
         return new self(
@@ -104,6 +109,9 @@ class RecordMorphToManyType
         return $config;
     }
 
+    /**
+     * @param array<string, mixed> $config
+     */
     public static function fromArray(array $config): self
     {
         return new self(

@@ -1,10 +1,18 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Http\Controllers\Concerns;
 
+use Closure;
 use Throwable;
 use Exception;
 use RuntimeException;
+use ReflectionFunction;
+use ReflectionFunctionAbstract;
+use ReflectionMethod;
+use ReflectionNamedType;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Contracts\Validation\Validator as ValidatorContract;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
@@ -61,6 +69,7 @@ trait HasControllerHelpers
     /**
      * Normalize and validate the tenant ID from the request.
      * Returns [$tenantId, ?JsonResponse] — caller returns the JsonResponse if non-null.
+     * @return array<int, mixed>
      */
     private function resolveTenantContext(Request $request, object $tableSchema): array
     {
@@ -68,13 +77,25 @@ trait HasControllerHelpers
         $this->recordService->attachRequestContext(
             request: $request,
             table: (string) ($request->route('table') ?? ''),
-            action: (string) ($request->route()?->getActionMethod() ?? ''),
+            action: $this->resolveRouteAction($request),
             tableSchema: $tableSchema,
             tenantId: $tenantId
         );
         $error = $this->validateTenantIdRequired($tableSchema, $tenantId);
 
         return [$tenantId, $error];
+    }
+
+    private function resolveRouteAction(Request $request): string
+    {
+        $route = $request->route();
+        if (!is_object($route) || !method_exists($route, 'getActionMethod')) {
+            return '';
+        }
+
+        $action = $route->getActionMethod();
+
+        return is_string($action) ? $action : '';
     }
 
     private function validateTenantIdRequired(object $tableSchema, mixed $tenantId): ?JsonResponse
@@ -195,6 +216,7 @@ trait HasControllerHelpers
         $authHandler = config('record.authorization');
         $gate = $authHandler === null ? Gate::forUser($user) : null;
         $permissionService = null;
+        $permissionUser = $user instanceof Model ? $user : null;
 
         foreach ($perms as $perm) {
             if ($authHandler !== null) {
@@ -203,7 +225,7 @@ trait HasControllerHelpers
                     : (bool) $authHandler($user, $perm, $table, $action);
             } elseif (config('permissions.enabled', false)) {
                 $permissionService ??= app(PermissionService::class);
-                $granted = $permissionService->userHasPermission($user, $perm);
+                $granted = $permissionUser instanceof Model && $permissionService->userHasPermission($permissionUser, $perm);
             } else {
                 $granted = $gate->allows($perm);
             }
@@ -336,6 +358,9 @@ trait HasControllerHelpers
         return $resolved;
     }
 
+    /**
+     * @param array<string, mixed> $config
+     */
     private function isValidatorConfigArray(array $config): bool
     {
         return isset($config['class']) || isset($config['functionName']);
@@ -343,7 +368,7 @@ trait HasControllerHelpers
 
     private function invokeValidatorCallable(callable $callback, Request $request, ?string $id): ValidatorContract
     {
-        $validator = $callback($request, $id);
+        $validator = $callback($request, $this->normalizeValidatorIdForCallable($callback, $id));
         if (!$validator instanceof ValidatorContract) {
             throw new RuntimeException('Validator callback must return a Validator instance');
         }
@@ -382,11 +407,58 @@ trait HasControllerHelpers
             throw new RuntimeException(sprintf("Validator method '%s::%s' does not exist", $className, $method));
         }
 
-        $validator = call_user_func([$className, $method], $request, $id);
+        $callback = [$className, $method];
+        $validator = call_user_func($callback, $request, $this->normalizeValidatorIdForCallable($callback, $id));
         if (!$validator instanceof ValidatorContract) {
             throw new RuntimeException('Validator callback must return a Validator instance');
         }
 
         return $validator;
+    }
+
+    private function normalizeValidatorIdForCallable(callable $callback, ?string $id): mixed
+    {
+        if (null === $id) {
+            return null;
+        }
+
+        $reflection = $this->reflectCallable($callback);
+        if (!$reflection instanceof ReflectionFunctionAbstract) {
+            return $id;
+        }
+
+        $parameter = $reflection->getParameters()[1] ?? null;
+        if (null === $parameter) {
+            return $id;
+        }
+
+        $type = $parameter->getType();
+        if (!$type instanceof ReflectionNamedType || !$type->isBuiltin()) {
+            return $id;
+        }
+
+        return match ($type->getName()) {
+            'int' => ctype_digit($id) ? (int) $id : $id,
+            'float' => is_numeric($id) ? (float) $id : $id,
+            'string' => $id,
+            default => $id,
+        };
+    }
+
+    private function reflectCallable(callable $callback): ?ReflectionFunctionAbstract
+    {
+        if ($callback instanceof Closure || is_string($callback)) {
+            return new ReflectionFunction($callback);
+        }
+
+        if (is_array($callback) && isset($callback[0], $callback[1])) {
+            return new ReflectionMethod($callback[0], (string) $callback[1]);
+        }
+
+        if (is_object($callback) && method_exists($callback, '__invoke')) {
+            return new ReflectionMethod($callback, '__invoke');
+        }
+
+        return null;
     }
 }

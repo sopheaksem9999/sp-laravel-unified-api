@@ -1,12 +1,31 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Sopheak\Core\Services;
 
+use Throwable;
 use Exception;
 use Illuminate\Support\Facades\Cache;
 
 class QueryCacheService
 {
+    private const REQUEST_NAMESPACE_MEMO_KEY = 'sp_laravel_api.cache.namespace_versions';
+
+    private const REQUEST_BUMPED_NAMESPACES_KEY = 'sp_laravel_api.cache.bumped_namespaces';
+
+    private const REQUEST_STATS_KEY = 'sp_laravel_api.cache.stats';
+
+    private const DEFAULT_STATS = [
+        'cache_hits' => 0,
+        'cache_misses' => 0,
+        'cache_puts' => 0,
+        'namespace_reads' => 0,
+        'namespace_memo_hits' => 0,
+        'invalidation_bumps' => 0,
+        'invalidation_dedupe_hits' => 0,
+    ];
+
     /**
      * Check if caching is enabled globally
      */
@@ -70,7 +89,12 @@ class QueryCacheService
         $cacheKey = self::getCachePrefix() . $key . ':' . self::resolveNamespaceToken($key);
 
         try {
-            return Cache::put($cacheKey, $value, $ttl);
+            $stored = Cache::put($cacheKey, $value, $ttl);
+            if ($stored) {
+                self::incrementRequestStat('cache_puts');
+            }
+
+            return $stored;
         } catch (Exception) {
             return false;
         }
@@ -89,7 +113,10 @@ class QueryCacheService
         $cacheKey = self::getCachePrefix() . $key . ':' . self::resolveNamespaceToken($key);
 
         try {
-            return Cache::get($cacheKey);
+            $value = Cache::get($cacheKey);
+            self::incrementRequestStat(null !== $value ? 'cache_hits' : 'cache_misses');
+
+            return $value;
         } catch (Exception) {
             return null;
         }
@@ -175,6 +202,13 @@ class QueryCacheService
     public static function inspectNamespaceVersion(string $scope, string $name, ?string $tenantKey = null, ?string $recordId = null): int
     {
         return self::getNamespaceVersion(scope: $scope, name: $name, tenantKey: $tenantKey, recordId: $recordId);
+    }
+
+    public static function requestStats(): array
+    {
+        $stats = self::getRequestAttribute(self::REQUEST_STATS_KEY, []);
+
+        return array_merge(self::DEFAULT_STATS, is_array($stats) ? $stats : []);
     }
 
     public static function invalidateRecordForTenant(string $table, mixed $id, string $tenantKey): int
@@ -266,8 +300,22 @@ class QueryCacheService
     {
         try {
             $key = self::namespaceKey(scope: $scope, name: $name, tenantKey: $tenantKey, recordId: $recordId);
+            $bumped = self::getRequestAttribute(self::REQUEST_BUMPED_NAMESPACES_KEY, []);
+            $bumped = is_array($bumped) ? $bumped : [];
+            if (isset($bumped[$key])) {
+                self::incrementRequestStat('invalidation_dedupe_hits');
+
+                return;
+            }
+
+            $bumped[$key] = true;
+            self::setRequestAttribute(self::REQUEST_BUMPED_NAMESPACES_KEY, $bumped);
+
             $current = self::getNamespaceVersion(scope: $scope, name: $name, tenantKey: $tenantKey, recordId: $recordId);
-            Cache::forever($key, $current + 1);
+            $next = $current + 1;
+            Cache::forever($key, $next);
+            self::memoizeNamespaceVersion($key, $next);
+            self::incrementRequestStat('invalidation_bumps');
         } catch (Exception) {
         }
     }
@@ -276,12 +324,56 @@ class QueryCacheService
     {
         $key = self::namespaceKey(scope: $scope, name: $name, tenantKey: $tenantKey, recordId: $recordId);
 
+        $memo = self::getRequestAttribute(self::REQUEST_NAMESPACE_MEMO_KEY, []);
+        $memo = is_array($memo) ? $memo : [];
+        if (isset($memo[$key])) {
+            self::incrementRequestStat('namespace_memo_hits');
+
+            return (int) $memo[$key];
+        }
+
         try {
             $value = Cache::get($key);
+            self::incrementRequestStat('namespace_reads');
             $version = is_int($value) ? $value : (int) $value;
-            return $version > 0 ? $version : 1;
+            $version = $version > 0 ? $version : 1;
+            self::memoizeNamespaceVersion($key, $version);
+
+            return $version;
         } catch (Exception) {
             return 1;
+        }
+    }
+
+    private static function memoizeNamespaceVersion(string $key, int $version): void
+    {
+        $memo = self::getRequestAttribute(self::REQUEST_NAMESPACE_MEMO_KEY, []);
+        $memo = is_array($memo) ? $memo : [];
+        $memo[$key] = $version;
+        self::setRequestAttribute(self::REQUEST_NAMESPACE_MEMO_KEY, $memo);
+    }
+
+    private static function incrementRequestStat(string $key): void
+    {
+        $stats = self::requestStats();
+        $stats[$key] = (int) ($stats[$key] ?? 0) + 1;
+        self::setRequestAttribute(self::REQUEST_STATS_KEY, $stats);
+    }
+
+    private static function getRequestAttribute(string $key, mixed $default = null): mixed
+    {
+        try {
+            return request()->attributes->get($key, $default);
+        } catch (Throwable) {
+            return $default;
+        }
+    }
+
+    private static function setRequestAttribute(string $key, mixed $value): void
+    {
+        try {
+            request()->attributes->set($key, $value);
+        } catch (Throwable) {
         }
     }
 }
