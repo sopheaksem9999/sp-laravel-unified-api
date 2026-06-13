@@ -14,6 +14,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Services\RecordService;
+use Sopheak\Core\Http\Controllers\CoreRecordController;
 use Sopheak\Core\Utilities\RelationshipResolverUtils;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Tests\TestCase;
@@ -292,6 +293,85 @@ class LegacyConfigTest extends TestCase
         $this->assertEquals(1, $response->getData()->data->count);
         $this->assertSame(1, CachedGlobalFunctionCounter::$count);
         Carbon::setTestNow();
+    }
+
+    public function test_table_function_post_clears_cache_with_resolved_tenant_attribute(): void
+    {
+        Cache::flush();
+
+        Config::set('record.enable_tenant_id', true);
+        Config::set('record.tenant_column', 'tenant_id');
+        Config::set('record.cache.enabled', true);
+        Config::set('record.cache.per_table', ['legacy_items' => true]);
+        Config::set('record.tables', [
+            'legacy_items' => [
+                'pmsName' => 'legacy_items',
+                'table' => 'legacy_items',
+                'hasTenantId' => true,
+                'softDeletes' => false,
+                'public' => ['read' => true, 'write' => true],
+                'functions' => [
+                    'clear_cache' => [
+                        'httpMethod' => ['POST'],
+                        'class' => LegacyFunction::class,
+                        'functionName' => 'handle',
+                        'disableCache' => true,
+                    ],
+                ],
+            ],
+        ]);
+
+        SchemaRegistryUtils::refresh();
+        if (!Schema::hasColumn('legacy_items', 'tenant_id')) {
+            Schema::table('legacy_items', function (Blueprint $table): void {
+                $table->string('tenant_id')->nullable();
+            });
+        }
+
+        $request = Request::create('/api/v1/legacy_items/rpc/clear_cache', 'POST');
+        $request->attributes->set('resolved_tenant_id', 'tenant-1');
+
+        $controller = new CoreRecordController(new RecordService());
+        $response = $controller->executeTableFunction($request, 'legacy_items', 'clear_cache');
+
+        $this->assertEquals(200, $response->getStatusCode());
+        $this->assertEquals('Legacy function executed', $response->getData()->data->message);
+    }
+
+    public function test_table_function_post_clears_cache_when_tenancy_is_disabled(): void
+    {
+        Cache::flush();
+
+        Config::set('record.enable_tenant_id', false);
+        Config::set('record.cache.enabled', true);
+        Config::set('record.cache.per_table', ['legacy_items' => true]);
+        Config::set('record.tables', [
+            'legacy_items' => [
+                'pmsName' => 'legacy_items',
+                'table' => 'legacy_items',
+                'hasTenantId' => true,
+                'softDeletes' => false,
+                'public' => ['read' => true, 'write' => true],
+                'functions' => [
+                    'clear_cache' => [
+                        'httpMethod' => ['POST'],
+                        'class' => LegacyFunction::class,
+                        'functionName' => 'handle',
+                        'disableCache' => true,
+                    ],
+                ],
+            ],
+        ]);
+
+        SchemaRegistryUtils::refresh();
+
+        $request = Request::create('/api/v1/legacy_items/rpc/clear_cache', 'POST');
+
+        $controller = new CoreRecordController(new RecordService());
+        $response = $controller->executeTableFunction($request, 'legacy_items', 'clear_cache');
+
+        $this->assertEquals(200, $response->getStatusCode());
+        $this->assertEquals('Legacy function executed', $response->getData()->data->message);
     }
 
     public function test_legacy_relationship_array_config(): void

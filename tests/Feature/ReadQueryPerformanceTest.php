@@ -106,6 +106,102 @@ class ReadQueryPerformanceTest extends TestCase
         $this->assertSame([], array_values($countQueries));
     }
 
+    public function test_total_false_avoids_count_queries_for_offset_and_cursor_pagination(): void
+    {
+        $this->createTasksTable();
+        $this->configureTasks();
+
+        foreach (range(1, 5) as $index) {
+            DB::table('tasks')->insert([
+                'name' => 'Task ' . $index,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        $queries = [];
+        DB::listen(static function ($event) use (&$queries): void {
+            $queries[] = strtolower((string) $event->sql);
+        });
+
+        $offset = app(RecordService::class)->listRecords(
+            Request::create('/api/tasks?per_page=2&total=false', 'GET'),
+            'tasks',
+            null
+        );
+
+        $cursor = app(RecordService::class)->listRecords(
+            Request::create('/api/tasks?cursor=2&per_page=2&total=false', 'GET'),
+            'tasks',
+            null
+        );
+
+        $countQueries = array_filter($queries, static fn(string $sql): bool => str_contains($sql, 'count('));
+
+        $this->assertSame([], array_values($countQueries));
+        $this->assertArrayNotHasKey('total', $offset['meta']);
+        $this->assertSame(0, $cursor['meta']['total']);
+    }
+
+    public function test_total_true_overrides_skip_total_default(): void
+    {
+        $this->createTasksTable();
+        $this->configureTasks();
+        Config::set('record.pagination.skip_total_default', true);
+
+        foreach (range(1, 3) as $index) {
+            DB::table('tasks')->insert([
+                'name' => 'Task ' . $index,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        $result = app(RecordService::class)->listRecords(
+            Request::create('/api/tasks?per_page=2&total=true', 'GET'),
+            'tasks',
+            null
+        );
+
+        $this->assertSame(3, $result['meta']['total']);
+        $this->assertSame('3', $result['headers']['X-Total-Count']);
+    }
+
+    public function test_non_boolean_total_parameter_remains_a_filter(): void
+    {
+        Schema::create('orders', function (Blueprint $table): void {
+            $table->id();
+            $table->integer('total');
+            $table->timestamps();
+        });
+
+        SchemaRegistryUtils::register('orders', new RecordTableType(
+            table: 'orders',
+            public: new RecordTablePublic(read: true, write: true),
+            primaryKey: 'id',
+            columns: [
+                'id' => ['type' => 'integer'],
+                'total' => ['type' => 'integer'],
+                'created_at' => ['type' => 'timestamp'],
+                'updated_at' => ['type' => 'timestamp'],
+            ]
+        ));
+
+        DB::table('orders')->insert([
+            ['total' => 50, 'created_at' => now(), 'updated_at' => now()],
+            ['total' => 150, 'created_at' => now(), 'updated_at' => now()],
+        ]);
+
+        $result = app(RecordService::class)->listRecords(
+            Request::create('/api/orders?total=gte.100&per_page=10', 'GET'),
+            'orders',
+            null
+        );
+
+        $this->assertSame(1, $result['meta']['total']);
+        $this->assertSame(150, (int) $result['data'][0]->total);
+    }
+
     public function test_list_show_and_optimized_relationship_reads_use_configured_read_connection(): void
     {
         $this->createUsersAndPostsTables();

@@ -340,7 +340,7 @@ Full relationship examples and payload guides: https://sp-laravel-api-docs.verce
 - **Cursor-Based**: `cursor=12345&direction=next` (high-performance for large datasets — use when cursor parameter present, or when `pagination.default_mode=cursor`)
 - **Custom Cursor**: `cursor_column=created_at` (use different cursor column; configurable default via `pagination.cursor.default_column`)
 - **Composite**: `composite_cursor=true&sortby=created_at` (multi-column cursors; configurable via `pagination.cursor.composite_enabled`)
-- **Skip Total**: `skip_total=true` (omit total count for performance; default configurable via `pagination.skip_total_default`)
+- **Total Control**: `total=false` omits the total count query for performance; `total=true` includes totals even when `pagination.skip_total_default=true`. Legacy `skip_total=true` remains supported.
 - **Limits**: `per_page` max ' . $maxPerPage . ', default 25
 
 ### Bulk Operations (Available for All Tables)
@@ -716,27 +716,35 @@ Accepts an array of IDs or an array of objects with the primary key.
                     'schema' => ['type' => 'string', 'default' => $defaultCursorColumn],
                 ],
                 [
+                    'name' => 'total',
+                    'in' => 'query',
+                    'required' => false,
+                    'description' => "Include total count metadata. Use `total=false` to skip the COUNT(*) query for performance, or `total=true` to include totals even when `pagination.skip_total_default=true`. Only boolean-like values are treated as this control; non-boolean values such as `total=gte.100` remain normal column filters.",
+                    'schema' => ['type' => 'boolean', 'default' => !$skipTotalDefault],
+                ],
+                [
                     'name' => 'skip_total',
                     'in' => 'query',
                     'required' => false,
-                    'description' => "Skip the total count query for performance (default: " . ($skipTotalDefault ? 'true' : 'false') . ", configurable via `pagination.skip_total_default`). When `true`, `total`, `last_page`, `from`, `to` are omitted from meta.",
+                    'deprecated' => true,
+                    'description' => "Legacy alias for `total=false`. Skip the total count query for performance (default: " . ($skipTotalDefault ? 'true' : 'false') . ", configurable via `pagination.skip_total_default`).",
                     'schema' => ['type' => 'boolean', 'default' => $skipTotalDefault],
                 ],
             ]);
 
             $listMetaProperties = [
                 'request_id' => ['type' => 'string'],
-                'total' => ['type' => 'integer', 'description' => 'Total records. Omitted when skip_total=true.'],
+                'total' => ['type' => 'integer', 'description' => 'Total records. Omitted when total=false or skip_total=true.'],
                 'per_page' => ['type' => 'integer'],
                 'current_page' => ['type' => 'integer', 'description' => 'Current page (offset pagination). Omitted during cursor pagination.'],
-                'last_page' => ['type' => 'integer', 'description' => 'Last page number (offset pagination). Omitted during cursor pagination or skip_total=true.'],
-                'from' => ['type' => 'integer', 'description' => 'Starting record number (offset pagination). Omitted during cursor pagination or skip_total=true.'],
-                'to' => ['type' => 'integer', 'description' => 'Ending record number (offset pagination). Omitted during cursor pagination or skip_total=true.'],
+                'last_page' => ['type' => 'integer', 'description' => 'Last page number (offset pagination). Omitted during cursor pagination, total=false, or skip_total=true.'],
+                'from' => ['type' => 'integer', 'description' => 'Starting record number (offset pagination). Omitted during cursor pagination, total=false, or skip_total=true.'],
+                'to' => ['type' => 'integer', 'description' => 'Ending record number (offset pagination). Omitted during cursor pagination, total=false, or skip_total=true.'],
                 'cursor' => ['type' => 'string', 'description' => 'Next cursor value (cursor pagination). Omitted during offset pagination.'],
                 'direction' => ['type' => 'string', 'description' => 'Cursor direction (cursor pagination). Omitted during offset pagination.'],
                 'cursor_column' => ['type' => 'string', 'description' => 'Cursor column used (cursor pagination). Omitted during offset pagination.'],
-                'first_cursor' => ['type' => 'string', 'description' => 'Cursor to jump to first page (cursor pagination). Omitted when skip_total=true.'],
-                'last_cursor' => ['type' => 'string', 'description' => 'Cursor to jump to last page (cursor pagination). Omitted when skip_total=true.'],
+                'first_cursor' => ['type' => 'string', 'description' => 'Cursor to jump to first page (cursor pagination). Omitted when total=false or skip_total=true.'],
+                'last_cursor' => ['type' => 'string', 'description' => 'Cursor to jump to last page (cursor pagination). Omitted when total=false or skip_total=true.'],
             ];
             $paths[$basePath] = array_filter([
                 'parameters' => $listParameters,

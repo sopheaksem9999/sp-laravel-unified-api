@@ -228,7 +228,7 @@ return [
             'composite_enabled' => true,
         ],
 
-        // When true, paginated list requests skip the COUNT(*) query unless explicitly requested
+        // When true, paginated list requests default to total=false unless clients pass total=true
         'skip_total_default' => env('SP_PAGINATION_SKIP_TOTAL', false),
     ],
 

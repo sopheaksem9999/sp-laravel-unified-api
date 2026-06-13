@@ -1,12 +1,12 @@
 ---
 title: "Page and Per Page Pagination Contract"
-description: "Feature guide for standard list pagination parameters, cursor pagination, and skip_total for large datasets."
+description: "Feature guide for standard list pagination parameters, cursor pagination, and total count control for large datasets."
 keywords:
   - page param
   - per_page param
   - cursor pagination
   - keyset pagination
-  - skip_total
+  - total=false
   - pagination response meta
   - meta.page
   - meta.per_page
@@ -95,7 +95,7 @@ GET /api/v1/customers?cursor=5025&direction=next&cursor_column=id
 
 - `cursor` — next page cursor (the last record's cursor column value)
 - `first_cursor` — `null`; send `cursor=` for the first page
-- `last_cursor` — cursor to jump to the final page. Omitted when `skip_total=true` or `boundary_cursors=false`
+- `last_cursor` — cursor to jump to the final page. Omitted when `total=false`, `skip_total=true`, or `boundary_cursors=false`
 
 ### Navigation
 
@@ -107,31 +107,33 @@ GET /api/v1/customers?cursor=5025&direction=next&cursor_column=id
 | Click First | `?cursor=&direction=next` |
 | Click Last | `?cursor={meta.last_cursor}&direction=next` |
 
-### Skip Total / Boundary Cursors
+### Total Count / Boundary Cursors
 
-`total` is included by default via a `COUNT(*)` query. The `last_cursor` computation adds a O(per_page) query. Use `skip_total=true` to omit both:
+`total` is included by default via a `COUNT(*)` query. The `last_cursor` computation adds a O(per_page) query. Use `total=false` to omit both:
 
 ```
-GET /api/v1/customers?cursor=5025&direction=next&per_page=25&skip_total=true
+GET /api/v1/customers?cursor=5025&direction=next&per_page=25&total=false
 ```
 
 ## Non-Paginated List (`limit`)
 
-When using `limit` without `per_page` or `page`, `total` is NOT included by default. Use `add_total=true` to include it:
+When using `limit` without `per_page` or `page`, `total` is NOT included by default. Use `total=true` to include it. Legacy `add_total=true` remains supported:
 
 ```
 GET /api/v1/customers?limit=50                      # no total
-GET /api/v1/customers?limit=50&add_total=true       # includes total
+GET /api/v1/customers?limit=50&total=true           # includes total
 ```
 
-## Skip Total
+## Total Count Control
 
-Avoid the `COUNT(*)` overhead on paginated endpoints by adding `skip_total=true`:
+Avoid the `COUNT(*)` overhead on paginated endpoints by adding `total=false`:
 
 ```
-GET /api/v1/customers?page=1&per_page=25&skip_total=true
-GET /api/v1/customers?cursor=5025&direction=next&per_page=25&skip_total=true
+GET /api/v1/customers?page=1&per_page=25&total=false
+GET /api/v1/customers?cursor=5025&direction=next&per_page=25&total=false
 ```
+
+Legacy `skip_total=true` remains supported for older clients.
 
 ## Config
 
