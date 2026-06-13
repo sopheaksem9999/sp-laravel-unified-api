@@ -231,6 +231,10 @@ class QueryBuilderFiltersUtils
                 $params = self::$operatorCache[$cacheKey];
             }
 
+            if (isset($params['total']) && self::isBooleanLikeValue($params['total'])) {
+                unset($params['total']);
+            }
+
             // Check for lazy loading parameter
             $isLazy = isset($params['lazy']) && ('true' === $params['lazy'] || '1' === $params['lazy']);
 
@@ -327,8 +331,25 @@ class QueryBuilderFiltersUtils
         return isset($params['lazy']) && ('true' === $params['lazy'] || '1' === $params['lazy']);
     }
 
-    /**
-     * Get lazy operation statistics for debugging.
+    private static function isBooleanLikeValue(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return true;
+        }
+
+        if (is_int($value)) {
+            return 0 === $value || 1 === $value;
+        }
+
+        if (!is_string($value)) {
+            return false;
+        }
+
+        return in_array(strtolower(trim($value)), ['1', '0', 'true', 'false', 'yes', 'no', 'on', 'off'], true);
+    }
+
+	    /**
+	     * Get lazy operation statistics for debugging.
      * @return array<string, float|int>
      */
     public static function getLazyStats(): array

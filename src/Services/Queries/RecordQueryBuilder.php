@@ -290,7 +290,7 @@ class RecordQueryBuilder
                 direction: $request->input('direction', 'next'),
                 cursorColumn: $request->input('cursor_column'),
                 perPage: $perPage,
-                skipTotal: $request->boolean('skip_total', RecordConfigService::skipTotalDefault()),
+                skipTotal: $this->shouldSkipTotal($request),
                 sortOrder: $request->input('order', 'desc')
             );
         }
@@ -298,8 +298,39 @@ class RecordQueryBuilder
         return $this->offsetPaginate(
             page: (int) $request->input('page', 1),
             perPage: $perPage,
-            skipTotal: $request->boolean('skip_total', RecordConfigService::skipTotalDefault())
+            skipTotal: $this->shouldSkipTotal($request)
         );
+    }
+
+    private function shouldSkipTotal(Request $request): bool
+    {
+        if ($this->hasBooleanQueryParameter($request, 'total')) {
+            return !$request->boolean('total');
+        }
+
+        return $request->boolean('skip_total', RecordConfigService::skipTotalDefault());
+    }
+
+    private function hasBooleanQueryParameter(Request $request, string $key): bool
+    {
+        if (!$request->query->has($key)) {
+            return false;
+        }
+
+        $value = $request->query($key);
+        if (is_bool($value)) {
+            return true;
+        }
+
+        if (is_int($value)) {
+            return 0 === $value || 1 === $value;
+        }
+
+        if (!is_string($value)) {
+            return false;
+        }
+
+        return in_array(strtolower(trim($value)), ['1', '0', 'true', 'false', 'yes', 'no', 'on', 'off'], true);
     }
 
     public function getBuilder(): Builder

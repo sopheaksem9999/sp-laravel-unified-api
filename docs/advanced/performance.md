@@ -10,7 +10,7 @@ keywords:
   - pagination
   - indexing
   - cursor pagination
-  - skip_total
+  - total=false
   - read replica
   - query profiling
   - index hints
@@ -47,7 +47,7 @@ Response meta:
 }
 ```
 
-`total` and `last_cursor` are computed via separate queries (COUNT + O(per_page) DESC LIMIT). Skip both with `skip_total=true`:
+`total` and `last_cursor` are computed via separate queries (COUNT + O(per_page) DESC LIMIT). Skip both with `total=false`:
 
 **Supported parameters:**
 
@@ -60,19 +60,21 @@ Response meta:
 
 Composite cursors (`cursor_column` != primary key) generate stable ordering via `WHERE (cursor_col, id) > (?, ?)` to handle non-unique sort values.
 
-### Skip Total COUNT (`?skip_total=true`)
+### Total COUNT Control (`?total=true|false`)
 
-The `COUNT(*)` query on paginated endpoints can be expensive on large filtered datasets. Skip it when you don't need exact totals. Works for both offset and cursor pagination:
+The `COUNT(*)` query on paginated endpoints can be expensive on large filtered datasets. Use `total=false` when you don't need exact totals. Works for both offset and cursor pagination:
 
 ```bash
 # Offset
-GET /api/v1/invoices?page=1&per_page=25&skip_total=true
+GET /api/v1/invoices?page=1&per_page=25&total=false
 
 # Cursor
-GET /api/v1/invoices?cursor=250000&per_page=25&skip_total=true
+GET /api/v1/invoices?cursor=250000&per_page=25&total=false
 ```
 
-When skipped, the response uses an approximate count from `INFORMATION_SCHEMA.TABLES` (MySQL) or `pg_class.reltuples` (PostgreSQL), or returns `"total": 0` with only the actual row count.
+When skipped, offset pagination omits `total` metadata and cursor pagination returns `"total": 0`. Legacy `skip_total=true` remains supported for older clients.
+
+When `pagination.skip_total_default=true` is configured, clients can force totals back on with `total=true`.
 
 ### Config
 
@@ -93,7 +95,7 @@ When skipped, the response uses an approximate count from `INFORMATION_SCHEMA.TA
 - Prefer `select=` to limit columns, especially on wide tables.
 - Use pagination (`page`, `per_page`) or cursor pagination (`cursor`) instead of unbounded lists.
 - Add DB indexes for common filters and sorts (`status`, `created_at`, foreign keys, tenant column).
-- Enable approximate counts via `?skip_total=true` to avoid expensive `COUNT(*)`.
+- Use `?total=false` to avoid expensive `COUNT(*)`.
 
 ## Relationship Loading
 

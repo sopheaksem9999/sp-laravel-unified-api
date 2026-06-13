@@ -23,7 +23,11 @@ trait HasFunctionOperations
     public function executeTableFunction(Request $request, string $table, string $functionName): Response
     {
         try {
-            $this->resolveSchemaOrFail($table);
+            $tableSchema = $this->resolveSchemaOrFail($table);
+            [, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
+            if ($tenantError instanceof Response) {
+                return $tenantError;
+            }
 
             return $this->recordService->executeTableFunction($request, $table, $functionName);
         } catch (HttpResponseException $exception) {
@@ -55,7 +59,11 @@ trait HasFunctionOperations
         $request->route()->setParameter('id', $id);
 
         try {
-            $this->resolveSchemaOrFail($table);
+            $tableSchema = $this->resolveSchemaOrFail($table);
+            [, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
+            if ($tenantError instanceof Response) {
+                return $tenantError;
+            }
 
             return $this->recordService->executeTableFunction($request, $table, $functionName);
         } catch (HttpResponseException $exception) {
