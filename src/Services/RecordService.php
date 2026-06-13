@@ -651,7 +651,7 @@ class RecordService
         }
 
         $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
-        $tenantId = $tenantEnabled ? $this->normalizeTenantId($request->header(RecordConfigService::tenantHeader())) : null;
+        $tenantId = $tenantEnabled ? $this->resolveTenantFromRequest($request, $tableSchema) : null;
         $cacheKey = null;
 
         if (!$disableCache && $this->isCacheableRequest($request, $table)) {
@@ -751,7 +751,7 @@ class RecordService
         }
 
         $tenantEnabled = RecordConfigService::enableTenantId();
-        $tenantId = $tenantEnabled ? $this->normalizeTenantId($request->header(RecordConfigService::tenantHeader())) : null;
+        $tenantId = $tenantEnabled ? RecordUtils::resolveTenantIdFromRequest($request) : null;
         $cacheKey = null;
 
         if (!$disableCache && RecordConfigService::cacheEnabled() && 'GET' === $request->method() && !$request->has(['search', 'filter', 'where'])) {
@@ -1686,7 +1686,7 @@ class RecordService
         $perPage = max(1, min((int) $request->input('per_page', RecordConfigService::limitMax()), $maxPerPage));
         $page = max((int) $request->input('page', 1), 1);
 
-        $skipTotal = $request->boolean('skip_total', RecordConfigService::skipTotalDefault());
+        $skipTotal = $this->shouldSkipTotal($request);
 
         if ($skipTotal) {
             $total = 0;
@@ -1751,7 +1751,7 @@ class RecordService
         }
 
         // Count total matching records before cursor filtering
-        $skipTotal = $request->boolean('skip_total', RecordConfigService::skipTotalDefault());
+        $skipTotal = $this->shouldSkipTotal($request);
         $total = 0;
         $firstCursor = $firstCursorDefault;
         $lastCursor = null;
@@ -1864,6 +1864,56 @@ class RecordService
         return 'cursor' === RecordConfigService::paginationDefaultMode();
     }
 
+    private function shouldSkipTotal(Request $request): bool
+    {
+        if ($this->hasBooleanQueryParameter($request, 'total')) {
+            return !$request->boolean('total');
+        }
+
+        return $request->boolean('skip_total', RecordConfigService::skipTotalDefault());
+    }
+
+    private function shouldIncludeLimitedTotal(Request $request): bool
+    {
+        if ($this->hasBooleanQueryParameter($request, 'total')) {
+            return $request->boolean('total');
+        }
+
+        return $request->boolean('add_total');
+    }
+
+    private function hasBooleanQueryParameter(Request $request, string $key): bool
+    {
+        if (!$request->query->has($key)) {
+            return false;
+        }
+
+        $value = $request->query($key);
+        if (is_bool($value)) {
+            return true;
+        }
+
+        if (is_int($value)) {
+            return 0 === $value || 1 === $value;
+        }
+
+        if (!is_string($value)) {
+            return false;
+        }
+
+        return in_array(strtolower(trim($value)), ['1', '0', 'true', 'false', 'yes', 'no', 'on', 'off'], true);
+    }
+
+    private function paginationControlParameters(Request $request): array
+    {
+        $parameters = ['page', 'per_page', 'limit', 'cursor', 'cursor_column', 'direction', 'skip_total', 'add_total', 'explain'];
+        if ($this->hasBooleanQueryParameter($request, 'total')) {
+            $parameters[] = 'total';
+        }
+
+        return $parameters;
+    }
+
     /**
      * List records for a table.
      */
@@ -1887,7 +1937,7 @@ class RecordService
 
         $actualTableName = $tableSchema->table ?? $table;
 
-        $filters = $request->except(['page', 'per_page', 'limit', 'cursor', 'cursor_column', 'direction', 'skip_total', 'add_total', 'explain']);
+        $filters = $request->except($this->paginationControlParameters($request));
 
         $selectParam = $request->query('select', '');
         $effectiveSelectParam = self::getCombinedSelectParam($request);
@@ -1980,7 +2030,7 @@ class RecordService
             $limit = max(1, min((int) $request->input('limit'), RecordConfigService::limitMax()));
             $data = $builder->limit($limit)->get()->all();
 
-            if ($request->boolean('add_total')) {
+            if ($this->shouldIncludeLimitedTotal($request)) {
                 $total = count($data);
                 $headers['X-Total-Count'] = (string) $total;
                 $meta = ['total' => $total];
@@ -2525,7 +2575,7 @@ class RecordService
             $tenantId = RecordUtils::resolveTenantIdFromRequest($request);
         }
 
-        $filters = $request->except(['page', 'per_page', 'limit', 'cursor', 'cursor_column', 'direction', 'skip_total', 'add_total', 'explain']);
+        $filters = $request->except($service->paginationControlParameters($request));
         $includes = $request->query('select', []);
         if (is_string($includes)) {
             $includes = explode(',', $includes);
@@ -2629,9 +2679,11 @@ class RecordService
         } elseif ($request->has('limit') && !$request->has('per_page')) {
             $limit = max(1, min((int) $request->input('limit'), RecordConfigService::limitMax()));
             $data = $builder->limit($limit)->get()->all();
-            $total = count($data);
-            $headers['X-Total-Count'] = (string) $total;
-            $meta = ['total' => $total];
+            if ($service->shouldIncludeLimitedTotal($request)) {
+                $total = count($data);
+                $headers['X-Total-Count'] = (string) $total;
+                $meta = ['total' => $total];
+            }
         } else {
             [$data, $meta, $headers, $total] = $service->executePagination($builder, $request, $defaultOrderBy);
         }

@@ -1,12 +1,12 @@
 ---
 title: "Pagination Module"
-description: "Pagination behavior covering page/per_page, cursor-based pagination, and skip_total for large datasets."
+description: "Pagination behavior covering page/per_page, cursor-based pagination, and total count control for large datasets."
 keywords:
   - pagination architecture
   - page per_page standard
   - cursor pagination
   - keyset pagination
-  - skip_total
+  - total=false
   - pagination metadata
   - list endpoint paging
 ---
@@ -84,13 +84,13 @@ GET /api/v1/invoices?cursor=1025&direction=next&cursor_column=id
 ```
 
 - `first_cursor` — `null`; send `cursor=` for the first page
-- `last_cursor` — computed via O(per_page) query; sends you to the final page. Omitted when `skip_total=true` or `boundary_cursors=false`
-- `total` — full matching count. Omitted with `skip_total=true`
+- `last_cursor` — computed via O(per_page) query; sends you to the final page. Omitted when `total=false`, `skip_total=true`, or `boundary_cursors=false`
+- `total` — full matching count. Omitted with `total=false` or `skip_total=true`
 
-`total` reflects the full matching record count before cursor filtering. Add `skip_total=true` to omit it and avoid the `COUNT(*)` query:
+`total` reflects the full matching record count before cursor filtering. Add `total=false` to omit it and avoid the `COUNT(*)` query:
 
 ```bash
-GET /api/v1/invoices?cursor=1025&direction=next&per_page=25&skip_total=true
+GET /api/v1/invoices?cursor=1025&direction=next&per_page=25&total=false
 ```
 
 ### Headers
@@ -112,19 +112,21 @@ X-Cursor: 1025
 
 When `cursor_column` differs from the primary key (e.g., sorting by `created_at`), the query builder automatically generates a composite cursor using `WHERE (cursor_col, id) > (?, ?)` to ensure stable ordering across non-unique sort values.
 
-## Skip Total (`?skip_total=true`)
+## Total Count Control (`?total=true|false`)
 
 Avoid the expensive `COUNT(*)` query on large filtered datasets:
 
 ```bash
-GET /api/v1/invoices?page=1&per_page=25&skip_total=true
+GET /api/v1/invoices?page=1&per_page=25&total=false
 ```
 
-When enabled, the response omits exact `X-Total-Pages` and uses an approximate count. Configure globally with:
+When disabled, offset pagination omits `total` metadata and cursor pagination returns `"total": 0`. Legacy `skip_total=true` remains supported for older clients. Configure skipped totals globally with:
 
 ```env
 SP_PAGINATION_SKIP_TOTAL=true
 ```
+
+Clients can force totals back on with `total=true`.
 
 ## Config Reference
 
