@@ -302,31 +302,6 @@ return [
                 'metadata' => ['type' => 'json', 'nullable' => true],
             ],
         ),
-        // Deprecated alias kept for backward compatibility with clients still calling
-        // /sp_document_folders. Same physical table as sp_attachment_folders above.
-        // disableCache on both entries avoids stale reads between the two URL names
-        // while both are live — remove this entry (and the cache flag) once clients
-        // have migrated to sp_attachment_folders.
-        'sp_document_folders' => new RecordTableType(
-            table: 'sp_attachment_folders',
-            pmsName: 'attachment',
-            hasTenantId: true,
-            softDeletes: false,
-            isAuthRead: true,
-            isAuthWrite: true,
-            primaryKey: 'id',
-            disableCache: true,
-            columns: [
-                'id' => ['type' => 'string', 'nullable' => false],
-                'name' => ['type' => 'string', 'nullable' => false],
-                'parent_id' => ['type' => 'string', 'nullable' => true],
-                'scope' => ['type' => 'string', 'nullable' => false],
-                'visibility' => ['type' => 'string', 'nullable' => false],
-                'owner_type' => ['type' => 'string', 'nullable' => true],
-                'owner_id' => ['type' => 'string', 'nullable' => true],
-                'metadata' => ['type' => 'json', 'nullable' => true],
-            ],
-        ),
         'sp_attachment_links' => new RecordTableType(
             table: 'sp_attachment_links',
             pmsName: 'attachment',
