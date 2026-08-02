@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Sopheak\Core\Utilities\TimeUtils;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
+use Sopheak\Core\Services\AttachmentUrlService;
 use Sopheak\Core\Services\RecordConfigService;
 
 class RelationshipResolverUtils
@@ -172,6 +173,10 @@ class RelationshipResolverUtils
                         $decoded = array_map(static fn(mixed $item): mixed => is_array($item) ? (object) $item : $item, $decoded);
                     }
 
+                    // Enrich embedded attachment rows with resolved URLs, mirroring
+                    // the direct-read behavior of the AttachmentTrigger
+                    $decoded = self::enrichEmbeddedAttachments($decoded, $relConfig);
+
                     // Assign decoded value back to record using original alias
                     if ($isArrayRecord) {
                         $record[$originalAlias] = $decoded;
@@ -192,6 +197,49 @@ class RelationshipResolverUtils
         }
 
         return $records;
+    }
+
+    /**
+     * Determine whether a resolved relationship targets the attachment table.
+     */
+    private static function isAttachmentRelation(array $config): bool
+    {
+        return ($config['table'] ?? null) === (string) config('attachments.route_prefix', 'sp_attachments');
+    }
+
+    /**
+     * Append resolved download/public URLs to embedded attachment records so that
+     * nested attachment relations expose working urls, mirroring the behavior of
+     * the AttachmentTrigger on direct attachment reads.
+     */
+    private static function enrichEmbeddedAttachments(mixed $value, array $config): mixed
+    {
+        if (!self::isAttachmentRelation($config)) {
+            return $value;
+        }
+
+        $isList = is_array($value) && array_is_list($value);
+        $items = $isList ? $value : (null !== $value ? [$value] : []);
+
+        $enriched = array_map(static fn(mixed $item): mixed => self::enrichAttachmentItem($item), $items);
+
+        if ($isList) {
+            return $enriched;
+        }
+
+        return $enriched[0] ?? null;
+    }
+
+    private static function enrichAttachmentItem(mixed $item): mixed
+    {
+        if (null === $item || !(is_array($item) || is_object($item))) {
+            return $item;
+        }
+
+        $isObject = is_object($item);
+        $enriched = app(AttachmentUrlService::class)->appendUrls((array) $item);
+
+        return $isObject ? (object) $enriched : $enriched;
     }
 
     /**
@@ -1715,14 +1763,14 @@ class RelationshipResolverUtils
                 if ('belongsTo' === $config['type']) {
                     $foreign = $recordArray[$config['foreign_key']] ?? null;
                     $related = null !== $foreign ? ($relatedGrouped[$foreign] ?? null) : null;
-                    $record->{$alias} = $related;
+                    $record->{$alias} = self::enrichEmbeddedAttachments($related, $config);
                     if ($related) {
                         $flatRelated[] = $related;
                     }
                 } elseif ('hasMany' === $config['type'] || 'morphMany' === $config['type'] || 'hasManyThrough' === $config['type']) {
                     $local = $recordArray[$config['local_key'] ?? 'id'] ?? null;
                     $related = null !== $local ? ($relatedGrouped[$local] ?? []) : [];
-                    $record->{$alias} = $related;
+                    $record->{$alias} = self::enrichEmbeddedAttachments($related, $config);
 
                     foreach ($related as $r) {
                         $flatRelated[] = $r;
@@ -1735,14 +1783,14 @@ class RelationshipResolverUtils
                         : ($recordArray[$parentKey] ?? null);
                     $related = null !== $local ? ($relatedGrouped[$local] ?? []) : [];
 
-                    $record->{$alias} = $related;
+                    $record->{$alias} = self::enrichEmbeddedAttachments($related, $config);
                     foreach ($related as $r) {
                         $flatRelated[] = $r;
                     }
                 } else { // hasOne or unknown
                     $local = $recordArray[$config['local_key'] ?? 'id'] ?? null;
                     $related = null !== $local ? ($relatedGrouped[$local] ?? null) : null;
-                    $record->{$alias} = $related;
+                    $record->{$alias} = self::enrichEmbeddedAttachments($related, $config);
                     if ($related) {
                         $flatRelated[] = $related;
                     }
