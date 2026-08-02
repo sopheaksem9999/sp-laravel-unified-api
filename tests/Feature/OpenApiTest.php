@@ -221,6 +221,75 @@ class OpenApiTest extends TestCase
     }
 
     /** @test */
+    public function it_uses_name_over_description_for_global_rpc_function_summary(): void
+    {
+        Config::set('app.url', 'http://localhost');
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.rpc_prefix', 'rpc');
+        Config::set('record.tables', []);
+        Config::set('record.global_functions', [
+            'auth/login' => [
+                'httpMethod' => ['POST'],
+                'name' => 'Login',
+                'description' => 'Authenticate a user and return an access token.',
+            ],
+        ]);
+
+        $service = new OpenApiService();
+        $spec = $service->generateInternal();
+
+        $this->assertSame('RPC - Login', $spec['paths']['/api/v2/rpc/auth/login']['post']['summary']);
+    }
+
+    /** @test */
+    public function it_falls_back_to_description_when_name_is_not_set_for_global_rpc_function(): void
+    {
+        Config::set('app.url', 'http://localhost');
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.rpc_prefix', 'rpc');
+        Config::set('record.tables', []);
+        Config::set('record.global_functions', [
+            'auth/login' => [
+                'httpMethod' => ['POST'],
+                'description' => 'Authenticate a user and return an access token.',
+            ],
+        ]);
+
+        $service = new OpenApiService();
+        $spec = $service->generateInternal();
+
+        $this->assertSame(
+            'RPC - Authenticate a user and return an access token.',
+            $spec['paths']['/api/v2/rpc/auth/login']['post']['summary'],
+        );
+    }
+
+    /** @test */
+    public function it_uses_name_over_description_for_table_scoped_rpc_function_summary(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.rpc_prefix', 'rpc');
+        Config::set('record.tables', [
+            'invoices' => new RecordTableType(
+                table: 'invoices',
+                columns: ['id' => ['type' => 'bigint', 'nullable' => false]],
+                functions: [
+                    'send' => [
+                        'httpMethod' => ['POST'],
+                        'name' => 'Send Invoice',
+                        'description' => 'Send the invoice to the customer via email.',
+                    ],
+                ],
+            ),
+        ]);
+
+        $service = new OpenApiService();
+        $spec = $service->generateInternal();
+
+        $this->assertSame('RPC - Send Invoice', $spec['paths']['/api/v2/invoices/rpc/send']['post']['summary']);
+    }
+
+    /** @test */
     public function it_documents_relationship_payload_shapes_clearly(): void
     {
         Config::set('record.api_prefix', 'api/v2');

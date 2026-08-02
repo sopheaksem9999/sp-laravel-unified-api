@@ -454,6 +454,20 @@ Accepts an array of IDs or an array of objects with the primary key.
     }
 
     /**
+     * Resolve the display text used to build an RPC operation's summary/description:
+     * $functionConfig->name when set, else ->description, else a humanized function key.
+     */
+    private static function rpcMethodName(mixed $functionConfig, string $functionName): string
+    {
+        $name = $functionConfig->name ?? null;
+        if (!empty($name)) {
+            return $name;
+        }
+
+        return empty($functionConfig->description) ? self::schemaName($functionName) : $functionConfig->description;
+    }
+
+    /**
      * @return array<string, string|mixed[][]|int[]|string[]>
      */
     private static function tableSchema(string $table, array $columns): array
@@ -1305,7 +1319,7 @@ Accepts an array of IDs or an array of objects with the primary key.
             }
 
             $allowedMethods = gettype($functionConfig->httpMethod) === 'string' ? [$functionConfig->httpMethod] : $functionConfig->httpMethod ?? ['GET'];
-            $methodName = empty($functionConfig->description) ? self::schemaName($functionName) : $functionConfig->description;
+            $methodName = self::rpcMethodName($functionConfig, $functionName);
             $summary = sprintf('RPC - %s', $methodName);
             $description = sprintf('%s', $methodName);
 
@@ -1533,7 +1547,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                 }
 
                 $allowedMethods = gettype($functionConfig->httpMethod) === 'string' ? [$functionConfig->httpMethod] : $functionConfig->httpMethod ?? ['GET'];
-                $methodName = empty($functionConfig->description) ? self::schemaName($functionName) : $functionConfig->description;
+                $methodName = self::rpcMethodName($functionConfig, $functionName);
                 $summary = sprintf('RPC - %s', $methodName);
                 $description = sprintf('%s', $methodName);
 

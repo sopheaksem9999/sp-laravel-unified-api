@@ -23,6 +23,8 @@ class RecordGlobalFunction
         public readonly array|string|null $pmsName = null,
         public readonly bool $disableCache = false,
         public readonly ?int $cacheTTL = null,
+        /** Display name for OpenAPI summary generation. Unrelated to $name (which overrides the function's route key) — falls back to $description, then a humanized function key, when empty. */
+        public readonly ?string $displayName = null,
         public readonly ?string $description = null,
         public readonly ?array $querySchema = null,
         public readonly ?array $payloadSchema = null,

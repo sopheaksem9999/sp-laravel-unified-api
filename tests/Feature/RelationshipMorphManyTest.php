@@ -162,4 +162,117 @@ class RelationshipMorphManyTest extends TestCase
         $this->assertEquals($videoId, $rows[0]->target_id);
         $this->assertTrue(Str::isUuid($rows[0]->id));
     }
+
+    public function test_nested_update_can_modify_a_translation_belonging_to_the_same_parent(): void
+    {
+        $videoId = (string) Str::uuid();
+        $translationId = (string) Str::uuid();
+
+        DB::table('videos')->insert(['id' => $videoId, 'title' => 'Video 1']);
+        DB::table('translations')->insert([
+            'id' => $translationId,
+            'target_type' => 'videos',
+            'target_id' => $videoId,
+            'locale' => 'km-KH',
+            'field' => 'title',
+            'value' => 'original',
+        ]);
+
+        $payload = [
+            'translations' => [
+                ['id' => $translationId, 'value' => 'updated'],
+            ],
+        ];
+
+        RelationshipResolverUtils::processRelatedData('videos', $payload, $videoId, null, 'update');
+
+        $this->assertSame('updated', DB::table('translations')->where('id', $translationId)->value('value'));
+    }
+
+    public function test_nested_delete_can_delete_a_translation_belonging_to_the_same_parent(): void
+    {
+        $videoId = (string) Str::uuid();
+        $translationId = (string) Str::uuid();
+
+        DB::table('videos')->insert(['id' => $videoId, 'title' => 'Video 1']);
+        DB::table('translations')->insert([
+            'id' => $translationId,
+            'target_type' => 'videos',
+            'target_id' => $videoId,
+            'locale' => 'km-KH',
+            'field' => 'title',
+            'value' => 'original',
+        ]);
+
+        $payload = [
+            'translations' => [
+                ['id' => $translationId, '_delete' => true],
+            ],
+        ];
+
+        RelationshipResolverUtils::processRelatedData('videos', $payload, $videoId, null, 'update');
+
+        $this->assertDatabaseMissing('translations', ['id' => $translationId]);
+    }
+
+    public function test_nested_update_cannot_modify_a_translation_belonging_to_a_different_parent(): void
+    {
+        $videoId = (string) Str::uuid();
+        $promotionId = (string) Str::uuid();
+        $foreignTranslationId = (string) Str::uuid();
+
+        DB::table('videos')->insert(['id' => $videoId, 'title' => 'Video 1']);
+        DB::table('promotions')->insert(['id' => $promotionId, 'title' => 'Promo 1']);
+        DB::table('translations')->insert([
+            'id' => $foreignTranslationId,
+            'target_type' => 'promotions',
+            'target_id' => $promotionId,
+            'locale' => 'km-KH',
+            'field' => 'title',
+            'value' => 'original',
+        ]);
+
+        // Attacker only has access to $videoId, but references a translation that
+        // actually belongs to a different promotion.
+        $payload = [
+            'translations' => [
+                ['id' => $foreignTranslationId, 'value' => 'hacked'],
+            ],
+        ];
+
+        RelationshipResolverUtils::processRelatedData('videos', $payload, $videoId, null, 'update');
+
+        $row = DB::table('translations')->where('id', $foreignTranslationId)->first();
+        $this->assertSame('original', $row->value);
+        $this->assertSame('promotions', $row->target_type);
+        $this->assertSame($promotionId, $row->target_id);
+    }
+
+    public function test_nested_delete_cannot_delete_a_translation_belonging_to_a_different_parent(): void
+    {
+        $videoId = (string) Str::uuid();
+        $promotionId = (string) Str::uuid();
+        $foreignTranslationId = (string) Str::uuid();
+
+        DB::table('videos')->insert(['id' => $videoId, 'title' => 'Video 1']);
+        DB::table('promotions')->insert(['id' => $promotionId, 'title' => 'Promo 1']);
+        DB::table('translations')->insert([
+            'id' => $foreignTranslationId,
+            'target_type' => 'promotions',
+            'target_id' => $promotionId,
+            'locale' => 'km-KH',
+            'field' => 'title',
+            'value' => 'original',
+        ]);
+
+        $payload = [
+            'translations' => [
+                ['id' => $foreignTranslationId, '_delete' => true],
+            ],
+        ];
+
+        RelationshipResolverUtils::processRelatedData('videos', $payload, $videoId, null, 'update');
+
+        $this->assertDatabaseHas('translations', ['id' => $foreignTranslationId]);
+    }
 }
