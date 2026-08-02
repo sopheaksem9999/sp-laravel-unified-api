@@ -156,7 +156,7 @@ class AttachmentArchitectureSafetyTest extends TestCase
         Config::set('attachments.folder_delete_strategy', 'restrict');
 
         $folderId = Str::uuid()->toString();
-        DB::table('sp_document_folders')->insert([
+        DB::table('sp_attachment_folders')->insert([
             'id' => $folderId,
             'name' => 'Internal',
             'scope' => 'internal',
@@ -176,7 +176,7 @@ class AttachmentArchitectureSafetyTest extends TestCase
 
         $this->assertSame(409, $response->getStatusCode());
         $this->assertSame('Folder is not empty', data_get($response->getData(true), 'message'));
-        $this->assertDatabaseHas('sp_document_folders', ['id' => $folderId]);
+        $this->assertDatabaseHas('sp_attachment_folders', ['id' => $folderId]);
     }
 
     /** @test */
@@ -249,9 +249,9 @@ class AttachmentArchitectureSafetyTest extends TestCase
     {
         Schema::dropIfExists('sp_attachment_links');
         Schema::dropIfExists('sp_attachments');
-        Schema::dropIfExists('sp_document_folders');
+        Schema::dropIfExists('sp_attachment_folders');
 
-        Schema::create('sp_document_folders', function (Blueprint $table): void {
+        Schema::create('sp_attachment_folders', function (Blueprint $table): void {
             $table->uuid('id')->primary();
             $table->string('name');
             $table->uuid('parent_id')->nullable()->index();
@@ -314,8 +314,8 @@ class AttachmentArchitectureSafetyTest extends TestCase
                     'temp_timeout' => ['type' => 'datetime', 'nullable' => true],
                 ]
             ),
-            'sp_document_folders' => new RecordTableType(
-                table: 'sp_document_folders',
+            'sp_attachment_folders' => new RecordTableType(
+                table: 'sp_attachment_folders',
                 pmsName: 'attachments',
                 hasTenantId: false,
                 isAuthRead: false,
