@@ -136,4 +136,30 @@ class RelationshipMorphManyTest extends TestCase
         $this->assertEquals($videoId, $rows[0]->target_id);
         $this->assertEquals('km-KH', $rows[0]->locale);
     }
+
+    public function test_nested_create_overrides_client_supplied_discriminator(): void
+    {
+        $videoId = (string) Str::uuid();
+
+        $payload = [
+            'title' => 'Video 1',
+            'translations' => [
+                [
+                    'target_type' => 'promotions', // malicious/wrong value — must be overridden
+                    'target_id' => (string) Str::uuid(),
+                    'locale' => 'km-KH',
+                    'field' => 'title',
+                    'value' => 'ភាពយន្ត',
+                ],
+            ],
+        ];
+
+        RelationshipResolverUtils::processRelatedData('videos', $payload, $videoId, null, 'create');
+
+        $rows = DB::table('translations')->get();
+        $this->assertCount(1, $rows);
+        $this->assertEquals('videos', $rows[0]->target_type);
+        $this->assertEquals($videoId, $rows[0]->target_id);
+        $this->assertTrue(Str::isUuid($rows[0]->id));
+    }
 }
