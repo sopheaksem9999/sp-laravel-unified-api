@@ -653,7 +653,7 @@ class RelationshipResolverUtils
                 } elseif ('create' === $operation || $allowCreate) {
                     // Create path
                     unset($item['id']);
-                    if (!$hasPk && self::isUuidColumnType($relatedSchema->columns[$relatedPk] ?? null)) {
+                    if (!isset($item[$relatedPk]) && self::isUuidColumnType($relatedSchema->columns[$relatedPk] ?? null)) {
                         $item[$relatedPk] = (string) Str::uuid();
                     }
 
