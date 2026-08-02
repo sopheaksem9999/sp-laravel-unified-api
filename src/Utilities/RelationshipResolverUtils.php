@@ -204,7 +204,10 @@ class RelationshipResolverUtils
      */
     private static function isAttachmentRelation(array $config): bool
     {
-        return ($config['table'] ?? null) === (string) config('attachments.route_prefix', 'sp_attachments');
+        // 'sp_attachments' is the table's config key everywhere else in this codebase
+        // (AttachmentUploadController, AttachmentAccessService); it is not derived from
+        // attachments.route_prefix, which only controls the attachment routes' URL segment.
+        return ($config['table'] ?? null) === 'sp_attachments';
     }
 
     /**

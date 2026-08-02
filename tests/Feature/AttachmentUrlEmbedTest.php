@@ -7,10 +7,13 @@ namespace Sopheak\Core\Tests\Feature;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Sopheak\Core\Http\Controllers\AttachmentUploadController;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordBelongsToType;
@@ -147,6 +150,73 @@ class AttachmentUrlEmbedTest extends TestCase
         $this->assertNotNull($data[0]->profile_image);
         $this->assertStringContainsString('/sp_attachments/' . $attachmentId . '/download', $data[0]->profile_image->download_url);
         $this->assertStringContainsString('/storage/images/banner.jpg', $data[0]->profile_image->url);
+    }
+
+    public function test_embedded_attachment_still_gets_urls_when_route_prefix_is_customized(): void
+    {
+        // route_prefix (a URL segment) must not be used as a proxy for the
+        // sp_attachments table name — customizing it should not disable enrichment.
+        Config::set('attachments.route_prefix', 'media');
+
+        $videoId = (string) Str::uuid();
+        $attachmentId = (string) Str::uuid();
+
+        DB::table('videos')->insert(['id' => $videoId, 'title' => 'Video 1', 'profile_image_id' => $attachmentId]);
+        DB::table('sp_attachments')->insert([
+            'id' => $attachmentId,
+            'disk' => 'public',
+            'path' => 'images/poster.jpg',
+            'filename' => 'poster.jpg',
+            'mime_type' => 'image/jpeg',
+            'size' => 1024,
+            'visibility' => 'public',
+        ]);
+
+        $request = Request::create('/api/v1/videos', 'GET', ['select' => '*,profile_image(*)']);
+
+        $schema = SchemaRegistryUtils::get();
+        $result = RecordService::applyRequestFilters($request, $schema['videos']);
+        $data = $result['data'];
+
+        $this->assertCount(1, $data);
+        $profile = (array) $data[0]->profile_image;
+        $this->assertArrayHasKey('url', $profile);
+        $this->assertStringContainsString('/storage/images/poster.jpg', $profile['url']);
+        $this->assertArrayHasKey('download_url', $profile);
+    }
+
+    public function test_a_real_local_disk_upload_resolves_a_working_url_when_embedded(): void
+    {
+        Storage::fake('public');
+
+        $file = UploadedFile::fake()->image('poster.jpg');
+        $uploadRequest = Request::create('/attachments/upload', 'POST', [
+            'visibility' => 'public',
+        ], [], [
+            'file' => $file,
+        ]);
+
+        $uploadResponse = (new AttachmentUploadController())->upload($uploadRequest);
+        $this->assertSame(200, $uploadResponse->getStatusCode());
+
+        $uploaded = $uploadResponse->getData(true)['data'];
+        $attachmentId = $uploaded['id'];
+
+        Storage::disk('public')->assertExists($uploaded['path']);
+
+        $videoId = (string) Str::uuid();
+        DB::table('videos')->insert(['id' => $videoId, 'title' => 'Video 1', 'profile_image_id' => $attachmentId]);
+
+        $request = Request::create('/api/v1/videos', 'GET', ['select' => '*,profile_image(*)']);
+
+        $schema = SchemaRegistryUtils::get();
+        $result = RecordService::applyRequestFilters($request, $schema['videos']);
+        $data = $result['data'];
+
+        $this->assertCount(1, $data);
+        $profile = (array) $data[0]->profile_image;
+        $this->assertStringContainsString('/storage/' . $uploaded['path'], $profile['url']);
+        $this->assertStringContainsString('/sp_attachments/' . $attachmentId . '/download', $profile['download_url']);
     }
 
     public function test_non_attachment_embeds_are_unchanged(): void
