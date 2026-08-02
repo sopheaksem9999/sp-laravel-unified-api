@@ -569,7 +569,7 @@ class RelationshipResolverUtils
                 continue;
             }
 
-            $foreignKey = $config['foreign_key'] ?? null;
+            $foreignKey = $config['foreign_key'] ?? ('morphMany' === $type ? ($config['morph_id'] ?? null) : null);
             $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
 
             if (!$foreignKey) {
@@ -621,6 +621,11 @@ class RelationshipResolverUtils
 
                 // Ensure FK is set to parent ID (cannot be overridden by input)
                 $item[$foreignKey] = $recordId;
+                if ('morphMany' === $type && isset($config['morph_type'], $config['morph_class'])) {
+                    // Force discriminator column to the configured morph class
+                    $item[$config['morph_type']] = $config['morph_class'];
+                }
+
                 if ($tenantId && $hasTenant) {
                     $item[RecordConfigService::tenantColumn()] = $tenantId;
                 }
@@ -648,6 +653,10 @@ class RelationshipResolverUtils
                 } elseif ('create' === $operation || $allowCreate) {
                     // Create path
                     unset($item['id']);
+                    if (!$hasPk && self::isUuidColumnType($relatedSchema->columns[$relatedPk] ?? null)) {
+                        $item[$relatedPk] = (string) Str::uuid();
+                    }
+
                     DB::table($actualRelatedTableName)->insert($item);
                 }
             }
@@ -2333,5 +2342,35 @@ class RelationshipResolverUtils
         if ([] !== $validColumns) {
             $query->select($validColumns);
         }
+    }
+
+    /**
+     * Detect whether a column definition is uuid-typed across supported drivers.
+     *
+     * - pgsql reports the native 'uuid' type (also visible via udt_name)
+     * - mysql reports 'char(36)' / 'varchar(36)'
+     * - sqlite reports a bare 'varchar' with no length for uuid() columns
+     *   (indistinguishable from string PKs, but this package's convention is
+     *   uuid PKs for all non-integer keys)
+     *
+     * @param array<string, mixed>|null $colDef
+     */
+    private static function isUuidColumnType(?array $colDef): bool
+    {
+        if ($colDef === null) {
+            return false;
+        }
+
+        $type = strtolower((string) ($colDef['type'] ?? ''));
+
+        if ('uuid' === $type || 'uuid' === strtolower((string) ($colDef['udt_name'] ?? ''))) {
+            return true;
+        }
+
+        if (preg_match('/^(char|varchar)\(36\)$/', $type) === 1) {
+            return true;
+        }
+
+        return 'sqlite' === DB::getDriverName() && in_array($type, ['varchar', 'char'], true);
     }
 }
