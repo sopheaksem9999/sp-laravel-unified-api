@@ -97,14 +97,13 @@ class RelationshipMorphManyTest extends TestCase
 
     public function test_include_translations_filters_by_morph_class(): void
     {
-        $videoId = (string) Str::uuid();
-        $promoId = (string) Str::uuid();
+        $sharedId = (string) Str::uuid();
 
-        DB::table('videos')->insert(['id' => $videoId, 'title' => 'Video 1']);
-        DB::table('promotions')->insert(['id' => $promoId, 'title' => 'Promo 1']);
+        DB::table('videos')->insert(['id' => $sharedId, 'title' => 'Video 1']);
+        DB::table('promotions')->insert(['id' => $sharedId, 'title' => 'Promo 1']);
 
-        DB::table('translations')->insert(['id' => (string) Str::uuid(), 'target_type' => 'videos', 'target_id' => $videoId, 'locale' => 'km-KH', 'field' => 'title', 'value' => 'ភាពយន្ត']);
-        DB::table('translations')->insert(['id' => (string) Str::uuid(), 'target_type' => 'promotions', 'target_id' => $promoId, 'locale' => 'km-KH', 'field' => 'title', 'value' => 'ផ្សព្វផ្សាយ']);
+        DB::table('translations')->insert(['id' => (string) Str::uuid(), 'target_type' => 'videos', 'target_id' => $sharedId, 'locale' => 'km-KH', 'field' => 'title', 'value' => 'ភាពយន្ត']);
+        DB::table('translations')->insert(['id' => (string) Str::uuid(), 'target_type' => 'promotions', 'target_id' => $sharedId, 'locale' => 'km-KH', 'field' => 'title', 'value' => 'ផ្សព្វផ្សាយ']);
 
         $request = Request::create('/api/v1/videos', 'GET', ['select' => '*,translations(*)']);
 
