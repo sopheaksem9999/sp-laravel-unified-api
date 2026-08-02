@@ -405,7 +405,7 @@ class RelationshipResolverUtils
                 // Handle RecordMorphToManyType (built-in morphToMany)
                 if ($rel instanceof RecordMorphToManyType) {
                     $relatedTableName = $rel->related && class_exists($rel->related)
-                        ? (new $rel->related)->getTable()
+                        ? (new $rel->related())->getTable()
                         : $alias;
 
                     $result = [

@@ -170,4 +170,3 @@ final class DocsValidator
 $docsRoot = $argv[1] ?? (__DIR__ . '/../docs');
 $validator = new DocsValidator();
 exit($validator->run($docsRoot));
-

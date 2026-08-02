@@ -649,6 +649,14 @@ Accepts an array of IDs or an array of objects with the primary key.
     /**
      * @param array<string, RecordTableType> $tables
      */
+    /**
+     * @return array{}|array<int, array<string, array{}>>
+     */
+    private static function security(bool $requiresAuth): array
+    {
+        return $requiresAuth ? [['bearerAuth' => []]] : [];
+    }
+
     private static function paths(array $tables): array
     {
         $apiPrefix = RecordConfigService::apiPrefix();
@@ -777,7 +785,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                             ],
                         ],
                     ],
-                    'security' => [['bearerAuth' => []]],
+                    'security' => self::security($config->isAuthRead),
                 ] : [],
                 'post' => $canCreate ? [
                     'tags' => [$formattedRecordName],
@@ -815,7 +823,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                             ],
                         ],
                     ],
-                    'security' => [['bearerAuth' => []]],
+                    'security' => self::security($config->isAuthWrite),
                 ] : [],
             ], static fn(mixed $value): bool => [] !== $value);
 
@@ -895,7 +903,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                 ],
                             ],
                         ],
-                        'security' => [['bearerAuth' => []]],
+                        'security' => self::security($config->isAuthWrite),
                     ],
                 ];
 
@@ -979,7 +987,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                 ],
                             ],
                         ],
-                        'security' => [['bearerAuth' => []]],
+                        'security' => self::security($config->isAuthWrite),
                     ],
                 ];
             }
@@ -1038,7 +1046,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                             ],
                         ],
                     ],
-                    'security' => [['bearerAuth' => []]],
+                    'security' => self::security($config->isAuthRead),
                 ] : [],
                 'put' => $canUpdate ? [
                     'tags' => [$formattedRecordName],
@@ -1097,7 +1105,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                             ],
                         ],
                     ],
-                    'security' => [['bearerAuth' => []]],
+                    'security' => self::security($config->isAuthWrite),
                 ] : [],
                 'delete' => $canDelete ? [
                     'tags' => [$formattedRecordName],
@@ -1153,7 +1161,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                             ],
                         ],
                     ],
-                    'security' => [['bearerAuth' => []]],
+                    'security' => self::security($config->isAuthWrite),
                 ] : [],
             ], static fn(mixed $value): bool => [] !== $value);
 
@@ -1207,7 +1215,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                 ],
                             ],
                         ],
-                        'security' => [['bearerAuth' => []]],
+                        'security' => self::security($config->isAuthWrite),
                     ],
                 ];
             }
@@ -1261,7 +1269,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                 ],
                             ],
                         ],
-                        'security' => [['bearerAuth' => []]],
+                        'security' => self::security($config->isAuthWrite),
                     ],
                 ];
             }
@@ -1459,7 +1467,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                             ],
                         ],
                     ],
-                    'security' => [['bearerAuth' => []]],
+                    'security' => self::security(!($functionConfig->isPublic ?? true)),
                 ];
 
                 // Add request body for POST, PUT, PATCH methods
@@ -1702,7 +1710,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                 ],
                             ],
                         ],
-                        'security' => [['bearerAuth' => []]],
+                        'security' => self::security(!($functionConfig->isPublic ?? false)),
                     ];
 
                     // Add path parameters if any

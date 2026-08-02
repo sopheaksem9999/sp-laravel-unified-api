@@ -32,7 +32,6 @@ use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Console\McpServerCommand;
 use Sopheak\Core\Console\EnablePgsqlRlsCommand;
 use Illuminate\Support\Facades\Route;
-
 use Illuminate\Support\Facades\Event;
 use Sopheak\Core\Events\RecordCreated;
 use Sopheak\Core\Events\RecordDeleted;

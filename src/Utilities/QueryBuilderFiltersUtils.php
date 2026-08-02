@@ -348,8 +348,8 @@ class QueryBuilderFiltersUtils
         return in_array(strtolower(trim($value)), ['1', '0', 'true', 'false', 'yes', 'no', 'on', 'off'], true);
     }
 
-	    /**
-	     * Get lazy operation statistics for debugging.
+    /**
+     * Get lazy operation statistics for debugging.
      * @return array<string, float|int>
      */
     public static function getLazyStats(): array

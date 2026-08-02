@@ -31,10 +31,12 @@ class ApiClientExportService
         $baseUrl = (string) ($spec['servers'][0]['url'] ?? (string) config('app.url', ''));
         $apiPrefix = '/' . ltrim(RecordConfigService::apiPrefix(), '/');
         $apiPrefixForStrip = rtrim($apiPrefix, '/');
+        $loginPath = $this->normalizeLoginPath((string) config('record.api_docs.login_api', ''));
+        $accessTokenKey = (string) config('record.api_docs.access_token_key', 'access_token');
 
         $existingNames = $emitter->extractRequestNames($existing);
 
-        $allRequests = $this->parsePaths($spec['paths'] ?? [], $apiPrefixForStrip);
+        $allRequests = $this->parsePaths($spec['paths'] ?? [], $apiPrefixForStrip, $loginPath);
         $regenKeysProvided = $regenKeys !== null;
         $regenAll = $regenKeysProvided && in_array('all', $regenKeys, true);
         $regenSet = ($regenKeysProvided && ! $regenAll)
@@ -51,10 +53,12 @@ class ApiClientExportService
         foreach ($allRequests as $req) {
             $tag = $req['tag'];
             $isRpc = str_starts_with((string) $tag, 'RPC');
-            $tableKey = $isRpc ? 'RPC' : $tag;
-            $folderName = $isRpc ? 'RPC' : $tag;
+            $tableKey = $tag;
+            $folderName = $tag;
 
-            $inRegenSet = $regenAll || isset($regenSet[strtolower((string) $tableKey)]);
+            $inRegenSet = $regenAll
+                || isset($regenSet[strtolower((string) $tableKey)])
+                || ($isRpc && isset($regenSet['rpc']));
             $inExisting = in_array($req['name'], $existingNames, true);
 
             // Default mode (no --regen) processes everything.
@@ -90,6 +94,8 @@ class ApiClientExportService
                 queryParams: $req['queryParams'],
                 headers: [['name' => 'Accept', 'value' => 'application/json', 'enabled' => true]],
                 bodyJson: $req['bodyJson'],
+                requiresAuth: $req['requiresAuth'],
+                isLoginRequest: $req['isLoginRequest'],
             );
 
             if (! $isRpc) {
@@ -97,17 +103,18 @@ class ApiClientExportService
             }
         }
 
-        // Order folders: per-table in spec order, then RPC last.
+        // Order folders: per-table in spec order, then all RPC-prefixed folders last.
         $orderedFolders = [];
+        $rpcFolders = [];
         foreach ($folderOrder as $name) {
-            if ($name !== 'RPC') {
+            if (str_starts_with($name, 'RPC')) {
+                $rpcFolders[] = new ExportFolder($name, $foldersAccumulator[$name]);
+            } else {
                 $orderedFolders[] = new ExportFolder($name, $foldersAccumulator[$name]);
             }
         }
 
-        if (isset($foldersAccumulator['RPC'])) {
-            $orderedFolders[] = new ExportFolder('RPC', $foldersAccumulator['RPC']);
-        }
+        array_push($orderedFolders, ...$rpcFolders);
 
         // Suggestions = all non-RPC table names in spec that have no generated requests.
         $allTableNames = [];
@@ -128,7 +135,30 @@ class ApiClientExportService
             regenerated: $regenerated,
             skipped: $skipped,
             suggestions: $suggestions,
+            accessTokenKey: $accessTokenKey,
         );
+    }
+
+    /**
+     * Normalize `record.api_docs.login_api` (relative path or absolute URL) to a
+     * bare, leading-slash path so it can be compared against OpenAPI path keys.
+     */
+    private function normalizeLoginPath(string $loginApi): string
+    {
+        if ($loginApi === '') {
+            return '';
+        }
+
+        $path = $loginApi;
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            $path = (string) (parse_url($path, PHP_URL_PATH) ?? '');
+        }
+
+        if ($path === '') {
+            return '';
+        }
+
+        return rtrim('/' . ltrim($path, '/'), '/');
     }
 
     /**
@@ -137,7 +167,7 @@ class ApiClientExportService
      * @param  array<string, array<string, mixed>> $paths
      * @return array<int, array<string, mixed>>
      */
-    private function parsePaths(array $paths, string $apiPrefixForStrip): array
+    private function parsePaths(array $paths, string $apiPrefixForStrip, string $loginPath = ''): array
     {
         $requests = [];
         $validMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
@@ -146,6 +176,7 @@ class ApiClientExportService
             $strippedPath = str_starts_with($path, $apiPrefixForStrip . '/')
                 ? substr($path, strlen($apiPrefixForStrip))
                 : $path;
+            $isLoginRequest = $loginPath !== '' && rtrim((string) $path, '/') === $loginPath;
 
             foreach ($methods as $method => $op) {
                 if (! is_array($op)) {
@@ -161,6 +192,7 @@ class ApiClientExportService
                 $tag = isset($tags[0]) ? (string) $tags[0] : 'Default';
                 $name = (string) ($op['summary'] ?? $op['operationId'] ?? '');
                 $description = (string) ($op['description'] ?? '');
+                $requiresAuth = ($op['security'] ?? [['bearerAuth' => []]]) !== [];
 
                 $queryParams = [];
                 $pathParams = [];
@@ -182,6 +214,8 @@ class ApiClientExportService
                     'pathParams' => $pathParams,
                     'queryParams' => $queryParams,
                     'bodyJson' => $this->buildBodyExample($op['requestBody'] ?? null),
+                    'requiresAuth' => $requiresAuth,
+                    'isLoginRequest' => $isLoginRequest,
                 ];
             }
         }

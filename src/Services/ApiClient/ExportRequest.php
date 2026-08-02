@@ -21,6 +21,7 @@ class ExportRequest
         public readonly array $queryParams = [],
         public readonly array $headers = [],
         public readonly ?string $bodyJson = null,
-    ) {
-    }
+        public readonly bool $requiresAuth = true,
+        public readonly bool $isLoginRequest = false,
+    ) {}
 }
