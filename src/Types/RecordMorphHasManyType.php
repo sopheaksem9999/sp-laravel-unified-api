@@ -7,7 +7,7 @@ namespace Sopheak\Core\Types;
 use Sopheak\Core\Enums\RecordRelationshipsEnum;
 
 /**
- * Create a new RecordMorphManyType instance.
+ * Create a new RecordMorphHasManyType instance.
  *
  * This class represents a polymorphic has-many relationship configuration.
  * It links a parent table to a related table through a discriminator column
@@ -22,7 +22,7 @@ use Sopheak\Core\Enums\RecordRelationshipsEnum;
  *
  * Example usage:
  * ```php
- * $relation = new RecordMorphManyType(
+ * $relation = new RecordMorphHasManyType(
  *     table: 'translations',
  *     morphType: 'target_type',
  *     morphId: 'target_id',
@@ -31,7 +31,7 @@ use Sopheak\Core\Enums\RecordRelationshipsEnum;
  * );
  * ```
  */
-class RecordMorphManyType
+class RecordMorphHasManyType
 {
     public function __construct(
         public string $table,
