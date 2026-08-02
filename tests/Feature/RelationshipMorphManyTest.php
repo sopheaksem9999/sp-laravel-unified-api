@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Tests\TestCase;
-use Sopheak\Core\Types\RecordMorphManyType;
+use Sopheak\Core\Types\RecordMorphHasManyType;
 use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Utilities\RelationshipResolverUtils;
@@ -57,7 +57,7 @@ class RelationshipMorphManyTest extends TestCase
                 softDeletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [
-                    'translations' => new RecordMorphManyType(
+                    'translations' => new RecordMorphHasManyType(
                         table: 'translations',
                         morphType: 'target_type',
                         morphId: 'target_id',
@@ -73,7 +73,7 @@ class RelationshipMorphManyTest extends TestCase
                 softDeletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [
-                    'translations' => new RecordMorphManyType(
+                    'translations' => new RecordMorphHasManyType(
                         table: 'translations',
                         morphType: 'target_type',
                         morphId: 'target_id',

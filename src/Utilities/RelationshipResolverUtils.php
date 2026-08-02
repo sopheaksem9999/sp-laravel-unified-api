@@ -12,7 +12,7 @@ use Sopheak\Core\Types\RecordHasManyThroughType;
 use Sopheak\Core\Types\RecordHasManyType;
 use Sopheak\Core\Types\RecordMetaBelongsToManyType;
 use Sopheak\Core\Types\RecordMetaHasManyThroughType;
-use Sopheak\Core\Types\RecordMorphManyType;
+use Sopheak\Core\Types\RecordMorphHasManyType;
 use Sopheak\Core\Types\RecordMorphToManyType;
 use Sopheak\Core\Types\RecordSpatiePermissionType;
 use Illuminate\Database\Query\Builder;
@@ -330,8 +330,8 @@ class RelationshipResolverUtils
                     return $result;
                 }
 
-                // Handle RecordMorphManyType (polymorphic hasMany)
-                if ($rel instanceof RecordMorphManyType) {
+                // Handle RecordMorphHasManyType (polymorphic hasMany)
+                if ($rel instanceof RecordMorphHasManyType) {
                     $result = [
                         'type' => 'morphMany',
                         'table' => $rel->table,
