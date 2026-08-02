@@ -10,11 +10,11 @@ use Sopheak\Core\Services\ApiClient\BrunoEmitter;
 class ExportBrunoCommand extends AbstractExportCommand
 {
     protected $signature = 'sp-laravel-api:export-bruno
-                            {--output= : Output file path. Defaults to api-clients/bruno/collection.bru (relative to project root).}
+                            {--output= : Output folder path. Defaults to api-client/bruno (relative to project root).}
                             {--regen= : Comma-separated table keys to regenerate, or "all". Tables not listed are skipped if already in the collection.}
-                            {--dry-run : Print the diff summary; do not write the file.}';
+                            {--dry-run : Print the diff summary; do not write files.}';
 
-    protected $description = 'Export the OpenAPI spec to a Bruno v3 collection file.';
+    protected $description = 'Export the OpenAPI spec to a Bruno collection folder with sub-folders for each table.';
 
     protected function emitter(): ApiClientEmitterInterface
     {
@@ -23,7 +23,7 @@ class ExportBrunoCommand extends AbstractExportCommand
 
     protected function defaultOutputPath(): string
     {
-        return 'api-clients/bruno/collection.bru';
+        return 'api-client/bruno';
     }
 
     protected function formatName(): string

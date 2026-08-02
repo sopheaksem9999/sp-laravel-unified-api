@@ -9,7 +9,9 @@ interface ApiClientEmitterInterface
     /**
      * Render an ExportResult into the tool-specific collection shape.
      *
-     * Returned array is what gets json_encode'd and written to disk.
+     * For single-file emitters (Postman), returns the collection array structure.
+     * For multi-file emitters (Bruno), returns an array of relative file paths
+     * to string content.
      *
      * @return array<string, mixed>
      */

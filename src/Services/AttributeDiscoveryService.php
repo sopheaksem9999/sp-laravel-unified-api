@@ -65,7 +65,7 @@ class AttributeDiscoveryService
                 foreach ($method->getAttributes(RecordFunction::class) as $attrRef) {
                     /** @var RecordFunction $functionAttr */
                     $functionAttr = $attrRef->newInstance();
-                    
+
                     if ($functionAttr->table === null) {
                         continue;
                     }

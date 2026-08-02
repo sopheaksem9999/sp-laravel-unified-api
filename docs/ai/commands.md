@@ -1,3 +1,13 @@
+---
+title: "Commands"
+description: "Package CLI commands reference for development, testing, and static analysis."
+keywords:
+  - commands
+  - artisan
+  - composer
+  - phpunit
+---
+
 # Commands (Shared)
 
 ## Install

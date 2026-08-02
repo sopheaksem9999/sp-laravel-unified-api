@@ -224,7 +224,7 @@ class RecordCacheService
         if ($tenantEnabled && (null === $cacheTenantId || '' === $cacheTenantId)) {
             throw new InvalidArgumentException(sprintf(
                 'Cannot clear cache for table [%s]: tenant is enabled but no tenantId was provided. '
-                .'Pass the resolved tenant id (e.g. from the request via RecordUtils::resolveTenantIdFromRequest).',
+                . 'Pass the resolved tenant id (e.g. from the request via RecordUtils::resolveTenantIdFromRequest).',
                 $table
             ));
         }

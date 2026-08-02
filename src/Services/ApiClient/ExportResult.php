@@ -22,8 +22,8 @@ class ExportResult
         public readonly array $regenerated = [],
         public readonly array $skipped = [],
         public readonly array $suggestions = [],
-    ) {
-    }
+        public readonly string $accessTokenKey = 'access_token',
+    ) {}
 
     public function isEmpty(): bool
     {

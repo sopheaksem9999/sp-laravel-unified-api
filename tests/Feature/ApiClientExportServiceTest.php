@@ -126,8 +126,92 @@ class ApiClientExportServiceTest extends TestCase
 
         $result = $this->service->build($spec, null, null, $this->brunoEmitter());
 
-        $folderNames = array_map(static fn (ExportFolder $f): string => $f->name, $result->folders);
+        $folderNames = array_map(static fn(ExportFolder $f): string => $f->name, $result->folders);
         $this->assertSame(['Users', 'Orders', 'RPC'], $folderNames);
+    }
+
+    public function test_rpc_subgroups_get_their_own_folder_instead_of_collapsing(): void
+    {
+        $spec = $this->buildFixtureSpec();
+        $spec['paths']['/api/v1/rpc/auth/login'] = [
+            'post' => [
+                'tags' => ['RPC - Auth'],
+                'summary' => 'RPC - Login',
+                'description' => 'Auth login',
+            ],
+        ];
+        $spec['paths']['/api/v1/rpc/media/upload'] = [
+            'post' => [
+                'tags' => ['RPC - Media'],
+                'summary' => 'RPC - Upload',
+                'description' => 'Media upload',
+            ],
+        ];
+
+        $result = $this->service->build($spec, null, null, $this->brunoEmitter());
+
+        $folderNames = array_map(static fn(ExportFolder $f): string => $f->name, $result->folders);
+        $this->assertSame(['Users', 'Orders', 'RPC - Auth', 'RPC - Media'], $folderNames);
+    }
+
+    public function test_regen_rpc_wildcard_regenerates_every_rpc_subgroup(): void
+    {
+        $spec = $this->buildFixtureSpec();
+        $spec['paths']['/api/v1/rpc/auth/login'] = [
+            'post' => [
+                'tags' => ['RPC - Auth'],
+                'summary' => 'RPC - Login',
+                'description' => 'Auth login',
+            ],
+        ];
+        $spec['paths']['/api/v1/rpc/media/upload'] = [
+            'post' => [
+                'tags' => ['RPC - Media'],
+                'summary' => 'RPC - Upload',
+                'description' => 'Media upload',
+            ],
+        ];
+        $existing = [
+            'folders' => [
+                ['name' => 'RPC - Auth', 'requests' => [['name' => 'RPC - Login']]],
+                ['name' => 'RPC - Media', 'requests' => [['name' => 'RPC - Upload']]],
+            ],
+        ];
+
+        $result = $this->service->build($spec, $existing, ['rpc'], $this->brunoEmitter());
+
+        $this->assertContains('RPC - Login', $result->regenerated);
+        $this->assertContains('RPC - Upload', $result->regenerated);
+    }
+
+    public function test_regen_exact_rpc_subgroup_tag_only_regenerates_that_folder(): void
+    {
+        $spec = $this->buildFixtureSpec();
+        $spec['paths']['/api/v1/rpc/auth/login'] = [
+            'post' => [
+                'tags' => ['RPC - Auth'],
+                'summary' => 'RPC - Login',
+                'description' => 'Auth login',
+            ],
+        ];
+        $spec['paths']['/api/v1/rpc/media/upload'] = [
+            'post' => [
+                'tags' => ['RPC - Media'],
+                'summary' => 'RPC - Upload',
+                'description' => 'Media upload',
+            ],
+        ];
+        $existing = [
+            'folders' => [
+                ['name' => 'RPC - Auth', 'requests' => [['name' => 'RPC - Login']]],
+                ['name' => 'RPC - Media', 'requests' => [['name' => 'RPC - Upload']]],
+            ],
+        ];
+
+        $result = $this->service->build($spec, $existing, ['RPC - Auth'], $this->brunoEmitter());
+
+        $this->assertContains('RPC - Login', $result->regenerated);
+        $this->assertContains('RPC - Upload', $result->skipped);
     }
 
     public function test_appends_existing_rpc_requests_as_skipped_when_table_not_in_regen(): void
@@ -226,9 +310,131 @@ class ApiClientExportServiceTest extends TestCase
         $this->assertContains('page', $names);
         $this->assertContains('per_page', $names);
 
-        $page = array_values(array_filter($queryParams, static fn (array $p): bool => $p['name'] === 'page'))[0];
+        $page = array_values(array_filter($queryParams, static fn(array $p): bool => $p['name'] === 'page'))[0];
         $this->assertSame('1', (string) $page['value']);
         $this->assertTrue($page['enabled']);
+    }
+
+    public function test_marks_request_as_not_requiring_auth_when_spec_security_is_empty(): void
+    {
+        $spec = [
+            'openapi' => '3.0.3',
+            'info' => ['title' => 'TestApp', 'version' => '1.0.0'],
+            'servers' => [['url' => 'http://localhost']],
+            'paths' => [
+                '/api/v1/users' => [
+                    'get' => [
+                        'tags' => ['Users'],
+                        'summary' => 'List Users',
+                        'security' => [],
+                    ],
+                ],
+            ],
+        ];
+
+        $result = $this->service->build($spec, null, null, $this->brunoEmitter());
+
+        $this->assertFalse($result->folders[0]->requests[0]->requiresAuth);
+    }
+
+    public function test_marks_request_as_requiring_auth_when_spec_security_is_absent_or_set(): void
+    {
+        $spec = [
+            'openapi' => '3.0.3',
+            'info' => ['title' => 'TestApp', 'version' => '1.0.0'],
+            'servers' => [['url' => 'http://localhost']],
+            'paths' => [
+                '/api/v1/users' => [
+                    'get' => [
+                        'tags' => ['Users'],
+                        'summary' => 'List Users',
+                        // no 'security' key at all
+                    ],
+                ],
+                '/api/v1/orders' => [
+                    'get' => [
+                        'tags' => ['Orders'],
+                        'summary' => 'List Orders',
+                        'security' => [['bearerAuth' => []]],
+                    ],
+                ],
+            ],
+        ];
+
+        $result = $this->service->build($spec, null, null, $this->brunoEmitter());
+
+        $this->assertTrue($result->folders[0]->requests[0]->requiresAuth);
+        $this->assertTrue($result->folders[1]->requests[0]->requiresAuth);
+    }
+
+    public function test_marks_rpc_request_matching_login_api_config_as_login_request(): void
+    {
+        Config::set('record.api_docs.login_api', '/api/v1/rpc/auth/login');
+        $spec = $this->buildFixtureSpec();
+        $spec['paths']['/api/v1/rpc/auth/login'] = [
+            'post' => [
+                'tags' => ['RPC - Auth'],
+                'summary' => 'RPC - Login',
+            ],
+        ];
+        $spec['paths']['/api/v1/rpc/auth/logout'] = [
+            'post' => [
+                'tags' => ['RPC - Auth'],
+                'summary' => 'RPC - Logout',
+            ],
+        ];
+
+        $result = $this->service->build($spec, null, null, $this->brunoEmitter());
+
+        $rpcFolder = array_values(array_filter($result->folders, static fn(ExportFolder $f): bool => $f->name === 'RPC - Auth'))[0];
+        $byName = [];
+        foreach ($rpcFolder->requests as $request) {
+            $byName[$request->name] = $request;
+        }
+
+        $this->assertTrue($byName['RPC - Login']->isLoginRequest);
+        $this->assertFalse($byName['RPC - Logout']->isLoginRequest);
+    }
+
+    public function test_matches_login_api_config_given_as_absolute_url(): void
+    {
+        Config::set('record.api_docs.login_api', 'https://api.example.com/api/v1/rpc/auth/login');
+        $spec = $this->buildFixtureSpec();
+        $spec['paths']['/api/v1/rpc/auth/login'] = [
+            'post' => [
+                'tags' => ['RPC - Auth'],
+                'summary' => 'RPC - Login',
+            ],
+        ];
+
+        $result = $this->service->build($spec, null, null, $this->brunoEmitter());
+
+        $rpcFolder = $result->folders[2];
+        $this->assertTrue($rpcFolder->requests[0]->isLoginRequest);
+    }
+
+    public function test_no_request_is_marked_as_login_when_login_api_does_not_match_anything(): void
+    {
+        Config::set('record.api_docs.login_api', '/v1/auth/login');
+        $spec = $this->buildFixtureSpec();
+
+        $result = $this->service->build($spec, null, null, $this->brunoEmitter());
+
+        foreach ($result->folders as $folder) {
+            foreach ($folder->requests as $request) {
+                $this->assertFalse($request->isLoginRequest);
+            }
+        }
+    }
+
+    public function test_uses_configured_access_token_key_on_export_result(): void
+    {
+        Config::set('record.api_docs.access_token_key', 'auth_token');
+        $spec = $this->buildFixtureSpec();
+
+        $result = $this->service->build($spec, null, null, $this->brunoEmitter());
+
+        $this->assertSame('auth_token', $result->accessTokenKey);
     }
 
     public function test_uses_app_name_as_collection_name(): void

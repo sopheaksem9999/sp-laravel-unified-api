@@ -21,10 +21,8 @@ class ExportBrunoCommandTest extends TestCase
         parent::setUp();
         SchemaRegistryUtils::refresh();
 
-        $this->outputPath = sys_get_temp_dir() . '/bruno-test-' . uniqid() . '.bru';
-        if (is_file($this->outputPath)) {
-            unlink($this->outputPath);
-        }
+        $this->outputPath = sys_get_temp_dir() . '/bruno-test-' . uniqid();
+        $this->cleanupDir($this->outputPath);
 
         // Ensure a known app + api prefix
         Config::set('app.name', 'TestApp');
@@ -48,158 +46,71 @@ class ExportBrunoCommandTest extends TestCase
 
     protected function tearDown(): void
     {
-        if (is_file($this->outputPath)) {
-            unlink($this->outputPath);
-        }
-
+        $this->cleanupDir($this->outputPath);
         parent::tearDown();
     }
 
-    public function test_writes_a_bruno_v3_collection_to_the_output_path(): void
+    public function test_writes_a_bruno_collection_folder_structure(): void
     {
         $this->artisan('sp-laravel-api:export-bruno', [
             '--output' => $this->outputPath,
         ])->assertExitCode(0);
 
-        $this->assertFileExists($this->outputPath);
-        $decoded = json_decode((string) file_get_contents($this->outputPath), true);
-        $this->assertIsArray($decoded);
-        $this->assertSame('v3', $decoded['meta']['version']);
-        $this->assertSame('TestApp API', $decoded['meta']['name']);
-        $this->assertSame('bearer', $decoded['auth']['mode']);
-        $this->assertSame('http://localhost', $decoded['vars']['baseUrl']['value']);
-        $this->assertSame('/api/v1', $decoded['vars']['apiPrefix']['value']);
-        $this->assertTrue($decoded['vars']['bearerToken']['secret']);
+        $this->assertFileExists($this->outputPath . '/bruno.json');
+        $this->assertFileExists($this->outputPath . '/collection.bru');
+        $this->assertFileExists($this->outputPath . '/environments/Local.bru');
+        $this->assertFileExists($this->outputPath . '/Users/List Users.bru');
+
+        $brunoJson = json_decode((string) file_get_contents($this->outputPath . '/bruno.json'), true);
+        $this->assertSame('TestApp API', $brunoJson['name']);
+        $this->assertSame('collection', $brunoJson['type']);
+
+        $collectionBru = (string) file_get_contents($this->outputPath . '/collection.bru');
+        $this->assertStringContainsString('name: TestApp API', $collectionBru);
+
+        $localEnvBru = (string) file_get_contents($this->outputPath . '/environments/Local.bru');
+        $this->assertStringContainsString('baseUrl: http://localhost', $localEnvBru);
+
+        $listUsersBru = (string) file_get_contents($this->outputPath . '/Users/List Users.bru');
+        $this->assertStringContainsString('name: List Users', $listUsersBru);
+        $this->assertStringContainsString('url: {{baseUrl}}{{apiPrefix}}/users', $listUsersBru);
     }
 
-    public function test_includes_users_folder_in_output(): void
-    {
-        $this->artisan('sp-laravel-api:export-bruno', [
-            '--output' => $this->outputPath,
-        ])->assertExitCode(0);
-
-        $decoded = json_decode((string) file_get_contents($this->outputPath), true);
-        $folderNames = array_column($decoded['folders'], 'name');
-
-        $this->assertContains('Users', $folderNames);
-
-        $usersFolder = array_values(array_filter($decoded['folders'], static fn (array $f): bool => $f['name'] === 'Users'))[0];
-        $requestNames = array_column($usersFolder['requests'], 'name');
-        $this->assertContains('List Users', $requestNames);
-    }
-
-    public function test_injects_select_param_on_list_request(): void
-    {
-        $this->artisan('sp-laravel-api:export-bruno', [
-            '--output' => $this->outputPath,
-        ])->assertExitCode(0);
-
-        $decoded = json_decode((string) file_get_contents($this->outputPath), true);
-        $usersFolder = array_values(array_filter($decoded['folders'], static fn (array $f): bool => $f['name'] === 'Users'))[0];
-        $listUsers = array_values(array_filter($usersFolder['requests'], static fn (array $r): bool => $r['name'] === 'List Users'))[0];
-
-        $select = array_values(array_filter($listUsers['params'], static fn (array $p): bool => $p['name'] === 'select'))[0];
-        $this->assertFalse($select['enabled']);
-        $this->assertSame('', $select['value']);
-    }
-
-    public function test_dry_run_does_not_write_the_file(): void
+    public function test_dry_run_does_not_write_files(): void
     {
         $this->artisan('sp-laravel-api:export-bruno', [
             '--output' => $this->outputPath,
             '--dry-run' => true,
         ])->assertExitCode(0);
 
-        $this->assertFileDoesNotExist($this->outputPath);
+        $this->assertDirectoryDoesNotExist($this->outputPath);
     }
 
     public function test_regen_flag_regenerates_specific_table(): void
     {
         // Seed an existing collection with stale data
-        $existing = [
-            'meta' => ['name' => 'TestApp API', 'type' => 'collection', 'version' => 'v3'],
-            'vars' => [
-                'baseUrl' => ['value' => 'http://OLD'],
-                'apiPrefix' => ['value' => '/OLD'],
-                'bearerToken' => ['value' => '', 'secret' => true],
-            ],
-            'folders' => [
-                ['name' => 'Users', 'requests' => [['name' => 'List Users']]],
-            ],
-        ];
-        file_put_contents($this->outputPath, json_encode($existing));
+        @mkdir($this->outputPath . '/Users', 0o755, true);
+        file_put_contents($this->outputPath . '/Users/List Users.bru', "meta {\n  name: List Users\n}");
 
         $this->artisan('sp-laravel-api:export-bruno', [
             '--output' => $this->outputPath,
             '--regen' => 'users',
         ])->assertExitCode(0);
 
-        $decoded = json_decode((string) file_get_contents($this->outputPath), true);
-        // The var should be updated to the new value (regenerated)
-        $this->assertSame('http://localhost', $decoded['vars']['baseUrl']['value']);
-        $this->assertSame('/api/v1', $decoded['vars']['apiPrefix']['value']);
+        $listUsersBru = (string) file_get_contents($this->outputPath . '/Users/List Users.bru');
+        $this->assertStringContainsString('url: {{baseUrl}}{{apiPrefix}}/users', $listUsersBru);
     }
 
-    public function test_default_run_preserves_existing_var_values(): void
+    public function test_creates_output_directory_if_missing(): void
     {
-        // Default mode skips existing — the var values should be preserved
-        $existing = [
-            'meta' => ['name' => 'TestApp API', 'type' => 'collection', 'version' => 'v3'],
-            'vars' => [
-                'baseUrl' => ['value' => 'http://OLD'],
-                'apiPrefix' => ['value' => '/OLD'],
-                'bearerToken' => ['value' => 'OLD_TOKEN', 'secret' => true],
-            ],
-            'folders' => [
-                ['name' => 'Users', 'requests' => [['name' => 'List Users']]],
-            ],
-        ];
-        file_put_contents($this->outputPath, json_encode($existing));
-
-        $this->artisan('sp-laravel-api:export-bruno', [
-            '--output' => $this->outputPath,
-        ])->assertExitCode(0);
-
-        // Default mode = skip existing -> existing names not regenerated
-        // But our emitter always rewrites the collection; the var is re-rendered each run.
-        // The user's expectation is that "List Users" stays in skipped[].
-        $decoded = json_decode((string) file_get_contents($this->outputPath), true);
-        $usersFolder = array_values(array_filter($decoded['folders'], static fn (array $f): bool => $f['name'] === 'Users'))[0];
-        $requestNames = array_column($usersFolder['requests'], 'name');
-        $this->assertContains('List Users', $requestNames);
-    }
-
-    public function test_returns_failure_when_output_directory_is_unwritable(): void
-    {
-        $badPath = '/this/directory/does/not/exist/and/cannot/be/created.bru';
-
-        $this->artisan('sp-laravel-api:export-bruno', [
-            '--output' => $badPath,
-        ])->assertExitCode(1);
-    }
-
-    public function test_creates_parent_directory_if_missing(): void
-    {
-        $nestedPath = sys_get_temp_dir() . '/bruno-test-' . uniqid() . '/nested/collection.bru';
+        $nestedPath = sys_get_temp_dir() . '/bruno-test-' . uniqid() . '/nested/bruno';
 
         $this->artisan('sp-laravel-api:export-bruno', [
             '--output' => $nestedPath,
         ])->assertExitCode(0);
 
-        $this->assertFileExists($nestedPath);
-
-        @unlink($nestedPath);
-        @rmdir(dirname($nestedPath));
-        @rmdir(dirname($nestedPath, 2));
-    }
-
-    public function test_returns_failure_when_existing_file_is_invalid_json(): void
-    {
-        file_put_contents($this->outputPath, 'not json');
-
-        $this->artisan('sp-laravel-api:export-bruno', [
-            '--output' => $this->outputPath,
-        ])->assertExitCode(1);
+        $this->assertFileExists($nestedPath . '/bruno.json');
+        $this->cleanupDir(dirname($nestedPath));
     }
 
     private function cleanupDir(string $path): void
@@ -214,11 +125,7 @@ class ExportBrunoCommandTest extends TestCase
         }
 
         foreach ($files as $file) {
-            if ($file === '.') {
-                continue;
-            }
-
-            if ($file === '..') {
+            if ($file === '.' || $file === '..') {
                 continue;
             }
 

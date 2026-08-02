@@ -1,3 +1,12 @@
+---
+title: "Project Context"
+description: "High-level overview, technology stack, and repository map for SP Laravel API core package."
+keywords:
+  - project context
+  - repository map
+  - stack
+---
+
 # Project Context (Shared)
 
 ## TL;DR

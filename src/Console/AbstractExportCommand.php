@@ -59,6 +59,8 @@ abstract class AbstractExportCommand extends Command
 
                 $existing = $decoded;
             }
+        } elseif (is_dir($outputPath)) {
+            $existing = $this->loadExistingDirectory($outputPath);
         }
 
         try {
@@ -86,6 +88,23 @@ abstract class AbstractExportCommand extends Command
         $this->line('Done. Run with --regen=all to regenerate the full collection.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * @return array<string, string>|null
+     */
+    private function loadExistingDirectory(string $outputPath): ?array
+    {
+        $files = [];
+        $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($outputPath));
+        foreach ($iterator as $file) {
+            if ($file->isFile() && $file->getExtension() === 'bru') {
+                $relativePath = ltrim(substr($file->getPathname(), strlen($outputPath)), '/\\');
+                $files[$relativePath] = (string) file_get_contents($file->getPathname());
+            }
+        }
+
+        return $files !== [] ? $files : null;
     }
 
     private function resolveOutputPath(): string
@@ -123,7 +142,7 @@ abstract class AbstractExportCommand extends Command
         }
 
         $available = $this->collectSpecTags($spec);
-        $invalid = array_values(array_filter($regenKeys, static fn (string $k): bool => ! isset($available[strtolower($k)])));
+        $invalid = array_values(array_filter($regenKeys, static fn(string $k): bool => ! isset($available[strtolower($k)])));
 
         if ($invalid !== []) {
             $this->error('Invalid --regen value(s): ' . implode(', ', $invalid));
@@ -162,6 +181,38 @@ abstract class AbstractExportCommand extends Command
      */
     private function writeCollection(string $outputPath, array $rendered): bool
     {
+        $isFileMap = true;
+        foreach ($rendered as $k => $v) {
+            if (! is_string($k) || ! is_string($v)) {
+                $isFileMap = false;
+                break;
+            }
+        }
+
+        if ($isFileMap && $rendered !== []) {
+            $baseDir = $outputPath;
+            foreach ($rendered as $relativePath => $content) {
+                $fullPath = $baseDir . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $relativePath);
+                $dir = dirname($fullPath);
+                if (! is_dir($dir)) {
+                    $created = @mkdir($dir, 0o755, true);
+                    if (! $created && ! is_dir($dir)) {
+                        $this->error('Failed to create directory: ' . $dir);
+
+                        return false;
+                    }
+                }
+
+                if (@file_put_contents($fullPath, $content) === false) {
+                    $this->error('Failed to write file: ' . $fullPath);
+
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         $directory = dirname($outputPath);
         if (! is_dir($directory)) {
             $created = @mkdir($directory, 0o755, true);

@@ -24,16 +24,18 @@ The package ships two Artisan commands that turn the auto-generated OpenAPI spec
   - [How the diff works](#how-the-diff-works)
   - [Output layout](#output-layout)
   - [Collection variables](#collection-variables)
+  - [Per-endpoint authentication](#per-endpoint-authentication)
+  - [Login token auto-capture](#login-token-auto-capture)
   - [Format-specific behavior](#format-specific-behavior)
   - [Examples](#examples)
 
 ## Quick start
 
 ```bash
-# Export to Bruno (writes api-clients/bruno/collection.bru)
+# Export to Bruno (writes api-client/bruno/ folder with subfolders for each table)
 php artisan sp-laravel-api:export-bruno
 
-# Export to Postman (writes api-clients/postman/collection.json)
+# Export to Postman (writes api-client/postman/collection.json)
 php artisan sp-laravel-api:export-postman
 
 # Preview the diff without writing
@@ -52,16 +54,16 @@ The first run creates the collection with every endpoint in the spec. Subsequent
 
 | Command | Default output | Format |
 |---|---|---|
-| `sp-laravel-api:export-bruno`   | `api-clients/bruno/collection.bru`     | Bruno v3 (JSON in a `.bru` file) |
-| `sp-laravel-api:export-postman` | `api-clients/postman/collection.json`  | Postman v2.1 |
+| `sp-laravel-api:export-bruno`   | `api-client/bruno`                   | Bruno collection folder (with sub-folders per table and `.bru` files) |
+| `sp-laravel-api:export-postman` | `api-client/postman/collection.json`  | Postman v2.1 |
 
 ## Flags
 
 | Flag | Default | Description |
 |---|---|---|
-| `--output=<path>` | (format-specific default) | Output file path. Relative paths are resolved from `base_path()`. The parent directory is created if it doesn't exist. |
-| `--regen=<list>`  | (none)             | Comma-separated table keys to regenerate, or `all`. Matching is case-insensitive against OpenAPI tags. Tables not listed are skipped if they already exist in the collection. |
-| `--dry-run`       | `false`            | Print the diff summary to stdout; do not write the file. |
+| `--output=<path>` | (format-specific default) | Output folder/file path. Relative paths are resolved from `base_path()`. Parent directories are created if they don't exist. |
+| `--regen=<list>`  | (none)             | Comma-separated table keys to regenerate, or `all`. Matching is case-insensitive against OpenAPI tags. `rpc` is a wildcard that regenerates every RPC-prefixed folder (`RPC`, `RPC - Auth`, `RPC - Media`, ...) at once; an exact subgroup tag (e.g. `RPC - Auth`) regenerates only that folder. Tables not listed are skipped if they already exist in the collection. |
+| `--dry-run`       | `false`            | Print the diff summary to stdout; do not write files. |
 
 ## Exit codes
 
@@ -90,18 +92,27 @@ The default paths are relative to `base_path()` (your Laravel app root):
 
 ```
 your-app/
-└── api-clients/
+└── api-client/
     ├── bruno/
-    │   └── collection.bru        # Bruno v3 (JSON)
+    │   ├── bruno.json            # Collection manifest
+    │   ├── collection.bru        # Bearer auth mode (no vars)
+    │   ├── environments/
+    │   │   └── Local.bru         # baseUrl / apiPrefix / bearerToken (Bruno environment)
+    │   ├── Users/                # Folder per table tag
+    │   │   ├── List Users.bru
+    │   │   ├── Create Users.bru
+    │   │   └── ...
+    │   ├── RPC - Auth/           # One folder per RPC subgroup tag (last, in spec order)
+    │   │   └── ...
+    │   └── RPC - Media/
+    │       └── ...
     └── postman/
-        └── collection.json       # Postman v2.1
+        └── collection.json       # Postman v2.1 JSON
 ```
 
 Override with `--output=`. The path can be absolute or relative.
 
 ## Collection variables
-
-Both formats get three collection-level variables:
 
 | Name          | Value                  | Notes |
 |---------------|------------------------|-------|
@@ -111,6 +122,28 @@ Both formats get three collection-level variables:
 
 The request URL is built as `{{baseUrl}}{{apiPrefix}}{{path}}`, so the same collection works across local, staging, and production by changing the `baseUrl` var.
 
+**Bruno** stores these in `environments/Local.bru`, a proper Bruno environment (selectable from the environment dropdown in the app), regenerated from `config('app.url')` on every export run. Duplicate it inside Bruno to add `Staging`/`Production` environments — exports won't touch environment files other than `Local.bru`.
+
+**Postman** stores them as collection-level `variable[]` entries (see [Format-specific behavior](#format-specific-behavior)).
+
+## Per-endpoint authentication
+
+Each request's auth requirement is read from the OpenAPI `security` field, which in turn reflects the table's `isAuthRead`/`isAuthWrite` flags (`#[RecordTable]`) or a function's `isPublic` flag (`#[RecordFunction]`/`#[RecordGlobalFunction]`) — the same flags that drive runtime enforcement.
+
+| | Requires auth | Public (no auth) |
+|---|---|---|
+| **Bruno** | `auth: inherit` (uses the collection's bearer auth) | `auth: none` |
+| **Postman** | No override — inherits the collection's bearer auth | `"auth": {"type": "noauth"}` on the request |
+
+## Login token auto-capture
+
+If `config('record.api_docs.login_api')` (the same setting used by the docs UI's login form) matches the path of a generated RPC request, that request gets a script that captures the access token automatically:
+
+- **Bruno**: a `script:post-response` block that recursively searches the JSON response for a key named `config('record.api_docs.access_token_key')` (default `access_token`) and calls `bru.setVar("bearerToken", token)` — a runtime variable, which takes precedence over the `environments/Local.bru` value. Run "Login" once and every other request in the session is authenticated.
+- **Postman**: a `"test"` event script on the item doing the same search via `pm.response.json()` and writing the result with `pm.collectionVariables.set("bearerToken", token)`.
+
+The token search matches whatever key structure the login endpoint actually returns (top-level or nested), mirroring `routes/web.php`'s `/api-docs/auth/login` proxy exactly. If `login_api` is unset or doesn't match any generated request, no script is attached.
+
 ## Format-specific behavior
 
 | Behavior | Bruno | Postman |
@@ -118,7 +151,7 @@ The request URL is built as `{{baseUrl}}{{apiPrefix}}{{path}}`, so the same coll
 | Auth at collection level | `bearer` mode | `bearer` with `token: {{bearerToken}}` |
 | `select` query param on list endpoints | Injected as a **disabled** param with description | Omitted, but description includes a `Tip:` line |
 | Folder naming | First `tag` from the OpenAPI operation (pluralized) | Same as Bruno |
-| RPC endpoints | Single `RPC` folder appended last | Same as Bruno |
+| RPC endpoints | One folder per RPC tag (`RPC`, `RPC - Auth`, `RPC - Media`, ...), all appended last in spec order | Same as Bruno |
 | Request naming | OpenAPI `summary` (e.g. `List Users`) | Same as Bruno |
 
 In Bruno, the disabled `select` param keeps the field visible in the UI but prevents accidental sends. In Postman, omitting the param is the cleaner choice since Postman has no `enabled:false` concept; the description tells the user what to do.
