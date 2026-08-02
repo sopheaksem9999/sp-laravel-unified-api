@@ -79,7 +79,6 @@ class SyncRecordColumnsCommand extends Command
                 'sp_attachments',
                 'sp_attachment_links',
                 'sp_attachment_folders',
-                'sp_document_folders',
                 'sp_webhook_endpoints',
                 'sp_webhook_subscriptions',
                 'sp_webhook_deliveries',
