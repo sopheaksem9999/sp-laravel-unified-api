@@ -12,6 +12,7 @@ use Sopheak\Core\Types\RecordHasManyThroughType;
 use Sopheak\Core\Types\RecordHasManyType;
 use Sopheak\Core\Types\RecordMetaBelongsToManyType;
 use Sopheak\Core\Types\RecordMetaHasManyThroughType;
+use Sopheak\Core\Types\RecordMorphManyType;
 use Sopheak\Core\Types\RecordMorphToManyType;
 use Sopheak\Core\Types\RecordSpatiePermissionType;
 use Illuminate\Database\Query\Builder;
@@ -106,6 +107,11 @@ class RelationshipResolverUtils
 
                     break;
 
+                case 'morphMany':
+                    $builder = self::addMorphManySubquery($builder, $table, $safeAlias, $config, $columns, $tenantId, $schema);
+
+                    break;
+
                 case 'hasManyThrough':
                     $builder = self::addHasManyThroughSubquery($builder, $table, $safeAlias, $config, $columns, $tenantId, $schema);
 
@@ -153,11 +159,17 @@ class RelationshipResolverUtils
                         $decoded = (array) $jsonData;
                     } elseif (null === $jsonData) {
                         // default based on relationship multiplicity
-                        if (in_array($relType, ['hasMany', 'belongsToMany', 'morphToMany', 'hasManyThrough'], true)) {
+                        if (in_array($relType, ['hasMany', 'morphMany', 'belongsToMany', 'morphToMany', 'hasManyThrough'], true)) {
                             $decoded = [];
                         } else {
                             $decoded = null; // belongsTo / hasOne
                         }
+                    }
+
+                    // morphMany subquery results decode to assoc arrays; normalize to objects
+                    // to match the shape produced by the non-subquery loading path
+                    if ('morphMany' === $relType && is_array($decoded)) {
+                        $decoded = array_map(static fn(mixed $item): mixed => is_array($item) ? (object) $item : $item, $decoded);
                     }
 
                     // Assign decoded value back to record using original alias
@@ -307,6 +319,25 @@ class RelationshipResolverUtils
                         'type' => 'hasMany',
                         'table' => $rel->table,
                         'foreign_key' => $rel->foreignKey ?? (Str::singular($mainTable) . '_id'),
+                        'local_key' => $rel->localKey ?? $localPk,
+                        'selectable' => ['*'],
+                        'allow_create' => $rel->allowCreate,
+                        'allow_update' => $rel->allowUpdate,
+                        'allow_delete' => $rel->allowDelete,
+                    ];
+                    self::$resolveCache[$cacheKey] = $result;
+
+                    return $result;
+                }
+
+                // Handle RecordMorphManyType (polymorphic hasMany)
+                if ($rel instanceof RecordMorphManyType) {
+                    $result = [
+                        'type' => 'morphMany',
+                        'table' => $rel->table,
+                        'morph_type' => $rel->morphType,
+                        'morph_id' => $rel->morphId,
+                        'morph_class' => $rel->morphClass,
                         'local_key' => $rel->localKey ?? $localPk,
                         'selectable' => ['*'],
                         'allow_create' => $rel->allowCreate,
@@ -1124,6 +1155,51 @@ class RelationshipResolverUtils
     }
 
     /**
+     * @param array<string, mixed> $config
+     */
+    private static function addMorphManySubquery(Builder $builder, string $table, string $alias, array $config, array $columns, mixed $tenantId, array $schema): Builder
+    {
+        $relatedTable = $config['table'];
+        $morphType = $config['morph_type'];
+        $morphId = $config['morph_id'];
+        $morphClass = $config['morph_class'];
+        $localKey = $config['local_key'] ?? 'id';
+        $enableTenantId = RecordConfigService::enableTenantId();
+
+        // Get actual table names from schema
+        $actualMainTableName = $schema[$table]->table ?? $table;
+        $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
+
+        // Build column selection for JSON object
+        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
+
+        // Build the JSON array aggregation subquery
+        $subqueryRaw = "(
+            SELECT {$jsonArrayAggExpr}
+            FROM {$actualRelatedTableName}
+            WHERE {$actualRelatedTableName}.{$morphType} = " . DB::getPdo()->quote($morphClass) . "
+              AND {$actualRelatedTableName}.{$morphId} = {$actualMainTableName}.{$localKey}";
+
+        // Add tenant filtering if enabled
+        $tenantCol = RecordConfigService::tenantColumn();
+        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
+            $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualRelatedTableName, $tenantId);
+        }
+
+        // Add soft delete filtering
+        if ($schema[$relatedTable]->softDeletes ?? false) {
+            $subqueryRaw .= sprintf(' AND %s.deleted_at IS NULL', $actualRelatedTableName);
+        }
+
+        $subqueryRaw .= '
+        )';
+
+        $builder->addSelect([DB::raw(sprintf('%s as %s', $subqueryRaw, $alias))]);
+
+        return $builder;
+    }
+
+    /**
      * Add belongsToMany relationship subquery with JSON array aggregation.
      * Handles many-to-many relationships through pivot tables.
      * @param array<string, mixed> $config
@@ -1521,6 +1597,7 @@ class RelationshipResolverUtils
 
                 case 'hasMany':
                 case 'hasManyThrough':
+                case 'morphMany':
                     $value = $recordArray[$localKey] ?? null;
 
                     break;
@@ -1554,7 +1631,7 @@ class RelationshipResolverUtils
 
         // Optimized non-through relationships with advanced bulk loading
         // For belongsToMany, we don't need foreignKey and ownerKey in the traditional sense
-        $effectiveForeignKey = $foreignKey ?? 'id';
+        $effectiveForeignKey = $foreignKey ?? ('morphMany' === $type ? ($config['morph_id'] ?? 'id') : 'id');
         $effectiveOwnerKey = $ownerKey ?? 'id';
 
         return self::loadStandardRelationshipOptimized($type, $relatedTable, $effectiveForeignKey, $effectiveOwnerKey, $matchValues, $columns, $tenantId, $schema, $config);
@@ -1603,7 +1680,7 @@ class RelationshipResolverUtils
                     if ($related) {
                         $flatRelated[] = $related;
                     }
-                } elseif ('hasMany' === $config['type'] || 'hasManyThrough' === $config['type']) {
+                } elseif ('hasMany' === $config['type'] || 'morphMany' === $config['type'] || 'hasManyThrough' === $config['type']) {
                     $local = $recordArray[$config['local_key'] ?? 'id'] ?? null;
                     $related = null !== $local ? ($relatedGrouped[$local] ?? []) : [];
                     $record->{$alias} = $related;
@@ -1651,12 +1728,14 @@ class RelationshipResolverUtils
 
                 self::includeRelationshipsRecursive($flat, $config['table'], $children, $tenantId, $depth + 1, $maxDepth);
                 // Map enriched children back to records when hasMany/through with memory cleanup
-                if ('hasMany' === $config['type']) {
+                if ('hasMany' === $config['type'] || 'morphMany' === $config['type']) {
                     // Rebuild grouped map
                     $grouped = [];
                     foreach ($flat as $fr) {
                         $fa = (array) $fr;
-                        $key = $fa[$config['foreign_key']] ?? null;
+                        $key = ('morphMany' === $config['type'])
+                            ? ($fa[$config['morph_id']] ?? null)
+                            : ($fa[$config['foreign_key']] ?? null);
                         if (null !== $key) {
                             $grouped[$key][] = $fr;
                         }
@@ -2175,8 +2254,12 @@ class RelationshipResolverUtils
 
             foreach (array_chunk($matchValues, $chunkSize) as $chunk) {
                 $chunkQuery = clone $builder;
-                $chunkResults = $chunkQuery->whereIn($queryKey, $chunk)->get();
 
+                if ('morphMany' === $type && isset($relationshipConfig['morph_type'])) {
+                    $chunkQuery->where($relationshipConfig['morph_type'], $relationshipConfig['morph_class']);
+                }
+
+                $chunkResults = $chunkQuery->whereIn($queryKey, $chunk)->get();
                 $relatedRecords = $relatedRecords->merge($chunkResults);
             }
         }
@@ -2204,7 +2287,7 @@ class RelationshipResolverUtils
                 $key = $recordArray[$groupKey] ?? null;
 
                 if (null !== $key) {
-                    if ('hasMany' === $type) {
+                    if ('hasMany' === $type || 'morphMany' === $type) {
                         $grouped[$key][] = $relatedRecord;
                     } else {
                         // belongsTo or hasOne - single record
