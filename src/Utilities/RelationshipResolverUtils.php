@@ -600,12 +600,18 @@ class RelationshipResolverUtils
                 // Handle deletion
                 if (($item['_delete'] ?? false) || ($item['_destroy'] ?? false)) {
                     if ($hasPk && $allowDelete) {
+                        $deleteQuery = self::scopeToParent(
+                            DB::table($actualRelatedTableName)->where($relatedPk, $idVal),
+                            $foreignKey,
+                            $recordId,
+                            $type,
+                            $config,
+                        );
+
                         if ($relatedSchema->softDeletes ?? false) {
-                            DB::table($actualRelatedTableName)
-                                ->where($relatedPk, $idVal)
-                                ->update(['deleted_at' => TimeUtils::now()]);
+                            $deleteQuery->update(['deleted_at' => TimeUtils::now()]);
                         } else {
-                            DB::table($actualRelatedTableName)->where($relatedPk, $idVal)->delete();
+                            $deleteQuery->delete();
                         }
                     }
 
@@ -649,7 +655,13 @@ class RelationshipResolverUtils
                 if ($hasPk && $allowUpdate) {
                     // Upsert/update path
                     unset($item[$relatedPk]);
-                    DB::table($actualRelatedTableName)->where($relatedPk, $idVal)->update($item);
+                    self::scopeToParent(
+                        DB::table($actualRelatedTableName)->where($relatedPk, $idVal),
+                        $foreignKey,
+                        $recordId,
+                        $type,
+                        $config,
+                    )->update($item);
                 } elseif ('create' === $operation || $allowCreate) {
                     // Create path
                     unset($item['id']);
@@ -663,6 +675,24 @@ class RelationshipResolverUtils
         }
 
         return $payload;
+    }
+
+    /**
+     * Scope a nested update/delete query to rows that actually belong to the
+     * parent record, so a client can't reference another parent's child row
+     * by id to modify or delete it.
+     *
+     * @param array<string, mixed> $config
+     */
+    private static function scopeToParent(Builder $query, string $foreignKey, mixed $recordId, string $type, array $config): Builder
+    {
+        $query->where($foreignKey, $recordId);
+
+        if ('morphMany' === $type && isset($config['morph_type'], $config['morph_class'])) {
+            $query->where($config['morph_type'], $config['morph_class']);
+        }
+
+        return $query;
     }
 
     /**

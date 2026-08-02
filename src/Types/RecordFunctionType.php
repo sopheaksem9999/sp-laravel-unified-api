@@ -18,6 +18,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  * @property array|string       $httpMethod      Allowed HTTP methods (GET, POST, PUT, DELETE, etc.)
  * @property string             $class           Class name for class-based functions (required)
  * @property string             $functionName Method name for class-based functions (required)
+ * @property null|string        $name            Display name for OpenAPI summary generation (optional; falls back to $description, then a humanized function key, when empty)
  * @property null|string        $description     Function description for documentation purposes
  *
  * @since 1.0.0
@@ -85,6 +86,7 @@ class RecordFunctionType
      * @param array|string|RecordFunctionMethodEnum $httpMethod      Allowed HTTP methods (e.g., 'GET', ['GET', 'POST'])
      * @param string       $class           Class name for class-based functions (required)
      * @param string       $functionName Method name for class-based functions (required)
+     * @param null|string  $name            Display name for OpenAPI summary generation (optional; falls back to $description, then a humanized function key, when empty)
      * @param null|string  $description     Function description for documentation purposes
      * @param array|string|null $pmsName   The PMS name identifier(s) for this function (optional, null for public)
      * @param bool $isPublic Whether the function is public (default: false)
@@ -105,6 +107,7 @@ class RecordFunctionType
         public array|string|null $pmsName = null,
         public bool $disableCache = false,
         public ?int $cacheTTL = null,
+        public ?string $name = null,
         public ?string $description = null,
         public ?array $querySchema = null,
         public ?array $payloadSchema = null,
@@ -151,6 +154,7 @@ class RecordFunctionType
             pmsName: $properties['pmsName'] ?? null,
             disableCache: $properties['disableCache'] ?? false,
             cacheTTL: $properties['cacheTTL'] ?? null,
+            name: $properties['name'] ?? null,
             description: $properties['description'] ?? null,
             querySchema: $properties['querySchema'] ?? null,
             payloadSchema: $properties['payloadSchema'] ?? null,
@@ -179,6 +183,10 @@ class RecordFunctionType
             'clearCacheTables' => $this->clearCacheTables,
             'middleware' => $this->middleware,
         ];
+
+        if (null !== $this->name) {
+            $config['name'] = $this->name;
+        }
 
         if (null !== $this->description) {
             $config['description'] = $this->description;
@@ -233,6 +241,7 @@ class RecordFunctionType
             pmsName: $config['pmsName'] ?? null,
             disableCache: $config['disableCache'] ?? false,
             cacheTTL: $config['cacheTTL'] ?? null,
+            name: $config['name'] ?? null,
             description: $config['description'] ?? null,
             querySchema: $config['querySchema'] ?? null,
             payloadSchema: $config['payloadSchema'] ?? null,
