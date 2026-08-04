@@ -7,9 +7,7 @@ namespace Sopheak\Core\Services;
 use InvalidArgumentException;
 use Throwable;
 use Sopheak\Core\Jobs\AuditLogJob;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
-use Sopheak\Core\Types\RecordTableType;
+use Sopheak\Core\Support\RecordConfigLoader;
 
 class RecordConfigService
 {
@@ -337,25 +335,7 @@ class RecordConfigService
      */
     private static function tableConfigFiles(): array
     {
-        $directory = config_path(self::tableConfigPath());
-        if (!is_dir($directory)) {
-            return [];
-        }
-
-        $tables = [];
-        foreach (self::phpFilesInDirectory($directory) as $path) {
-            $config = require $path;
-            if ($config instanceof RecordTableType) {
-                $tables[pathinfo($path, PATHINFO_FILENAME)] = $config;
-                continue;
-            }
-
-            if (is_array($config)) {
-                $tables = array_merge($tables, $config);
-            }
-        }
-
-        return $tables;
+        return RecordConfigLoader::tables(config_path(self::tableConfigPath()));
     }
 
     /**
@@ -363,39 +343,7 @@ class RecordConfigService
      */
     private static function globalFunctionConfigFiles(): array
     {
-        $functions = [];
-        foreach (self::globalFunctionConfigDirectories() as $directory) {
-            if (!is_dir($directory)) {
-                continue;
-            }
-
-            foreach (self::phpFilesInDirectory($directory) as $path) {
-                $config = require $path;
-                if (!is_array($config)) {
-                    continue;
-                }
-
-                $group = pathinfo($path, PATHINFO_FILENAME);
-                foreach ($config as $functionName => $functionConfig) {
-                    if (!is_string($functionName)) {
-                        continue;
-                    }
-
-                    if ($functionName === '') {
-                        continue;
-                    }
-
-                    $normalizedFunctionName = ltrim($functionName, '/');
-                    $prefixedFunctionName = str_contains($normalizedFunctionName, '/')
-                        ? $normalizedFunctionName
-                        : $group . '/' . $normalizedFunctionName;
-
-                    $functions[$prefixedFunctionName] = $functionConfig;
-                }
-            }
-        }
-
-        return $functions;
+        return RecordConfigLoader::globalFunctions(...self::globalFunctionConfigDirectories());
     }
 
     /**
@@ -407,31 +355,6 @@ class RecordConfigService
             config_path('records/globalFunctions'),
             config_path('records/global-functions'),
         ];
-    }
-
-    /**
-     * @return string[]
-     */
-    private static function phpFilesInDirectory(string $directory): array
-    {
-        $files = [];
-        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory));
-
-        foreach ($iterator as $file) {
-            if (!$file->isFile()) {
-                continue;
-            }
-
-            if ($file->getExtension() !== 'php') {
-                continue;
-            }
-
-            $files[] = $file->getPathname();
-        }
-
-        sort($files);
-
-        return $files;
     }
 
     public static function subqueryOptimizationMaxRecords(): int
