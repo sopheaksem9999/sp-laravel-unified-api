@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Tests\Feature;
 
+use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -60,6 +61,17 @@ class RecordServiceUuidPrimaryKeyTest extends TestCase
             $table->timestamps();
         });
 
+        // A natural string key, registered below WITHOUT declared columns so
+        // its types come from database introspection. SQLite's PRAGMA reports
+        // this as a bare 'varchar' — exactly what it reports for a uuid()
+        // column — so any heuristic that reads introspected types would call
+        // it a uuid and overwrite the client's key.
+        Schema::create('sku_widgets', function (Blueprint $table): void {
+            $table->string('sku')->primary();
+            $table->string('name')->nullable();
+            $table->timestamps();
+        });
+
         config()->set('record.tables', [
             'uuid_widgets' => new RecordTableType(
                 table: 'uuid_widgets',
@@ -79,6 +91,13 @@ class RecordServiceUuidPrimaryKeyTest extends TestCase
                     'name' => ['type' => 'string', 'nullable' => true],
                 ],
             ),
+            // No columns: on purpose. SchemaRegistryUtils falls back to
+            // introspection for this one.
+            'sku_widgets' => new RecordTableType(
+                table: 'sku_widgets',
+                hasTenantId: false,
+                primaryKey: 'sku',
+            ),
         ]);
 
         SchemaRegistryUtils::refresh();
@@ -88,6 +107,7 @@ class RecordServiceUuidPrimaryKeyTest extends TestCase
     {
         Schema::dropIfExists('uuid_widgets');
         Schema::dropIfExists('int_widgets');
+        Schema::dropIfExists('sku_widgets');
 
         parent::tearDown();
     }
@@ -140,6 +160,46 @@ class RecordServiceUuidPrimaryKeyTest extends TestCase
 
         $this->assertSame(1, (int) $result['id']);
         $this->assertFalse(Str::isUuid((string) $result['id']));
+    }
+
+    /**
+     * @test
+     *
+     * Characterization, NOT a regression guard. It passes with or without the
+     * uuid-detection fix, because createRecord short-circuits on
+     * array_key_exists($pk, ...) before uuid detection is ever consulted — a
+     * supplied key is unreachable by that code path. Kept because it documents
+     * the contract; a_natural_string_key_is_not_invented is the test that
+     * actually pins the fix.
+     */
+    public function a_client_supplied_natural_string_key_is_never_replaced(): void
+    {
+        $result = $this->service()->createRecord('sku_widgets', [
+            'sku' => 'WIDGET-001',
+            'name' => 'Widget',
+        ], null);
+
+        // createRecord reports the key it actually inserted under 'id',
+        // whatever the primaryKey is named.
+        $this->assertSame('WIDGET-001', $result['id']);
+        $this->assertSame('WIDGET-001', DB::table('sku_widgets')->value('sku'));
+    }
+
+    /** @test */
+    public function a_natural_string_key_is_not_invented(): void
+    {
+        // The column is a not-null natural key with no default, so omitting it
+        // has to fail loudly. The regression this guards is the opposite: an
+        // introspection-driven heuristic quietly writing a uuid into 'sku',
+        // producing a row whose business key is meaningless.
+        try {
+            $this->service()->createRecord('sku_widgets', ['name' => 'Widget'], null);
+            $this->fail('createRecord should not have inserted a row without a natural key');
+        } catch (QueryException) {
+            // expected
+        }
+
+        $this->assertSame(0, DB::table('sku_widgets')->count());
     }
 
     private function service(): RecordService

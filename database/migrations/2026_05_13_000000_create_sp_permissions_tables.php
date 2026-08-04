@@ -14,7 +14,16 @@ return new class extends Migration {
 
         Schema::create('sp_permissions', function (Blueprint $table) {
             MigrationIdHelper::primary($table);
-            $table->string('name');
+            // Bounded because of the unique('name') below -- the same
+            // per-column index budget that governs sp_roles.key.
+            //
+            // Auto-registration builds these as "{verb}{separator}{pmsName}"
+            // (PermissionRegistrar::ensurePermissionExists), so the package's
+            // own longest is 21 characters: 'delete:sp_attachments'. A client's
+            // pmsName defaults to the table name, and MySQL caps identifiers at
+            // 64 characters, so the CRUD form tops out near 71. 191 is not a
+            // real constraint on any name this generates.
+            $table->string('name', MigrationIdHelper::INDEX_SAFE_LENGTH);
             $table->string('group')->nullable();
             $table->string('guard_name');
             $table->text('description')->nullable();
@@ -27,14 +36,25 @@ return new class extends Migration {
 
         Schema::create('sp_roles', function (Blueprint $table) use ($tenantColumn, $enableTenantId) {
             MigrationIdHelper::primary($table);
+            // key and the tenant column are the two parts of
+            // sp_roles_key_tenant_unique (and key alone of sp_roles_key_unique),
+            // so both are bounded to INDEX_SAFE_LENGTH for the same reason as
+            // sp_model_has_roles. Unbounded, the composite index costs
+            // 1020 + 1020 = 2040 bytes under utf8mb4 -- inside InnoDB's
+            // 3072-byte limit, but each part alone already exceeds the 767-byte
+            // per-column cap of the COMPACT and REDUNDANT row formats. Bounded,
+            // it is 764 + 764 = 1528 bytes with every part under 767.
+            //
+            // key holds Str::slug($role->name), so 191 characters is not a real
+            // constraint on any name this package or its tests generate.
             if ($enableTenantId) {
-                $table->string($tenantColumn)->nullable();
+                $table->string($tenantColumn, MigrationIdHelper::INDEX_SAFE_LENGTH)->nullable();
                 $table->unique(['key', $tenantColumn], 'sp_roles_key_tenant_unique');
             } else {
                 $table->unique('key', 'sp_roles_key_unique');
             }
             $table->string('name');
-            $table->string('key')->nullable();
+            $table->string('key', MigrationIdHelper::INDEX_SAFE_LENGTH)->nullable();
             $table->string('guard_name');
             $table->text('description')->nullable();
             $table->boolean('is_system')->nullable()->default(false);
@@ -55,7 +75,9 @@ return new class extends Migration {
             MigrationIdHelper::foreign($table, 'role_id');
             MigrationIdHelper::foreign($table, 'permission_id');
             if ($enableTenantId) {
-                $table->string($tenantColumn)->nullable()->index();
+                // Part of sp_role_permissions_unique; bounded for the same
+                // index-budget reason as the other tenant columns here.
+                $table->string($tenantColumn, MigrationIdHelper::INDEX_SAFE_LENGTH)->nullable()->index();
             }
             $table->timestamps();
 
