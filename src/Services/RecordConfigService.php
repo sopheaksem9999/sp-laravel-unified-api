@@ -357,6 +357,19 @@ class RecordConfigService
         ];
     }
 
+    /**
+     * Clear the memoized table/global-function directory scans.
+     *
+     * RecordConfigLoader is an implementation detail of this service; callers
+     * that need to bust its cache (e.g. SchemaRegistryUtils's test-hygiene
+     * and runtime-refresh sweep) go through here rather than reaching into
+     * Support directly.
+     */
+    public static function flushConfigFileCache(): void
+    {
+        RecordConfigLoader::flush();
+    }
+
     public static function subqueryOptimizationMaxRecords(): int
     {
         return (int) config('record.subquery_optimization_max_records', 100);
