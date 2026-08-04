@@ -14,7 +14,16 @@ return new class extends Migration {
 
         Schema::create('sp_permissions', function (Blueprint $table) {
             MigrationIdHelper::primary($table);
-            $table->string('name');
+            // Bounded because of the unique('name') below -- the same
+            // per-column index budget that governs sp_roles.key.
+            //
+            // Auto-registration builds these as "{verb}{separator}{pmsName}"
+            // (PermissionRegistrar::ensurePermissionExists), so the package's
+            // own longest is 21 characters: 'delete:sp_attachments'. A client's
+            // pmsName defaults to the table name, and MySQL caps identifiers at
+            // 64 characters, so the CRUD form tops out near 71. 191 is not a
+            // real constraint on any name this generates.
+            $table->string('name', MigrationIdHelper::INDEX_SAFE_LENGTH);
             $table->string('group')->nullable();
             $table->string('guard_name');
             $table->text('description')->nullable();

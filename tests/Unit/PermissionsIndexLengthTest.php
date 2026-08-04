@@ -34,9 +34,16 @@ class PermissionsIndexLengthTest extends TestCase
     /**
      * Every string column that takes part in a unique index in this migration.
      *
+     * Hand-maintained, and therefore able to go stale — it originally omitted
+     * sp_permissions.name, so the invariant this docblock states was false and
+     * the test could not see it. every_unique_index_string_column_is_listed
+     * now derives the same set from the emitted DDL and fails if the two
+     * disagree, so an omission cannot survive again.
+     *
      * @var list<array{string, string}>
      */
     private const INDEXED_STRING_COLUMNS = [
+        ['sp_permissions', 'name'],
         ['sp_roles', 'key'],
         ['sp_roles', 'tenant_id'],
         ['sp_role_permissions', 'tenant_id'],
@@ -62,6 +69,45 @@ class PermissionsIndexLengthTest extends TestCase
                 sprintf('%s.%s is part of a unique index and must be bounded', $table, $column)
             );
         }
+    }
+
+    /** @test */
+    public function every_unique_index_string_column_is_listed(): void
+    {
+        $sql = $this->compileForMySql();
+
+        $discovered = [];
+
+        foreach ($sql as $statement) {
+            if (preg_match('/alter table `([^`]+)` add unique `[^`]+`\(([^)]*)\)/', $statement, $match) !== 1) {
+                continue;
+            }
+
+            $table = $match[1];
+            $create = $this->createStatementFor($sql, $table);
+
+            foreach (explode(',', $match[2]) as $rawColumn) {
+                $column = trim($rawColumn, " `");
+
+                // Only string columns carry a length worth bounding; the uuid
+                // and bigint key columns in these indexes are fixed width.
+                if (preg_match(sprintf('/`%s` varchar\(/', preg_quote($column, '/')), $create) !== 1) {
+                    continue;
+                }
+
+                $discovered[] = [$table, $column];
+            }
+        }
+
+        sort($discovered);
+        $expected = self::INDEXED_STRING_COLUMNS;
+        sort($expected);
+
+        $this->assertSame(
+            $expected,
+            $discovered,
+            'INDEXED_STRING_COLUMNS must list every string column in a unique index in this migration'
+        );
     }
 
     /** @test */
