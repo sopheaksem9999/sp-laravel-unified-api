@@ -789,11 +789,31 @@ class SetupPackageCommand extends Command
 
     private function defaultWebhooksConfig(): string
     {
-        return file_get_contents(__DIR__ . '/../../config/sp-webhooks.php') ?: "<?php\n\nreturn [];";
+        return $this->shippedConfig('sp-webhooks.php');
     }
 
     private function defaultAttachmentsConfig(): string
     {
-        return file_get_contents(__DIR__ . '/../../config/sp-attachments.php') ?: "<?php\n\nreturn [];";
+        return $this->shippedConfig('sp-attachments.php');
+    }
+
+    /**
+     * Read one of the package's own shipped config files verbatim.
+     *
+     * Throws rather than falling back to an empty config: a falsy read means
+     * the shipped file moved or is unreadable, and silently scaffolding
+     * `<?php return [];` into a client's application would hand them a
+     * working-looking but empty config.
+     */
+    private function shippedConfig(string $filename): string
+    {
+        $path = __DIR__ . '/../../config/' . $filename;
+        $contents = is_file($path) ? file_get_contents($path) : false;
+
+        if ($contents === false || $contents === '') {
+            throw new RuntimeException('Failed to read packaged config file: ' . $path);
+        }
+
+        return $contents;
     }
 }
