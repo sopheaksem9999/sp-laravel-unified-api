@@ -111,7 +111,7 @@ class MigrationIdHelperTest extends TestCase
                 'helper_probe',
                 'model_id',
                 'varchar',
-                "morph() must always render a varchar column, even under id_type={$idType}"
+                'morph() must always render a varchar column, even under id_type=' . $idType
             );
 
             DB::table('helper_probe')->insert(['model_id' => '42']);
@@ -122,9 +122,47 @@ class MigrationIdHelperTest extends TestCase
             $this->assertSame(
                 2,
                 DB::table('helper_probe')->count(),
-                "morph() should accept both key shapes under id_type={$idType}"
+                'morph() should accept both key shapes under id_type=' . $idType
             );
         }
+    }
+
+    /** @test */
+    public function morph_is_bounded_to_an_index_safe_length(): void
+    {
+        $definition = null;
+
+        Schema::create('helper_probe', function (Blueprint $table) use (&$definition): void {
+            $definition = MigrationIdHelper::morph($table, 'model_id');
+        });
+
+        // The length cannot be asserted from the schema here: SQLite's grammar
+        // renders every string column as a bare 'varchar' with no length, so
+        // Schema::getColumns() reports the same thing for 191 and for 255. The
+        // column definition is what the MySQL and PostgreSQL grammars turn into
+        // varchar(N), so that is what this asserts.
+        //
+        // It matters because these columns sit in composite unique indexes.
+        // Under utf8mb4 an unbounded varchar(255) costs 1020 bytes, and
+        // sp_model_has_roles_unique holds four columns: at 255 with a uuid
+        // role_id and a tenant column that is 3204 bytes against MySQL's
+        // 3072-byte InnoDB limit, and the table cannot be created at all.
+        $this->assertSame(191, MigrationIdHelper::INDEX_SAFE_LENGTH);
+        $this->assertSame(191, $definition->get('length'));
+    }
+
+    /** @test */
+    public function morph_length_can_be_overridden_for_an_unindexed_column(): void
+    {
+        $definition = null;
+
+        Schema::create('helper_probe', function (Blueprint $table) use (&$definition): void {
+            $definition = MigrationIdHelper::morph($table, 'model_id', null);
+        });
+
+        // null means "no explicit bound", which Blueprint::string() resolves to
+        // Laravel's default string length.
+        $this->assertSame(255, $definition->get('length'));
     }
 
     private function assertColumnType(string $table, string $column, string $expected, string $message = ''): void
@@ -139,8 +177,8 @@ class MigrationIdHelperTest extends TestCase
             }
         }
 
-        $this->assertNotNull($match, "Column '{$column}' not found on table '{$table}'.");
-        $this->assertSame($expected, $match['type'], $message !== '' ? $message : "Column '{$column}' on '{$table}' should report type '{$expected}'.");
+        $this->assertNotNull($match, sprintf("Column '%s' not found on table '%s'.", $column, $table));
+        $this->assertSame($expected, $match['type'], $message !== '' ? $message : sprintf("Column '%s' on '%s' should report type '%s'.", $column, $table, $expected));
     }
 
     protected function tearDown(): void
