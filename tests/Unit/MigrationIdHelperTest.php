@@ -24,6 +24,8 @@ class MigrationIdHelperTest extends TestCase
             MigrationIdHelper::primary($table);
         });
 
+        $this->assertColumnType('helper_probe', 'id', 'integer');
+
         // NOTE: DB::table(...)->insert([]) is a no-op in Laravel — Builder::insert()
         // short-circuits and returns true without executing any SQL when given an
         // empty array. insertGetId([]) has no such shortcut and compiles to
@@ -42,6 +44,8 @@ class MigrationIdHelperTest extends TestCase
             MigrationIdHelper::primary($table);
         });
 
+        $this->assertColumnType('helper_probe', 'id', 'varchar');
+
         $uuid = '3f2504e0-4f89-11d3-9a0c-0305e82c3301';
         DB::table('helper_probe')->insert(['id' => $uuid]);
 
@@ -57,6 +61,8 @@ class MigrationIdHelperTest extends TestCase
             MigrationIdHelper::foreign($table, 'role_id')->index();
         });
 
+        $this->assertColumnType('helper_probe', 'role_id', 'integer');
+
         DB::table('helper_probe')->insert(['role_id' => 42]);
 
         $this->assertSame(42, (int) DB::table('helper_probe')->value('role_id'));
@@ -70,6 +76,12 @@ class MigrationIdHelperTest extends TestCase
         Schema::create('helper_probe', function (Blueprint $table): void {
             MigrationIdHelper::foreign($table, 'role_id')->index();
         });
+
+        // Column-type assertion, not just round-trip: on SQLite an
+        // unsignedBigInteger column happily stores a uuid string verbatim
+        // (type affinity is advisory), so an insert-based assertion alone
+        // cannot tell a correct uuid column from a mistakenly integer one.
+        $this->assertColumnType('helper_probe', 'role_id', 'varchar');
 
         $uuid = '3f2504e0-4f89-11d3-9a0c-0305e82c3301';
         DB::table('helper_probe')->insert(['role_id' => $uuid]);
@@ -88,6 +100,20 @@ class MigrationIdHelperTest extends TestCase
                 MigrationIdHelper::morph($table, 'model_id')->index();
             });
 
+            // The column-type assertion is the actual regression guard here.
+            // SQLite type affinity is advisory, so a varchar column and an
+            // integer column both happily store either key shape verbatim —
+            // the insert round-trip below cannot distinguish a correct
+            // unconditional morph() from one that was mistakenly wired to
+            // id_type. Asserting the reported column type is 'varchar'
+            // under BOTH settings is what actually catches that bug.
+            $this->assertColumnType(
+                'helper_probe',
+                'model_id',
+                'varchar',
+                "morph() must always render a varchar column, even under id_type={$idType}"
+            );
+
             DB::table('helper_probe')->insert(['model_id' => '42']);
             DB::table('helper_probe')->insert([
                 'model_id' => '3f2504e0-4f89-11d3-9a0c-0305e82c3301',
@@ -99,6 +125,22 @@ class MigrationIdHelperTest extends TestCase
                 "morph() should accept both key shapes under id_type={$idType}"
             );
         }
+    }
+
+    private function assertColumnType(string $table, string $column, string $expected, string $message = ''): void
+    {
+        $columns = Schema::getColumns($table);
+
+        $match = null;
+        foreach ($columns as $candidate) {
+            if ($candidate['name'] === $column) {
+                $match = $candidate;
+                break;
+            }
+        }
+
+        $this->assertNotNull($match, "Column '{$column}' not found on table '{$table}'.");
+        $this->assertSame($expected, $match['type'], $message !== '' ? $message : "Column '{$column}' on '{$table}' should report type '{$expected}'.");
     }
 
     protected function tearDown(): void
