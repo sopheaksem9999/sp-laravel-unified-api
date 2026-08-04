@@ -26,6 +26,20 @@ use Sopheak\Core\Services\RecordConfigService;
 class MigrationIdHelper
 {
     /**
+     * Length for string columns that take part in a composite index.
+     *
+     * 191 is the conventional Laravel value: under utf8mb4 (4 bytes per
+     * character) MySQL's InnoDB index limit of 3072 bytes leaves room for four
+     * such columns, and older row formats (COMPACT / REDUNDANT) cap a single
+     * index part at 767 bytes, which a varchar(255) utf8mb4 column (1020 bytes)
+     * already exceeds on its own.
+     *
+     * A key value is at most 36 characters (uuid) or 20 (bigint), so 191 is
+     * never a real constraint on the data.
+     */
+    public const INDEX_SAFE_LENGTH = 191;
+
+    /**
      * Primary key for a table governed by record.id_type.
      */
     public static function primary(Blueprint $table, string $column = 'id'): void
@@ -57,10 +71,15 @@ class MigrationIdHelper
      * Always a string: it must hold a uuid or an integer key with equal ease,
      * and the package cannot know which the client uses. This mirrors the
      * existing sp_attachment_links.record_id column.
+     *
+     * Bounded to INDEX_SAFE_LENGTH by default because every such column this
+     * package declares is part of an index, and an unbounded varchar(255)
+     * under utf8mb4 costs 1020 bytes of the 3072-byte InnoDB index budget.
+     * Pass null for an unindexed column that wants Laravel's default 255.
      */
-    public static function morph(Blueprint $table, string $column): ColumnDefinition
+    public static function morph(Blueprint $table, string $column, ?int $length = self::INDEX_SAFE_LENGTH): ColumnDefinition
     {
-        return $table->string($column);
+        return $table->string($column, $length);
     }
 
     private static function isUuid(): bool

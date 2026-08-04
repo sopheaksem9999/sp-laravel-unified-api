@@ -67,13 +67,18 @@ return new class extends Migration {
 
         Schema::create('sp_model_has_roles', function (Blueprint $table) use ($tenantColumn, $enableTenantId) {
             $table->bigIncrements('id');
-            $table->string('model_type');
+            // Every string column here is part of sp_model_has_roles_unique, so
+            // each is bounded to INDEX_SAFE_LENGTH. Unbounded varchar(255)
+            // columns cost 1020 bytes each under utf8mb4 and the four of them
+            // (with a uuid role_id and a tenant column) overrun MySQL's
+            // 3072-byte InnoDB index limit: 1020 + 1020 + 144 + 1020 = 3204.
+            $table->string('model_type', MigrationIdHelper::INDEX_SAFE_LENGTH);
             // Points at an arbitrary client model, whose key may be a uuid or
             // an integer. A string holds either.
             MigrationIdHelper::morph($table, 'model_id');
             MigrationIdHelper::foreign($table, 'role_id');
             if ($enableTenantId) {
-                $table->string($tenantColumn)->nullable()->index();
+                $table->string($tenantColumn, MigrationIdHelper::INDEX_SAFE_LENGTH)->nullable()->index();
             }
             $table->timestamps();
 
@@ -86,11 +91,12 @@ return new class extends Migration {
 
         Schema::create('sp_model_permissions', function (Blueprint $table) use ($tenantColumn, $enableTenantId) {
             $table->bigIncrements('id');
-            $table->string('model_type');
+            // Bounded for the same index-budget reason as sp_model_has_roles.
+            $table->string('model_type', MigrationIdHelper::INDEX_SAFE_LENGTH);
             MigrationIdHelper::morph($table, 'model_id');
             MigrationIdHelper::foreign($table, 'permission_id');
             if ($enableTenantId) {
-                $table->string($tenantColumn)->nullable()->index();
+                $table->string($tenantColumn, MigrationIdHelper::INDEX_SAFE_LENGTH)->nullable()->index();
             }
             $table->timestamps();
 
