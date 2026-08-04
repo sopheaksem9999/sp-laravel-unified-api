@@ -53,8 +53,8 @@ column, which works for either convention. That is the pattern to generalize.
 ## Why attachments and webhooks are excluded
 
 The default for `record.id_type` is `integer`, chosen so that existing clients
-need to add no configuration at all. Permissions and audit are already integer,
-so that default is a no-op for them.
+need to change no configuration at all. Permissions and audit are already
+integer, so that default is a no-op for them.
 
 Attachments and webhooks, however, ship UUID today. Their
 `RecordTableType.columns['id']['type']` feeds live runtime behavior: UUID
@@ -70,7 +70,7 @@ conventions, because the columns that reference client records
 
 ## Resulting behavior
 
-With `SP_ID_TYPE` unset (default `integer`):
+With `record.id_type` left at its default of `integer`:
 
 | Table | `id` type | Change |
 |---|---|---|
@@ -84,9 +84,9 @@ With `SP_ID_TYPE` unset (default `integer`):
 | `sp_document_folders` | `uuid` | unchanged |
 | `sp_webhook_*` | `uuid` | unchanged |
 
-With `SP_ID_TYPE=uuid`, the six permissions/audit tables get `uuid` primary
-keys and their package-internal foreign keys (`role_id`, `permission_id`)
-become `uuid` to match. The attachments and webhooks rows are unaffected.
+Set to `uuid`, the six permissions/audit tables get `uuid` primary keys and
+their package-internal foreign keys (`role_id`, `permission_id`) become `uuid`
+to match. The attachments and webhooks rows are unaffected.
 
 ## Components
 
@@ -128,14 +128,20 @@ config.
 
 ### Config file changes
 
-`config/record.php` gains:
+`config/record.php` gains a plain literal, with no `env()` indirection. A client
+sets it by editing their published config file:
 
 ```php
-'id_type' => env('SP_ID_TYPE', 'integer'), // uuid|integer
+'id_type' => 'integer', // uuid|integer
 ```
 
 documented as governing the permissions and audit tables only, with a note that
 attachments and webhooks are always UUID.
+
+This is a deployment-invariant structural choice, not a per-environment one: a
+given client's tables have one ID shape across local, staging, and production,
+and it is fixed at first migration. An env var would imply it can differ between
+environments, which would be actively misleading.
 
 `config/permissions.php` and `config/audit.php` replace their literal
 `'id' => ['type' => 'bigIncrements'|'integer']` entries with values derived from
@@ -154,9 +160,9 @@ It also survives `config:cache`: `mergeConfigFrom` is skipped when config is
 cached, but the cached payload already holds the value resolved at cache-build
 time, when `record.php` was loaded normally.
 
-Reading through `config()` rather than `env()` directly means the setting works
-whether a client sets `SP_ID_TYPE` in `.env` or edits a published
-`config/record.php` by hand.
+A client that has not published `config/record.php` has no `record.id_type` key
+at all, and `config('record.id_type', 'integer')` yields the default. That is
+the correct outcome, and it is why the default must be `integer`.
 
 ## Bug fixes
 
@@ -198,7 +204,8 @@ a test rather than assumed. If it does fail, the fix is a `(string)` cast at the
 
 ## Testing
 
-Feature tests that run the package migrations under both `SP_ID_TYPE` values:
+Feature tests that run the package migrations under both `record.id_type`
+values, set via the test case's config rather than an environment variable:
 
 1. **Primary key types.** Under `integer`, the six governed tables have
    integer PKs; under `uuid`, they have uuid PKs.
@@ -211,9 +218,9 @@ Feature tests that run the package migrations under both `SP_ID_TYPE` values:
    works.
 5. **Audit both ways.** Audit entries write and read back for both UUID-keyed
    and integer-keyed entities and users.
-6. **Backward compatibility.** The existing suite passes with no `SP_ID_TYPE`
-   set and no config changes. This is the proof that existing installs are
-   untouched.
+6. **Backward compatibility.** The existing suite passes with `record.id_type`
+   absent entirely and no config changes. This is the proof that existing
+   installs are untouched.
 7. **Boundary validation.** An invalid `record.id_type` throws
    `InvalidArgumentException`.
 
