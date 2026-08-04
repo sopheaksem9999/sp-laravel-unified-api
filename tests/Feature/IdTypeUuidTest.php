@@ -101,20 +101,16 @@ class IdTypeUuidTest extends TestCase
     /** @test */
     public function audit_log_id_stays_an_auto_incrementing_integer(): void
     {
-        // With audit.enabled = true (set in getEnvironmentSetUp), the real
-        // audit migration (2025_01_27_000000_create_audit_logs_table) ran,
-        // not the TestCase::setUp() fallback that stands in when the
-        // migration is gated off. Prove that by checking a column the two
-        // disagree on: the migration emits unsignedBigInteger('entity_id')
-        // (SQLite type 'integer'), while the fallback emits
-        // string('entity_id') (SQLite type 'varchar'). Seeing 'integer' here
-        // means we are asserting against the migration, not a fixture.
+        // audit.enabled = true (set in getEnvironmentSetUp) is what
+        // guarantees the real audit migration ran instead of the
+        // TestCase::setUp() fallback fixture — not any column shape. Neither
+        // id nor entity_id distinguish the two any more: ->id() is identical
+        // in both, and Task 5 made entity_id a string in both. Provenance is
+        // proven elsewhere (ClientModelReferenceColumnsTest carries its own
+        // audit.enabled override plus schema assertions); this test only
+        // checks behavior, not which code path built the table.
         $columns = collect(Schema::getColumns('sp_audit_logs'))->keyBy('name');
-        $this->assertSame(
-            'integer',
-            $columns['entity_id']['type'],
-            'entity_id should be integer, proving the real migration (not the TestCase fallback) built this table'
-        );
+        $this->assertSame('varchar', $columns['entity_id']['type']);
         $this->assertSame('integer', $columns['id']['type']);
 
         DB::table('sp_audit_logs')->insert([
