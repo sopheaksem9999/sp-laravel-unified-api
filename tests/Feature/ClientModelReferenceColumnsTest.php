@@ -44,6 +44,13 @@ class ClientModelReferenceColumnsTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function getEnvironmentSetUp($app): void
+    {
+        parent::getEnvironmentSetUp($app);
+
+        $app['config']->set('audit.enabled', true);
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -170,6 +177,52 @@ class ClientModelReferenceColumnsTest extends TestCase
         $this->assertFalse($intUser->hasRole('viewer'));
         $this->assertTrue($uuidUser->hasRole('viewer'));
         $this->assertFalse($uuidUser->hasRole('admin'));
+    }
+
+    /** @test */
+    public function audit_entity_and_user_columns_are_strings(): void
+    {
+        $this->assertColumnType('sp_audit_logs', 'entity_id', 'varchar');
+        $this->assertColumnType('sp_audit_logs', 'user_id', 'varchar');
+    }
+
+    /** @test */
+    public function audit_logs_accept_a_uuid_entity_and_user(): void
+    {
+        $entityId = (string) Str::uuid();
+        $userId = (string) Str::uuid();
+
+        DB::table('sp_audit_logs')->insert([
+            'entity_type' => 'invoices',
+            'entity_id' => $entityId,
+            'user_id' => $userId,
+            'event' => 'created',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $row = DB::table('sp_audit_logs')->first();
+
+        $this->assertSame($entityId, $row->entity_id);
+        $this->assertSame($userId, $row->user_id);
+    }
+
+    /** @test */
+    public function audit_logs_still_accept_integer_entities_and_users(): void
+    {
+        DB::table('sp_audit_logs')->insert([
+            'entity_type' => 'invoices',
+            'entity_id' => '42',
+            'user_id' => '7',
+            'event' => 'created',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $row = DB::table('sp_audit_logs')->first();
+
+        $this->assertSame('42', (string) $row->entity_id);
+        $this->assertSame('7', (string) $row->user_id);
     }
 
     private function createPermission(string $name): string
