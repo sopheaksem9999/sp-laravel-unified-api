@@ -115,23 +115,60 @@ class PermissionsIndexLengthTest extends TestCase
     {
         $sql = $this->compileForMySql();
 
-        $this->assertNotNull(
-            $this->statementMatching($sql, 'sp_roles_key_tenant_unique'),
-            'the composite unique index should exist when tenancy is enabled'
-        );
+        $index = $this->statementMatching($sql, 'sp_roles_key_tenant_unique');
+
+        $this->assertNotNull($index, 'the composite unique index should exist when tenancy is enabled');
 
         $create = $this->createStatementFor($sql, 'sp_roles');
 
-        // 4 bytes per character under utf8mb4.
-        $bytesPerPart = MigrationIdHelper::INDEX_SAFE_LENGTH * 4;
+        // Every number below is read out of the emitted DDL, not computed from
+        // INDEX_SAFE_LENGTH — an assertion over a compile-time constant could
+        // never fail and would say nothing about what the migration produces.
+        $total = 0;
 
-        $this->assertSame(764, $bytesPerPart);
-        $this->assertLessThan(767, $bytesPerPart, 'each index part must fit the COMPACT/REDUNDANT per-column cap');
-        $this->assertLessThan(3072, $bytesPerPart * 2, 'the composite key must fit the InnoDB index limit');
+        foreach ($this->indexColumns($index) as $column) {
+            $bytes = $this->declaredVarcharBytes($create, $column);
+            $total += $bytes;
 
-        // And nothing in this table quietly reintroduces a 255 in the index.
-        $this->assertStringNotContainsString('`key` varchar(255)', $create);
-        $this->assertStringNotContainsString('`tenant_id` varchar(255)', $create);
+            $this->assertLessThan(
+                767,
+                $bytes,
+                sprintf('sp_roles.%s is %d bytes under utf8mb4, over the COMPACT/REDUNDANT per-column cap', $column, $bytes)
+            );
+        }
+
+        $this->assertSame(1528, $total, 'sp_roles_key_tenant_unique should cost 764 + 764 bytes');
+        $this->assertLessThan(3072, $total, 'the composite key must fit the InnoDB index limit');
+    }
+
+    /**
+     * Column names of an `add unique ...(...)` statement.
+     *
+     * @return list<string>
+     */
+    private function indexColumns(string $indexStatement): array
+    {
+        $this->assertSame(
+            1,
+            preg_match('/\(([^)]*)\)\s*$/', $indexStatement, $match),
+            'could not read the column list out of: ' . $indexStatement
+        );
+
+        return array_map(static fn (string $raw): string => trim($raw, " `"), explode(',', $match[1]));
+    }
+
+    /**
+     * Byte cost of a column's DECLARED varchar length under utf8mb4.
+     */
+    private function declaredVarcharBytes(string $createStatement, string $column): int
+    {
+        $this->assertSame(
+            1,
+            preg_match(sprintf('/`%s` varchar\((\d+)\)/', preg_quote($column, '/')), $createStatement, $match),
+            sprintf('%s should be declared with an explicit varchar length', $column)
+        );
+
+        return (int) $match[1] * 4;
     }
 
     /**

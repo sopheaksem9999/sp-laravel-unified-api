@@ -162,7 +162,16 @@ class RecordServiceUuidPrimaryKeyTest extends TestCase
         $this->assertFalse(Str::isUuid((string) $result['id']));
     }
 
-    /** @test */
+    /**
+     * @test
+     *
+     * Characterization, NOT a regression guard. It passes with or without the
+     * uuid-detection fix, because createRecord short-circuits on
+     * array_key_exists($pk, ...) before uuid detection is ever consulted — a
+     * supplied key is unreachable by that code path. Kept because it documents
+     * the contract; a_natural_string_key_is_not_invented is the test that
+     * actually pins the fix.
+     */
     public function a_client_supplied_natural_string_key_is_never_replaced(): void
     {
         $result = $this->service()->createRecord('sku_widgets', [
