@@ -49,8 +49,8 @@ class PackageTableUuidPrimaryKeyTest extends TestCase
         // The base TestCase blanks these so unrelated tests get a clean route
         // regex. Re-require the shipped files: this is the config a real app
         // boots with, and it is exactly what is being asserted.
-        $attachments = require __DIR__ . '/../../config/attachments.php';
-        $webhooks = require __DIR__ . '/../../config/webhooks.php';
+        $attachments = require __DIR__ . '/../../config/sp-attachments.php';
+        $webhooks = require __DIR__ . '/../../config/sp-webhooks.php';
 
         Config::set('attachments.enabled', true);
         Config::set('attachments.tables', $attachments['tables']);
