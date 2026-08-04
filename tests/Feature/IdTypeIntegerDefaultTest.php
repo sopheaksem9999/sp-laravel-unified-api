@@ -61,6 +61,12 @@ class IdTypeIntegerDefaultTest extends TestCase
     /** @test */
     public function attachment_and_webhook_tables_keep_uuid_keys(): void
     {
+        // Schema assertion first: SQLite's advisory type affinity means an
+        // insert/select round-trip alone cannot tell a genuine uuid column
+        // from an integer column that merely tolerates a uuid string.
+        $columns = collect(Schema::getColumns('sp_attachments'))->keyBy('name');
+        $this->assertSame('varchar', $columns['id']['type']);
+
         $uuid = '3f2504e0-4f89-11d3-9a0c-0305e82c3301';
 
         DB::table('sp_attachments')->insert([
