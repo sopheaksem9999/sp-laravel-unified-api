@@ -1,5 +1,6 @@
 <?php
 
+use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Types\RecordMetaBelongsToManyType;
 use Sopheak\Core\Types\RecordTableType;
 
@@ -144,7 +145,7 @@ return [
             canDelete: false,
             canUpsert: false,
             columns: [
-                'id' => ['type' => 'bigIncrements', 'nullable' => false],
+                'id' => ['type' => RecordConfigService::idType() === 'uuid' ? 'uuid' : 'bigIncrements', 'nullable' => false],
                 'name' => ['type' => 'string', 'nullable' => false],
                 'group' => ['type' => 'string', 'nullable' => true],
                 'guard_name' => ['type' => 'string', 'nullable' => false],
@@ -177,7 +178,7 @@ return [
             canUpsert: false,
             columns: array_merge(
                 [
-                    'id' => ['type' => 'bigIncrements', 'nullable' => false],
+                    'id' => ['type' => RecordConfigService::idType() === 'uuid' ? 'uuid' : 'bigIncrements', 'nullable' => false],
                     'name' => ['type' => 'string', 'nullable' => false],
                     'key' => ['type' => 'string', 'nullable' => true],
                     'guard_name' => ['type' => 'string', 'nullable' => true, 'default' => 'api'],
