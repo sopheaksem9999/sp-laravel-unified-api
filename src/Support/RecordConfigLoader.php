@@ -24,14 +24,15 @@ use Sopheak\Core\Types\RecordTableType;
  * process, not re-read on every call. `flush()` clears the memo, and
  * `SchemaRegistryUtils::refresh()` / `clearAllCache()` call it as part of
  * their existing cache-invalidation sweep, which runs between tests and
- * whenever config-affecting state changes at runtime. Under a
- * short-lived worker model (classic PHP-FPM, one request per process) this
- * is invisible: the process that reads the file also dies with it, so a scan
- * is already effectively "once per request." Under a long-lived worker
- * (Laravel Octane, queue workers) a file added to, removed from, or edited in
- * one of these directories is **not** picked up mid-process — it takes a
- * worker restart (or an explicit `RecordConfigLoader::flush()` /
- * `SchemaRegistryUtils::refresh()`) for the change to be seen.
+ * whenever config-affecting state changes at runtime. Classic PHP-FPM is
+ * unaffected: its shared-nothing request lifecycle tears down and
+ * reinitializes all userland statics at every request boundary, so the memo
+ * never outlives the request that filled it. Long-lived workers (Laravel
+ * Octane, queue workers) keep statics alive across requests, so a file
+ * added to, removed from, or edited in one of these directories is **not**
+ * picked up mid-process — it takes a worker restart (or an explicit
+ * `RecordConfigLoader::flush()` / `SchemaRegistryUtils::refresh()`) for the
+ * change to be seen.
  */
 class RecordConfigLoader
 {
