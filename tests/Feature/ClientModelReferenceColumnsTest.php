@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Tests\Feature;
 
+use Sopheak\Core\Authorization\Models\Permission;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -227,7 +228,7 @@ class ClientModelReferenceColumnsTest extends TestCase
 
     private function createPermission(string $name): string
     {
-        \Sopheak\Core\Authorization\Models\Permission::query()->create([
+        Permission::query()->create([
             'name' => $name,
             'guard_name' => 'api',
         ]);
@@ -241,13 +242,13 @@ class ClientModelReferenceColumnsTest extends TestCase
 
         $this->assertTrue(
             $columns->has($column),
-            "{$table} should have a {$column} column"
+            sprintf('%s should have a %s column', $table, $column)
         );
 
         $this->assertSame(
             $expected,
             $columns[$column]['type'],
-            "{$table}.{$column} should be {$expected}"
+            sprintf('%s.%s should be %s', $table, $column, $expected)
         );
     }
 }
