@@ -40,15 +40,22 @@ MySQL 1364).
 
 This bites hardest when scaffolding against a SQLite development database.
 SQLite has no native uuid type, so introspection reports a uuid column as a
-bare `varchar` — `sp-laravel-api:sync-record-columns` writes that verbatim, and
-`sp-laravel-api:generate-all-configs` emits no `columns` at all. In both
-cases the resulting config silently disables key generation on **every** driver,
-including the MySQL or PostgreSQL you deploy to. After generating or syncing
-against SQLite, change uuid primary keys to `'type' => 'uuid'` by hand.
+bare `varchar`, and `sp-laravel-api:sync-record-columns` writes that verbatim.
+`sp-laravel-api:generate-all-configs` chains into the same sync, so it produces
+the same result. The written config then silently disables key generation on
+**every** driver, including the MySQL or PostgreSQL you deploy to. After
+generating or syncing against SQLite, change uuid primary keys to
+`'type' => 'uuid'` by hand.
 
-Detection is deliberately identical on every driver: it reads only the declared
-type, never the live column. That is what stops a natural string key — say
-`string('sku')->primary()` — from being mistaken for a uuid and overwritten.
+When a table declares no `columns` at all, they are filled from live
+introspection instead, and what that yields **is** driver-dependent: `uuid()`
+introspects as `char(36)` on MySQL and `uuid` on PostgreSQL — both detected as
+uuid — but as a bare `varchar` on SQLite, which is not. Declaring the type
+explicitly is the only way to get identical behavior everywhere.
+
+Bare `varchar` is deliberately not treated as a uuid on any driver. That is what
+stops a natural string key — say `string('sku')->primary()` — from being
+mistaken for a uuid and overwritten.
 :::
 
 Example:
