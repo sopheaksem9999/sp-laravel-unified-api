@@ -15,11 +15,23 @@ use Sopheak\Core\Tests\TestCase;
  * The sp_document_folders -> sp_attachment_folders rename.
  *
  * The migration used to carry a `config('database.default') !== 'sqlite'`
- * condition that compared a connection NAME against a driver name. It never
- * matched here (this suite's connection is named "testing" while the driver is
- * sqlite), which is why the rename ran and the suite passed. Removing it makes
- * the intent match the behaviour; these tests pin that behaviour down so the
- * condition cannot come back in either form.
+ * condition that compared a connection NAME against a driver name. Two
+ * different mistakes hide inside that one line, and a test has to provoke each
+ * separately:
+ *
+ * - as written, it fired whenever the DEFAULT CONNECTION was NAMED 'sqlite'.
+ *   Stock Laravel 11/12 config/database.php ships
+ *   `'default' => env('DB_CONNECTION', 'sqlite')` against a connection key
+ *   named `sqlite`, so that is the common local setup, and there the rename
+ *   was skipped while config/attachments.php pointed at the new name — every
+ *   folder query 500s. This suite's connection is named "testing", so the
+ *   default-path tests below CANNOT see that; renameIsNotConditionalOnThe
+ *   ConnectionName covers it by switching the default to a connection named
+ *   'sqlite'.
+ * - rewritten to DB::getDriverName(), it would skip SQLite for real, which the
+ *   remaining tests catch because this suite runs on SQLite.
+ *
+ * Together the two shapes are pinned. Neither alone is sufficient.
  */
 class RenameAttachmentFoldersMigrationTest extends TestCase
 {
@@ -101,6 +113,47 @@ class RenameAttachmentFoldersMigrationTest extends TestCase
 
         $this->assertTrue(Schema::hasTable('sp_attachment_folders'));
         $this->assertFalse(Schema::hasTable('sp_document_folders'));
+    }
+
+    /** @test */
+    public function the_rename_is_not_conditional_on_the_connection_name(): void
+    {
+        // The regression the removed line actually caused. Stock Laravel 11/12
+        // names its default connection 'sqlite', and the old guard read
+        // config('database.default') -- a connection NAME -- so it fired there
+        // and left the table behind. This suite's connection is named
+        // "testing", which is exactly why every other test here stayed green
+        // with the broken line in place.
+        $this->rebuildLegacySchema();
+        $this->useConnectionNamedSqlite();
+
+        $this->assertSame('sqlite', config('database.default'));
+
+        $this->migration()->up();
+
+        $this->assertTrue(
+            Schema::hasTable('sp_attachment_folders'),
+            'the rename must run even when the default connection is NAMED sqlite'
+        );
+        $this->assertFalse(Schema::hasTable('sp_document_folders'));
+    }
+
+    /**
+     * Point the default connection at a key literally named 'sqlite', backed by
+     * the same in-memory database so the schema built above is still visible.
+     */
+    private function useConnectionNamedSqlite(): void
+    {
+        $pdo = DB::connection()->getPdo();
+
+        config()->set('database.connections.sqlite', config('database.connections.' . config('database.default')));
+        config()->set('database.default', 'sqlite');
+
+        DB::purge('sqlite');
+        // Without this the new connection would open its own, empty :memory:
+        // database. Sharing the PDO changes only the connection's NAME, which
+        // is the single variable under test.
+        DB::connection('sqlite')->setPdo($pdo);
     }
 
     private function migration(): Migration
