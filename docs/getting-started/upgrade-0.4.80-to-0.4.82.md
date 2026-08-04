@@ -123,19 +123,21 @@ unaffected.
 
 ### If folder queries fail with "no such table"
 
-The rename migration contains a guard intended to skip SQLite:
+An earlier revision of the rename migration carried a guard intended to skip
+SQLite:
 
 ```php
 config('database.default') !== 'sqlite'
 ```
 
 `config('database.default')` returns the connection **name**, not the driver, so
-this only matches when the connection happens to be named `sqlite`. If you have
-a non-SQLite connection named `sqlite`, the rename is skipped while the config
-still points at `sp_attachment_folders`, and every folder query fails with a
-missing-table error.
+it compared two different things and never reliably matched. The condition has
+been removed: `Schema::rename` works on every supported driver, SQLite included,
+and the rename now always runs when `sp_document_folders` exists and
+`sp_attachment_folders` does not.
 
-Workaround until this is fixed: rename the table by hand.
+If you are on a version that still has the guard and your connection happens to
+be named `sqlite`, rename the table by hand:
 
 ```sql
 ALTER TABLE sp_document_folders RENAME TO sp_attachment_folders;
