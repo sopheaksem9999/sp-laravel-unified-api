@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace Sopheak\Core\Tests\Feature;
 
 use Illuminate\Config\Repository;
+use Illuminate\Log\Events\MessageLogged;
+use Illuminate\Support\Facades\Log;
+use ReflectionProperty;
 use Sopheak\Core\Config\ConfigNamespaceBridge;
+use Sopheak\Core\CoreSpLaravelApiProvider;
 use Sopheak\Core\Tests\TestCase;
 
 class ConfigNamespaceBridgeTest extends TestCase
@@ -162,6 +166,117 @@ class ConfigNamespaceBridgeTest extends TestCase
         } finally {
             $this->removeTemporaryConfigDirectory($directory);
         }
+    }
+
+    /** @test */
+    public function deprecated_files_defaults_to_the_application_config_path(): void
+    {
+        // The no-argument branch is the only one production uses. Exercised by
+        // pointing the application's config path at a directory this test owns,
+        // so nothing is written into Testbench's config dir inside vendor/.
+        $directory = $this->makeTemporaryConfigDirectory();
+        $original = $this->app->configPath();
+
+        try {
+            file_put_contents($directory . '/audit.php', '<?php return [];');
+            $this->app->useConfigPath($directory);
+
+            $this->assertSame(['audit.php' => 'sp-audit.php'], ConfigNamespaceBridge::deprecatedFiles());
+        } finally {
+            $this->app->useConfigPath($original);
+            $this->removeTemporaryConfigDirectory($directory);
+        }
+    }
+
+    /** @test */
+    public function the_deprecation_notice_names_each_old_file_still_on_disk(): void
+    {
+        $logged = $this->captureDeprecationNotices(['record.php', 'webhooks.php']);
+
+        $this->assertCount(2, $logged);
+        $this->assertStringContainsString('config/record.php', $logged[0]);
+        $this->assertStringContainsString('config/sp-record.php', $logged[0]);
+        $this->assertStringContainsString('config/webhooks.php', $logged[1]);
+        $this->assertStringContainsString('config/sp-webhooks.php', $logged[1]);
+    }
+
+    /** @test */
+    public function the_deprecation_notice_is_silenced_by_the_suppression_flag(): void
+    {
+        // The sole escape hatch for a client who cannot rename yet.
+        config()->set('sp-laravel-api.suppress_config_rename_notice', true);
+
+        $this->assertSame([], $this->captureDeprecationNotices(['record.php']));
+    }
+
+    /** @test */
+    public function the_deprecation_notice_is_not_emitted_outside_the_console(): void
+    {
+        // PHP-FPM is shared-nothing: it boots the application on every request,
+        // so without this gate an unmigrated client with all five old files
+        // would get five log lines per HTTP request. The notice is for someone
+        // running artisan, not for request serving.
+        $this->assertSame(
+            [],
+            $this->captureDeprecationNotices(['record.php', 'audit.php'], runningInConsole: false)
+        );
+    }
+
+    /**
+     * Run the provider's notice against a temp config directory seeded with the
+     * given old-named files, and return the messages it logged.
+     *
+     * @param  string[]  $oldNamedFiles
+     * @return string[]
+     */
+    private function captureDeprecationNotices(array $oldNamedFiles, bool $runningInConsole = true): array
+    {
+        $directory = $this->makeTemporaryConfigDirectory();
+        $original = $this->app->configPath();
+        $originalConsole = $this->consoleFlag();
+        $logged = [];
+
+        Log::listen(function (MessageLogged $message) use (&$logged): void {
+            $logged[] = $message->message;
+        });
+
+        try {
+            foreach ($oldNamedFiles as $file) {
+                file_put_contents($directory . '/' . $file, '<?php return [];');
+            }
+
+            $this->app->useConfigPath($directory);
+            $this->setConsoleFlag($runningInConsole);
+
+            (new CoreSpLaravelApiProvider($this->app))->reportDeprecatedConfigFiles();
+        } finally {
+            $this->setConsoleFlag($originalConsole);
+            $this->app->useConfigPath($original);
+            $this->removeTemporaryConfigDirectory($directory);
+        }
+
+        return $logged;
+    }
+
+    /**
+     * Application::runningInConsole() memoizes into a protected property, and
+     * boot() has already populated it by the time a test runs, so the env var
+     * it reads is no longer consulted. Reflection is the only way to flip it.
+     */
+    private function consoleFlag(): ?bool
+    {
+        $property = new ReflectionProperty($this->app, 'isRunningInConsole');
+
+        /** @var bool|null $value */
+        $value = $property->getValue($this->app);
+
+        return $value;
+    }
+
+    private function setConsoleFlag(?bool $value): void
+    {
+        $property = new ReflectionProperty($this->app, 'isRunningInConsole');
+        $property->setValue($this->app, $value);
     }
 
     private function makeTemporaryConfigDirectory(): string

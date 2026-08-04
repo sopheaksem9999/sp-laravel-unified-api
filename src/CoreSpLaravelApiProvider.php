@@ -71,18 +71,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
         // it reflects anything Testbench's getEnvironmentSetUp() changed.
         ConfigNamespaceBridge::mirror($this->app['config']);
 
-        foreach (ConfigNamespaceBridge::deprecatedFiles() as $old => $new) {
-            if ((bool) config('sp-laravel-api.suppress_config_rename_notice', false)) {
-                break;
-            }
-
-            Log::info(sprintf(
-                'sp-laravel-api: config/%s is deprecated; rename it to config/%s. '
-                . 'It keeps working — set sp-laravel-api.suppress_config_rename_notice to silence this.',
-                $old,
-                $new
-            ));
-        }
+        $this->reportDeprecatedConfigFiles();
 
         $this->publishes([
             __DIR__ . '/../config/sp-laravel-api.php' => config_path('sp-laravel-api.php'),
@@ -183,5 +172,38 @@ class CoreSpLaravelApiProvider extends ServiceProvider
             /** @var Builder $this */
             return RecordService::applyRequestFilters($request, $this, $tenantId, $isArray, $orderBy);
         });
+    }
+
+    /**
+     * Log one notice per deprecated (unprefixed) config file the client still has.
+     *
+     * Console-only, deliberately. boot() runs once per application instance,
+     * which under Octane or a queue worker means once per worker — but PHP-FPM
+     * is shared-nothing and boots the application afresh on every request, so
+     * an unmigrated client with all five old files would otherwise get five
+     * Log::info lines on *every* HTTP request at Laravel's default log level.
+     * The notice's audience is a developer running artisan (migrate,
+     * vendor:publish), not a request being served, so gate it on the console.
+     *
+     * Public so a test can exercise it without re-running the whole of boot().
+     */
+    public function reportDeprecatedConfigFiles(): void
+    {
+        if (!$this->app->runningInConsole()) {
+            return;
+        }
+
+        if ((bool) config('sp-laravel-api.suppress_config_rename_notice', false)) {
+            return;
+        }
+
+        foreach (ConfigNamespaceBridge::deprecatedFiles() as $old => $new) {
+            Log::info(sprintf(
+                'sp-laravel-api: config/%s is deprecated; rename it to config/%s. '
+                . 'It keeps working — set sp-laravel-api.suppress_config_rename_notice to silence this.',
+                $old,
+                $new
+            ));
+        }
     }
 }

@@ -399,7 +399,7 @@ return [
     */
     'global_functions' => [
         // Add your custom functions here
-        // Example functions should be defined in your application's config/record.php
+        // Example functions should be defined in your application's config/sp-record.php
     ],
 
     'global_triggers' => [
@@ -483,6 +483,6 @@ return [
     */
     'tables' => [
         // Add your table configurations here
-        // Example configurations should be defined in your application's config/record.php
+        // Example configurations should be defined in your application's config/sp-record.php
     ],
 ];
