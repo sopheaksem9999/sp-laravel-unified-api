@@ -255,6 +255,42 @@ class SchemaRegistryUtils
     }
 
     /**
+     * Detect whether a column definition is uuid-typed across supported drivers.
+     *
+     * - a hand-written config declares the type as 'uuid'
+     * - pgsql reports the native 'uuid' type (also visible via udt_name)
+     * - mysql reports 'char(36)' / 'varchar(36)'
+     * - sqlite reports a bare 'varchar' with no length for uuid() columns
+     *   (indistinguishable from string PKs, but this package's convention is
+     *   uuid PKs for all non-integer keys)
+     *
+     * Shared by every write path that must supply a primary key value the
+     * database has no default for: RecordService::createRecord and the nested
+     * create in RelationshipResolverUtils. Keeping one implementation is the
+     * point — the two paths must not disagree about what a uuid column is.
+     *
+     * @param array<string, mixed>|null $colDef
+     */
+    public static function isUuidColumnType(?array $colDef): bool
+    {
+        if ($colDef === null) {
+            return false;
+        }
+
+        $type = strtolower((string) ($colDef['type'] ?? ''));
+
+        if ('uuid' === $type || 'uuid' === strtolower((string) ($colDef['udt_name'] ?? ''))) {
+            return true;
+        }
+
+        if (preg_match('/^(char|varchar)\(36\)$/', $type) === 1) {
+            return true;
+        }
+
+        return 'sqlite' === DB::getDriverName() && in_array($type, ['varchar', 'char'], true);
+    }
+
+    /**
      * Get table columns information from database.
      * Public so the CLI command can use it for generation.
      */

@@ -59,7 +59,17 @@ class RecordService
         $actualTableName = $tableSchema->table ?? $table;
         $pk = $tableSchema->primaryKey ?? 'id';
 
-        // Insert record
+        // Insert record.
+        //
+        // A uuid primary key has no database default and is not auto-incrementing,
+        // so when the client supplies no id the value has to be generated here or
+        // the insert violates the column's not-null constraint. This mirrors the
+        // nested-create path in RelationshipResolverUtils::processRelatedData and
+        // shares its uuid detection so the two cannot drift.
+        if ((!array_key_exists($pk, $payloadMain) || null === $payloadMain[$pk]) && SchemaRegistryUtils::isUuidColumnType($tableSchema->columns[$pk] ?? null)) {
+            $payloadMain[$pk] = (string) Str::uuid();
+        }
+
         if (array_key_exists($pk, $payloadMain) && null !== $payloadMain[$pk]) {
             DB::table($actualTableName)->insert($payloadMain);
             $insertedId = $payloadMain[$pk];
