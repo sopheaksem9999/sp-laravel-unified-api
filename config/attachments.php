@@ -95,7 +95,9 @@ return [
             isAuthWrite: true,
             primaryKey: 'id',
             columns: [
-                'id' => ['type' => 'string', 'nullable' => false],
+                // uuid, matching uuid('id')->primary() in
+                // 2024_01_01_000000_create_sp_attachments_tables.
+                'id' => ['type' => 'uuid', 'nullable' => false],
                 'folder_id' => ['type' => 'string', 'nullable' => true],
                 'title' => ['type' => 'string', 'nullable' => true],
                 'caption' => ['type' => 'string', 'nullable' => true],
@@ -292,7 +294,10 @@ return [
             primaryKey: 'id',
             disableCache: true,
             columns: [
-                'id' => ['type' => 'string', 'nullable' => false],
+                // uuid: the table is created as sp_document_folders with
+                // uuid('id')->primary() and renamed by
+                // 2026_08_02_000000_rename_sp_document_folders_table.
+                'id' => ['type' => 'uuid', 'nullable' => false],
                 'name' => ['type' => 'string', 'nullable' => false],
                 'parent_id' => ['type' => 'string', 'nullable' => true],
                 'scope' => ['type' => 'string', 'nullable' => false],
