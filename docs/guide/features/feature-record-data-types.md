@@ -29,6 +29,28 @@ You can store database-like type strings in `columns.{field}.type`, for example:
 - `varchar`, `char`, `text`
 - `json`, `jsonb`
 
+::: warning `uuid` is what enables automatic primary key generation
+A uuid primary key has no database default and does not auto-increment, so the
+package generates one on create — but **only when the primary key column is
+declared `uuid`** (or `char(36)`/`varchar(36)`, or a PostgreSQL `udt_name` of
+`uuid`). Declaring it `string` or `varchar` will **not** generate a key on any
+driver, and `POST /{apiPrefix}/{table}` without a client-supplied `id` then
+fails with a not-null violation (`SQLSTATE[23000]` / PostgreSQL 23502 /
+MySQL 1364).
+
+This bites hardest when scaffolding against a SQLite development database.
+SQLite has no native uuid type, so introspection reports a uuid column as a
+bare `varchar` — `sp-laravel-api:sync-record-columns` writes that verbatim, and
+`sp-laravel-api:generate-all-configs` emits no `columns` at all. In both
+cases the resulting config silently disables key generation on **every** driver,
+including the MySQL or PostgreSQL you deploy to. After generating or syncing
+against SQLite, change uuid primary keys to `'type' => 'uuid'` by hand.
+
+Detection is deliberately identical on every driver: it reads only the declared
+type, never the live column. That is what stops a natural string key — say
+`string('sku')->primary()` — from being mistaken for a uuid and overwritten.
+:::
+
 Example:
 
 ```php
