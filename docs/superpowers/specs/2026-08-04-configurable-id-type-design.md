@@ -1,6 +1,15 @@
 ---
 title: "Configurable ID Type for Bundled Modules"
 description: "Design for a global record.id_type setting governing sp_permissions and sp_roles primary keys, and for fixing client-model reference columns that are hardcoded as integers."
+keywords:
+  - id type
+  - uuid
+  - integer
+  - primary key
+  - record.id_type
+  - permissions
+  - audit
+  - migration
 date: 2026-08-04
 status: approved
 ---
@@ -17,7 +26,7 @@ branches on `columns.id.type` from the client's own `RecordTableType` config.
 The gap is in the modules this package ships itself. Their migrations hardcode
 ID types, and they disagree with each other:
 
-- `sp_attachments`, `sp_document_folders`, `sp_webhook_*` use `uuid('id')->primary()`
+- `sp_attachments`, `sp_attachment_folders`, `sp_webhook_*` use `uuid('id')->primary()`
 - `sp_permissions`, `sp_roles`, `sp_role_permissions`, `sp_model_has_roles`,
   `sp_model_permissions`, `sp_audit_logs` use `bigIncrements('id')` / `id()`
 
@@ -109,7 +118,7 @@ install.
 
 These tables are package-internal and already interoperate with both client
 conventions, because the columns that reference client records
-(`sp_attachment_links.record_id`, `sp_document_folders.owner_id`) are strings.
+(`sp_attachment_links.record_id`, `sp_attachment_folders.owner_id`) are strings.
 
 ## Resulting behavior
 
@@ -238,11 +247,24 @@ outright. Both become `string`.
 
 ### Related fix: audit tenant column
 
-`sp_audit_logs` hardcodes its tenant column as `unsignedBigInteger`, ignoring
-the `record.tenant_column_type` setting that already exists for this purpose and
-that the attachments, webhooks, and permissions migrations already honor. It
-will honor it too. Same root cause, same change, so it is included here rather
-than deferred.
+`sp_audit_logs` hardcodes its tenant column as `unsignedBigInteger`. Every other
+package migration declares it `string` — attachments, webhooks, and permissions
+all use `$table->string($tenantColumn)`. Audit is the outlier, and as an integer
+column it cannot hold a UUID tenant id, which is the same bug class as
+`entity_id` and `user_id`.
+
+It becomes an unconditional `string`, matching its siblings and holding either
+tenant id shape.
+
+**Correction:** an earlier draft of this spec claimed `record.tenant_column_type`
+"already exists for this purpose and the attachments, webhooks, and permissions
+migrations already honor it," and proposed driving the column type from it. That
+premise was false. `grep -rn "tenantColumnType" src database` shows the only
+readers are `RecordConfigService` itself and `EnablePgsqlRlsCommand`, which uses
+it for PostgreSQL RLS cast expressions — not for column declarations. Driving the
+audit column from that setting would have made `sp_audit_logs` the only table
+whose tenant column type varies with config, giving it `bigint` while every
+sibling stayed `varchar`.
 
 ### PostgreSQL parameter binding
 
@@ -274,7 +296,7 @@ values, set via the test case's config rather than an environment variable:
    `sp_roles.id` are integer; under `uuid`, they are uuid.
 2. **Ungoverned tables hold.** The three pivot `id` columns and
    `sp_audit_logs.id` are integer under both settings.
-3. **Exclusion holds.** `sp_attachments`, `sp_document_folders`, and
+3. **Exclusion holds.** `sp_attachments`, `sp_attachment_folders`, and
    `sp_webhook_*` have uuid PKs under both settings.
 4. **The bug, as a failing test first.** A client `User` model with a UUID
    primary key can be assigned a role and have it read back. This fails against

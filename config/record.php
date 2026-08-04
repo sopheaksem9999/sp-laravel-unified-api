@@ -47,6 +47,39 @@ return [
     'enable_tenant_id' => false,
     'tenant_column' => 'tenant_id',
     'tenant_column_type' => 'string', // PGSQL RLS cast type: string, integer, bigint, uuid
+
+    /*
+    |--------------------------------------------------------------------------
+    | Bundled Module ID Type
+    |--------------------------------------------------------------------------
+    |
+    | Controls the primary key type for the package's own sp_permissions and
+    | sp_roles tables, and for the foreign key columns that reference them.
+    |
+    | Supported values: 'integer' (default) or 'uuid'.
+    |
+    | Set this to 'uuid' if your project uses UUID primary keys, so the roles
+    | and permissions API surface matches the rest of your tables.
+    |
+    | Choose this BEFORE running the package migrations and do not change it
+    | afterwards. It is read only while the tables are being created, so a later
+    | change does not alter them — it just makes this setting disagree with the
+    | schema, and the mismatch fails loudly on the next write rather than
+    | degrading quietly. Switching to 'uuid' after migrating makes role creation
+    | write a uuid into an integer id column (PostgreSQL: invalid input syntax
+    | for type bigint); switching back to 'integer' makes it insert no id at all
+    | into a column that has no default (PostgreSQL: null value in column "id").
+    | Converting an already-migrated project means writing your own migration
+    | for sp_permissions.id, sp_roles.id and every foreign key listed above.
+    |
+    | Not governed by this setting:
+    | - sp_attachments, sp_attachment_folders and sp_webhook_* always use uuid.
+    | - The pivot ids (sp_role_permissions, sp_model_has_roles,
+    |   sp_model_permissions) and sp_audit_logs.id are always auto-incrementing
+    |   integers. Nothing references them and their insert paths supply no id.
+    |
+    */
+    'id_type' => 'integer', // uuid|integer
     'tenant_header' => 'X-Tenant-ID',
     'table_config_path' => 'records/tables',
 

@@ -9,10 +9,13 @@ use Sopheak\Core\Authorization\PermissionRegistrar;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Str;
+use Sopheak\Core\Authorization\Traits\HasConfigurableKey;
 use Sopheak\Core\Services\RecordConfigService;
 
 class Role extends Model
 {
+    use HasConfigurableKey;
+
     protected $table = 'sp_roles';
 
     protected $fillable = [

@@ -1,3 +1,17 @@
+---
+title: "Configurable ID Type Implementation Plan"
+description: "Six-task TDD implementation plan for the record.id_type setting and the client-model reference column fixes."
+keywords:
+  - id type
+  - uuid
+  - integer
+  - primary key
+  - record.id_type
+  - implementation plan
+  - migration
+date: 2026-08-04
+---
+
 # Configurable ID Type Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -13,7 +27,7 @@
 ## Global Constraints
 
 - Default `record.id_type` is `'integer'`. With the key absent or defaulted, **every table keeps the exact type it has today.** Any change to default behavior is a bug.
-- `sp_attachments`, `sp_document_folders`, and `sp_webhook_*` keep `uuid` primary keys under **both** settings. They are never governed by `id_type`.
+- `sp_attachments`, `sp_attachment_folders`, and `sp_webhook_*` keep `uuid` primary keys under **both** settings. They are never governed by `id_type`.
 - `sp_role_permissions.id`, `sp_model_has_roles.id`, `sp_model_permissions.id`, and `sp_audit_logs.id` stay `bigIncrements` under **both** settings. Their write paths insert no `id`.
 - `id_type` is read via `config()`, never `env()`. No `SP_ID_TYPE` environment variable is introduced.
 - `declare(strict_types=1);` at the top of every new PHP file, matching the codebase.
@@ -206,7 +220,7 @@ In `config/record.php`, insert after the `'tenant_column_type'` line (near line 
     | project that has already migrated will NOT alter existing tables.
     |
     | Not governed by this setting:
-    | - sp_attachments, sp_document_folders and sp_webhook_* always use uuid.
+    | - sp_attachments, sp_attachment_folders and sp_webhook_* always use uuid.
     | - The pivot ids (sp_role_permissions, sp_model_has_roles,
     |   sp_model_permissions) and sp_audit_logs.id are always auto-incrementing
     |   integers. Nothing references them and their insert paths supply no id.
@@ -1452,7 +1466,7 @@ project that has already migrated does **not** alter existing tables.
 
 ### What it does not govern
 
-- `sp_attachments`, `sp_document_folders` and `sp_webhook_*` always use `uuid`
+- `sp_attachments`, `sp_attachment_folders` and `sp_webhook_*` always use `uuid`
   primary keys.
 - `sp_role_permissions.id`, `sp_model_has_roles.id`,
   `sp_model_permissions.id` and `sp_audit_logs.id` are always auto-incrementing

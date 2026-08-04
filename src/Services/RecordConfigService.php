@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Services;
 
+use InvalidArgumentException;
 use Throwable;
 use Sopheak\Core\Jobs\AuditLogJob;
 use RecursiveDirectoryIterator;
@@ -25,6 +26,39 @@ class RecordConfigService
     public static function tenantColumnType(): string
     {
         return (string) config('record.tenant_column_type', 'string');
+    }
+
+    /**
+     * Primary key type for the bundled sp_permissions and sp_roles tables.
+     *
+     * Config is a system boundary, so an unrecognized value fails loudly here
+     * rather than silently falling back to integer, which would be expensive
+     * to discover once tables are already migrated.
+     *
+     * @throws InvalidArgumentException when the configured value is not
+     *                                  'uuid' or 'integer'
+     */
+    public static function idType(): string
+    {
+        $configured = config('record.id_type') ?? 'integer';
+
+        if (!is_string($configured)) {
+            throw new InvalidArgumentException(sprintf(
+                'record.id_type must be "uuid" or "integer", got %s',
+                get_debug_type($configured)
+            ));
+        }
+
+        $normalized = strtolower(trim($configured));
+
+        if (!in_array($normalized, ['uuid', 'integer'], true)) {
+            throw new InvalidArgumentException(sprintf(
+                'record.id_type must be "uuid" or "integer", got "%s"',
+                $configured
+            ));
+        }
+
+        return $normalized;
     }
 
     public static function tenantHeader(): string

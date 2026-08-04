@@ -128,7 +128,7 @@ class SuperAdminBypassTest extends TestCase
             Schema::create('sp_model_has_roles', function (Blueprint $table): void {
                 $table->bigIncrements('id');
                 $table->string('model_type');
-                $table->unsignedBigInteger('model_id');
+                $table->string('model_id');
                 $table->unsignedBigInteger('role_id');
                 $table->string('tenant_id')->nullable();
                 $table->timestamps();
@@ -140,7 +140,7 @@ class SuperAdminBypassTest extends TestCase
             Schema::create('sp_model_permissions', function (Blueprint $table): void {
                 $table->bigIncrements('id');
                 $table->string('model_type');
-                $table->unsignedBigInteger('model_id');
+                $table->string('model_id');
                 $table->unsignedBigInteger('permission_id');
                 $table->string('tenant_id')->nullable();
                 $table->timestamps();
