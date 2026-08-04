@@ -38,7 +38,7 @@ class AuditTenantColumnTypeTest extends TestCase
 
         $this->assertTrue(
             $columns->has($tenantColumn),
-            "sp_audit_logs should have a {$tenantColumn} column when tenant ids are enabled"
+            sprintf('sp_audit_logs should have a %s column when tenant ids are enabled', $tenantColumn)
         );
         $this->assertSame('varchar', $columns[$tenantColumn]['type']);
     }

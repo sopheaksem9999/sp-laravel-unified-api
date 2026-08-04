@@ -61,8 +61,16 @@ return [
     | Set this to 'uuid' if your project uses UUID primary keys, so the roles
     | and permissions API surface matches the rest of your tables.
     |
-    | This is read only when the package migrations first run. Changing it on a
-    | project that has already migrated will NOT alter existing tables.
+    | Choose this BEFORE running the package migrations and do not change it
+    | afterwards. It is read only while the tables are being created, so a later
+    | change does not alter them — it just makes this setting disagree with the
+    | schema, and the mismatch fails loudly on the next write rather than
+    | degrading quietly. Switching to 'uuid' after migrating makes role creation
+    | write a uuid into an integer id column (PostgreSQL: invalid input syntax
+    | for type bigint); switching back to 'integer' makes it insert no id at all
+    | into a column that has no default (PostgreSQL: null value in column "id").
+    | Converting an already-migrated project means writing your own migration
+    | for sp_permissions.id, sp_roles.id and every foreign key listed above.
     |
     | Not governed by this setting:
     | - sp_attachments, sp_attachment_folders and sp_webhook_* always use uuid.
