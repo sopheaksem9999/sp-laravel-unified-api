@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Sopheak\Core\Database\MigrationIdHelper;
 use Sopheak\Core\Services\RecordConfigService;
 
 return new class extends Migration {
@@ -12,7 +13,7 @@ return new class extends Migration {
         $enableTenantId = RecordConfigService::enableTenantId();
 
         Schema::create('sp_permissions', function (Blueprint $table) {
-            $table->bigIncrements('id');
+            MigrationIdHelper::primary($table);
             $table->string('name');
             $table->string('group')->nullable();
             $table->string('guard_name');
@@ -25,7 +26,7 @@ return new class extends Migration {
         });
 
         Schema::create('sp_roles', function (Blueprint $table) use ($tenantColumn, $enableTenantId) {
-            $table->bigIncrements('id');
+            MigrationIdHelper::primary($table);
             if ($enableTenantId) {
                 $table->string($tenantColumn)->nullable();
                 $table->unique(['key', $tenantColumn], 'sp_roles_key_tenant_unique');
@@ -48,9 +49,11 @@ return new class extends Migration {
         });
 
         Schema::create('sp_role_permissions', function (Blueprint $table) use ($tenantColumn, $enableTenantId) {
+            // Surrogate key: nothing references it, and Eloquent's sync()
+            // inserts pivot rows without an id, so it must stay auto-incrementing.
             $table->bigIncrements('id');
-            $table->unsignedBigInteger('role_id');
-            $table->unsignedBigInteger('permission_id');
+            MigrationIdHelper::foreign($table, 'role_id');
+            MigrationIdHelper::foreign($table, 'permission_id');
             if ($enableTenantId) {
                 $table->string($tenantColumn)->nullable()->index();
             }
@@ -65,8 +68,10 @@ return new class extends Migration {
         Schema::create('sp_model_has_roles', function (Blueprint $table) use ($tenantColumn, $enableTenantId) {
             $table->bigIncrements('id');
             $table->string('model_type');
-            $table->unsignedBigInteger('model_id');
-            $table->unsignedBigInteger('role_id');
+            // Points at an arbitrary client model, whose key may be a uuid or
+            // an integer. A string holds either.
+            MigrationIdHelper::morph($table, 'model_id');
+            MigrationIdHelper::foreign($table, 'role_id');
             if ($enableTenantId) {
                 $table->string($tenantColumn)->nullable()->index();
             }
@@ -82,8 +87,8 @@ return new class extends Migration {
         Schema::create('sp_model_permissions', function (Blueprint $table) use ($tenantColumn, $enableTenantId) {
             $table->bigIncrements('id');
             $table->string('model_type');
-            $table->unsignedBigInteger('model_id');
-            $table->unsignedBigInteger('permission_id');
+            MigrationIdHelper::morph($table, 'model_id');
+            MigrationIdHelper::foreign($table, 'permission_id');
             if ($enableTenantId) {
                 $table->string($tenantColumn)->nullable()->index();
             }
