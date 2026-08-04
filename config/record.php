@@ -47,6 +47,31 @@ return [
     'enable_tenant_id' => false,
     'tenant_column' => 'tenant_id',
     'tenant_column_type' => 'string', // PGSQL RLS cast type: string, integer, bigint, uuid
+
+    /*
+    |--------------------------------------------------------------------------
+    | Bundled Module ID Type
+    |--------------------------------------------------------------------------
+    |
+    | Controls the primary key type for the package's own sp_permissions and
+    | sp_roles tables, and for the foreign key columns that reference them.
+    |
+    | Supported values: 'integer' (default) or 'uuid'.
+    |
+    | Set this to 'uuid' if your project uses UUID primary keys, so the roles
+    | and permissions API surface matches the rest of your tables.
+    |
+    | This is read only when the package migrations first run. Changing it on a
+    | project that has already migrated will NOT alter existing tables.
+    |
+    | Not governed by this setting:
+    | - sp_attachments, sp_document_folders and sp_webhook_* always use uuid.
+    | - The pivot ids (sp_role_permissions, sp_model_has_roles,
+    |   sp_model_permissions) and sp_audit_logs.id are always auto-incrementing
+    |   integers. Nothing references them and their insert paths supply no id.
+    |
+    */
+    'id_type' => 'integer', // uuid|integer
     'tenant_header' => 'X-Tenant-ID',
     'table_config_path' => 'records/tables',
 
