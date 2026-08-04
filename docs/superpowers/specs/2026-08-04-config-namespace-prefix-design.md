@@ -70,51 +70,112 @@ behavioral change; a client who migrates gets clean, obviously-ours filenames.
 The `sp-` prefix (hyphen, not underscore) matches the existing
 `sp-laravel-api.php` and `sp-api-mcp.php`.
 
-## The bridge
+## Amendment: the direction is inverted
 
-A `ConfigNamespaceBridge` invoked at the top of
-`CoreSpLaravelApiProvider::register()`, running in two passes around the
-existing `mergeConfigFrom` calls.
+The original draft made `sp-*` the internal namespace and rewrote every
+`config()` call in `src/` to match. Planning found that unworkable, for a reason
+worth recording.
 
-### Pass A — adopt, before the merges
+### What the bootstrap order actually is
 
-For each old/new pair: if the client has the old namespace and does **not**
-have the new one, copy old to new.
+From `vendor/orchestra/testbench-core/src/Concerns/CreatesApplication.php`:
+
+```
+line 534   RegisterProviders::bootstrap()    <- providers' register() runs here
+line 544   $this->getEnvironmentSetUp($app)  <- tests set config here
+line 565   BootProviders::bootstrap()        <- providers' boot() runs here
+```
+
+A bridge in `register()` therefore runs **before** any test-supplied config. A
+bridge in `boot()` runs after `getEnvironmentSetUp()` but still before the test
+body and `setUp()`.
+
+### Why that sinks the original design
+
+`tests/TestCase.php` blanks `record.tables`, `attachments.tables` and
+`webhooks.tables`, and across the suite there are **355 `config()->set()` calls
+on these five namespaces in 63 files**. Only 11 files use `getEnvironmentSetUp`;
+the rest set config in `setUp()` or the test body, both of which run after
+`boot()`.
+
+If the package read `sp-record.tables` while tests set `record.tables`, no
+bridge placement rescues it. Every one of those 355 call sites would have to
+change, and any client doing the same at runtime would break silently.
+
+### The inversion
+
+**Keep the existing namespaces internally canonical. Rename only the files.**
+
+`mergeConfigFrom($path, $key)` takes the key independently of the path, so the
+package can ship `config/sp-attachments.php` and still merge it under
+`attachments`:
 
 ```php
-if ($config->has($old) && !$config->has($new)) {
-    $config->set($new, $config->get($old));
+$this->mergeConfigFrom(__DIR__ . '/../config/sp-attachments.php', 'attachments');
+```
+
+Package code continues reading `config('record.*')`, `config('attachments.*')`
+and so on — unchanged. Tests are unchanged. The 164 call sites in `src/` are
+unchanged.
+
+What the client sees is the only thing that changes: `vendor:publish` now writes
+`config/sp-record.php` instead of `config/record.php`, so their `config/`
+directory says plainly which files belong to this package. That was the entire
+goal.
+
+## The bridge
+
+Two passes, now much smaller.
+
+### Pass A — adopt, in `register()`, before the merges
+
+A client who publishes the new `sp-record.php` gets it under the `sp-record`
+namespace, which the package does not read. Fold it into the canonical one:
+
+```php
+if ($config->has($new)) {
+    $config->set($old, array_replace_recursive(
+        $config->get($old, []),
+        $config->get($new)
+    ));
 }
 ```
 
-After this pass, a client's published `record.php` *is* `sp-record`, and the
-subsequent `mergeConfigFrom` calls layer package defaults underneath it with
-their usual client-wins semantics.
+New wins over old, matching the both-files-exist rule below. A client who has
+only the old file needs nothing — it already loaded under the canonical name.
 
-### Pass B — mirror, after the merges
+### Pass B — mirror, in `boot()`, after the merges
 
-For each pair, copy the fully-resolved new namespace back onto the old one:
+Copy the resolved canonical namespace onto the new one, so a client who has
+migrated can read `config('sp-record.tables')` in their own code:
 
 ```php
-$config->set($old, $config->get($new));
+$config->set($new, $config->get($old));
 ```
 
-Both namespaces now hold the identical resolved array. Client code calling
-`config('record.tables')` or `config('audit.enabled')` keeps working forever,
-whether or not the client ever renames a file.
+`boot()` rather than `register()` so the mirror reflects anything
+`getEnvironmentSetUp()` changed.
 
-### Ordering is load-bearing
+### Ordering is still load-bearing
 
-Pass A **must** run before the `mergeConfigFrom` calls. `config/sp-permissions.php`
+Pass A must run before the `mergeConfigFrom` calls. `config/sp-permissions.php`
 evaluates `RecordConfigService::idType()` at merge time, which reads
-`sp-record.id_type`. If the bridge has not yet adopted the client's
-`record.php`, that read returns the default and the permissions tables are
-declared with the wrong primary key type.
+`record.id_type`. If a client's published `sp-record.php` has not yet been
+folded into `record`, that read returns the default and the permissions tables
+are declared with the wrong primary key type.
 
-This is the same load-order property the `id_type` feature already depends on,
-documented in `2026-08-04-configurable-id-type-design.md`: `record.php` is
-loaded by Laravel's `LoadConfiguration` bootstrapper before any provider
-registers, so its values are available during `register()`.
+This is the same load-order property the `id_type` feature depends on:
+`record.php` (and now `sp-record.php`) is loaded by Laravel's
+`LoadConfiguration` bootstrapper before any provider registers, so its values
+are available during `register()`.
+
+### Known limitation
+
+A runtime `config()->set('sp-record.x', …)` issued after `boot()` does not
+propagate to the canonical `record.x`. Runtime overrides must use the canonical
+name. This is documented rather than solved: the canonical name is what all
+existing code and tests already use, so the limitation only affects code written
+against the new name *and* mutating config at runtime, which nothing does today.
 
 ### When both files exist
 
@@ -135,19 +196,16 @@ One log line per boot, naming each old-named file found and its new name.
 
 ## Package internals
 
-The roughly 175 `config('<old>.*')` call sites in `src/` are rewritten to the
-`sp-*` names.
+**Nothing changes.** This is the point of the inversion.
 
-Additionally, `RecordConfigService` accessors read the new name with the old as
-fallback:
+The 164 `config('record.*')` / `config('attachments.*')` / … call sites in
+`src/` keep reading the canonical namespaces. `RecordConfigService` accessors are
+untouched — no new-then-old fallback is needed, because the canonical name never
+moves. The 355 `config()->set()` calls across 63 test files keep working
+verbatim.
 
-```php
-config('sp-record.id_type') ?? config('record.id_type') ?? 'integer'
-```
-
-The boot-time bridge cannot see runtime `config()->set()` calls, which both the
-package's own test suite and some client code perform. The accessor fallback
-covers that case; the bridge covers file-level config. Both are needed.
+The only code changes are in `CoreSpLaravelApiProvider`: the `mergeConfigFrom`
+source paths, the `publishes` map, and the two bridge passes.
 
 ## Directory autoloading in `sp-record.php`
 
@@ -240,23 +298,30 @@ every existing install.
 
 ## Testing
 
-1. **No client config at all.** Package defaults load under `sp-*`. Old
-   namespaces mirror correctly.
-2. **Client has only old-named files.** Values are adopted into `sp-*`, package
-   code reads them correctly, and `config('record.*')` still resolves.
-3. **Client has only new-named files.** Works directly; old namespaces mirror.
-4. **Client has both.** New wins; old is ignored; the notice says so.
-5. **The `id_type` ordering case.** A client with only `record.php` setting
-   `id_type` to `uuid` must produce uuid columns in `sp-permissions`' table
-   config — proving Pass A ran before the merges.
-6. **Runtime `config()->set()`** on an old name is still honored by
-   `RecordConfigService` accessors.
-7. **`config:cache` compatibility.** The bridge runs inside `register()`, which
-   is skipped when config is cached; confirm the cached payload already holds
-   both namespaces resolved.
+1. **No client config at all.** Package defaults load under the canonical
+   namespaces, exactly as today.
+2. **Client has only old-named files.** Nothing changes — they already load
+   under the canonical names. This is the case that must be bit-for-bit
+   identical to current behavior.
+3. **Client has only new-named files.** Pass A folds `sp-record` into `record`;
+   package code resolves it correctly.
+4. **Client has both.** New wins on conflicting keys; the notice says the old
+   file was superseded.
+5. **The `id_type` ordering case.** A client with only `sp-record.php` setting
+   `id_type` to `uuid` must produce uuid columns in the permissions table
+   config — proving Pass A ran before the merges. This is the test most likely
+   to catch a regression, since it depends on the exact ordering.
+6. **Mirror reflects `getEnvironmentSetUp`.** A value set on the canonical name
+   in `getEnvironmentSetUp()` is visible on the `sp-*` name after boot, proving
+   Pass B runs in `boot()` and not `register()`.
+7. **`config:cache` compatibility.** Both passes are skipped when config is
+   cached; confirm the cached payload already holds both namespaces resolved,
+   and that a cached app behaves identically to an uncached one.
 8. **Deprecation notice** fires once per boot, names the right files, and is
    suppressible.
-9. The existing 463-test suite passes unchanged.
+9. The existing 486-test suite passes **unchanged** — no test edits. If any test
+   needs editing, the inversion has been implemented wrongly; that is the
+   signal to stop and re-read this section.
 
 ### Autoloading tests
 
@@ -277,16 +342,22 @@ every existing install.
 
 ## Files affected
 
-- `config/record.php` → `config/sp-record.php` (and four siblings)
-- `src/Config/ConfigNamespaceBridge.php` — new
+- `config/record.php` → `config/sp-record.php`, and the same for
+  `permissions`, `audit`, `attachments`, `webhooks` — `git mv`, contents
+  otherwise unchanged except for the autoloading block in `sp-record.php`
+- `src/Config/ConfigNamespaceBridge.php` — new; the two passes
 - `src/Support/RecordConfigLoader.php` — new; the directory-scanning logic
   extracted from `RecordConfigService`, memoized per path
-- `src/CoreSpLaravelApiProvider.php` — invoke the bridge; update
-  `mergeConfigFrom` and `publishes` paths
-- `src/Services/RecordConfigService.php` — accessor fallbacks; delegate scanning
-  to `RecordConfigLoader`; honor the `autoloaded` flag
+- `src/CoreSpLaravelApiProvider.php` — `mergeConfigFrom` source paths (keys
+  unchanged), `publishes` map, and the two bridge invocations
+- `src/Services/RecordConfigService.php` — delegate scanning to
+  `RecordConfigLoader`; honor the `autoloaded` flag. **No accessor changes.**
 - `src/Console/SetupPackageCommand.php` — emit the loader calls when scaffolding
-- ~175 `config()` call sites across `src/`
-- `docs/` — an upgrade note explaining that nothing is required, plus the
-  `config:cache` closure caveat
+- `docs/getting-started/upgrade-0.4.80-to-0.4.82.md` — replace the "Coming next"
+  placeholder with the real section
+- `docs/` — the `config:cache` closure caveat
 - `CHANGELOG.md`
+
+**Explicitly not affected:** the 164 `config()` call sites in `src/`, and all
+355 `config()->set()` calls in `tests/`. If a change to either becomes
+necessary, the design has drifted back toward the rejected direction.
