@@ -78,14 +78,21 @@ class ConfigNamespaceBridge
      * `$config->has('attachments')` is always true and says nothing about which
      * file the client published.
      *
+     * @param string|null $directory Directory to scan. Defaults to the
+     *                               application's config_path(). Overridable so
+     *                               tests can point at a directory they own
+     *                               rather than writing fixtures into the real
+     *                               config directory.
+     *
      * @return array<string, string> old filename => new filename
      */
-    public static function deprecatedFiles(): array
+    public static function deprecatedFiles(?string $directory = null): array
     {
+        $directory ??= config_path();
         $found = [];
 
         foreach (self::RENAMES as $canonical => $published) {
-            if (is_file(config_path($canonical . '.php'))) {
+            if (is_file($directory . '/' . $canonical . '.php')) {
                 $found[$canonical . '.php'] = $published . '.php';
             }
         }

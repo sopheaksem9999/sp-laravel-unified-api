@@ -47,10 +47,13 @@ class SetupPackageCommand extends Command
             $created += $this->ensureFile('config/records/tables/README.md', $this->defaultRecordTablesReadme(), $force);
             $created += $this->ensureFile('config/records/tables/users.php', $this->defaultUsersTableConfig(), $force);
             $created += $this->ensureFile('config/records/global-functions/README.md', $this->defaultRecordGlobalFunctionsReadme(), $force);
-            $created += $this->ensureFile('config/record.php', $this->defaultRecordConfig(), $force);
-            $created += $this->ensureFile('config/audit.php', $this->defaultAuditConfig(), $force);
-            $created += $this->ensureFile('config/attachments.php', $this->defaultAttachmentsConfig(), $force);
-            $created += $this->ensureFile('config/webhooks.php', $this->defaultWebhooksConfig(), $force);
+            // sp-* names: the package ships and reads these under the canonical
+            // namespaces regardless, and scaffolding the old unprefixed names
+            // would trip the package's own config-rename deprecation notice.
+            $created += $this->ensureFile('config/sp-record.php', $this->defaultRecordConfig(), $force);
+            $created += $this->ensureFile('config/sp-audit.php', $this->defaultAuditConfig(), $force);
+            $created += $this->ensureFile('config/sp-attachments.php', $this->defaultAttachmentsConfig(), $force);
+            $created += $this->ensureFile('config/sp-webhooks.php', $this->defaultWebhooksConfig(), $force);
             $created += $this->ensureAppServiceProviderRateLimiters();
         } catch (Throwable $throwable) {
             $this->error('❌ Failed to create configuration files: ' . $throwable->getMessage());
@@ -786,11 +789,11 @@ class SetupPackageCommand extends Command
 
     private function defaultWebhooksConfig(): string
     {
-        return file_get_contents(__DIR__ . '/../../config/webhooks.php') ?: "<?php\n\nreturn [];";
+        return file_get_contents(__DIR__ . '/../../config/sp-webhooks.php') ?: "<?php\n\nreturn [];";
     }
 
     private function defaultAttachmentsConfig(): string
     {
-        return file_get_contents(__DIR__ . '/../../config/attachments.php') ?: "<?php\n\nreturn [];";
+        return file_get_contents(__DIR__ . '/../../config/sp-attachments.php') ?: "<?php\n\nreturn [];";
     }
 }

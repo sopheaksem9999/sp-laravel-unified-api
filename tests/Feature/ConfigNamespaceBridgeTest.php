@@ -87,7 +87,7 @@ class ConfigNamespaceBridgeTest extends TestCase
             $this->assertSame(
                 $canonical,
                 $config->get($published . '.marker'),
-                "{$published} must mirror {$canonical}"
+                sprintf('%s must mirror %s', $published, $canonical)
             );
         }
     }
@@ -105,5 +105,81 @@ class ConfigNamespaceBridgeTest extends TestCase
             ],
             ConfigNamespaceBridge::RENAMES
         );
+    }
+
+    /** @test */
+    public function the_canonical_namespace_still_carries_package_defaults(): void
+    {
+        $this->assertIsArray(config('attachments.tables'));
+        $this->assertNotNull(config('attachments.disk_public'));
+    }
+
+    /** @test */
+    public function the_published_name_mirrors_the_canonical_one_after_boot(): void
+    {
+        $this->assertSame(config('record.api_prefix'), config('sp-record.api_prefix'));
+        $this->assertSame(config('audit.enabled'), config('sp-audit.enabled'));
+    }
+
+    /** @test */
+    public function a_value_set_in_environment_setup_reaches_the_mirrored_name(): void
+    {
+        // record.api_prefix is set to 'api' by TestCase::getEnvironmentSetUp,
+        // which runs after register() and before boot(). Seeing it on the
+        // mirrored name proves Pass B runs in boot(), not register().
+        $this->assertSame('api', config('sp-record.api_prefix'));
+    }
+
+    /** @test */
+    public function no_notice_is_emitted_when_no_old_named_file_exists(): void
+    {
+        // A directory with nothing in it stands in for the common case: a client
+        // with nothing to migrate gets no log noise.
+        $directory = $this->makeTemporaryConfigDirectory();
+
+        try {
+            $this->assertSame([], ConfigNamespaceBridge::deprecatedFiles($directory));
+        } finally {
+            $this->removeTemporaryConfigDirectory($directory);
+        }
+    }
+
+    /** @test */
+    public function deprecated_files_reports_old_names_present_on_disk(): void
+    {
+        // Scans a directory this test owns rather than config_path(), which
+        // under Testbench resolves inside vendor/ — unversioned, wiped by
+        // composer install, and littered if the run aborts mid-test.
+        $directory = $this->makeTemporaryConfigDirectory();
+
+        try {
+            file_put_contents($directory . '/record.php', '<?php return [];');
+
+            $this->assertSame(
+                ['record.php' => 'sp-record.php'],
+                ConfigNamespaceBridge::deprecatedFiles($directory)
+            );
+        } finally {
+            $this->removeTemporaryConfigDirectory($directory);
+        }
+    }
+
+    private function makeTemporaryConfigDirectory(): string
+    {
+        $directory = sys_get_temp_dir() . '/sp-config-bridge-' . bin2hex(random_bytes(8));
+        mkdir($directory, 0777, true);
+
+        return $directory;
+    }
+
+    private function removeTemporaryConfigDirectory(string $directory): void
+    {
+        foreach (glob($directory . '/*') ?: [] as $file) {
+            unlink($file);
+        }
+
+        if (is_dir($directory)) {
+            rmdir($directory);
+        }
     }
 }

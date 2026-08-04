@@ -38,7 +38,7 @@ class AttachmentAfterReadAddsUrlsTest extends TestCase
             });
         }
 
-        $config = require __DIR__ . '/../../config/attachments.php';
+        $config = require __DIR__ . '/../../config/sp-attachments.php';
         $tableConfig = $config['tables']['sp_attachments'];
         $tableConfig->isAuthRead = false;
 
