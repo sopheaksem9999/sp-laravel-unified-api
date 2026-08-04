@@ -127,9 +127,18 @@ your project's convention.
 ```
 
 The default is `'integer'`, set as a plain literal — there is no `SP_ID_TYPE`
-environment variable. This setting is read only when the package migrations
-first run. Changing it on a project that has already migrated does **not**
-alter existing tables.
+environment variable.
+
+Choose it **before** the package migrations first run, and do not change it
+afterwards. The setting is read only while the tables are being created, so a
+later change does not alter them — it only makes the setting disagree with the
+schema, and that disagreement fails loudly on the next write rather than
+degrading quietly. Switching to `'uuid'` after migrating makes role creation
+write a UUID into an integer `id` column (PostgreSQL: `invalid input syntax for
+type bigint`); switching back to `'integer'` makes it insert no id at all into a
+column that has no default (PostgreSQL: `null value in column "id"`). Converting
+an already-migrated project means writing your own migration for
+`sp_permissions.id`, `sp_roles.id` and every foreign key listed below.
 
 ### What it governs
 
@@ -166,7 +175,20 @@ equally well:
 - `sp_attachment_links.record_id`
 
 This is why a UUID-keyed `User` works with roles and audit logging regardless
-of what `id_type` is set to.
+of what `id_type` is set to. Each is a `varchar(191)`: long enough for any UUID
+or integer key, and short enough that the composite unique indexes these
+columns sit in stay inside MySQL's 3072-byte InnoDB index limit under `utf8mb4`.
+
+**Upgrading an existing install.** Those columns used to be
+`unsignedBigInteger`, so a project that migrated earlier still has integer
+columns while the package metadata now declares them as strings. Migration
+`2026_08_05_000000_convert_client_reference_columns_to_string` converts them in
+place. It is a no-op when the columns are already strings and when the table is
+absent (`sp_audit_logs` with `audit.enabled` off), and it leaves every index
+alone. It does rewrite `sp_audit_logs`, which is usually the largest table in
+the schema, so run it in a maintenance window on a big database. Its `down()` is
+intentionally a no-op: a UUID cannot be cast back into a `bigint` without
+destroying data.
 
 Note that `sp_audit_logs`'s tenant column (present only when
 `enable_tenant_id` is on) follows this same reasoning and is **always**
