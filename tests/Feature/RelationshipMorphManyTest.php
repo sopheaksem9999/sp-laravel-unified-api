@@ -88,6 +88,19 @@ class RelationshipMorphManyTest extends TestCase
                 hasTenantId: false,
                 softDeletes: false,
                 public: new RecordTablePublic(read: true, write: true),
+                // Declared, not introspected. A nested create has to generate
+                // this table's key, and uuid detection reads the declared type
+                // — SQLite's PRAGMA reports a uuid column as a bare 'varchar',
+                // indistinguishable from a natural string key, so introspection
+                // is not allowed to decide this.
+                columns: [
+                    'id' => ['type' => 'uuid', 'nullable' => false],
+                    'target_type' => ['type' => 'string', 'nullable' => false],
+                    'target_id' => ['type' => 'uuid', 'nullable' => false],
+                    'locale' => ['type' => 'string', 'nullable' => false],
+                    'field' => ['type' => 'string', 'nullable' => false],
+                    'value' => ['type' => 'text', 'nullable' => false],
+                ],
                 relationships: [],
             ),
         ]);

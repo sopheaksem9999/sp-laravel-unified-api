@@ -123,23 +123,44 @@ unaffected.
 
 ### If folder queries fail with "no such table"
 
-The rename migration contains a guard intended to skip SQLite:
+An earlier revision of the rename migration carried a guard intended to skip
+SQLite:
 
 ```php
 config('database.default') !== 'sqlite'
 ```
 
 `config('database.default')` returns the connection **name**, not the driver, so
-this only matches when the connection happens to be named `sqlite`. If you have
-a non-SQLite connection named `sqlite`, the rename is skipped while the config
-still points at `sp_attachment_folders`, and every folder query fails with a
-missing-table error.
+the comparison was against the wrong thing — and it fired for any install whose
+default connection happened to be **named** `sqlite`, whatever driver that
+connection actually used.
 
-Workaround until this is fixed: rename the table by hand.
+That is not a rare accident. Stock Laravel 11/12 `config/database.php` ships:
+
+```php
+'default' => env('DB_CONNECTION', 'sqlite'),
+```
+
+against a connection key literally named `sqlite`. So on a default install the
+guard fired routinely: the rename was skipped, the table stayed
+`sp_document_folders`, and `config/attachments.php` already pointed at
+`sp_attachment_folders` — every folder query failed with a missing-table error.
+Installs that renamed their connection (this package's own test suite calls it
+`testing`) never saw it, which is why the bug survived as long as it did.
+
+The condition has been removed rather than corrected to `DB::getDriverName()`,
+which would have skipped SQLite for real and stranded the table on every SQLite
+install. `Schema::rename` works on every supported driver, so the rename now
+always runs when `sp_document_folders` exists and `sp_attachment_folders` does
+not.
+
+If you are on a version that still has the guard, rename the table by hand:
 
 ```sql
 ALTER TABLE sp_document_folders RENAME TO sp_attachment_folders;
 ```
+
+The fixed migration detects a table renamed this way and does nothing.
 
 See [Attachment Folders](/guide/feature-attachments-folders).
 
