@@ -150,10 +150,10 @@ alter existing tables.
 
 ### What always stays `uuid`, regardless of the setting
 
-- `sp_attachments`, `sp_document_folders` and `sp_webhook_*`
-  (`sp_webhook_endpoints`, `sp_webhook_subscriptions`,
-  `sp_webhook_deliveries`) always use `uuid` primary keys. They do not consult
-  `record.id_type`.
+- `sp_attachments`, `sp_attachment_folders` (renamed from
+  `sp_document_folders`) and `sp_webhook_*` (`sp_webhook_endpoints`,
+  `sp_webhook_subscriptions`, `sp_webhook_deliveries`) always use `uuid`
+  primary keys. They do not consult `record.id_type`.
 
 ### What always stays `string` — the client-reference columns
 

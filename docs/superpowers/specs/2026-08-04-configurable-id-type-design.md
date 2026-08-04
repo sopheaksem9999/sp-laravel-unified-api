@@ -26,7 +26,7 @@ branches on `columns.id.type` from the client's own `RecordTableType` config.
 The gap is in the modules this package ships itself. Their migrations hardcode
 ID types, and they disagree with each other:
 
-- `sp_attachments`, `sp_document_folders`, `sp_webhook_*` use `uuid('id')->primary()`
+- `sp_attachments`, `sp_attachment_folders`, `sp_webhook_*` use `uuid('id')->primary()`
 - `sp_permissions`, `sp_roles`, `sp_role_permissions`, `sp_model_has_roles`,
   `sp_model_permissions`, `sp_audit_logs` use `bigIncrements('id')` / `id()`
 
@@ -118,7 +118,7 @@ install.
 
 These tables are package-internal and already interoperate with both client
 conventions, because the columns that reference client records
-(`sp_attachment_links.record_id`, `sp_document_folders.owner_id`) are strings.
+(`sp_attachment_links.record_id`, `sp_attachment_folders.owner_id`) are strings.
 
 ## Resulting behavior
 
@@ -296,7 +296,7 @@ values, set via the test case's config rather than an environment variable:
    `sp_roles.id` are integer; under `uuid`, they are uuid.
 2. **Ungoverned tables hold.** The three pivot `id` columns and
    `sp_audit_logs.id` are integer under both settings.
-3. **Exclusion holds.** `sp_attachments`, `sp_document_folders`, and
+3. **Exclusion holds.** `sp_attachments`, `sp_attachment_folders`, and
    `sp_webhook_*` have uuid PKs under both settings.
 4. **The bug, as a failing test first.** A client `User` model with a UUID
    primary key can be assigned a role and have it read back. This fails against

@@ -65,7 +65,7 @@ return [
     | project that has already migrated will NOT alter existing tables.
     |
     | Not governed by this setting:
-    | - sp_attachments, sp_document_folders and sp_webhook_* always use uuid.
+    | - sp_attachments, sp_attachment_folders and sp_webhook_* always use uuid.
     | - The pivot ids (sp_role_permissions, sp_model_has_roles,
     |   sp_model_permissions) and sp_audit_logs.id are always auto-incrementing
     |   integers. Nothing references them and their insert paths supply no id.
