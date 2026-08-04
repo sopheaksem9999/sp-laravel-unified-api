@@ -126,6 +126,29 @@ class RecordConfigLoaderTest extends TestCase
     }
 
     /** @test */
+    public function it_processes_files_in_sorted_order_so_the_last_file_alphabetically_wins_a_key_conflict(): void
+    {
+        // Both files declare the same "shared" key via an array return, so
+        // array_merge() means whichever file is scanned last wins. Naming
+        // them so "a_first" sorts before "z_second" makes that outcome
+        // depend on phpFilesIn() actually sorting: with sort() (ascending),
+        // z_second.php is applied last and "shared" ends up "from-z"; an
+        // unsorted or reverse-sorted scan would leave "from-a" instead.
+        file_put_contents(
+            $this->dir . '/tables/a_first.php',
+            '<?php return ["shared" => new \Sopheak\Core\Types\RecordTableType(table: "from-a")];'
+        );
+        file_put_contents(
+            $this->dir . '/tables/z_second.php',
+            '<?php return ["shared" => new \Sopheak\Core\Types\RecordTableType(table: "from-z")];'
+        );
+
+        $tables = RecordConfigLoader::tables($this->dir . '/tables');
+
+        $this->assertSame('from-z', $tables['shared']->table);
+    }
+
+    /** @test */
     public function it_memoizes_by_directory(): void
     {
         file_put_contents(

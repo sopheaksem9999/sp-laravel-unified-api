@@ -18,6 +18,20 @@ use Sopheak\Core\Types\RecordTableType;
  * not re-published.
  *
  * Memoized per resolved directory path so the two callers do not double-scan.
+ *
+ * Caching contract: each directory's file scan runs at most once per PHP
+ * process — the result is memoized for the remaining lifetime of that
+ * process, not re-read on every call. `flush()` clears the memo, and
+ * `SchemaRegistryUtils::refresh()` / `clearAllCache()` call it as part of
+ * their existing cache-invalidation sweep, which runs between tests and
+ * whenever config-affecting state changes at runtime. Under a
+ * short-lived worker model (classic PHP-FPM, one request per process) this
+ * is invisible: the process that reads the file also dies with it, so a scan
+ * is already effectively "once per request." Under a long-lived worker
+ * (Laravel Octane, queue workers) a file added to, removed from, or edited in
+ * one of these directories is **not** picked up mid-process — it takes a
+ * worker restart (or an explicit `RecordConfigLoader::flush()` /
+ * `SchemaRegistryUtils::refresh()`) for the change to be seen.
  */
 class RecordConfigLoader
 {
