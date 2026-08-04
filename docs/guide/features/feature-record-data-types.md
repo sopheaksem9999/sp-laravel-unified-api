@@ -170,14 +170,22 @@ Columns that point at **your** models are always strings, because the
 package cannot know your key type. A string holds a UUID or an integer key
 equally well:
 
-- `sp_model_has_roles.model_id`, `sp_model_permissions.model_id`
-- `sp_audit_logs.entity_id`, `sp_audit_logs.user_id`
-- `sp_attachment_links.record_id`
+- `sp_model_has_roles.model_id`, `sp_model_permissions.model_id` — `varchar(191)`
+- `sp_audit_logs.entity_id`, `sp_audit_logs.user_id` — `varchar(191)`
+- `sp_attachment_links.record_id` — `varchar(255)`
 
 This is why a UUID-keyed `User` works with roles and audit logging regardless
-of what `id_type` is set to. Each is a `varchar(191)`: long enough for any UUID
-or integer key, and short enough that the composite unique indexes these
-columns sit in stay inside MySQL's 3072-byte InnoDB index limit under `utf8mb4`.
+of what `id_type` is set to.
+
+The two `model_id` columns are bounded to 191 characters because they sit in
+composite **unique** indexes alongside `model_type` and a governed foreign key.
+At `varchar(255)` under `utf8mb4`, those indexes exceed MySQL's 3072-byte InnoDB
+limit once `id_type` is `uuid` and `enable_tenant_id` is on, and the migration
+fails outright. 191 is long enough for any UUID or integer key.
+
+`sp_audit_logs.entity_id` and `user_id` share the bound for consistency, though
+their indexes are non-unique and were never at risk.
+`sp_attachment_links.record_id` predates this work and is unbounded.
 
 **Upgrading an existing install.** Those columns used to be
 `unsignedBigInteger`, so a project that migrated earlier still has integer
