@@ -149,6 +149,80 @@ The boot-time bridge cannot see runtime `config()->set()` calls, which both the
 package's own test suite and some client code perform. The accessor fallback
 covers that case; the bridge covers file-level config. Both are needed.
 
+## Directory autoloading in `sp-record.php`
+
+The published `sp-record.php` gains explicit loading of the table and
+global-function directories:
+
+```php
+use Sopheak\Core\Support\RecordConfigLoader;
+
+return [
+    // ...
+    'tables'           => RecordConfigLoader::tables(__DIR__ . '/records/tables'),
+    'global_functions' => RecordConfigLoader::globalFunctions(__DIR__ . '/records/global-functions'),
+    'autoloaded'       => true,
+];
+```
+
+### Why a helper rather than an inline loop
+
+`RecordConfigService::tableConfigFiles()` and `globalFunctionConfigFiles()`
+already scan these directories at runtime. Inlining an equivalent loop into the
+published config file would duplicate that logic into a file the package can
+never patch again, and it would lose behavior the existing loader has:
+
+- Global functions are grouped by source filename
+  (`$group = pathinfo($path, PATHINFO_FILENAME)`), and non-string or empty
+  function names are skipped. A plain `array_merge` drops both.
+- Two directory spellings are supported for global functions —
+  `records/globalFunctions` and `records/global-functions`. The helper keeps
+  both.
+
+`RecordConfigLoader` is the existing logic extracted to a public, memoized
+(per resolved directory path) support class. The service delegates to it, so
+there is one implementation.
+
+### What this actually buys: `config:cache`
+
+The point is not the scanning — it is where the scanning happens. Evaluated
+inside the config file, `php artisan config:cache` bakes the resolved tables
+into the cached payload and production performs no filesystem I/O. Today the
+service re-scans on every `getTableConfig()` call, of which there are 14 sites,
+with no memoization, regardless of whether config is cached.
+
+### The `autoloaded` flag
+
+`'autoloaded' => true` tells `RecordConfigService` the directories have already
+been read, so it skips its runtime scan.
+
+This is what keeps the change backward compatible. A client still on the old
+`record.php` has no such key, so the service scans exactly as it does today.
+A client on the new `sp-record.php` gets the cached fast path with no double
+work. No client action is required either way.
+
+### Closure caveat — must be documented
+
+`RecordTableType` accepts a `Closure` for `createValidator`, `updateValidator`
+and `deleteValidator`, and `global_functions` supports `'type' => 'closure'`.
+Closures are not `var_export`-able, so once these values live in the config
+file, `php artisan config:cache` fails for any client using one, with Laravel's
+opaque *"Your configuration files are not serializable."*
+
+This is inherent to putting values in a config file, not a flaw in the helper.
+Today closures work precisely because the scanning happens at runtime.
+
+Two documented escape hatches:
+
+1. Use `[MyValidator::class, 'validate']` instead of a closure. The package
+   already supports the callable-array form and it is better practice — it
+   survives config caching and is testable in isolation.
+2. Remove the `RecordConfigLoader` calls and the `autoloaded` flag from
+   `sp-record.php`, reverting to runtime scanning.
+
+The upgrade note must state this plainly, because the failure appears at deploy
+time rather than in development.
+
 ## Deliberately unchanged
 
 **`sp-record.php` stays publish-only.** Adding a `mergeConfigFrom` for it would
@@ -184,13 +258,35 @@ every existing install.
    suppressible.
 9. The existing 463-test suite passes unchanged.
 
+### Autoloading tests
+
+10. `RecordConfigLoader::tables()` returns the same array the service's runtime
+    scan returns, for a directory containing both `RecordTableType`-returning
+    files and array-returning files.
+11. `RecordConfigLoader::globalFunctions()` preserves filename grouping and
+    skips non-string and empty function names, matching current behavior. Both
+    `records/globalFunctions` and `records/global-functions` resolve.
+12. With `'autoloaded' => true`, `RecordConfigService` does not re-scan — assert
+    by pointing it at a directory whose contents changed after load.
+13. Without the flag (old `record.php`), the runtime scan still happens.
+14. `php artisan config:cache` succeeds for a config with no closures, and the
+    cached payload contains the resolved tables.
+15. `config:cache` fails loudly for a config containing a closure validator.
+    Assert the failure so the caveat stays documented by a test rather than only
+    by prose.
+
 ## Files affected
 
 - `config/record.php` → `config/sp-record.php` (and four siblings)
 - `src/Config/ConfigNamespaceBridge.php` — new
+- `src/Support/RecordConfigLoader.php` — new; the directory-scanning logic
+  extracted from `RecordConfigService`, memoized per path
 - `src/CoreSpLaravelApiProvider.php` — invoke the bridge; update
   `mergeConfigFrom` and `publishes` paths
-- `src/Services/RecordConfigService.php` — accessor fallbacks
+- `src/Services/RecordConfigService.php` — accessor fallbacks; delegate scanning
+  to `RecordConfigLoader`; honor the `autoloaded` flag
+- `src/Console/SetupPackageCommand.php` — emit the loader calls when scaffolding
 - ~175 `config()` call sites across `src/`
-- `docs/` — an upgrade note explaining that nothing is required
+- `docs/` — an upgrade note explaining that nothing is required, plus the
+  `config:cache` closure caveat
 - `CHANGELOG.md`
