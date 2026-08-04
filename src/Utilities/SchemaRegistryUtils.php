@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Sopheak\Core\Services\AttributeDiscoveryService;
 use Sopheak\Core\Services\RecordConfigService;
+use Sopheak\Core\Support\RecordConfigLoader;
 
 class SchemaRegistryUtils
 {
@@ -157,6 +158,7 @@ class SchemaRegistryUtils
     public static function refresh(): void
     {
         self::$cache = [];
+        RecordConfigLoader::flush();
         RelationshipResolverUtils::clearSchemaCache();
         QueryBuilderFiltersUtils::clearColumnCache();
     }
@@ -166,6 +168,7 @@ class SchemaRegistryUtils
         self::$cache = [];
         self::$uniqueColumnsCache = [];
         self::$foreignKeysCache = [];
+        RecordConfigLoader::flush();
         RelationshipResolverUtils::clearSchemaCache();
         QueryBuilderFiltersUtils::clearColumnCache();
     }
