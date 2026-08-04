@@ -8,6 +8,9 @@ keywords:
   - cast types
   - uuid integer numeric boolean
   - datetime json array
+  - id_type
+  - primary key type
+  - client reference columns
 ---
 
 # Record Data Types
@@ -111,3 +114,62 @@ Available relationship types:
 - `morphToMany`
 - `morphByMany`
 - `spatiePermission`
+
+## 5) Bundled Module ID Type (`record.id_type`)
+
+The package's own `sp_permissions` and `sp_roles` tables can use either
+auto-incrementing integer or UUID primary keys, so their API surface matches
+your project's convention.
+
+```php
+// config/record.php
+'id_type' => 'integer', // uuid|integer
+```
+
+The default is `'integer'`, set as a plain literal — there is no `SP_ID_TYPE`
+environment variable. This setting is read only when the package migrations
+first run. Changing it on a project that has already migrated does **not**
+alter existing tables.
+
+### What it governs
+
+| Table | Column |
+|---|---|
+| `sp_permissions` | `id` |
+| `sp_roles` | `id` |
+| `sp_role_permissions` | `role_id`, `permission_id` |
+| `sp_model_has_roles` | `role_id` |
+| `sp_model_permissions` | `permission_id` |
+
+### What always stays `bigIncrements`, regardless of the setting
+
+- `sp_role_permissions.id`, `sp_model_has_roles.id`, `sp_model_permissions.id`
+  and `sp_audit_logs.id`. These are surrogate keys: nothing references them,
+  and their insert paths (including Eloquent's `sync()` for the pivot tables)
+  supply no id, so they must stay auto-incrementing regardless of `id_type`.
+
+### What always stays `uuid`, regardless of the setting
+
+- `sp_attachments`, `sp_document_folders` and `sp_webhook_*`
+  (`sp_webhook_endpoints`, `sp_webhook_subscriptions`,
+  `sp_webhook_deliveries`) always use `uuid` primary keys. They do not consult
+  `record.id_type`.
+
+### What always stays `string` — the client-reference columns
+
+Columns that point at **your** models are always strings, because the
+package cannot know your key type. A string holds a UUID or an integer key
+equally well:
+
+- `sp_model_has_roles.model_id`, `sp_model_permissions.model_id`
+- `sp_audit_logs.entity_id`, `sp_audit_logs.user_id`
+- `sp_attachment_links.record_id`
+
+This is why a UUID-keyed `User` works with roles and audit logging regardless
+of what `id_type` is set to.
+
+Note that `sp_audit_logs`'s tenant column (present only when
+`enable_tenant_id` is on) follows this same reasoning and is **always**
+`string` too — it is not governed by `record.tenant_column_type`. That
+setting only controls the PostgreSQL RLS cast used by the
+`pgsql:enable-rls` command; it has no effect on any migrated column type.
