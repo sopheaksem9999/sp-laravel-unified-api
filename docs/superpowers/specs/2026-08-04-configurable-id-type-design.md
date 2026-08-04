@@ -1,6 +1,15 @@
 ---
 title: "Configurable ID Type for Bundled Modules"
 description: "Design for a global record.id_type setting governing sp_permissions and sp_roles primary keys, and for fixing client-model reference columns that are hardcoded as integers."
+keywords:
+  - id type
+  - uuid
+  - integer
+  - primary key
+  - record.id_type
+  - permissions
+  - audit
+  - migration
 date: 2026-08-04
 status: approved
 ---

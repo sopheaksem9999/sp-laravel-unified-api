@@ -1,3 +1,17 @@
+---
+title: "Configurable ID Type Implementation Plan"
+description: "Six-task TDD implementation plan for the record.id_type setting and the client-model reference column fixes."
+keywords:
+  - id type
+  - uuid
+  - integer
+  - primary key
+  - record.id_type
+  - implementation plan
+  - migration
+date: 2026-08-04
+---
+
 # Configurable ID Type Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
