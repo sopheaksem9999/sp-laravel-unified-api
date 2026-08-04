@@ -72,10 +72,16 @@ class ClientModelReferenceColumnsTest extends TestCase
     }
 
     /** @test */
-    public function role_id_columns_remain_integers_under_the_default_setting(): void
+    public function governed_foreign_key_columns_remain_integers_under_the_default_setting(): void
     {
-        $this->assertColumnType('sp_model_has_roles', 'role_id', 'integer');
+        // Guards against over-correcting MigrationIdHelper::foreign() calls
+        // to strings: every FK that references sp_roles/sp_permissions must
+        // track their integer PK under the default setting, not just one
+        // column on one table.
+        $this->assertColumnType('sp_role_permissions', 'role_id', 'integer');
         $this->assertColumnType('sp_role_permissions', 'permission_id', 'integer');
+        $this->assertColumnType('sp_model_has_roles', 'role_id', 'integer');
+        $this->assertColumnType('sp_model_permissions', 'permission_id', 'integer');
     }
 
     /** @test */

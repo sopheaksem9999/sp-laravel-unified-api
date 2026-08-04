@@ -6,6 +6,7 @@ namespace Sopheak\Core\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Sopheak\Core\Authorization\Models\Permission;
 use Sopheak\Core\Authorization\Models\Role;
@@ -22,6 +23,15 @@ class IdTypeUuidTest extends TestCase
         // Must be set here, not in setUp(): Testbench runs this before
         // RefreshDatabase migrates, so it is what the schema is built from.
         $app['config']->set('record.id_type', 'uuid');
+
+        // The base TestCase sets audit.enabled = false, which gates the real
+        // audit migration off. When that happens, TestCase::setUp() builds a
+        // fallback sp_audit_logs table of its own so unrelated tests don't
+        // blow up on a missing table. That fallback is not the migration
+        // under test here, so it must be enabled to actually exercise
+        // Task 5's territory (the migration is intentionally left alone by
+        // this task, but the test needs to observe *it*, not the fixture).
+        $app['config']->set('audit.enabled', true);
     }
 
     /** @test */
@@ -91,6 +101,22 @@ class IdTypeUuidTest extends TestCase
     /** @test */
     public function audit_log_id_stays_an_auto_incrementing_integer(): void
     {
+        // With audit.enabled = true (set in getEnvironmentSetUp), the real
+        // audit migration (2025_01_27_000000_create_audit_logs_table) ran,
+        // not the TestCase::setUp() fallback that stands in when the
+        // migration is gated off. Prove that by checking a column the two
+        // disagree on: the migration emits unsignedBigInteger('entity_id')
+        // (SQLite type 'integer'), while the fallback emits
+        // string('entity_id') (SQLite type 'varchar'). Seeing 'integer' here
+        // means we are asserting against the migration, not a fixture.
+        $columns = collect(Schema::getColumns('sp_audit_logs'))->keyBy('name');
+        $this->assertSame(
+            'integer',
+            $columns['entity_id']['type'],
+            'entity_id should be integer, proving the real migration (not the TestCase fallback) built this table'
+        );
+        $this->assertSame('integer', $columns['id']['type']);
+
         DB::table('sp_audit_logs')->insert([
             'entity_type' => 'users',
             'entity_id' => '1',
@@ -105,6 +131,12 @@ class IdTypeUuidTest extends TestCase
     /** @test */
     public function attachment_tables_still_use_uuid_keys(): void
     {
+        // Schema assertion first: SQLite's advisory type affinity means an
+        // insert/select round-trip alone cannot tell a genuine uuid column
+        // from an integer column that merely tolerates a uuid string.
+        $columns = collect(Schema::getColumns('sp_attachments'))->keyBy('name');
+        $this->assertSame('varchar', $columns['id']['type']);
+
         $uuid = (string) Str::uuid();
 
         DB::table('sp_attachments')->insert([
