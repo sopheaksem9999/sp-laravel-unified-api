@@ -260,9 +260,16 @@ class SchemaRegistryUtils
      * - a hand-written config declares the type as 'uuid'
      * - pgsql reports the native 'uuid' type (also visible via udt_name)
      * - mysql reports 'char(36)' / 'varchar(36)'
-     * - sqlite reports a bare 'varchar' with no length for uuid() columns
-     *   (indistinguishable from string PKs, but this package's convention is
-     *   uuid PKs for all non-integer keys)
+     *
+     * Deliberately driver-independent: the answer depends only on the column
+     * definition, so every driver gets the same one. An earlier revision added
+     * an sqlite-only branch treating any bare 'varchar'/'char' as a uuid,
+     * because SQLite's PRAGMA reports uuid() columns that way. It could not
+     * tell a uuid PK from a natural string PK — a table registered without
+     * declared `columns`, keyed by e.g. string('sku')->primary(), introspects
+     * as 'varchar' — so createRecord silently overwrote that natural key with a
+     * generated uuid. The branch is gone; declare 'uuid' in the table's
+     * `columns` to get key generation.
      *
      * Shared by every write path that must supply a primary key value the
      * database has no default for: RecordService::createRecord and the nested
@@ -283,11 +290,7 @@ class SchemaRegistryUtils
             return true;
         }
 
-        if (preg_match('/^(char|varchar)\(36\)$/', $type) === 1) {
-            return true;
-        }
-
-        return 'sqlite' === DB::getDriverName() && in_array($type, ['varchar', 'char'], true);
+        return preg_match('/^(char|varchar)\(36\)$/', $type) === 1;
     }
 
     /**
