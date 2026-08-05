@@ -185,4 +185,47 @@ class SelectParamValidationTest extends TestCase
         $response->assertStatus(422);
         $response->assertJsonPath('message', "Unknown column 'bogus_field' in select for table 'authors'. Valid columns: created_at, display_name, id, name, updated_at.");
     }
+
+    /** @test */
+    public function show_endpoint_reports_422_not_500(): void
+    {
+        $response = $this->getJson('/api/authors/' . $this->authorId . '?select=bogus_rel(*)');
+
+        $response->assertStatus(422);
+        $response->assertJsonPath('message', "Unknown relationship 'bogus_rel' in select for table 'authors'. Valid relationships: posts.");
+    }
+
+    /** @test */
+    public function create_endpoint_reports_422_instead_of_swallowing_the_error(): void
+    {
+        $response = $this->postJson('/api/authors?select=bogus_rel(*)', ['name' => 'Grace Hopper']);
+
+        $response->assertStatus(422);
+        $response->assertJsonPath('message', "Unknown relationship 'bogus_rel' in select for table 'authors'. Valid relationships: posts.");
+        $this->assertDatabaseMissing('authors', ['name' => 'Grace Hopper']);
+    }
+
+    /** @test */
+    public function update_endpoint_reports_422_instead_of_swallowing_the_error(): void
+    {
+        $response = $this->putJson('/api/authors/' . $this->authorId . '?select=bogus_rel(*)', ['name' => 'Ada, Countess of Lovelace']);
+
+        $response->assertStatus(422);
+        $response->assertJsonPath('message', "Unknown relationship 'bogus_rel' in select for table 'authors'. Valid relationships: posts.");
+    }
+
+    /** @test */
+    public function bulk_create_endpoint_reports_422_instead_of_swallowing_the_error(): void
+    {
+        // A single JSON object (not wrapped in an array) is required here:
+        // bulkRecordCreate() builds its items list from $request->all(), which
+        // merges the select query param into the body. Sending an array body
+        // would put 'select' at the same level as the items, failing an
+        // unrelated pre-existing "each item must be an object" check before
+        // this test's target code ever runs.
+        $response = $this->postJson('/api/authors/bulk/create?select=bogus_rel(*)', ['name' => 'Grace Hopper']);
+
+        $response->assertStatus(422);
+        $response->assertJsonPath('message', "Unknown relationship 'bogus_rel' in select for table 'authors'. Valid relationships: posts.");
+    }
 }
