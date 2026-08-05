@@ -17,6 +17,20 @@ class CleanTempAttachmentsCommandTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function getEnvironmentSetUp($app): void
+    {
+        parent::getEnvironmentSetUp($app);
+
+        // The Schema::create() calls below are guarded by !hasTable() and
+        // never actually run: RefreshDatabase already migrates the real
+        // sp_attachments/sp_attachment_links tables first. This test inserts
+        // literal string ids directly, so the real table's id column must
+        // actually be uuid-typed (varchar), not the governed default
+        // integer. Must be set here, not in setUp(): Testbench migrates
+        // before setUp().
+        $app['config']->set('record.id_type', 'uuid');
+    }
+
     protected function setUp(): void
     {
         parent::setUp();

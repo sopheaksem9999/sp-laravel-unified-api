@@ -14,33 +14,42 @@ use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
 /**
- * The package's own uuid-keyed tables must be creatable through the generic
- * CRUD path without a client-supplied id.
+ * The package's own attachments/webhooks tables must follow record.id_type,
+ * the same as sp_permissions/sp_roles: MigrationIdHelper::primary() in their
+ * migrations produces uuid('id')->primary() only when id_type is 'uuid',
+ * bigIncrements otherwise.
  *
- * Their migrations declare uuid('id')->primary(), which has no database
- * default and does not auto-increment, so createRecord has to generate the
- * key. It decides that from the DECLARED column type in config, and these
- * tables used to declare 'string' — so no key was generated and the insert
- * failed the not-null constraint on every driver.
+ * Run via the two concrete subclasses (integer default, uuid), not directly.
  *
  * The declaration is the thing under test here, not round-trip behaviour:
  * SQLite's type affinity would let a wrong declaration pass a plain insert
  * test, so the assertions read the registered config directly as well.
  */
-class PackageTableUuidPrimaryKeyTest extends TestCase
+abstract class PackageTableGovernedIdTypeTest extends TestCase
 {
     use RefreshDatabase;
 
     /**
-     * Package tables whose migration uses uuid('id')->primary().
+     * Package tables whose migration uses MigrationIdHelper::primary().
      */
-    private const UUID_KEYED_TABLES = [
+    private const GOVERNED_TABLES = [
         'sp_webhook_endpoints',
         'sp_webhook_subscriptions',
         'sp_webhook_deliveries',
         'sp_attachments',
         'sp_attachment_folders',
     ];
+
+    abstract protected function idType(): string;
+
+    protected function getEnvironmentSetUp($app): void
+    {
+        parent::getEnvironmentSetUp($app);
+
+        // Must be set here, not in setUp(): Testbench runs this before
+        // RefreshDatabase migrates, so it is what the schema is built from.
+        $app['config']->set('record.id_type', $this->idType());
+    }
 
     protected function setUp(): void
     {
@@ -63,49 +72,60 @@ class PackageTableUuidPrimaryKeyTest extends TestCase
     /**
      * @test
      *
-     * @dataProvider uuidKeyedTables
+     * @dataProvider governedTables
      */
-    public function a_uuid_keyed_package_table_declares_a_uuid_primary_key(string $table): void
+    public function a_governed_package_table_declares_the_configured_id_type(string $table): void
     {
         $config = SchemaRegistryUtils::getTable($table);
 
         $this->assertInstanceOf(RecordTableType::class, $config, $table . ' should be registered');
 
         $pk = $config->primaryKey ?? 'id';
+        $isUuid = SchemaRegistryUtils::isUuidColumnType($config->columns[$pk] ?? null);
 
-        $this->assertTrue(
-            SchemaRegistryUtils::isUuidColumnType($config->columns[$pk] ?? null),
-            sprintf(
-                "%s.%s is uuid('id')->primary() in its migration, so it must declare a uuid type; got %s",
+        if ('uuid' === $this->idType()) {
+            $this->assertTrue($isUuid, sprintf(
+                '%s.%s should be uuid under id_type=uuid; got %s',
                 $table,
                 $pk,
                 var_export($config->columns[$pk]['type'] ?? null, true)
-            )
-        );
+            ));
+        } else {
+            $this->assertFalse($isUuid, sprintf(
+                '%s.%s should not be uuid under id_type=integer; got %s',
+                $table,
+                $pk,
+                var_export($config->columns[$pk]['type'] ?? null, true)
+            ));
+        }
     }
 
     /**
      * @test
      *
-     * @dataProvider uuidKeyedTables
+     * @dataProvider governedTables
      */
-    public function a_uuid_keyed_package_table_can_be_created_without_a_client_supplied_id(string $table): void
+    public function a_governed_package_table_can_be_created_without_a_client_supplied_id(string $table): void
     {
         $result = app(RecordService::class)->createRecord($table, $this->payloadFor($table), null);
 
-        $this->assertTrue(
-            Str::isUuid((string) $result['id']),
-            sprintf('createRecord must generate a uuid for %s, got: %s', $table, var_export($result['id'], true))
-        );
+        if ('uuid' === $this->idType()) {
+            $this->assertTrue(
+                Str::isUuid((string) $result['id']),
+                sprintf('createRecord must generate a uuid for %s under id_type=uuid, got: %s', $table, var_export($result['id'], true))
+            );
+        } else {
+            $this->assertSame(1, (int) $result['id']);
+        }
+
         $this->assertSame(1, DB::table($table)->where('id', $result['id'])->count());
     }
 
     /** @test */
     public function sp_attachment_links_keeps_its_auto_incrementing_key(): void
     {
-        // Counterweight: its migration uses $table->id(), so a uuid must never
-        // be generated for it. Over-applying the uuid declaration would break
-        // the sequence on every driver that enforces the column type.
+        // Counterweight: its migration uses $table->id() unconditionally, so a
+        // uuid must never be generated for it regardless of id_type.
         $config = SchemaRegistryUtils::getTable('sp_attachment_links');
 
         $this->assertFalse(SchemaRegistryUtils::isUuidColumnType($config->columns['id'] ?? null));
@@ -122,10 +142,10 @@ class PackageTableUuidPrimaryKeyTest extends TestCase
     /**
      * @return array<string, array{string}>
      */
-    public static function uuidKeyedTables(): array
+    public static function governedTables(): array
     {
         $cases = [];
-        foreach (self::UUID_KEYED_TABLES as $table) {
+        foreach (self::GOVERNED_TABLES as $table) {
             $cases[$table] = [$table];
         }
 

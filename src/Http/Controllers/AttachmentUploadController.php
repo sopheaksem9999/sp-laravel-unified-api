@@ -464,7 +464,6 @@ class AttachmentUploadController extends Controller
 
         $tenantColumn = RecordConfigService::tenantColumn();
         $payload = $this->onlyExistingColumns('sp_attachment_folders', [
-            'id' => Str::uuid()->toString(),
             'name' => $request->input('name'),
             'parent_id' => $request->input('parent_id'),
             'scope' => $request->input('scope', 'internal'),
@@ -763,7 +762,6 @@ class AttachmentUploadController extends Controller
 
         // 3. Prepare Payload with Dynamic Tenant Column
         $attachmentPayload = [
-            'id' => Str::uuid()->toString(),
             'folder_id' => $request->input('folder_id'),
             'title' => $request->input('title'),
             'caption' => $request->input('caption'),
@@ -866,7 +864,6 @@ class AttachmentUploadController extends Controller
         $size = isset($sourceAttachment['size']) ? (int) $sourceAttachment['size'] : (int) Storage::disk($disk)->size($fullPath);
 
         $attachmentPayload = [
-            'id' => Str::uuid()->toString(),
             'folder_id' => $request->input('folder_id', $sourceAttachment['folder_id'] ?? null),
             'title' => $request->input('title', $sourceAttachment['title'] ?? null),
             'caption' => $request->input('caption', $sourceAttachment['caption'] ?? null),

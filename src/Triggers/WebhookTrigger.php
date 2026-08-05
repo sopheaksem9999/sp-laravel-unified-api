@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Sopheak\Core\Triggers;
 
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 use Sopheak\Core\Attributes\RecordTrigger;
 use Sopheak\Core\Services\RecordService;
@@ -114,7 +113,6 @@ class WebhookTrigger extends RecordTriggerBase
         foreach ($endpoints['data'] as $endpoint) {
             // Create delivery record
             $deliveryPayload = [
-                'id' => Str::uuid()->toString(),
                 'endpoint_id' => $endpoint['id'],
                 'event' => $event,
                 'payload' => json_encode($payload),

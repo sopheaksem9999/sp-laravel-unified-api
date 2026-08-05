@@ -301,7 +301,7 @@ class AttachmentArchitectureSafetyTest extends TestCase
                 isAuthRead: false,
                 isAuthWrite: false,
                 columns: [
-                    'id' => ['type' => 'string', 'nullable' => false],
+                    'id' => ['type' => 'uuid', 'nullable' => false],
                     'folder_id' => ['type' => 'string', 'nullable' => true],
                     'title' => ['type' => 'string', 'nullable' => true],
                     'caption' => ['type' => 'string', 'nullable' => true],
@@ -321,7 +321,7 @@ class AttachmentArchitectureSafetyTest extends TestCase
                 isAuthRead: false,
                 isAuthWrite: false,
                 columns: [
-                    'id' => ['type' => 'string', 'nullable' => false],
+                    'id' => ['type' => 'uuid', 'nullable' => false],
                     'name' => ['type' => 'string', 'nullable' => false],
                     'parent_id' => ['type' => 'string', 'nullable' => true],
                     'scope' => ['type' => 'string', 'nullable' => false],

@@ -59,18 +59,20 @@ class IdTypeIntegerDefaultTest extends TestCase
     }
 
     /** @test */
-    public function attachment_and_webhook_tables_keep_uuid_keys(): void
+    public function attachment_and_webhook_tables_use_integer_keys_by_default(): void
     {
+        // Attachments/webhooks used to always use uuid keys regardless of
+        // record.id_type. They now follow it like every other governed
+        // table, which is an accepted breaking change for the default: see
+        // docs/superpowers/specs/2026-08-05-expand-id-type-governance-design.md.
+        //
         // Schema assertion first: SQLite's advisory type affinity means an
-        // insert/select round-trip alone cannot tell a genuine uuid column
-        // from an integer column that merely tolerates a uuid string.
+        // insert/select round-trip alone cannot tell a genuine integer
+        // column from a string column that merely tolerates a numeric value.
         $columns = collect(Schema::getColumns('sp_attachments'))->keyBy('name');
-        $this->assertSame('varchar', $columns['id']['type']);
-
-        $uuid = '3f2504e0-4f89-11d3-9a0c-0305e82c3301';
+        $this->assertSame('integer', $columns['id']['type']);
 
         DB::table('sp_attachments')->insert([
-            'id' => $uuid,
             'disk' => 'local',
             'path' => 'a/b.txt',
             'filename' => 'b.txt',
@@ -81,6 +83,6 @@ class IdTypeIntegerDefaultTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $this->assertSame($uuid, DB::table('sp_attachments')->value('id'));
+        $this->assertSame(1, (int) DB::table('sp_attachments')->value('id'));
     }
 }

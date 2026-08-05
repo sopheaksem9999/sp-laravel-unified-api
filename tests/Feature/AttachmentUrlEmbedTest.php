@@ -26,6 +26,17 @@ class AttachmentUrlEmbedTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function getEnvironmentSetUp($app): void
+    {
+        parent::getEnvironmentSetUp($app);
+
+        // This test inserts uuid-shaped attachment ids directly into the real
+        // migrated sp_attachments table (no private fixture schema of its
+        // own), so the real table's id column must actually be uuid-typed.
+        // Must be set here, not in setUp(): Testbench migrates before setUp().
+        $app['config']->set('record.id_type', 'uuid');
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -59,6 +70,19 @@ class AttachmentUrlEmbedTest extends TestCase
                 softDeletes: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
+                columns: [
+                    'id' => ['type' => 'uuid', 'nullable' => false],
+                    'folder_id' => ['type' => 'string', 'nullable' => true],
+                    'title' => ['type' => 'string', 'nullable' => true],
+                    'caption' => ['type' => 'string', 'nullable' => true],
+                    'disk' => ['type' => 'string', 'nullable' => false],
+                    'path' => ['type' => 'string', 'nullable' => false],
+                    'filename' => ['type' => 'string', 'nullable' => false],
+                    'mime_type' => ['type' => 'string', 'nullable' => false],
+                    'size' => ['type' => 'integer', 'nullable' => false],
+                    'visibility' => ['type' => 'string', 'nullable' => false],
+                    'temp_timeout' => ['type' => 'datetime', 'nullable' => true],
+                ],
             ),
         ]);
 
