@@ -211,6 +211,22 @@ class RecordConfigAutoloadedTest extends TestCase
     }
 
     /** @test */
+    public function global_function_directory_names_contains_both_spellings(): void
+    {
+        // config/sp-record.php and RecordConfigService::globalFunctionConfigDirectories()
+        // both derive their directory list from
+        // RecordConfigService::globalFunctionDirectoryNames() -- this is the
+        // single test that guards both call sites at once. Dropping either
+        // spelling from that shared list (e.g. a future cleanup treating the
+        // legacy camelCase name as redundant) fails here even though
+        // config/sp-record.php itself is never executed by any test.
+        $names = RecordConfigService::globalFunctionDirectoryNames();
+
+        $this->assertContains('records/globalFunctions', $names);
+        $this->assertContains('records/global-functions', $names);
+    }
+
+    /** @test */
     public function a_loaded_table_config_survives_var_export(): void
     {
         $tables = ['widgets' => new RecordTableType(table: 'widgets', primaryKey: 'id')];

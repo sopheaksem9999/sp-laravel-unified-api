@@ -355,14 +355,30 @@ class RecordConfigService
     }
 
     /**
+     * The two accepted spellings of the global-function config directory,
+     * relative to a config/ directory.
+     *
+     * Single source of truth for both call sites that need this list:
+     * globalFunctionConfigDirectories() below maps these onto config_path()
+     * for the runtime scan, and config/sp-record.php maps the same list onto
+     * __DIR__ for the config-cache-friendly autoloaded scan. Add or remove a
+     * spelling here only -- editing either call site's own hardcoded list
+     * would let the two drift apart silently, since config/sp-record.php is
+     * publish-only and no test exercises it directly.
+     *
+     * @return string[]
+     */
+    public static function globalFunctionDirectoryNames(): array
+    {
+        return ['records/globalFunctions', 'records/global-functions'];
+    }
+
+    /**
      * @return string[]
      */
     private static function globalFunctionConfigDirectories(): array
     {
-        return [
-            config_path('records/globalFunctions'),
-            config_path('records/global-functions'),
-        ];
+        return array_map(config_path(...), self::globalFunctionDirectoryNames());
     }
 
     /**
