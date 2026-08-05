@@ -10,10 +10,11 @@ use Illuminate\Support\Facades\RateLimiter;
 use Throwable;
 use RuntimeException;
 use Illuminate\Console\Command;
+use Sopheak\Core\Config\ConfigNamespaceBridge;
 
 class SetupPackageCommand extends Command
 {
-    protected $signature = 'sp-laravel-api:setup {--force : Overwrite existing configs}';
+    protected $signature = 'sp-laravel-api:setup {--force : Overwrite existing config files, including publishing packaged defaults over old-named ones}';
 
     protected $description = 'Setup SP Laravel API package: publish configs and create record/audit configurations using config/sp-record.php + config/records/tables/*.php + config/records/global-functions/*.php.';
 
@@ -22,12 +23,22 @@ class SetupPackageCommand extends Command
         $this->info('Setting up SP Laravel API package...');
         $this->newLine();
 
+        $force = (bool) $this->option('force');
+
+        if (!$this->guardAgainstShadowingOldNamedConfigFiles($force)) {
+            return self::FAILURE;
+        }
+
         // Publish package config
         $this->line('📦 Publishing package configurations...');
         try {
+            // --force follows the command's own flag rather than being pinned
+            // on: publishing the package's packaged defaults over a client's
+            // customized config is destructive, and this command is the one
+            // the setup docs tell people to run.
             $this->call('vendor:publish', [
                 '--tag' => 'sp-laravel-api-config',
-                '--force' => true,
+                '--force' => $force,
             ]);
             $this->info('✅ Package configurations published successfully.');
         } catch (Throwable $throwable) {
@@ -36,7 +47,6 @@ class SetupPackageCommand extends Command
         }
 
         $this->newLine();
-        $force = (bool) $this->option('force');
 
         $this->line('🔧 Creating application configuration files...');
         $created = 0;
@@ -88,6 +98,66 @@ class SetupPackageCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Refuse to publish `sp-*.php` on top of a still-present old-named config.
+     *
+     * Publishing writes the package's packaged DEFAULTS to the new name, and
+     * ConfigNamespaceBridge::adopt() gives the new name precedence over the old
+     * one for every key both files set. So on a client who has customized
+     * `config/record.php` and not yet migrated, publishing silently reverts
+     * their settings to the packaged defaults — `api_prefix` back to `api/v1`,
+     * `id_type` back to `integer` — while `config/record.php` stays
+     * byte-identical on disk. There is nothing in `git diff` to see, no error,
+     * and this command even prints "Skipped (exists)" for the old file. The
+     * only safe move is not to create that state.
+     *
+     * @return bool false when the caller must abort without publishing
+     */
+    private function guardAgainstShadowingOldNamedConfigFiles(bool $force): bool
+    {
+        $oldNamed = ConfigNamespaceBridge::deprecatedFiles();
+
+        if ($oldNamed === []) {
+            return true;
+        }
+
+        $this->newLine();
+        $this->warn('⚠️  Old-named package config files are still present in config/:');
+        $this->newLine();
+
+        foreach ($oldNamed as $old => $new) {
+            $this->line(sprintf('    config/%s  →  config/%s', $old, $new));
+        }
+
+        $this->newLine();
+        $this->line('Publishing writes the package\'s packaged DEFAULTS to the sp-* names, and an');
+        $this->line('sp-* file takes precedence over its old-named counterpart for every key both');
+        $this->line('set. Your customizations would stop taking effect while the old file stays');
+        $this->line('byte-identical on disk — no diff, no error, nothing to notice.');
+        $this->newLine();
+        $this->line('Rename your existing files instead, then re-run this command:');
+        $this->newLine();
+
+        foreach ($oldNamed as $old => $new) {
+            $this->line(sprintf('    git mv config/%s config/%s', $old, $new));
+        }
+
+        $this->newLine();
+
+        if ($force) {
+            $this->warn('--force given: publishing packaged defaults over the names above anyway.');
+            $this->warn('Copy anything you still need out of the old files before the next boot.');
+            $this->newLine();
+
+            return true;
+        }
+
+        $this->error('❌ Aborted without publishing or creating anything.');
+        $this->line('   Re-run with --force only if you really want the packaged defaults to win.');
+
+        return false;
     }
 
     private function ensureAppServiceProviderRateLimiters(): int
