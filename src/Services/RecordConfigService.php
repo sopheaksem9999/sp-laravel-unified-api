@@ -335,6 +335,10 @@ class RecordConfigService
      */
     private static function tableConfigFiles(): array
     {
+        if ((bool) config('record.autoloaded', false)) {
+            return [];
+        }
+
         return RecordConfigLoader::tables(config_path(self::tableConfigPath()));
     }
 
@@ -343,6 +347,10 @@ class RecordConfigService
      */
     private static function globalFunctionConfigFiles(): array
     {
+        if ((bool) config('record.autoloaded', false)) {
+            return [];
+        }
+
         return RecordConfigLoader::globalFunctions(...self::globalFunctionConfigDirectories());
     }
 

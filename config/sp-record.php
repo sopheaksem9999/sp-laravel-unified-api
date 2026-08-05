@@ -1,5 +1,7 @@
 <?php
 
+use Sopheak\Core\Support\RecordConfigLoader;
+
 /*
  * Record API Configuration.
  *
@@ -397,10 +399,18 @@ return [
     | ],
     |
     */
-    'global_functions' => [
-        // Add your custom functions here
-        // Example functions should be defined in your application's config/sp-record.php
-    ],
+    // Scanned here rather than at runtime so `php artisan config:cache` bakes
+    // the result into the cached payload and production does no filesystem
+    // scanning. `autoloaded` tells RecordConfigService to skip its own scan.
+    //
+    // NOTE: values reachable from here must be var_export()-able. A Closure
+    // validator or a 'type' => 'closure' global function will make
+    // `php artisan config:cache` fail. Use [MyValidator::class, 'method'] instead.
+    'autoloaded' => true,
+    'global_functions' => RecordConfigLoader::globalFunctions(
+        __DIR__ . '/records/globalFunctions',
+        __DIR__ . '/records/global-functions',
+    ),
 
     'global_triggers' => [
     ],
@@ -481,8 +491,8 @@ return [
     | ],
     |
     */
-    'tables' => [
-        // Add your table configurations here
-        // Example configurations should be defined in your application's config/sp-record.php
-    ],
+    // Scanned from config/records/tables in the client's own config directory.
+    // See the `autoloaded` note above the `global_functions` key for why this
+    // is resolved here rather than at request time.
+    'tables' => RecordConfigLoader::tables(__DIR__ . '/records/tables'),
 ];
