@@ -69,9 +69,13 @@ return new class extends Migration {
         });
 
         Schema::create('sp_role_permissions', function (Blueprint $table) use ($tenantColumn, $enableTenantId) {
-            // Surrogate key: nothing references it, and Eloquent's sync()
-            // inserts pivot rows without an id, so it must stay auto-incrementing.
-            $table->bigIncrements('id');
+            // Surrogate key: nothing references it. Governed by record.id_type
+            // via a custom Pivot class (RolePermissionPivot / ModelHasRolePivot /
+            // ModelPermissionPivot) registered on the relevant relationship with
+            // ->using(), since Eloquent's sync()/attach() only fire model events
+            // — and thus HasConfigurableKey's uuid generation — when a custom
+            // pivot class is registered.
+            MigrationIdHelper::primary($table);
             MigrationIdHelper::foreign($table, 'role_id');
             MigrationIdHelper::foreign($table, 'permission_id');
             if ($enableTenantId) {
@@ -88,7 +92,9 @@ return new class extends Migration {
         });
 
         Schema::create('sp_model_has_roles', function (Blueprint $table) use ($tenantColumn, $enableTenantId) {
-            $table->bigIncrements('id');
+            // Surrogate key: nothing references it. See sp_role_permissions.id
+            // above for why a custom Pivot class is required to govern it.
+            MigrationIdHelper::primary($table);
             // Every string column here is part of sp_model_has_roles_unique, so
             // each is bounded to INDEX_SAFE_LENGTH. Unbounded varchar(255)
             // columns cost 1020 bytes each under utf8mb4 and the four of them
@@ -112,7 +118,9 @@ return new class extends Migration {
         });
 
         Schema::create('sp_model_permissions', function (Blueprint $table) use ($tenantColumn, $enableTenantId) {
-            $table->bigIncrements('id');
+            // Surrogate key: nothing references it. See sp_role_permissions.id
+            // above for why a custom Pivot class is required to govern it.
+            MigrationIdHelper::primary($table);
             // Bounded for the same index-budget reason as sp_model_has_roles.
             $table->string('model_type', MigrationIdHelper::INDEX_SAFE_LENGTH);
             MigrationIdHelper::morph($table, 'model_id');
