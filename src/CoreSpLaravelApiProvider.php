@@ -197,7 +197,29 @@ class CoreSpLaravelApiProvider extends ServiceProvider
             return;
         }
 
+        $superseded = ConfigNamespaceBridge::supersededFiles();
+
         foreach (ConfigNamespaceBridge::deprecatedFiles() as $old => $new) {
+            // "It keeps working" is only true while the old file is the only
+            // one of the pair on disk. Once the sp-* counterpart exists too,
+            // adopt() gives it precedence for every key both files set, so the
+            // old file has stopped being fully in effect and telling the
+            // client it still works would be a false promise.
+            if (isset($superseded[$old])) {
+                Log::warning(sprintf(
+                    'sp-laravel-api: config/%s is deprecated AND no longer fully in effect — '
+                    . 'config/%s is also present and its values win for every key both files set. '
+                    . 'Copy anything you still need into config/%s and delete config/%s. '
+                    . 'Set sp-laravel-api.suppress_config_rename_notice to silence this.',
+                    $old,
+                    $new,
+                    $new,
+                    $old
+                ));
+
+                continue;
+            }
+
             Log::info(sprintf(
                 'sp-laravel-api: config/%s is deprecated; rename it to config/%s. '
                 . 'It keeps working — set sp-laravel-api.suppress_config_rename_notice to silence this.',

@@ -99,4 +99,30 @@ class ConfigNamespaceBridge
 
         return $found;
     }
+
+    /**
+     * Old-named config files whose `sp-*` counterpart is ALSO present.
+     *
+     * A subset of deprecatedFiles(). For these, adopt() has already folded the
+     * `sp-*` file over the canonical namespace with array_replace_recursive,
+     * so the new-named file wins every key both files set and the old file is
+     * no longer fully in effect — the exact opposite of the "it keeps working"
+     * promise that does hold for a lone old-named file. `sp-laravel-api:setup`
+     * used to produce this state on every run, which is why it is worth
+     * distinguishing rather than lumping in with the ordinary notice.
+     *
+     * @param string|null $directory Directory to scan. Defaults to the
+     *                               application's config_path().
+     *
+     * @return array<string, string> old filename => new filename
+     */
+    public static function supersededFiles(?string $directory = null): array
+    {
+        $directory ??= config_path();
+
+        return array_filter(
+            self::deprecatedFiles($directory),
+            static fn(string $new): bool => is_file($directory . '/' . $new)
+        );
+    }
 }
