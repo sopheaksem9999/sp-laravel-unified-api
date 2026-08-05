@@ -15,6 +15,17 @@ class IdTypeIntegerDefaultTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function getEnvironmentSetUp($app): void
+    {
+        parent::getEnvironmentSetUp($app);
+
+        // The base TestCase sets audit.enabled = false, which gates the real
+        // audit migration off and falls back to a fixture table of its own
+        // (see TestCase::setUp()). Enable it here so the default-config
+        // assertion below exercises the real migration, not the fixture.
+        $app['config']->set('audit.enabled', true);
+    }
+
     /** @test */
     public function governed_tables_use_integer_keys_by_default(): void
     {
@@ -98,5 +109,19 @@ class IdTypeIntegerDefaultTest extends TestCase
         ]);
 
         $this->assertSame(1, (int) DB::table('sp_attachments')->value('id'));
+    }
+
+    /** @test */
+    public function audit_log_id_stays_an_auto_incrementing_integer_by_default(): void
+    {
+        DB::table('sp_audit_logs')->insert([
+            'entity_type' => 'users',
+            'entity_id' => '1',
+            'event' => 'created',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->assertSame(1, (int) DB::table('sp_audit_logs')->value('id'));
     }
 }

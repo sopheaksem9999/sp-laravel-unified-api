@@ -13,6 +13,8 @@ use Illuminate\Support\Str;
 use Sopheak\Core\Authorization\Models\Permission;
 use Sopheak\Core\Authorization\Models\Role;
 use Sopheak\Core\Authorization\Traits\HasRoles;
+use Sopheak\Core\Enums\AuditLogEventEnum;
+use Sopheak\Core\Services\AuditLogService;
 use Sopheak\Core\Tests\TestCase;
 
 class TestRoleAssignee extends Model
@@ -148,29 +150,24 @@ class IdTypeUuidTest extends TestCase
     }
 
     /** @test */
-    public function audit_log_id_stays_an_auto_incrementing_integer(): void
+    public function audit_log_id_is_a_generated_uuid(): void
     {
         // audit.enabled = true (set in getEnvironmentSetUp) is what
         // guarantees the real audit migration ran instead of the
-        // TestCase::setUp() fallback fixture — not any column shape. Neither
-        // id nor entity_id distinguish the two any more: ->id() is identical
-        // in both, and Task 5 made entity_id a string in both. Provenance is
-        // proven elsewhere (ClientModelReferenceColumnsTest carries its own
-        // audit.enabled override plus schema assertions); this test only
-        // checks behavior, not which code path built the table.
+        // TestCase::setUp() fallback fixture — not any column shape.
         $columns = collect(Schema::getColumns('sp_audit_logs'))->keyBy('name');
         $this->assertSame('varchar', $columns['entity_id']['type']);
-        $this->assertSame('integer', $columns['id']['type']);
+        $this->assertSame('varchar', $columns['id']['type']);
 
-        DB::table('sp_audit_logs')->insert([
-            'entity_type' => 'users',
-            'entity_id' => '1',
-            'event' => 'created',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        AuditLogService::handleAuditDataEntry(
+            AuditLogEventEnum::CREATED,
+            'users',
+            'users',
+            ['event' => AuditLogEventEnum::CREATED->value, 'entity_id' => '1', 'new_data' => ['id' => '1']],
+        );
 
-        $this->assertSame(1, (int) DB::table('sp_audit_logs')->value('id'));
+        $id = DB::table('sp_audit_logs')->value('id');
+        $this->assertTrue(Str::isUuid((string) $id));
     }
 
     /** @test */

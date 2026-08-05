@@ -241,7 +241,7 @@ return [
             canDelete: false,
             canUpsert: false,
             columns: [
-                'id' => ['type' => 'integer', 'nullable' => false],
+                'id' => ['type' => \Sopheak\Core\Services\RecordConfigService::idType() === 'uuid' ? 'uuid' : 'bigIncrements', 'nullable' => false],
                 'entity_name' => ['type' => 'string', 'nullable' => true],
                 'entity_type' => ['type' => 'string', 'nullable' => true],
                 'entity_id' => ['type' => 'string', 'nullable' => true],

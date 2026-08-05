@@ -14,7 +14,7 @@ return new class extends Migration {
     {
         if (RecordConfigService::auditEnabled()) {
             Schema::create('sp_audit_logs', function (Blueprint $blueprint): void {
-                $blueprint->id();
+                MigrationIdHelper::primary($blueprint);
 
                 if (RecordConfigService::enableTenantId()) {
                     $tenantColumn = RecordConfigService::tenantColumn();
