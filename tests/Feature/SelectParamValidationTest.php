@@ -130,4 +130,31 @@ class SelectParamValidationTest extends TestCase
 
         $builder->applySelectFromParam('bogus_field');
     }
+
+    /** @test */
+    public function unknown_top_level_relationship_returns_422(): void
+    {
+        $response = $this->getJson('/api/authors?select=bogus_rel(*)');
+
+        $response->assertStatus(422);
+        $response->assertJsonPath('message', "Unknown relationship 'bogus_rel' in select for table 'authors'. Valid relationships: posts.");
+    }
+
+    /** @test */
+    public function unknown_nested_relationship_returns_422(): void
+    {
+        $response = $this->getJson('/api/authors?select=posts(bogus_child(*))');
+
+        $response->assertStatus(422);
+        $response->assertJsonPath('message', "Unknown relationship 'bogus_child' in select for table 'posts'. Valid relationships: none.");
+    }
+
+    /** @test */
+    public function valid_relationship_select_still_works(): void
+    {
+        $response = $this->getJson('/api/authors?select=id,posts(title)');
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('data.0.posts.0.title', 'First Post');
+    }
 }
