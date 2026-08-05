@@ -32,6 +32,31 @@ use Sopheak\Core\Support\RecordConfigLoader;
  * @see RelationshipResolverUtils
  * @see SchemaRegistryUtils
  */
+
+/*
+ * Directory holding client-authored table config files, relative to this
+ * config directory.
+ *
+ * Bound to a variable because it is read twice below and the two readings must
+ * never disagree: once as the `table_config_path` key -- which
+ * RecordConfigService::tableConfigPath() exposes and which
+ * MakeRecordTableCommand, SyncRecordColumnsCommand and
+ * GenerateRecordTablesFromDatabaseCommand all write generated table configs
+ * into -- and once as the directory the `autoloaded` scan at the bottom of
+ * this file actually reads.
+ *
+ * `autoloaded => true` disables RecordConfigService's runtime scan, and that
+ * runtime scan is the only other reader of `table_config_path`. So the loader
+ * call below is the SOLE consumer of this directory in a published install:
+ * hardcoding a directory there instead of reusing this value would mean a
+ * client who changes `table_config_path` keeps generating table configs into
+ * their chosen directory while nothing ever loads them -- every CRUD route
+ * those tables defined 404s, with no error anywhere.
+ *
+ * Change the path here and both follow.
+ */
+$tableConfigPath = 'records/tables';
+
 return [
     /*
     |--------------------------------------------------------------------------
@@ -84,7 +109,9 @@ return [
     */
     'id_type' => 'integer', // uuid|integer
     'tenant_header' => 'X-Tenant-ID',
-    'table_config_path' => 'records/tables',
+    // Change this at the $tableConfigPath binding above the return, not here:
+    // the `autoloaded` scan at the bottom of this file reads the same value.
+    'table_config_path' => $tableConfigPath,
 
     /*
     |--------------------------------------------------------------------------
@@ -498,8 +525,10 @@ return [
     | ],
     |
     */
-    // Scanned from config/records/tables in the client's own config directory.
-    // See the `autoloaded` note above the `global_functions` key for why this
-    // is resolved here rather than at request time.
-    'tables' => RecordConfigLoader::tables(__DIR__ . '/records/tables'),
+    // Scanned from the $tableConfigPath directory in the client's own config
+    // directory -- the same value the `table_config_path` key above reports,
+    // deliberately, so the two cannot name different directories. See the
+    // `autoloaded` note above the `global_functions` key for why this is
+    // resolved here rather than at request time.
+    'tables' => RecordConfigLoader::tables(__DIR__ . '/' . $tableConfigPath),
 ];
