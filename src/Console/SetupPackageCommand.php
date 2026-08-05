@@ -15,7 +15,7 @@ class SetupPackageCommand extends Command
 {
     protected $signature = 'sp-laravel-api:setup {--force : Overwrite existing configs}';
 
-    protected $description = 'Setup SP Laravel API package: publish configs and create record/audit configurations using config/record.php + config/records/tables/*.php + config/records/global-functions/*.php.';
+    protected $description = 'Setup SP Laravel API package: publish configs and create record/audit configurations using config/sp-record.php + config/records/tables/*.php + config/records/global-functions/*.php.';
 
     public function handle(): int
     {
@@ -288,7 +288,7 @@ class SetupPackageCommand extends Command
         return <<<'MD'
             # Record Table Configs
 
-            Put table config files in this folder to keep `config/record.php` clean.
+            Put table config files in this folder to keep `config/sp-record.php` clean.
 
             ## Rules
 
