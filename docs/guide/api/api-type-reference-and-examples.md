@@ -368,6 +368,7 @@ Create a class extending `Sopheak\Core\Resources\GlobalFunction`:
 ```php
 namespace App\Api\Functions\Auth;
 
+use Sopheak\Core\Enums\RecordFunctionMethodEnum;
 use Sopheak\Core\Resources\GlobalFunction;
 use Sopheak\Core\Types\RecordFunctionType;
 
@@ -376,7 +377,7 @@ class LoginFunction extends GlobalFunction
     public function configure(): RecordFunctionType
     {
         return new RecordFunctionType(
-            httpMethod: 'POST',
+            httpMethod: RecordFunctionMethodEnum::POST->value,
             class: \App\Services\AuthService::class,
             functionName: 'login',
             payloadSchema: [ ... ]
@@ -452,10 +453,11 @@ Defines a callable RPC endpoint config (table RPC or global RPC).
 - `querySchema`, `payloadSchema`, `responseSchema` (?array, default: `null`): Optional schema metadata used by OpenAPI generation.
 
 ```php
+use Sopheak\Core\Enums\RecordFunctionMethodEnum;
 use Sopheak\Core\Types\RecordFunctionType;
 
 $function = new RecordFunctionType(
-    httpMethod: ['POST'],
+    httpMethod: [RecordFunctionMethodEnum::POST->value],
     class: \App\Services\ReportService::class,
     functionName: 'generate',
     pmsName: 'view_report',

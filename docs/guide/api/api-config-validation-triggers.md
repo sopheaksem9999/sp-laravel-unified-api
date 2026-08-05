@@ -767,6 +767,7 @@ use Illuminate\Http\Request;
 use Sopheak\Core\Attributes\RecordTable;
 use Sopheak\Core\Attributes\RecordFunction;
 use Sopheak\Core\Attributes\RecordGlobalFunction;
+use Sopheak\Core\Enums\RecordFunctionMethodEnum;
 
 // 1. Table-scoped function inside the model
 #[RecordTable(table: 'invoices', pmsName: 'invoices')]
@@ -774,7 +775,7 @@ class Invoice
 {
     #[RecordFunction(
         name: 'sync',
-        httpMethod: ['POST'],
+        httpMethod: [RecordFunctionMethodEnum::POST->value],
         pmsName: 'invoice.sync',
         disableCache: true,
         description: 'Sync invoice to external system'
@@ -805,7 +806,7 @@ class HealthFunctions
 {
     #[RecordGlobalFunction(
         name: 'health',
-        httpMethod: ['GET'],
+        httpMethod: [RecordFunctionMethodEnum::GET->value],
         isPublic: true,
         description: 'Health check endpoint'
     )]
@@ -850,13 +851,14 @@ use Illuminate\Http\Request;
 use Sopheak\Core\Attributes\RecordTable;
 use Sopheak\Core\Attributes\RecordFunction;
 use Sopheak\Core\Attributes\RecordGlobalFunction;
+use Sopheak\Core\Enums\RecordFunctionMethodEnum;
 
 #[RecordTable(table: 'invoices', pmsName: 'invoices', hasTenantId: true, softDeletes: true)]
 class Invoice extends Model
 {
     #[RecordFunction(
         name: 'sync',
-        httpMethod: ['POST'],
+        httpMethod: [RecordFunctionMethodEnum::POST->value],
         pmsName: 'invoice.sync',
         disableCache: true,
         description: 'Sync invoice to external system'
@@ -869,7 +871,7 @@ class Invoice extends Model
 
     #[RecordGlobalFunction(
         name: 'health',
-        httpMethod: ['GET'],
+        httpMethod: [RecordFunctionMethodEnum::GET->value],
         isPublic: true,
         description: 'Health check endpoint'
     )]
@@ -911,7 +913,7 @@ return [
 // config/record.php
 'global_functions' => [
     'health' => new \Sopheak\Core\Types\RecordFunctionType(
-        httpMethod: ['GET'],
+        httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
         class: \App\Http\Controllers\HealthController::class,
         functionName: 'fromConfig',
         isPublic: true

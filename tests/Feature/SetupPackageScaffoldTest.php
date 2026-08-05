@@ -7,6 +7,7 @@ namespace Sopheak\Core\Tests\Feature;
 use Illuminate\Http\Request;
 use ReflectionClass;
 use Sopheak\Core\Console\SetupPackageCommand;
+use Sopheak\Core\Enums\RecordFunctionMethodEnum;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordTableType;
 use Throwable;
@@ -176,6 +177,62 @@ class SetupPackageScaffoldTest extends TestCase
             if ($validatorPath !== null) {
                 @unlink($validatorPath);
             }
+        }
+    }
+
+    /**
+     * `defaultAuditConfig()` scaffolds `config/sp-audit.php` as a fallback
+     * when vendor:publish produced nothing (see the setup command's own
+     * comment on why this path is never force-overwritten). Its function
+     * definitions declare `httpMethod` via
+     * `\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value` -- a fully
+     * qualified reference, since this scaffold has no `use` block -- rather
+     * than the raw string `'GET'` it used to. `->value` yields a plain
+     * string, so this must still survive the exact var_export()/eval
+     * round-trip `php artisan config:cache` performs; a regression back to a
+     * bare enum case (not `->value`) would var_export() as a
+     * non-serializable `\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET`
+     * reference and break config:cache on a brand-new install.
+     */
+    /** @test */
+    public function the_scaffolded_audit_config_httpmethod_survives_the_config_cache_round_trip(): void
+    {
+        $command = new SetupPackageCommand();
+        $reflection = new ReflectionClass($command);
+
+        $auditSource = $reflection->getMethod('defaultAuditConfig')->invoke($command);
+
+        $auditPath = sys_get_temp_dir() . '/sp_scaffold_audit_config_' . uniqid('', true) . '.php';
+        file_put_contents($auditPath, $auditSource);
+
+        try {
+            $config = require $auditPath;
+
+            $statsFunction = $config['tables']['sp_audit_logs']->functions['stats'];
+            $this->assertSame(
+                [RecordFunctionMethodEnum::GET->value],
+                $statsFunction->httpMethod,
+                'the scaffolded stats function must declare httpMethod as [RecordFunctionMethodEnum::GET->value], not a raw string'
+            );
+
+            $exported = var_export($config, true);
+
+            try {
+                $restored = eval('return ' . $exported . ';');
+            } catch (Throwable $throwable) {
+                $this->fail(
+                    'The scaffolded audit config is not config:cache-safe: '
+                    . $throwable->getMessage()
+                );
+            }
+
+            $this->assertSame(
+                ['GET'],
+                $restored['tables']['sp_audit_logs']->functions['stats']->httpMethod,
+                'httpMethod must round-trip through var_export()/eval as a plain string array'
+            );
+        } finally {
+            @unlink($auditPath);
         }
     }
 }
