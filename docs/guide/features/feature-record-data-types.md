@@ -178,23 +178,44 @@ an already-migrated project means writing your own migration for
 |---|---|
 | `sp_permissions` | `id` |
 | `sp_roles` | `id` |
-| `sp_role_permissions` | `role_id`, `permission_id` |
-| `sp_model_has_roles` | `role_id` |
-| `sp_model_permissions` | `permission_id` |
+| `sp_role_permissions` | `id`, `role_id`, `permission_id` |
+| `sp_model_has_roles` | `id`, `role_id` |
+| `sp_model_permissions` | `id`, `permission_id` |
+| `sp_audit_logs` | `id` |
+| `sp_attachments` | `id`, `folder_id` |
+| `sp_attachment_folders` | `id`, `parent_id` |
+| `sp_webhook_endpoints` | `id` |
+| `sp_webhook_subscriptions` | `id`, `endpoint_id` |
+| `sp_webhook_deliveries` | `id`, `endpoint_id` |
 
 ### What always stays `bigIncrements`, regardless of the setting
 
-- `sp_role_permissions.id`, `sp_model_has_roles.id`, `sp_model_permissions.id`
-  and `sp_audit_logs.id`. These are surrogate keys: nothing references them,
-  and their insert paths (including Eloquent's `sync()` for the pivot tables)
-  supply no id, so they must stay auto-incrementing regardless of `id_type`.
+- `sp_attachment_links.id`. This is a surrogate key: nothing references it,
+  and its insert path goes through the generic Record API with no
+  client-supplied id, so it stays auto-incrementing regardless of `id_type`.
 
-### What always stays `uuid`, regardless of the setting
+### How the pivot surrogate ids and `sp_audit_logs.id` are generated under `uuid`
 
-- `sp_attachments`, `sp_attachment_folders` (renamed from
-  `sp_document_folders`) and `sp_webhook_*` (`sp_webhook_endpoints`,
-  `sp_webhook_subscriptions`, `sp_webhook_deliveries`) always use `uuid`
-  primary keys. They do not consult `record.id_type`.
+`sp_role_permissions.id`, `sp_model_has_roles.id`, and `sp_model_permissions.id`
+are written via Eloquent's `sync()`/`attach()`, which never supplies an id on
+a plain insert. Each pivot table has a dedicated `Pivot`/`MorphPivot`
+subclass (`src/Authorization/Models/Pivots/`) registered via `->using()` on
+its relationship, so writes route through Eloquent's model lifecycle and the
+same `HasConfigurableKey` trait `Role`/`Permission` use generates the uuid.
+
+`sp_audit_logs.id` is written via a raw `DB::table(...)->insert()` in
+`AuditLogService`, which generates the uuid inline before the insert.
+
+⚠️ **Breaking change for attachments and webhooks.** `sp_attachments`,
+`sp_attachment_folders`, `sp_webhook_endpoints`, `sp_webhook_subscriptions`,
+and `sp_webhook_deliveries` used to always use `uuid` primary keys regardless
+of `record.id_type`. They now follow the setting like every other governed
+table. Since the default is `'integer'`, an install that never set
+`record.id_type` gets `bigIncrements` keys for these tables on its next fresh
+migration instead of `uuid`. If you rely on the existing `uuid` schema, set
+`'id_type' => 'uuid'` in `config/sp-record.php` **before** that migration
+runs. An already-migrated environment is unaffected either way — this only
+matters for new environments.
 
 ### What always stays `string` — the client-reference columns
 
