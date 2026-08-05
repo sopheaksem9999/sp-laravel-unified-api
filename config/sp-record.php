@@ -1,5 +1,6 @@
 <?php
 
+use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Support\RecordConfigLoader;
 
 /*
@@ -403,13 +404,19 @@ return [
     // the result into the cached payload and production does no filesystem
     // scanning. `autoloaded` tells RecordConfigService to skip its own scan.
     //
+    // The directory names come from RecordConfigService::globalFunctionDirectoryNames()
+    // -- the same list the runtime scan (config_path()-based) uses -- so the
+    // two cannot drift apart into scanning different directories.
+    //
     // NOTE: values reachable from here must be var_export()-able. A Closure
     // validator or a 'type' => 'closure' global function will make
     // `php artisan config:cache` fail. Use [MyValidator::class, 'method'] instead.
     'autoloaded' => true,
     'global_functions' => RecordConfigLoader::globalFunctions(
-        __DIR__ . '/records/globalFunctions',
-        __DIR__ . '/records/global-functions',
+        ...array_map(
+            static fn (string $name): string => __DIR__ . '/' . $name,
+            RecordConfigService::globalFunctionDirectoryNames(),
+        ),
     ),
 
     'global_triggers' => [
