@@ -239,28 +239,47 @@ package:
 | `attachments.php` | `sp-attachments.php` |
 | `webhooks.php` | `sp-webhooks.php` |
 
-**No action is required.** Only the filename changed — the internal config
-*namespace* each file feeds did not move. `mergeConfigFrom($path, $key)` takes
-its key independently of its path, so the package still merges
-`config/sp-record.php` under the `record` namespace, `config/sp-attachments.php`
-under `attachments`, and so on. `config('record.tables')` (and every other call
-site reading `record.*`, `permissions.*`, `audit.*`, `attachments.*` or
-`webhooks.*`) in your own code is completely unaffected and keeps resolving
-exactly as before, whichever filename is on disk.
+**No action is required.** Only the filename changed — the config *namespace*
+each file feeds did not move, though the two groups of files get there by
+different routes:
 
-If you have already published any of the old-named files, they keep working
-indefinitely. On boot, the package folds a published old-named file's contents
-into the canonical namespace before merging its own defaults, so nothing you
-customized is lost, and it mirrors the resolved values back onto the new name
-too — a project mid-migration can read config under either name.
+- `record` is **publish-only** — the package has never merged a vendor default
+  into it (see [Re-publishing](#re-publishing) below, unchanged by this
+  rename). Whichever filename you have on disk, Laravel loads it under its own
+  basename exactly like any other config file: `config/record.php` loads as
+  `record`, `config/sp-record.php` loads as `sp-record`. There is no
+  `mergeConfigFrom()` call for `record` anywhere in the package.
+- `permissions`, `audit`, `attachments` and `webhooks` are still merged the
+  same way they always were, via `mergeConfigFrom()` — only the **package's
+  own vendor-shipped file** that gets merged changed name, from e.g.
+  `config/attachments.php` to `config/sp-attachments.php` inside the package.
+  The canonical key each merges into (`attachments`, and so on) is unchanged.
 
-**Console commands log a one-time deprecation notice** for any old-named file
-still found in your `config/` directory (an info-level log line naming the old
-and new filename). This check is gated on `runningInConsole()`, so it never
-fires on HTTP/API requests — under PHP-FPM the application boots fresh on
-every request, and without that gate the notice would have logged on every
-single web request rather than only when you run an Artisan command. Silence
-it with:
+Either way, `config('record.tables')` (and every other call site reading
+`record.*`, `permissions.*`, `audit.*`, `attachments.*` or `webhooks.*`) in
+your own code is unaffected and keeps resolving exactly as before.
+
+If you have already published an **old**-named file, that alone is the entire
+compatibility story: Laravel loads `config/record.php` under key `record` the
+same way it always has, and nothing else needs to run for it to keep working.
+
+The `ConfigNamespaceBridge` only has work to do when a **new**-named file is
+also present — for example if you (or an earlier partial migration) published
+`config/sp-record.php`. Its `adopt()` pass folds that `sp-record`-keyed value
+into the canonical `record` key during `register()`, before the merges above
+run. It does this with `array_replace_recursive($old, $new)` where `$new` is
+the new-named file's value — **the new-named file's values win over the
+old-named file's for any key both set.** Its `mirror()` pass then copies the
+resolved value back onto the new-named key in `boot()`, so a project that
+only ever published the old file can still be read under the new name too.
+
+**Console commands log a deprecation notice** for any old-named file still
+found in your `config/` directory (an info-level log line naming the old and
+new filename) — this runs on every Artisan invocation, not just once. It is
+gated on `runningInConsole()`, so it never fires on HTTP/API requests — under
+PHP-FPM the application boots fresh on every request, and without that gate
+the same log line would have appeared on every single web request instead of
+only when a console command boots the app. Silence it with:
 
 ```php
 // config/sp-laravel-api.php
@@ -270,22 +289,41 @@ it with:
 ### Migrating voluntarily
 
 There is no deadline to do this, but if you want your `config/` directory to
-show only the new names:
+show only the new names, **rename the files directly rather than running
+`vendor:publish`.**
 
-1. Publish the new-named files. This does not touch or delete any old-named
-   file you already have:
-   ```bash
-   php artisan vendor:publish --tag=sp-laravel-api-config
-   ```
-   (Add `--force` only if a new-named file already exists and you want it
-   reset to the packaged defaults — it will discard any customizations in
-   that file.)
-2. Diff your old file against the freshly published one and copy your
-   customizations across, for example `config/record.php` into
-   `config/sp-record.php`.
-3. Delete the old file(s), e.g. `rm config/record.php`. The deprecation
-   notice stops once the old filename is gone.
-4. Re-run `php artisan sp-laravel-api:validate` to confirm.
+`vendor:publish` writes the package's packaged *defaults*, not your
+customizations. Given the precedence rule above — a new-named file's values
+win over an old-named file's for any key both set — publishing a fresh
+`config/sp-record.php` while your customized `config/record.php` is still on
+disk would silently apply the packaged defaults over your customizations for
+every key both files set, for as long as both files coexist. That window is
+real: it lasts until the next time something boots the app after you publish
+and before you finish copying your customizations across and deleting the old
+file — a request, a queued job, or even `php artisan sp-laravel-api:validate`
+itself.
+
+Renaming avoids that window entirely, because the new-named file is never
+anything other than what your old file already was:
+
+1. `git mv config/record.php config/sp-record.php` (repeat for
+   `permissions.php` → `sp-permissions.php`, `audit.php` → `sp-audit.php`,
+   `attachments.php` → `sp-attachments.php`, `webhooks.php` →
+   `sp-webhooks.php`, for whichever of these you've published). A plain `mv`
+   works the same outside of git.
+2. Optional: check whether the package added any keys since you last
+   published. For `permissions`, `audit`, `attachments` and `webhooks` this
+   barely matters — a missing key is filled in from the package's own vendor
+   default by `mergeConfigFrom()` regardless of which filename you use. For
+   `record` a missing key stays missing (see
+   [Re-publishing](#re-publishing)), so it's worth diffing against the
+   package's current default without publishing it:
+   `vendor/sopheak/sp-laravel-api/config/sp-record.php`.
+3. Run `php artisan sp-laravel-api:validate` to confirm.
+
+No diff-and-copy step against a freshly published default is needed, because
+renaming never puts an uncustomized default file in your live `config/`
+directory in the first place.
 
 **One limitation to know about:** the mirroring from canonical name to `sp-*`
 name happens once, during `boot()`. A runtime `config()->set('sp-record.x', …)`

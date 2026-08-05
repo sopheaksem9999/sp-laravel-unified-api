@@ -44,7 +44,18 @@ class SetupPackageCommand extends Command
         try {
             $this->ensureDirectory('config/records/tables');
             $this->ensureDirectory('config/records/global-functions');
+            $this->ensureDirectory('app/Record/Validators');
             $created += $this->ensureFile('config/records/tables/README.md', $this->defaultRecordTablesReadme(), $force);
+            // Static-method class reference, not a Closure: config/sp-record.php ships
+            // with 'autoloaded' => true, which evaluates this file's RecordTableType
+            // while the config file itself is being merged, so it must survive
+            // php artisan config:cache. var_export() cannot serialize a Closure; a
+            // [ClassName::class, 'method'] array of strings survives unchanged, but
+            // the method it names must be `public static` -- HasControllerHelpers
+            // invokes it as a plain PHP callable, which is only resolvable without
+            // an object instance (i.e. is_callable() only returns true) when the
+            // method is static.
+            $created += $this->ensureFile('app/Record/Validators/UserValidator.php', $this->defaultUserValidatorClass(), $force);
             $created += $this->ensureFile('config/records/tables/users.php', $this->defaultUsersTableConfig(), $force);
             $created += $this->ensureFile('config/records/global-functions/README.md', $this->defaultRecordGlobalFunctionsReadme(), $force);
             // sp-* names: the package ships and reads these under the canonical
@@ -304,9 +315,7 @@ class SetupPackageCommand extends Command
             ```php
             <?php
 
-            use Illuminate\Http\Request;
-            use Illuminate\Contracts\Validation\Validator as ValidatorContract;
-            use Illuminate\Support\Facades\Validator;
+            use App\Record\Validators\CustomerValidator;
             use Sopheak\Core\Types\RecordTableType;
 
             return new RecordTableType(
@@ -317,13 +326,42 @@ class SetupPackageCommand extends Command
                 relationships: [],
                 softDeletes: true,
                 hasTenantId: false,
-                createValidator: function (Request $request, ?int $id = null): ValidatorContract {
+                createValidator: [CustomerValidator::class, 'createCustomer'],
+            );
+            ```
+
+            `config/sp-record.php` ships with `'autoloaded' => true`, which evaluates
+            every file in this directory while the config file itself is being merged
+            -- so its content must survive `php artisan config:cache`. Avoid Closures
+            here (`var_export()` cannot serialize one); reference a `public static`
+            method on a class instead, e.g.:
+
+            ```php
+            <?php
+
+            declare(strict_types=1);
+
+            namespace App\Record\Validators;
+
+            use Illuminate\Contracts\Validation\Validator as ValidatorContract;
+            use Illuminate\Http\Request;
+            use Illuminate\Support\Facades\Validator;
+
+            class CustomerValidator
+            {
+                public static function createCustomer(Request $request, ?int $id = null): ValidatorContract
+                {
                     return Validator::make($request->all(), [
                         'name' => 'required|string|max:255',
                     ]);
-                },
-            );
+                }
+            }
             ```
+
+            The method must be `public static`: the package invokes a
+            `[ClassName::class, 'method']` reference as a plain PHP callable, and
+            `is_callable()` only resolves that array form without an object
+            instance when the method is static.
 
             ## Example (multiple tables in one file)
 
@@ -389,10 +427,14 @@ class SetupPackageCommand extends Command
         return <<<'PHP'
             <?php
 
-            use Illuminate\Http\Request;
-            use Illuminate\Contracts\Validation\Validator;
+            use App\Record\Validators\UserValidator;
             use Sopheak\Core\Types\RecordTableType;
 
+            // Validators are [ClassName::class, 'method'] references, not Closures:
+            // config/sp-record.php ships with 'autoloaded' => true, which evaluates
+            // this file while the config file itself is being merged, so its content
+            // must survive `php artisan config:cache` (var_export() cannot serialize
+            // a Closure). See app/Record/Validators/UserValidator.php.
             return new RecordTableType(
                 pmsName: 'user',
                 table: 'users',
@@ -402,20 +444,63 @@ class SetupPackageCommand extends Command
                 functions: [],
                 softDeletes: false,
                 hasTenantId: false,
-                createValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make($request->all(), [
-                    'name' => 'required|string|max:255',
-                    'email' => 'required|email',
-                    'password' => 'required|string|min:8',
-                ]),
-                updateValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make($request->all(), [
-                    'name' => 'sometimes|required|string|max:255',
-                    'email' => 'sometimes|required|email',
-                    'password' => 'sometimes|required|string|min:8',
-                ]),
-                deleteValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make(['id' => $id], [
-                    'id' => 'required|integer',
-                ]),
+                createValidator: [UserValidator::class, 'createUser'],
+                updateValidator: [UserValidator::class, 'updateUser'],
+                deleteValidator: [UserValidator::class, 'deleteUser'],
             );
+            PHP;
+    }
+
+    private function defaultUserValidatorClass(): string
+    {
+        return <<<'PHP'
+            <?php
+
+            declare(strict_types=1);
+
+            namespace App\Record\Validators;
+
+            use Illuminate\Contracts\Validation\Validator as ValidatorContract;
+            use Illuminate\Http\Request;
+            use Illuminate\Support\Facades\Validator;
+
+            /**
+             * Referenced from config/records/tables/users.php as
+             * [UserValidator::class, 'createUser'] etc. Methods must stay `public
+             * static`: the package invokes that array as a plain callable, and
+             * `is_callable()` only resolves a [Class, 'method'] array without an
+             * object instance when the method is static. config/sp-record.php's
+             * 'autoloaded' scan also requires the table config (including this
+             * reference) to survive `php artisan config:cache`, which a Closure
+             * cannot.
+             */
+            class UserValidator
+            {
+                public static function createUser(Request $request, ?int $id = null): ValidatorContract
+                {
+                    return Validator::make($request->all(), [
+                        'name' => 'required|string|max:255',
+                        'email' => 'required|email',
+                        'password' => 'required|string|min:8',
+                    ]);
+                }
+
+                public static function updateUser(Request $request, ?int $id = null): ValidatorContract
+                {
+                    return Validator::make($request->all(), [
+                        'name' => 'sometimes|required|string|max:255',
+                        'email' => 'sometimes|required|email',
+                        'password' => 'sometimes|required|string|min:8',
+                    ]);
+                }
+
+                public static function deleteUser(Request $request, ?int $id = null): ValidatorContract
+                {
+                    return Validator::make(['id' => $id], [
+                        'id' => 'required|integer',
+                    ]);
+                }
+            }
             PHP;
     }
 

@@ -21,7 +21,7 @@ class MigrateFromLegacyCommand extends Command
     public function handle(): int
     {
         if (!config('permissions.migrate_from_legacy', false) && !$this->option('force')) {
-            $this->warn('Legacy migration is not enabled in config/permissions.php.');
+            $this->warn('Legacy migration is not enabled in config/sp-permissions.php.');
             $this->warn('Set SP_PERMISSION_MIGRATE_FROM_LEGACY=true or migrate_from_legacy to true.');
             $this->warn('Use --force to skip this check.');
 
