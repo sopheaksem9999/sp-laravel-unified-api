@@ -24,7 +24,7 @@ Use this skill when you are adding or modifying:
 
 ## Where things live
 
-- Table configs: `config/records/tables/*.php` (or `config/record.php`)
+- Table configs: `config/records/tables/*.php` (or `config/sp-record.php`; an unmigrated project may still have `config/record.php` instead — edit whichever exists, never create both)
 - Global function configs: `config/records/globalFunctions/*.php`
 - CRUD orchestration: `Sopheak\Core\Services\RecordService`
 - Responses: `Sopheak\Core\Services\RecordApiResponseService`

@@ -50,7 +50,7 @@ The package provides two separate MCP endpoints with different security postures
 | **Data access** | Yes (reads/writes real data) | **None** (read-only schema) |
 | **Auth** | User Bearer token (your app auth) | `SP_API_MCP_TOKEN` (separate shared secret) |
 | **Production-safe** | Only behind full auth | Yes — no data exposure even if token leaks |
-| **Config** | `config/record.php` → `mcp.*` | `config/sp-api-mcp.php` |
+| **Config** | `config/sp-record.php` → `mcp.*` | `config/sp-api-mcp.php` |
 
 The Schema MCP is specifically designed for **frontend AI coding agents** (Cursor, Claude Code, opencode, Copilot) that need to discover API routes, fields, filters, and permissions — without ever touching production data.
 
@@ -66,10 +66,10 @@ The Schema MCP is specifically designed for **frontend AI coding agents** (Curso
 
 ### Data MCP (`record.mcp.*`)
 
-The Data MCP configuration lives in your `config/record.php` file under the `mcp` key. If you ran `php artisan sp-laravel-api:setup` recently, this will be generated for you.
+The Data MCP configuration lives in your `config/sp-record.php` file under the `mcp` key. If you ran `php artisan sp-laravel-api:setup` recently, this will be generated for you.
 
 ```php
-// config/record.php
+// config/sp-record.php
 'mcp' => [
     'enabled' => env('SP_MCP_ENABLED', false),
     

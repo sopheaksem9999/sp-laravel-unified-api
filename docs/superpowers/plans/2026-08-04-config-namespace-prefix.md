@@ -970,8 +970,13 @@ entries with:
     // scanning. `autoloaded` tells RecordConfigService to skip its own scan.
     //
     // NOTE: values reachable from here must be var_export()-able. A Closure
-    // validator or a 'type' => 'closure' global function will make
-    // `php artisan config:cache` fail. Use [MyValidator::class, 'method'] instead.
+    // validator will make `php artisan config:cache` fail. Use
+    // ['class' => MyValidator::class, 'functionName' => 'validate'] instead.
+    // (Corrected after implementation: there is no 'type' => 'closure' global
+    // function kind -- global functions have no `type` dispatch at all -- and
+    // turning `autoloaded` off does not avoid the config:cache failure,
+    // because Laravel globs config/ recursively and loads
+    // config/records/tables/*.php itself.)
     'autoloaded' => true,
     'tables' => RecordConfigLoader::tables(__DIR__ . '/records/tables'),
     'global_functions' => RecordConfigLoader::globalFunctions(
@@ -1138,13 +1143,18 @@ new files, copy customizations across, delete the old ones).
 
 - [ ] **Step 2: Document the `config:cache` closure caveat**
 
-In `docs/guide/features/feature-record-data-types.md`, state that with
-`autoloaded` enabled, table and global-function configs are evaluated inside the
-config file, so `php artisan config:cache` must serialize them — and a `Closure`
-validator or `'type' => 'closure'` global function makes it fail with
-*"Your configuration files are not serializable."* Give both escape hatches:
-use `[MyValidator::class, 'validate']`, or remove the loader calls and the
-`autoloaded` flag.
+In `docs/guide/features/feature-record-data-types.md`, state that a `Closure`
+validator in a table config makes `php artisan config:cache` fail.
+
+*(Corrected after implementation.* Two details in this step were wrong. There
+is no `'type' => 'closure'` global function kind — global functions have no
+`type` dispatch at all. And the second escape hatch does not work: removing the
+loader calls and the `autoloaded` flag changes nothing, because
+`config/records/` sits inside `config/` and Laravel's own `LoadConfiguration`
+globs `config/` recursively, loading `config/records/tables/orders.php` as the
+framework key `records.tables.orders`. Verified by running `config:cache` on an
+app with no `config/sp-record.php` at all: it still fails. The shipped docs
+give one escape hatch — don't put a `Closure` in `config/`.*)
 
 - [ ] **Step 3: CHANGELOG**
 

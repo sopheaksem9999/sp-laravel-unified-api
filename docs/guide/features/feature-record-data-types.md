@@ -11,6 +11,9 @@ keywords:
   - id_type
   - primary key type
   - client reference columns
+  - config:cache
+  - autoloaded
+  - closure serialization
 ---
 
 # Record Data Types
@@ -151,7 +154,7 @@ auto-incrementing integer or UUID primary keys, so their API surface matches
 your project's convention.
 
 ```php
-// config/record.php
+// config/sp-record.php
 'id_type' => 'integer', // uuid|integer
 ```
 
@@ -232,3 +235,88 @@ Note that `sp_audit_logs`'s tenant column (present only when
 `string` too — it is not governed by `record.tenant_column_type`. That
 setting only controls the PostgreSQL RLS cast used by the
 `pgsql:enable-rls` command; it has no effect on any migrated column type.
+
+## 6) `config:cache` and closures in table/function configs
+
+**A `Closure` anywhere under `config/records/` breaks `php artisan
+config:cache`.** This is not something the package turns on — it follows from
+where those files live.
+
+`config/records/tables/` and `config/records/global-functions/` are inside
+`config/`, and Laravel's own `LoadConfiguration` bootstrapper globs `config/`
+**recursively** (`Finder::create()->files()->name('*.php')->in($configPath)`)
+and loads each nested file under a dotted key built from its path. So
+`config/records/tables/orders.php` is loaded by the framework as the config key
+`records.tables.orders`, exactly like `config/app.php` is loaded as `app` —
+whether or not this package is installed, and whether or not you have ever
+published `config/sp-record.php`.
+
+`php artisan config:cache` then serializes the whole config tree with
+`var_export()`. On PHP 8.4 `var_export()` does **not** throw or warn when it
+hits a `Closure` — it silently writes the non-functional
+`\Closure::__set_state(array())`. The failure surfaces one step later, when
+`Illuminate\Foundation\Console\ConfigCacheCommand` `require`s the file it just
+wrote as a self-check; it then walks the config tree to name the culprit:
+
+```
+Your configuration files could not be serialized because the value at
+"records.tables.orders" is non-serializable.
+```
+
+Read that key carefully: `records.tables.orders`, not `record.tables.orders`.
+It is the framework's nested-directory key, which is the tell that the
+framework loaded the file, not the package.
+
+`config/sp-record.php` ships with `'autoloaded' => true`, which additionally
+reads the same directories through `RecordConfigLoader` while
+`config/sp-record.php` is being evaluated, so the same `RecordTableType`
+instances also land under `record.tables` / `record.global_functions`. That is
+a second copy of the same values; it is not the cause of the failure, and
+turning it off does not avoid it.
+
+There is therefore exactly **one** way out: do not put a `Closure` in those
+files.
+
+- **Use the package's own class-reference validator form instead of a
+  `Closure`.** `createValidator`/`updateValidator`/`deleteValidator` accept
+  `Closure|RecordValidationType|array|string|null`. Pass
+  `['class' => MyValidator::class, 'functionName' => 'validate']` (or the
+  equivalent `new RecordValidationType(class: MyValidator::class,
+  functionName: 'validate')`) instead of a closure. Both are plain data —
+  strings and, for `RecordValidationType`, an object with its own
+  `__set_state()` — so they survive `var_export()` and `config:cache`
+  unchanged, and the package still calls your method the same way it would
+  have called a closure.
+
+  ::: warning Don't reach for `[MyValidator::class, 'validate']` instead
+  That two-element array *looks* like a valid PHP callable, but
+  `is_callable()` only accepts the `[Class, 'method']` form for an
+  **instance** method when it also has an object to call it on; called as a
+  bare class-string with a non-`static` method, `is_callable()` returns
+  `false`. The package's validator resolver then falls through past its
+  callable check into `flattenValidatorConfigs()`, which doesn't recognize a
+  two-element array without a `class`/`functionName` key either, and throws
+  `RuntimeException: Invalid validator configuration. Expected callable,
+  Sopheak\Core\Types\RecordValidationType, or array, got string` on every
+  create/update request — trading a build-time `config:cache` failure for a
+  500 on every write. If you do want the bare-array callable style, the
+  method must be declared `public static`; the config-array form above avoids
+  the question entirely.
+  :::
+
+  ::: warning Turning `autoloaded` off does not help
+  Removing the `RecordConfigLoader::tables(...)` /
+  `RecordConfigLoader::globalFunctions(...)` calls from
+  `config/sp-record.php` and dropping the `'autoloaded'` key sends
+  `RecordConfigService` back to scanning those directories at request time —
+  but it does nothing for `config:cache`, because the framework loads the same
+  files itself before the package is even involved. Verified by running
+  `php artisan config:cache` on an application with **no** `config/sp-record.php`
+  at all and one closure-carrying file in `config/records/tables/`: it still
+  fails, with `records.tables.<file>` named as the non-serializable value. Your
+  only real choice is to keep closures out of `config/`.
+  :::
+
+If you want a `Closure` validator badly enough to give something up, the thing
+to give up is `config:cache` itself — not `autoloaded`, which changes nothing
+here.

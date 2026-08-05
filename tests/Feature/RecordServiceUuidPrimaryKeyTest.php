@@ -44,7 +44,7 @@ class RecordServiceUuidPrimaryKeyTest extends TestCase
         // now that the setting is in place — the same evaluation a real app does
         // at boot, where LoadConfiguration runs first. See
         // tests/Unit/PermissionsConfigIdTypeTest.php for the full explanation.
-        $permissions = require __DIR__ . '/../../config/permissions.php';
+        $permissions = require __DIR__ . '/../../config/sp-permissions.php';
         config()->set('permissions.tables', $permissions['tables']);
 
         // A table with a uuid primary key that has nothing to do with

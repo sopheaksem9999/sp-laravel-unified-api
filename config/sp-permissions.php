@@ -25,7 +25,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | When set to true, the package will:
-    | 1. Auto-register permissions from config/record.php (pmsName + can* flags)
+    | 1. Auto-register permissions from config/sp-record.php (pmsName + can* flags)
     | 2. Check permissions via the HasRoles trait (direct + role-based)
     | 3. Cache resolved permissions for the authenticated user
     |
@@ -39,7 +39,7 @@ return [
     | Auto-Register Permissions from Config
     |--------------------------------------------------------------------------
     |
-    | When enabled, on every boot the system scans all tables in config/record.php
+    | When enabled, on every boot the system scans all tables in config/sp-record.php
     | and auto-creates permissions based on pmsName + canRead/canCreate/etc flags.
     |
     | Example: pmsName: 'invoice', canRead: true → creates 'view:invoice' permission

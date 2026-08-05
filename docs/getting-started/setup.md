@@ -62,12 +62,18 @@ php artisan sp-laravel-api:setup --force
 
 This creates (or updates) common paths like:
 
-- `config/record.php`
-- `config/audit.php`
-- `config/attachments.php`
-- `config/webhooks.php`
+- `config/sp-record.php`
+- `config/sp-audit.php`
+- `config/sp-attachments.php`
+- `config/sp-webhooks.php`
 - `config/records/tables/*`
 - `config/records/global-functions/*`
+
+(These publish under `sp-`-prefixed filenames; the config namespace each one
+feeds — `record`, `audit`, `attachments`, `webhooks` — is unchanged. See
+[Upgrade 0.4.80 → 0.4.82](/getting-started/upgrade-0.4.80-to-0.4.82) for
+details if you have older, unprefixed copies of these files already
+published.)
 
 It also attempts to inject default rate limiters into `app/Providers/AppServiceProvider.php`:
 
