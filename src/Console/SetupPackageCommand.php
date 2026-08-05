@@ -439,7 +439,7 @@ class SetupPackageCommand extends Command
 
             class CustomerValidator
             {
-                public static function createCustomer(Request $request, ?int $id = null): ValidatorContract
+                public static function createCustomer(Request $request, int|string|null $id = null): ValidatorContract
                 {
                     return Validator::make($request->all(), [
                         'name' => 'required|string|max:255',
@@ -566,7 +566,7 @@ class SetupPackageCommand extends Command
              */
             class UserValidator
             {
-                public static function createUser(Request $request, ?int $id = null): ValidatorContract
+                public static function createUser(Request $request, int|string|null $id = null): ValidatorContract
                 {
                     return Validator::make($request->all(), [
                         'name' => 'required|string|max:255',
@@ -575,7 +575,7 @@ class SetupPackageCommand extends Command
                     ]);
                 }
 
-                public static function updateUser(Request $request, ?int $id = null): ValidatorContract
+                public static function updateUser(Request $request, int|string|null $id = null): ValidatorContract
                 {
                     return Validator::make($request->all(), [
                         'name' => 'sometimes|required|string|max:255',
@@ -584,10 +584,13 @@ class SetupPackageCommand extends Command
                     ]);
                 }
 
-                public static function deleteUser(Request $request, ?int $id = null): ValidatorContract
+                public static function deleteUser(Request $request, int|string|null $id = null): ValidatorContract
                 {
+                    // Not `integer`: this package supports uuid primary keys via
+                    // record.id_type, so the scaffold cannot assume the key is
+                    // numeric. Narrow this to match your own table's key type.
                     return Validator::make(['id' => $id], [
-                        'id' => 'required|integer',
+                        'id' => 'required',
                     ]);
                 }
             }
