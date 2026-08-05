@@ -439,7 +439,7 @@ class SetupPackageCommand extends Command
 
             class CustomerValidator
             {
-                public static function createCustomer(Request $request, ?int $id = null): ValidatorContract
+                public static function createCustomer(Request $request, int|string|null $id = null): ValidatorContract
                 {
                     return Validator::make($request->all(), [
                         'name' => 'required|string|max:255',
@@ -498,11 +498,12 @@ class SetupPackageCommand extends Command
             ```php
             <?php
 
+            use Sopheak\Core\Enums\RecordFunctionMethodEnum;
             use Sopheak\Core\Types\RecordFunctionType;
 
             return [
                 'login' => new RecordFunctionType(
-                    httpMethod: ['POST'],
+                    httpMethod: [RecordFunctionMethodEnum::POST->value],
                     class: \App\Services\AuthService::class,
                     functionName: 'login',
                     description: 'Login',
@@ -566,7 +567,7 @@ class SetupPackageCommand extends Command
              */
             class UserValidator
             {
-                public static function createUser(Request $request, ?int $id = null): ValidatorContract
+                public static function createUser(Request $request, int|string|null $id = null): ValidatorContract
                 {
                     return Validator::make($request->all(), [
                         'name' => 'required|string|max:255',
@@ -575,7 +576,7 @@ class SetupPackageCommand extends Command
                     ]);
                 }
 
-                public static function updateUser(Request $request, ?int $id = null): ValidatorContract
+                public static function updateUser(Request $request, int|string|null $id = null): ValidatorContract
                 {
                     return Validator::make($request->all(), [
                         'name' => 'sometimes|required|string|max:255',
@@ -584,10 +585,13 @@ class SetupPackageCommand extends Command
                     ]);
                 }
 
-                public static function deleteUser(Request $request, ?int $id = null): ValidatorContract
+                public static function deleteUser(Request $request, int|string|null $id = null): ValidatorContract
                 {
+                    // Not `integer`: this package supports uuid primary keys via
+                    // record.id_type, so the scaffold cannot assume the key is
+                    // numeric. Narrow this to match your own table's key type.
                     return Validator::make(['id' => $id], [
-                        'id' => 'required|integer',
+                        'id' => 'required',
                     ]);
                 }
             }
@@ -940,19 +944,19 @@ class SetupPackageCommand extends Command
                             'stats' => new \Sopheak\Core\Types\RecordFunctionType(
                                 class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
                                 functionName: 'getStats',
-                                httpMethod: ['GET'],
+                                httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
                                 description: 'Get audit statistics'
                             ),
                             'field-timeline/{entityType}/{entityId}/{field}' => new \Sopheak\Core\Types\RecordFunctionType(
                                 class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
                                 functionName: 'getFieldTimeline',
-                                httpMethod: ['GET'],
+                                httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
                                 description: 'Get field timeline'
                             ),
                             'field-stats/{entityType}/{entityId}/{field}' => new \Sopheak\Core\Types\RecordFunctionType(
                                 class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
                                 functionName: 'getFieldStats',
-                                httpMethod: ['GET'],
+                                httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
                                 description: 'Get field statistics'
                             ),
                         ]

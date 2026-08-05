@@ -30,7 +30,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  * // Public function (no pmsName)
  * $publicFunction = new RecordFunctionType(
  *     pmsName: null,
- *     httpMethod: 'POST',
+ *     httpMethod: RecordFunctionMethodEnum::POST->value,
  *     class: 'App\\Services\\AuthService',
  *     functionName: 'login',
  *     disableCache: false,
@@ -40,7 +40,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  * // Class-based function for business logic
  * $classFunction = new RecordFunctionType(
  *     pmsName: 'calculate_total',
- *     httpMethod: ['POST'],
+ *     httpMethod: [RecordFunctionMethodEnum::POST->value],
  *     class: 'App\\Services\\CalculationService',
  *     functionName: 'calculateTotal',
  *     disableCache: false,
@@ -50,7 +50,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  * // Simple GET endpoint
  * $getFunction = new RecordFunctionType(
  *     pmsName: 'get_status',
- *     httpMethod: 'GET',
+ *     httpMethod: RecordFunctionMethodEnum::GET->value,
  *     class: 'App\\Services\\StatusService',
  *     functionName: 'getStatus',
  *     disableCache: false,
@@ -60,7 +60,12 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  * // Multiple HTTP methods supported
  * $crudFunction = new RecordFunctionType(
  *     pmsName: 'manage_records',
- *     httpMethod: ['GET', 'POST', 'PUT', 'DELETE'],
+ *     httpMethod: [
+ *         RecordFunctionMethodEnum::GET->value,
+ *         RecordFunctionMethodEnum::POST->value,
+ *         RecordFunctionMethodEnum::PUT->value,
+ *         RecordFunctionMethodEnum::DELETE->value,
+ *     ],
  *     class: 'App\\Services\\RecordManagementService',
  *     functionName: 'handleRequest',
  *     disableCache: false,
@@ -70,7 +75,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  * // Multiple permissions (user needs at least one)
  * $multiPermissionFunction = new RecordFunctionType(
  *     pmsName: ['create_employeeRoster', 'update_employeeRoster'],
- *     httpMethod: ['POST'],
+ *     httpMethod: [RecordFunctionMethodEnum::POST->value],
  *     class: 'App\\Http\\Controllers\\EmployeeRosterController',
  *     functionName: 'upsertEmployeeRosters',
  *     disableCache: false,
@@ -223,7 +228,7 @@ class RecordFunctionType
      * ```php
      * $config = [
      *     'pmsName' => 'user_report',
-     *     'httpMethod' => ['GET', 'POST'],
+     *     'httpMethod' => [RecordFunctionMethodEnum::GET->value, RecordFunctionMethodEnum::POST->value],
      *     'class' => 'App\\Services\\UserReportService',
      *     'functionName' => 'generateReport',
      *     'description' => 'Generate user reports'

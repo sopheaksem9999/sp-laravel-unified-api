@@ -1,5 +1,6 @@
 <?php
 
+use Sopheak\Core\Enums\RecordFunctionMethodEnum;
 use Sopheak\Core\Triggers\AttachmentTrigger;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordFunctionType;
@@ -111,7 +112,7 @@ return [
             ],
             functions: [
                 'upload' => new RecordFunctionType(
-                    httpMethod: ['POST'],
+                    httpMethod: [RecordFunctionMethodEnum::POST->value],
                     class: AttachmentUploadController::class,
                     functionName: 'upload',
                     description: 'Upload a new attachment',
@@ -146,7 +147,7 @@ return [
                     ]
                 ),
                 'clone-temp' => new RecordFunctionType(
-                    httpMethod: ['POST'],
+                    httpMethod: [RecordFunctionMethodEnum::POST->value],
                     class: AttachmentUploadController::class,
                     functionName: 'cloneTemp',
                     description: 'Clone an existing attachment as temporary attachment',
@@ -174,7 +175,7 @@ return [
                     ]
                 ),
                 '{id}/download' => new RecordFunctionType(
-                    httpMethod: ['GET'],
+                    httpMethod: [RecordFunctionMethodEnum::GET->value],
                     class: AttachmentUploadController::class,
                     functionName: 'download',
                     description: 'Download an attachment',
@@ -184,7 +185,7 @@ return [
                     ]
                 ),
                 '{id}/view' => new RecordFunctionType(
-                    httpMethod: ['GET'],
+                    httpMethod: [RecordFunctionMethodEnum::GET->value],
                     class: AttachmentUploadController::class,
                     functionName: 'view',
                     description: 'View an attachment inline',
@@ -194,7 +195,7 @@ return [
                     ]
                 ),
                 'folders' => new RecordFunctionType(
-                    httpMethod: ['GET', 'POST'],
+                    httpMethod: [RecordFunctionMethodEnum::GET->value, RecordFunctionMethodEnum::POST->value],
                     class: AttachmentUploadController::class,
                     functionName: 'folders',
                     description: 'List or create folders',
@@ -235,7 +236,7 @@ return [
                     ]
                 ),
                 'folders/{id}' => new RecordFunctionType(
-                    httpMethod: ['PUT', 'PATCH', 'DELETE'],
+                    httpMethod: [RecordFunctionMethodEnum::PUT->value, RecordFunctionMethodEnum::PATCH->value, RecordFunctionMethodEnum::DELETE->value],
                     class: AttachmentUploadController::class,
                     functionName: 'folderItem',
                     description: 'Update or delete folder',
@@ -253,7 +254,7 @@ return [
                     ]
                 ),
                 'record/{table}/{record_id}' => new RecordFunctionType(
-                    httpMethod: ['GET', 'POST'],
+                    httpMethod: [RecordFunctionMethodEnum::GET->value, RecordFunctionMethodEnum::POST->value],
                     class: AttachmentUploadController::class,
                     functionName: 'record',
                     description: 'Get or link attachments for a specific record',
@@ -273,7 +274,7 @@ return [
                     ]
                 ),
                 'record/{table}/{record_id}/{attachment_id}' => new RecordFunctionType(
-                    httpMethod: ['DELETE'],
+                    httpMethod: [RecordFunctionMethodEnum::DELETE->value],
                     class: AttachmentUploadController::class,
                     functionName: 'unlinkFromRecord',
                     description: 'Unlink an attachment from a record'

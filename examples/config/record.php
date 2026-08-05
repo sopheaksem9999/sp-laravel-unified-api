@@ -11,6 +11,7 @@
  */
 use Illuminate\Http\Request;
 use Illuminate\Contracts\Validation\Validator;
+use Sopheak\Core\Enums\RecordFunctionMethodEnum;
 use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordHasManyType;
@@ -57,7 +58,7 @@ $tables = [
         ],
         functions: [
             'getFullName' => new RecordFunctionType(
-                httpMethod: ['GET'],
+                httpMethod: [RecordFunctionMethodEnum::GET->value],
                 class: 'App\\Services\\UserService',
                 functionName: 'getFullName',
                 pmsName: 'view_user',
@@ -382,7 +383,7 @@ return [
     */
     'global_functions' => [
         'searchAll' => new RecordFunctionType(
-            httpMethod: ['POST'],
+            httpMethod: [RecordFunctionMethodEnum::POST->value],
             class: 'App\\Services\\GlobalSearchService',
             functionName: 'searchAll',
             pmsName: 'search_all',
