@@ -1179,7 +1179,7 @@ class RelationshipResolverUtils
         $subAlias = $actualRelatedTableName === $actualMainTableName ? $actualRelatedTableName . '_sub' : $actualRelatedTableName;
 
         // Build column refs for the inner SELECT
-        $validColumns = self::resolveJsonObjectColumns($columns, $schema[$relatedTable]->columns ?? []);
+        $validColumns = self::resolveJsonObjectColumns($columns, $schema[$relatedTable]->columns ?? [], $relatedTable);
         if ([] === $validColumns) {
             $validColumns = ['id'];
         }
@@ -1268,7 +1268,7 @@ class RelationshipResolverUtils
         $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
 
         // Build column selection for JSON object
-        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
+        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName, $relatedTable);
 
         // Build the JSON array aggregation subquery
         $subqueryRaw = "(
@@ -1312,7 +1312,7 @@ class RelationshipResolverUtils
         $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
 
         // Build column selection for JSON object
-        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
+        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName, $relatedTable);
 
         // Build the JSON array aggregation subquery
         $subqueryRaw = "(
@@ -1363,7 +1363,7 @@ class RelationshipResolverUtils
         $actualPivotTableName = $schema[$pivotTable]->table ?? $pivotTable;
 
         // Build column selection for JSON object
-        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
+        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName, $relatedTable);
 
         // Build the JSON array aggregation subquery for many-to-many
         $subqueryRaw = "(
@@ -1447,7 +1447,7 @@ class RelationshipResolverUtils
         $actualPivotTableName = $schema[$pivotTable]->table ?? $pivotTable;
 
         // Build column selection for JSON object
-        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
+        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName, $relatedTable);
 
         // Build the JSON array aggregation subquery for morph-to-many
         // Use DB::raw with parameter binding to handle model_type correctly
@@ -1519,7 +1519,7 @@ class RelationshipResolverUtils
         $actualThroughTableName = $schema[$throughTable]->table ?? $throughTable;
 
         // Build column selection for JSON object
-        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
+        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName, $relatedTable);
 
         // Build the JSON array aggregation subquery with join
         $subqueryRaw = "(
@@ -1560,13 +1560,28 @@ class RelationshipResolverUtils
     /**
      * Resolve and validate JSON object columns for subqueries.
      */
-    private static function resolveJsonObjectColumns(array $columns, array $schemaColumns): array
+    private static function resolveJsonObjectColumns(array $columns, array $schemaColumns, string $relatedTable): array
     {
         if ($columns === ['*'] || [] === $columns) {
             $columns = array_keys($schemaColumns);
         }
 
         // Validate columns against schema
+        foreach ($columns as $column) {
+            if ('*' === $column || isset($schemaColumns[$column])) {
+                continue;
+            }
+
+            $validNames = array_keys($schemaColumns);
+            sort($validNames);
+            throw new InvalidArgumentException(sprintf(
+                "Unknown column '%s' in select for table '%s'. Valid columns: %s.",
+                $column,
+                $relatedTable,
+                [] === $validNames ? 'none' : implode(', ', $validNames)
+            ));
+        }
+
         $validColumns = array_filter($columns, fn($column): bool => isset($schemaColumns[$column]));
 
         // Remove tenant_id if it's not enabled in configuration
@@ -1582,10 +1597,10 @@ class RelationshipResolverUtils
     /**
      * Build database-specific JSON object expression from requested columns.
      */
-    private static function buildJsonObjectExpression(array $columns, array $schemaColumns, string $tableName = ''): string
+    private static function buildJsonObjectExpression(array $columns, array $schemaColumns, string $tableName, string $relatedTable): string
     {
         $driver = DB::getDriverName();
-        $validColumns = self::resolveJsonObjectColumns($columns, $schemaColumns);
+        $validColumns = self::resolveJsonObjectColumns($columns, $schemaColumns, $relatedTable);
         if ([] === $validColumns) {
             $validColumns = ['id'];
         }
@@ -1617,9 +1632,9 @@ class RelationshipResolverUtils
     /**
      * Build database-specific JSON array aggregation expression of JSON objects.
      */
-    private static function buildJsonArrayAggExpression(array $columns, array $schemaColumns, string $tableName = ''): string
+    private static function buildJsonArrayAggExpression(array $columns, array $schemaColumns, string $tableName, string $relatedTable): string
     {
-        $jsonObjectExpr = self::buildJsonObjectExpression($columns, $schemaColumns, $tableName);
+        $jsonObjectExpr = self::buildJsonObjectExpression($columns, $schemaColumns, $tableName, $relatedTable);
         $driver = DB::getDriverName();
 
         return match ($driver) {
@@ -2279,7 +2294,7 @@ class RelationshipResolverUtils
         }
 
         // Apply column selection with validation
-        self::applyColumnSelection($builder, $columns, $schema[$relatedTable]->columns ?? []);
+        self::applyColumnSelection($builder, $columns, $schema[$relatedTable]->columns ?? [], $relatedTable);
 
         // Handle belongsToMany and morphToMany relationships with pivot table
         if ('belongsToMany' === $type || 'morphToMany' === $type) {
@@ -2475,18 +2490,28 @@ class RelationshipResolverUtils
      * @param array   $columns       Requested columns to select
      * @param array   $schemaColumns Available columns from database schema
      */
-    private static function applyColumnSelection($query, array $columns, array $schemaColumns): void
+    private static function applyColumnSelection($query, array $columns, array $schemaColumns, string $relatedTable): void
     {
         if ($columns === ['*'] || [] === $columns) {
             return; // No filtering needed
         }
 
-        // Validate and filter columns against schema
-        $validColumns = array_values(array_filter($columns, fn($column): bool => '*' === $column || isset($schemaColumns[$column])));
+        foreach ($columns as $column) {
+            if ('*' === $column || isset($schemaColumns[$column])) {
+                continue;
+            }
 
-        if ([] !== $validColumns) {
-            $query->select($validColumns);
+            $validNames = array_keys($schemaColumns);
+            sort($validNames);
+            throw new InvalidArgumentException(sprintf(
+                "Unknown column '%s' in select for table '%s'. Valid columns: %s.",
+                $column,
+                $relatedTable,
+                [] === $validNames ? 'none' : implode(', ', $validNames)
+            ));
         }
+
+        $query->select($columns);
     }
 
 }

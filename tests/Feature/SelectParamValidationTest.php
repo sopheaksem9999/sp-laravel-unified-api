@@ -157,4 +157,32 @@ class SelectParamValidationTest extends TestCase
         $response->assertStatus(200);
         $response->assertJsonPath('data.0.posts.0.title', 'First Post');
     }
+
+    /** @test */
+    public function unknown_nested_column_returns_422(): void
+    {
+        $response = $this->getJson('/api/authors?select=posts(bogus_field)');
+
+        $response->assertStatus(422);
+        $response->assertJsonPath('message', "Unknown column 'bogus_field' in select for table 'posts'. Valid columns: author_id, created_at, id, title, updated_at.");
+    }
+
+    /** @test */
+    public function nested_wildcard_select_still_works(): void
+    {
+        $response = $this->getJson('/api/authors?select=id,posts(*)');
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('data.0.posts.0.title', 'First Post');
+        $response->assertJsonPath('data.0.posts.0.author_id', $this->authorId);
+    }
+
+    /** @test */
+    public function invalid_main_column_error_wins_over_invalid_relationship(): void
+    {
+        $response = $this->getJson('/api/authors?select=bogus_field,bogus_rel(*)');
+
+        $response->assertStatus(422);
+        $response->assertJsonPath('message', "Unknown column 'bogus_field' in select for table 'authors'. Valid columns: created_at, display_name, id, name, updated_at.");
+    }
 }
