@@ -164,6 +164,10 @@ class AuditLogService
             ));
         }
 
+        if (RecordConfigService::idType() === 'uuid' && !array_key_exists('id', $auditData)) {
+            $auditData['id'] = (string) Str::uuid();
+        }
+
         DB::table(RecordConfigService::auditLogModel())->insert($auditData);
     }
 
