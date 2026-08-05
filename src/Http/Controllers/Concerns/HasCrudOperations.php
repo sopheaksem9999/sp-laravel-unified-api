@@ -183,6 +183,8 @@ trait HasCrudOperations
             return $response;
         } catch (RecordNotFoundException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
+        } catch (InvalidArgumentException $e) {
+            return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
         } catch (HttpResponseException $e) {
             return $e->getResponse();
         } catch (Exception $e) {
@@ -275,6 +277,8 @@ trait HasCrudOperations
             });
         } catch (RecordNotFoundException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
+        } catch (InvalidArgumentException $e) {
+            return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
         } catch (HttpResponseException $e) {
@@ -374,6 +378,8 @@ trait HasCrudOperations
             });
         } catch (RecordNotFoundException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
+        } catch (InvalidArgumentException $e) {
+            return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
         } catch (HttpResponseException $e) {
@@ -464,6 +470,8 @@ trait HasCrudOperations
             });
         } catch (RecordNotFoundException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
+        } catch (InvalidArgumentException $e) {
+            return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
         } catch (HttpResponseException $e) {
@@ -543,6 +551,8 @@ trait HasCrudOperations
             });
         } catch (RecordNotFoundException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
+        } catch (InvalidArgumentException $e) {
+            return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
         } catch (HttpResponseException $e) {
             return $e->getResponse();
         } catch (Exception $e) {
@@ -619,6 +629,8 @@ trait HasCrudOperations
             });
         } catch (RecordNotFoundException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
+        } catch (InvalidArgumentException $e) {
+            return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
         } catch (HttpResponseException $e) {
             return $e->getResponse();
         } catch (Exception $e) {
@@ -667,6 +679,8 @@ trait HasCrudOperations
             return RecordApiResponseService::successWrapped($result['data'], $result['meta']);
         } catch (RecordNotFoundException $e) {
             return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::NOT_FOUND->value);
+        } catch (InvalidArgumentException $e) {
+            return RecordApiResponseService::errorWrapped($e->getMessage(), RecordApiJsonResponseEnum::VALIDATION_ERROR->value);
         } catch (ValidationException $e) {
             return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $e->errors());
         } catch (HttpResponseException $e) {

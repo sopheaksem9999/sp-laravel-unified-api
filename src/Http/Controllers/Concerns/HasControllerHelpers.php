@@ -7,6 +7,7 @@ namespace Sopheak\Core\Http\Controllers\Concerns;
 use Closure;
 use Throwable;
 use Exception;
+use InvalidArgumentException;
 use RuntimeException;
 use ReflectionFunction;
 use ReflectionFunctionAbstract;
@@ -161,6 +162,8 @@ trait HasControllerHelpers
             $result = $this->recordService->getRecord($request, $table, $id, $tenantId);
 
             return $result['data'] ?? null;
+        } catch (InvalidArgumentException $e) {
+            throw $e;
         } catch (Exception) {
             return null;
         }
