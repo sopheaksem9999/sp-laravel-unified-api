@@ -3189,7 +3189,7 @@ class RecordService
         } catch (Exception $exception) {
             return RecordApiResponseService::errorFromException(
                 exception: $exception,
-                message: 'Function execution failed: ' . $exception->getMessage(),
+                message: $exception->getMessage(),
                 status: RecordApiJsonResponseEnum::SERVER_ERROR->value
             );
         }
