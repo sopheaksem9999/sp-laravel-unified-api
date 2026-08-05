@@ -2141,6 +2141,7 @@ class RecordService
                 if ([] !== $recordIds) {
                     $optimizedBuilder = $this->createReadBuilder($actualTableName);
                     $mainCols = RelationshipResolverUtils::getMainTableColumns(is_string($selectParam) ? $selectParam : '');
+                    RelationshipResolverUtils::validateMainTableColumns($table, $mainCols);
                     // Strip computed attribute keys — they are not real DB columns
                     $attributeKeys = array_keys($tableSchema->attributes ?? []);
                     $dbMainCols = $attributeKeys !== []
@@ -2190,6 +2191,7 @@ class RecordService
             $requestedCols = $effectiveSelectParam !== ''
                 ? RelationshipResolverUtils::getMainTableColumns(is_string($selectParam) ? $selectParam : '')
                 : [];
+            RelationshipResolverUtils::validateMainTableColumns($table, $requestedCols);
             $data = RecordApiResponseService::applyAttributes($data, $table, $tableSchema->attributes, $requestedCols);
         }
 
@@ -2779,6 +2781,7 @@ class RecordService
                 if ([] !== $recordIds) {
                     $optimizedBuilder = $service->createReadBuilder($actualTableName);
                     $mainCols = RelationshipResolverUtils::getMainTableColumns(is_string($selectParam) ? $selectParam : '');
+                    RelationshipResolverUtils::validateMainTableColumns($table, $mainCols);
                     // Strip computed attribute keys — they are not real DB columns
                     $attributeKeys = $tableSchema instanceof RecordTableType ? array_keys($tableSchema->attributes ?? []) : [];
                     $dbMainCols = $attributeKeys !== []
@@ -2828,6 +2831,7 @@ class RecordService
             $requestedCols = $effectiveSelectParam !== ''
                 ? RelationshipResolverUtils::getMainTableColumns(is_string($selectParam) ? $selectParam : '')
                 : [];
+            RelationshipResolverUtils::validateMainTableColumns($table, $requestedCols);
             $data = RecordApiResponseService::applyAttributes($data, $table, $tableSchema->attributes, $requestedCols);
         }
 
@@ -2924,6 +2928,7 @@ class RecordService
         $dbMainCols = [];
         if ($effectiveSelectParam !== '') {
             $mainCols = RelationshipResolverUtils::getMainTableColumns(is_string($selectParam) ? $selectParam : '');
+            RelationshipResolverUtils::validateMainTableColumns($table, $mainCols);
             // Build DB-safe column list: strip computed attribute keys (not real DB columns)
             $attributeKeys = array_keys($tableSchema->attributes ?? []);
             $dbMainCols = $attributeKeys !== []
@@ -3016,6 +3021,7 @@ class RecordService
             $requestedCols = $effectiveSelectParam !== ''
                 ? RelationshipResolverUtils::getMainTableColumns(is_string($selectParam) ? $selectParam : '')
                 : [];
+            RelationshipResolverUtils::validateMainTableColumns($table, $requestedCols);
             $record = RecordApiResponseService::applyAttributes($record, $table, $tableSchema->attributes, $requestedCols);
         }
 

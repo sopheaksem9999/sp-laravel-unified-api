@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Utilities;
 
+use InvalidArgumentException;
 use Illuminate\Foundation\Auth\User;
 use Sopheak\Core\Enums\RecordRelationshipsEnum;
 use Sopheak\Core\Types\RecordAassociationType;
@@ -320,6 +321,44 @@ class RelationshipResolverUtils
         }
 
         return $columns;
+    }
+
+    /**
+     * Throws if any requested main-table column is not a real column or a
+     * declared computed attribute on the table's schema. '*' is always valid.
+     * No-op for an empty column list or an unregistered table.
+     *
+     * @param string[] $columns
+     */
+    public static function validateMainTableColumns(string $table, array $columns): void
+    {
+        if ([] === $columns) {
+            return;
+        }
+
+        $tableSchema = self::getSchema()[$table] ?? null;
+        if (null === $tableSchema) {
+            return;
+        }
+
+        $validNames = array_merge(
+            array_keys($tableSchema->columns ?? []),
+            array_keys($tableSchema->attributes ?? [])
+        );
+
+        foreach ($columns as $column) {
+            if ('*' === $column || in_array($column, $validNames, true)) {
+                continue;
+            }
+
+            sort($validNames);
+            throw new InvalidArgumentException(sprintf(
+                "Unknown column '%s' in select for table '%s'. Valid columns: %s.",
+                $column,
+                $table,
+                implode(', ', $validNames)
+            ));
+        }
     }
 
     /**
