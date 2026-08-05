@@ -71,10 +71,28 @@ class SetupPackageCommand extends Command
             // sp-* names: the package ships and reads these under the canonical
             // namespaces regardless, and scaffolding the old unprefixed names
             // would trip the package's own config-rename deprecation notice.
-            $created += $this->ensureFile('config/sp-record.php', $this->defaultRecordConfig(), $force);
-            $created += $this->ensureFile('config/sp-audit.php', $this->defaultAuditConfig(), $force);
-            $created += $this->ensureFile('config/sp-attachments.php', $this->defaultAttachmentsConfig(), $force);
-            $created += $this->ensureFile('config/sp-webhooks.php', $this->defaultWebhooksConfig(), $force);
+            //
+            // These four are NEVER force-overwritten, whatever --force says.
+            // vendor:publish above already emits all four, so by the time we
+            // get here the file on disk is the package's full packaged config.
+            // Forcing the scaffold over it would replace the ~540-line
+            // config/sp-record.php — `autoloaded` flag, RecordConfigLoader
+            // calls and all — with a ~207-line minimal file that has neither,
+            // silently switching off config:cache baking of table configs, and
+            // would leave a state that is neither the packaged defaults nor
+            // the client's own config: keys the scaffold omits (id_type, for
+            // one) survive from wherever they were, keys it sets get the
+            // scaffold's value. --force means "the packaged defaults win",
+            // and the packaged defaults are what vendor:publish just wrote.
+            //
+            // They stay here as a fallback for the one case that still needs
+            // them: the file is genuinely absent after publishing (a client
+            // who deleted it, or a publish that produced nothing).
+            $publishedByVendorPublish = false;
+            $created += $this->ensureFile('config/sp-record.php', $this->defaultRecordConfig(), $publishedByVendorPublish);
+            $created += $this->ensureFile('config/sp-audit.php', $this->defaultAuditConfig(), $publishedByVendorPublish);
+            $created += $this->ensureFile('config/sp-attachments.php', $this->defaultAttachmentsConfig(), $publishedByVendorPublish);
+            $created += $this->ensureFile('config/sp-webhooks.php', $this->defaultWebhooksConfig(), $publishedByVendorPublish);
             $created += $this->ensureAppServiceProviderRateLimiters();
         } catch (Throwable $throwable) {
             $this->error('❌ Failed to create configuration files: ' . $throwable->getMessage());
@@ -155,7 +173,9 @@ class SetupPackageCommand extends Command
         }
 
         $this->error('❌ Aborted without publishing or creating anything.');
-        $this->line('   Re-run with --force only if you really want the packaged defaults to win.');
+        $this->line('   Re-run with --force only if you really want the packaged defaults to win:');
+        $this->line("   it publishes the package's own sp-* files verbatim and leaves the");
+        $this->line('   old-named files on disk, superseded.');
 
         return false;
     }
