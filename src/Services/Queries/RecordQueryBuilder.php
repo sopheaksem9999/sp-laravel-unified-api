@@ -106,6 +106,7 @@ class RecordQueryBuilder
         }
 
         $mainCols = RelationshipResolverUtils::getMainTableColumns($selectParam);
+        RelationshipResolverUtils::validateMainTableColumns($this->table, $mainCols);
         if (!empty($mainCols)) {
             $attributeKeys = array_keys($this->config->attributes ?? []);
             $dbMainCols = $attributeKeys !== []
