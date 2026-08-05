@@ -130,7 +130,7 @@ class SyncRecordColumnsCommand extends Command
                 }
 
                 if (!isset($tableFiles[$tableName])) {
-                    // Table is defined inline in config/record.php or elsewhere; we only manage per-file configs
+                    // Table is defined inline in config/sp-record.php or elsewhere; we only manage per-file configs
                     $this->line(sprintf('Skipping table %s: not found in config/records/tables/*.php', $tableName));
                     continue;
                 }

@@ -154,7 +154,7 @@ auto-incrementing integer or UUID primary keys, so their API surface matches
 your project's convention.
 
 ```php
-// config/record.php
+// config/sp-record.php
 'id_type' => 'integer', // uuid|integer
 ```
 
@@ -258,13 +258,36 @@ throws, and the command reports it as:
 Your configuration files are not serializable.
 ```
 
-So a table with a `Closure` validator, or a global function declared
-`'type' => 'closure'`, runs fine normally but breaks `config:cache` as soon as
-`autoloaded` is enabled (the shipped default). Two ways out:
+So a table with a `Closure` `createValidator`/`updateValidator`/`deleteValidator`
+runs fine normally but breaks `config:cache` as soon as `autoloaded` is enabled
+(the shipped default). Two ways out:
 
-- **Use a class-method callable instead of a `Closure`.** `[MyValidator::class,
-  'validate']` is a plain array of strings, so it survives `var_export()` and
-  `config:cache` unchanged.
+- **Use the package's own class-reference validator form instead of a
+  `Closure`.** `createValidator`/`updateValidator`/`deleteValidator` accept
+  `Closure|RecordValidationType|array|string|null`. Pass
+  `['class' => MyValidator::class, 'functionName' => 'validate']` (or the
+  equivalent `new RecordValidationType(class: MyValidator::class,
+  functionName: 'validate')`) instead of a closure. Both are plain data —
+  strings and, for `RecordValidationType`, an object with its own
+  `__set_state()` — so they survive `var_export()` and `config:cache`
+  unchanged, and the package still calls your method the same way it would
+  have called a closure.
+
+  ::: warning Don't reach for `[MyValidator::class, 'validate']` instead
+  That two-element array *looks* like a valid PHP callable, but
+  `is_callable()` only accepts the `[Class, 'method']` form for an
+  **instance** method when it also has an object to call it on; called as a
+  bare class-string with a non-`static` method, `is_callable()` returns
+  `false`. The package's validator resolver then falls through past its
+  callable check into `flattenValidatorConfigs()`, which doesn't recognize a
+  two-element array without a `class`/`functionName` key either, and throws
+  `RuntimeException: Invalid validator configuration. Expected callable,
+  Sopheak\Core\Types\RecordValidationType, or array, got string` on every
+  create/update request — trading a build-time `config:cache` failure for a
+  500 on every write. If you do want the bare-array callable style, the
+  method must be declared `public static`; the config-array form above avoids
+  the question entirely.
+  :::
 - **Turn `autoloaded` off and go back to the runtime scan.** Remove the
   `RecordConfigLoader::tables(...)` / `RecordConfigLoader::globalFunctions(...)`
   calls from `config/sp-record.php` and drop (or set `false`) the `'autoloaded'`
