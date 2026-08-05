@@ -200,6 +200,35 @@ class ConfigNamespaceBridgeTest extends TestCase
         $this->assertStringContainsString('config/sp-webhooks.php', $logged[1]);
     }
 
+    /**
+     * "It keeps working" is only true while the old file is alone. Once the
+     * sp-* counterpart exists too — the state `sp-laravel-api:setup` used to
+     * create on every run — adopt() gives the sp-* file precedence for every
+     * key both files set, so the old file has stopped being fully in effect.
+     * Repeating the reassuring text there would be a false promise, which is
+     * worse than no notice at all.
+     *
+     * @test
+     */
+    public function the_notice_stops_promising_the_old_file_works_once_it_is_superseded(): void
+    {
+        $logged = $this->captureDeprecationNotices(
+            ['record.php', 'webhooks.php'],
+            newNamedFiles: ['sp-record.php']
+        );
+
+        $this->assertCount(2, $logged);
+
+        $this->assertStringNotContainsString('It keeps working', $logged[0]);
+        $this->assertStringContainsString('no longer fully in effect', $logged[0]);
+        $this->assertStringContainsString('config/sp-record.php', $logged[0]);
+
+        // webhooks.php has no sp-* counterpart on disk, so it keeps the
+        // original reassurance — proving the branch is per file, not global.
+        $this->assertStringContainsString('It keeps working', $logged[1]);
+        $this->assertStringNotContainsString('no longer fully in effect', $logged[1]);
+    }
+
     /** @test */
     public function the_deprecation_notice_is_silenced_by_the_suppression_flag(): void
     {
@@ -227,9 +256,10 @@ class ConfigNamespaceBridgeTest extends TestCase
      * given old-named files, and return the messages it logged.
      *
      * @param  string[]  $oldNamedFiles
+     * @param  string[]  $newNamedFiles  sp-* files to seed alongside them
      * @return string[]
      */
-    private function captureDeprecationNotices(array $oldNamedFiles, bool $runningInConsole = true): array
+    private function captureDeprecationNotices(array $oldNamedFiles, bool $runningInConsole = true, array $newNamedFiles = []): array
     {
         $directory = $this->makeTemporaryConfigDirectory();
         $original = $this->app->configPath();
@@ -241,7 +271,7 @@ class ConfigNamespaceBridgeTest extends TestCase
         });
 
         try {
-            foreach ($oldNamedFiles as $file) {
+            foreach ([...$oldNamedFiles, ...$newNamedFiles] as $file) {
                 file_put_contents($directory . '/' . $file, '<?php return [];');
             }
 
