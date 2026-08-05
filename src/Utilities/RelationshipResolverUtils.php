@@ -73,6 +73,18 @@ class RelationshipResolverUtils
 
             $config = self::resolveRelationship($table, $alias, $hintTable);
             if (!$config) {
+                $declaredRelationships = isset($schema[$table]) ? ($schema[$table]->relationships ?? []) : [];
+                if (!array_key_exists($alias, $declaredRelationships)) {
+                    $validNames = array_keys($declaredRelationships);
+                    sort($validNames);
+                    throw new InvalidArgumentException(sprintf(
+                        "Unknown relationship '%s' in select for table '%s'. Valid relationships: %s.",
+                        $alias,
+                        $table,
+                        [] === $validNames ? 'none' : implode(', ', $validNames)
+                    ));
+                }
+
                 continue;
             }
 
@@ -1791,6 +1803,19 @@ class RelationshipResolverUtils
 
             $config = self::resolveRelationship($table, $alias, $hintTable);
             if (!$config) {
+                $schema = self::getSchema();
+                $declaredRelationships = isset($schema[$table]) ? ($schema[$table]->relationships ?? []) : [];
+                if (!array_key_exists($alias, $declaredRelationships)) {
+                    $validNames = array_keys($declaredRelationships);
+                    sort($validNames);
+                    throw new InvalidArgumentException(sprintf(
+                        "Unknown relationship '%s' in select for table '%s'. Valid relationships: %s.",
+                        $alias,
+                        $table,
+                        [] === $validNames ? 'none' : implode(', ', $validNames)
+                    ));
+                }
+
                 continue;
             }
 
