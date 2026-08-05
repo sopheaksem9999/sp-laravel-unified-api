@@ -27,7 +27,7 @@ class RelationshipResolverUtilsJsonExpressionTest extends TestCase
             $schemaColumns[$name] = (object) [];
         }
 
-        $expression = $method->invoke(null, $columns, $schemaColumns, 'vendors');
+        $expression = $method->invoke(null, $columns, $schemaColumns, 'vendors', 'vendors');
 
         $this->assertStringContainsString('row_to_json', $expression);
         $this->assertStringNotContainsString('json_build_object', $expression);
