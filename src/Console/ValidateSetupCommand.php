@@ -318,7 +318,7 @@ class ValidateSetupCommand extends Command
                 if (config('permissions.enabled', false)) {
                     $this->addResult('✅', 'Built-in permission system is enabled', 'success');
                 } else {
-                    $this->addResult('ℹ️', 'Built-in permission system is disabled (config/permissions.php enabled=false)', 'info');
+                    $this->addResult('ℹ️', 'Built-in permission system is disabled (config/sp-permissions.php enabled=false)', 'info');
                     $this->addResult('ℹ️', 'Set SP_PERMISSION_ENABLED=true or permission.enabled=true to activate', 'info');
                 }
             } else {
@@ -365,7 +365,7 @@ class ValidateSetupCommand extends Command
                         }
                     }
                 } else {
-                    $this->addResult('⚠️', 'SchemaRegistryUtils returned empty schema - check config/record.php', 'warning');
+                    $this->addResult('⚠️', 'SchemaRegistryUtils returned empty schema - check config/sp-record.php', 'warning');
                 }
             } else {
                 $this->addResult('❌', 'SchemaRegistryUtils::get() did not return array', 'error');
@@ -419,13 +419,13 @@ class ValidateSetupCommand extends Command
         if (is_int($maxDepth) && $maxDepth > 0) {
             $this->addResult('✅', 'max_depth is configured properly: ' . $maxDepth, 'success');
         } else {
-            $this->addResult('⚠️', 'max_depth is missing or invalid in config/record.php', 'warning');
+            $this->addResult('⚠️', 'max_depth is missing or invalid in config/sp-record.php', 'warning');
         }
 
         // Check rate_limits
         $rateLimits = config('record.rate_limits');
         if (is_array($rateLimits)) {
-            $this->addResult('✅', 'rate_limits array is present in config/record.php', 'success');
+            $this->addResult('✅', 'rate_limits array is present in config/sp-record.php', 'success');
         } else {
             $this->addResult('ℹ️', 'rate_limits is not configured (using defaults)', 'info');
         }
@@ -480,7 +480,7 @@ class ValidateSetupCommand extends Command
                 $this->addResult('ℹ️', 'MCP module is disabled (SP_MCP_ENABLED=false)', 'info');
             }
         } else {
-            $this->addResult('⚠️', 'MCP configuration is missing from config/record.php', 'warning');
+            $this->addResult('⚠️', 'MCP configuration is missing from config/sp-record.php', 'warning');
             $this->addResult('ℹ️', 'Add the mcp configuration array or run: php artisan sp-laravel-api:setup', 'info');
         }
     }

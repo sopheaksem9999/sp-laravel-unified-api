@@ -11,6 +11,9 @@ keywords:
   - id_type
   - primary key type
   - client reference columns
+  - config:cache
+  - autoloaded
+  - closure serialization
 ---
 
 # Record Data Types
@@ -232,3 +235,40 @@ Note that `sp_audit_logs`'s tenant column (present only when
 `string` too — it is not governed by `record.tenant_column_type`. That
 setting only controls the PostgreSQL RLS cast used by the
 `pgsql:enable-rls` command; it has no effect on any migrated column type.
+
+## 6) `config:cache` and closures in autoloaded table/function configs
+
+`config/sp-record.php` ships with `'autoloaded' => true`. With that flag on,
+`RecordConfigLoader` reads every file under `config/records/tables/*.php` and
+`config/records/global-functions/*.php` while `config/sp-record.php` itself is
+being evaluated, so the resulting `RecordTableType` instances — including any
+`createValidator`/`updateValidator` closures inside them — become part of the
+in-memory `record.tables` / `record.global_functions` array before the request
+even starts.
+
+`php artisan config:cache` serializes that entire in-memory config tree to one
+PHP file with `var_export()`. On PHP 8.4, `var_export()` does **not** throw or
+warn when it hits a `Closure` — it silently writes the non-functional
+`\Closure::__set_state(array())`. The failure only surfaces one step later,
+when `Illuminate\Foundation\Console\ConfigCacheCommand` `require`s the file it
+just wrote, as a self-check: evaluating `\Closure::__set_state(array())`
+throws, and the command reports it as:
+
+```
+Your configuration files are not serializable.
+```
+
+So a table with a `Closure` validator, or a global function declared
+`'type' => 'closure'`, runs fine normally but breaks `config:cache` as soon as
+`autoloaded` is enabled (the shipped default). Two ways out:
+
+- **Use a class-method callable instead of a `Closure`.** `[MyValidator::class,
+  'validate']` is a plain array of strings, so it survives `var_export()` and
+  `config:cache` unchanged.
+- **Turn `autoloaded` off and go back to the runtime scan.** Remove the
+  `RecordConfigLoader::tables(...)` / `RecordConfigLoader::globalFunctions(...)`
+  calls from `config/sp-record.php` and drop (or set `false`) the `'autoloaded'`
+  key. `RecordConfigService` then scans `config/records/tables` and
+  `config/records/global-functions` itself at runtime, exactly as it did before
+  this feature existed — `Closure` validators work again, at the cost of
+  `config:cache` no longer baking those directories in.

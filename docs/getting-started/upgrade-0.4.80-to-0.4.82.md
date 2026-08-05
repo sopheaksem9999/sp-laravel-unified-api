@@ -225,17 +225,74 @@ SHOW COLUMNS FROM sp_audit_logs LIKE 'entity_id';   -- varchar(191)
 \d sp_audit_logs                                     -- entity_id | character varying(191)
 ```
 
-## Coming next
+## Config files renamed to `sp-*`
 
-The package's five unprefixed config files — `record.php`, `permissions.php`,
-`audit.php`, `attachments.php`, `webhooks.php` — will be renamed to `sp-record.php`,
-`sp-permissions.php` and so on, so it is obvious at a glance which files in your
-`config/` directory belong to this package.
+The package's five previously-unprefixed config files have been renamed so it
+is obvious at a glance which files in your `config/` directory belong to this
+package:
 
-**That change will also require no action.** The old names will keep working
-indefinitely, and `config('record.tables')` in your own code will continue to
-resolve. This section will be filled in with the details when the change ships;
-it is listed here only so the rename is not a surprise.
+| Old filename | New filename |
+|---|---|
+| `record.php` | `sp-record.php` |
+| `permissions.php` | `sp-permissions.php` |
+| `audit.php` | `sp-audit.php` |
+| `attachments.php` | `sp-attachments.php` |
+| `webhooks.php` | `sp-webhooks.php` |
+
+**No action is required.** Only the filename changed — the internal config
+*namespace* each file feeds did not move. `mergeConfigFrom($path, $key)` takes
+its key independently of its path, so the package still merges
+`config/sp-record.php` under the `record` namespace, `config/sp-attachments.php`
+under `attachments`, and so on. `config('record.tables')` (and every other call
+site reading `record.*`, `permissions.*`, `audit.*`, `attachments.*` or
+`webhooks.*`) in your own code is completely unaffected and keeps resolving
+exactly as before, whichever filename is on disk.
+
+If you have already published any of the old-named files, they keep working
+indefinitely. On boot, the package folds a published old-named file's contents
+into the canonical namespace before merging its own defaults, so nothing you
+customized is lost, and it mirrors the resolved values back onto the new name
+too — a project mid-migration can read config under either name.
+
+**Console commands log a one-time deprecation notice** for any old-named file
+still found in your `config/` directory (an info-level log line naming the old
+and new filename). This check is gated on `runningInConsole()`, so it never
+fires on HTTP/API requests — under PHP-FPM the application boots fresh on
+every request, and without that gate the notice would have logged on every
+single web request rather than only when you run an Artisan command. Silence
+it with:
+
+```php
+// config/sp-laravel-api.php
+'suppress_config_rename_notice' => true,
+```
+
+### Migrating voluntarily
+
+There is no deadline to do this, but if you want your `config/` directory to
+show only the new names:
+
+1. Publish the new-named files. This does not touch or delete any old-named
+   file you already have:
+   ```bash
+   php artisan vendor:publish --tag=sp-laravel-api-config
+   ```
+   (Add `--force` only if a new-named file already exists and you want it
+   reset to the packaged defaults — it will discard any customizations in
+   that file.)
+2. Diff your old file against the freshly published one and copy your
+   customizations across, for example `config/record.php` into
+   `config/sp-record.php`.
+3. Delete the old file(s), e.g. `rm config/record.php`. The deprecation
+   notice stops once the old filename is gone.
+4. Re-run `php artisan sp-laravel-api:validate` to confirm.
+
+**One limitation to know about:** the mirroring from canonical name to `sp-*`
+name happens once, during `boot()`. A runtime `config()->set('sp-record.x', …)`
+made afterwards (for example in your own service provider or a test) does not
+propagate back to `record.x`. If your code sets config at runtime, keep doing
+it against the canonical name (`record`, `permissions`, `audit`, `attachments`,
+`webhooks`), not the `sp-*` one.
 
 Design notes live in the repository at
 `docs/superpowers/specs/2026-08-04-config-namespace-prefix-design.md`.
