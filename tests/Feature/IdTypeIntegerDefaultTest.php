@@ -7,6 +7,7 @@ namespace Sopheak\Core\Tests\Feature;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Sopheak\Core\Authorization\Models\Permission;
 use Sopheak\Core\Authorization\Models\Role;
 use Sopheak\Core\Tests\TestCase;
 
@@ -48,6 +49,19 @@ class IdTypeIntegerDefaultTest extends TestCase
         ]);
 
         $this->assertSame(1, (int) DB::table('sp_model_has_roles')->value('id'));
+    }
+
+    /** @test */
+    public function role_permission_pivot_id_stays_auto_incrementing_integer_by_default(): void
+    {
+        $role = Role::query()->create(['name' => 'editor', 'guard_name' => 'api']);
+        Permission::query()->create(['name' => 'posts.edit', 'guard_name' => 'api']);
+
+        $role->givePermissionTo('posts.edit');
+
+        $pivotId = DB::table('sp_role_permissions')->value('id');
+
+        $this->assertSame(1, (int) $pivotId);
     }
 
     /** @test */

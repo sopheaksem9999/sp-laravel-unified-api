@@ -4,13 +4,27 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Tests\Feature;
 
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Sopheak\Core\Authorization\Models\Permission;
 use Sopheak\Core\Authorization\Models\Role;
+use Sopheak\Core\Authorization\Traits\HasRoles;
 use Sopheak\Core\Tests\TestCase;
+
+class TestRoleAssignee extends Model
+{
+    use HasRoles;
+
+    protected $table = 'test_role_assignees';
+
+    protected $guarded = [];
+
+    public $timestamps = false;
+}
 
 class IdTypeUuidTest extends TestCase
 {
@@ -32,6 +46,15 @@ class IdTypeUuidTest extends TestCase
         // Task 5's territory (the migration is intentionally left alone by
         // this task, but the test needs to observe *it*, not the fixture).
         $app['config']->set('audit.enabled', true);
+    }
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Schema::create('test_role_assignees', function (Blueprint $table): void {
+            $table->id();
+        });
     }
 
     /** @test */
@@ -86,7 +109,7 @@ class IdTypeUuidTest extends TestCase
     }
 
     /** @test */
-    public function surrogate_pivot_ids_stay_auto_incrementing_integers(): void
+    public function role_permission_pivot_id_is_a_generated_uuid(): void
     {
         $role = Role::query()->create(['name' => 'editor', 'guard_name' => 'api']);
         Permission::query()->create(['name' => 'posts.edit', 'guard_name' => 'api']);
@@ -95,7 +118,33 @@ class IdTypeUuidTest extends TestCase
 
         $pivotId = DB::table('sp_role_permissions')->value('id');
 
-        $this->assertSame(1, (int) $pivotId);
+        $this->assertTrue(Str::isUuid((string) $pivotId));
+    }
+
+    /** @test */
+    public function model_has_role_pivot_writes_succeed_with_uuid_keys(): void
+    {
+        $role = Role::query()->create(['name' => 'editor', 'guard_name' => 'api']);
+        $assignee = TestRoleAssignee::query()->create();
+
+        $assignee->assignRole('editor');
+
+        $this->assertTrue($assignee->hasRole('editor'));
+        $pivotId = DB::table('sp_model_has_roles')->value('id');
+        $this->assertTrue(Str::isUuid((string) $pivotId));
+    }
+
+    /** @test */
+    public function model_permission_pivot_writes_succeed_with_uuid_keys(): void
+    {
+        Permission::query()->create(['name' => 'posts.edit', 'guard_name' => 'api']);
+        $assignee = TestRoleAssignee::query()->create();
+
+        $assignee->givePermissionTo('posts.edit');
+
+        $this->assertTrue($assignee->hasPermissionTo('posts.edit'));
+        $pivotId = DB::table('sp_model_permissions')->value('id');
+        $this->assertTrue(Str::isUuid((string) $pivotId));
     }
 
     /** @test */

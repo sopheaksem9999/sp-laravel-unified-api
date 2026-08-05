@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Request;
 use Sopheak\Core\Authorization\Models\Permission;
+use Sopheak\Core\Authorization\Models\Pivots\ModelHasRolePivot;
+use Sopheak\Core\Authorization\Models\Pivots\ModelPermissionPivot;
 use Sopheak\Core\Authorization\Models\Role;
 use Sopheak\Core\Authorization\PermissionRegistrar;
 use Sopheak\Core\Services\RecordConfigService;
@@ -22,7 +24,7 @@ trait HasRoles
             'sp_model_has_roles',
             'model_id',
             'role_id'
-        )->withTimestamps();
+        )->using(ModelHasRolePivot::class)->withTimestamps();
 
         if (config('permissions.tenant_scoped', false)) {
             $relation->withPivot(RecordConfigService::tenantColumn());
@@ -39,7 +41,7 @@ trait HasRoles
             'sp_model_permissions',
             'model_id',
             'permission_id'
-        )->withTimestamps();
+        )->using(ModelPermissionPivot::class)->withTimestamps();
 
         if (config('permissions.tenant_scoped', false)) {
             $relation->withPivot(RecordConfigService::tenantColumn());
