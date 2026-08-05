@@ -253,7 +253,7 @@ Records are filtered by the `' . $tenantColumn . '` column.
 
 ## 🧩 Middleware Map (Public / Auth / Subscription)
 
-You can configure route middleware stacks per action and per table in `config/record.php` using `middleware_map`.
+You can configure route middleware stacks per action and per table in `config/sp-record.php` using `middleware_map`.
 
 ```php
 "middleware_map" => [

@@ -10,7 +10,7 @@ This package provides a config-driven dynamic CRUD API for database tables and c
 
 ### Where to Configure Endpoints
 
-- Table CRUD endpoints: `config/record.php` and/or `config/records/tables/*.php` returning `RecordTableType`
+- Table CRUD endpoints: `config/sp-record.php` and/or `config/records/tables/*.php` returning `RecordTableType`. A project that has not migrated yet may still have `config/record.php`; edit whichever file is already there and do not create the other.
 - Table-specific function endpoints: `RecordTableType::$functions`
 - Global function endpoints: `config/records/globalFunctions/*.php`
 

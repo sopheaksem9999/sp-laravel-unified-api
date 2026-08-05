@@ -1,5 +1,8 @@
 <?php
 
+use Sopheak\Core\Services\RecordConfigService;
+use Sopheak\Core\Support\RecordConfigLoader;
+
 /*
  * Record API Configuration.
  *
@@ -29,6 +32,31 @@
  * @see RelationshipResolverUtils
  * @see SchemaRegistryUtils
  */
+
+/*
+ * Directory holding client-authored table config files, relative to this
+ * config directory.
+ *
+ * Bound to a variable because it is read twice below and the two readings must
+ * never disagree: once as the `table_config_path` key -- which
+ * RecordConfigService::tableConfigPath() exposes and which
+ * MakeRecordTableCommand, SyncRecordColumnsCommand and
+ * GenerateRecordTablesFromDatabaseCommand all write generated table configs
+ * into -- and once as the directory the `autoloaded` scan at the bottom of
+ * this file actually reads.
+ *
+ * `autoloaded => true` disables RecordConfigService's runtime scan, and that
+ * runtime scan is the only other reader of `table_config_path`. So the loader
+ * call below is the SOLE consumer of this directory in a published install:
+ * hardcoding a directory there instead of reusing this value would mean a
+ * client who changes `table_config_path` keeps generating table configs into
+ * their chosen directory while nothing ever loads them -- every CRUD route
+ * those tables defined 404s, with no error anywhere.
+ *
+ * Change the path here and both follow.
+ */
+$tableConfigPath = 'records/tables';
+
 return [
     /*
     |--------------------------------------------------------------------------
@@ -81,7 +109,9 @@ return [
     */
     'id_type' => 'integer', // uuid|integer
     'tenant_header' => 'X-Tenant-ID',
-    'table_config_path' => 'records/tables',
+    // Change this at the $tableConfigPath binding above the return, not here:
+    // the `autoloaded` scan at the bottom of this file reads the same value.
+    'table_config_path' => $tableConfigPath,
 
     /*
     |--------------------------------------------------------------------------
@@ -377,19 +407,21 @@ return [
     | Define global custom functions that can be accessed via the endpoint:
     | POST/GET/PUT/DELETE /api/v1/{functionName}
     |
+    | Every global function is dispatched the same way: the package instantiates
+    | `class` and calls `functionName` on it. There is no `type` key and no
+    | closure- or SQL-backed function kind -- RecordService::executeCustomFunction()
+    | hands everything to executeClassFunction().
+    |
     | Each function can be configured with:
-    | - type: 'class', 'closure', or 'query'
+    | - class: fully-qualified class name (required)
+    | - functionName: method to call on it (default: 'handle')
     | - httpMethod: allowed HTTP methods (optional)
-    | - required_params: array of required parameters (optional)
-    | - class: class name for 'class' type functions
-    | - httpMethod: method name for 'class' type functions (default: 'handle')
-    | - closure: callable for 'closure' type functions
-    | - query: SQL query for 'query' type functions
+    | - required_params: request parameters that must be present (optional)
+    | - pmsName: permission name(s); omit for a public function
     |
     | Example:
     | 'global_functions' => [
     |     'system_status' => [
-    |         'type' => 'class',
     |         'class' => 'App\\Services\\SystemStatusService',
     |         'functionName' => 'getStatus',
     |         'httpMethod' => [HttpMethodEnum::GET->value],
@@ -397,10 +429,28 @@ return [
     | ],
     |
     */
-    'global_functions' => [
-        // Add your custom functions here
-        // Example functions should be defined in your application's config/record.php
-    ],
+    // Scanned here rather than at runtime so `php artisan config:cache` bakes
+    // the result into the cached payload and production does no filesystem
+    // scanning. `autoloaded` tells RecordConfigService to skip its own scan.
+    //
+    // The directory names come from RecordConfigService::globalFunctionDirectoryNames()
+    // -- the same list the runtime scan (config_path()-based) uses -- so the
+    // two cannot drift apart into scanning different directories.
+    //
+    // NOTE: values reachable from here must be var_export()-able -- a Closure
+    // validator will make `php artisan config:cache` fail. Use
+    // ['class' => MyValidator::class, 'functionName' => 'validate'] instead.
+    // Turning `autoloaded` off does NOT avoid that: config/records/ sits
+    // inside config/, so Laravel's own LoadConfiguration globs it recursively
+    // and loads config/records/tables/x.php as the key `records.tables.x`
+    // regardless of this file. See docs/guide/feature-record-data-types.
+    'autoloaded' => true,
+    'global_functions' => RecordConfigLoader::globalFunctions(
+        ...array_map(
+            static fn (string $name): string => __DIR__ . '/' . $name,
+            RecordConfigService::globalFunctionDirectoryNames(),
+        ),
+    ),
 
     'global_triggers' => [
     ],
@@ -481,8 +531,10 @@ return [
     | ],
     |
     */
-    'tables' => [
-        // Add your table configurations here
-        // Example configurations should be defined in your application's config/record.php
-    ],
+    // Scanned from the $tableConfigPath directory in the client's own config
+    // directory -- the same value the `table_config_path` key above reports,
+    // deliberately, so the two cannot name different directories. See the
+    // `autoloaded` note above the `global_functions` key for why this is
+    // resolved here rather than at request time.
+    'tables' => RecordConfigLoader::tables(__DIR__ . '/' . $tableConfigPath),
 ];

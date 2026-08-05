@@ -18,7 +18,7 @@ class AttachmentFunctionEndpointAvailabilityTest extends TestCase
     {
         parent::setUp();
 
-        $attachmentConfig = require __DIR__ . '/../../config/attachments.php';
+        $attachmentConfig = require __DIR__ . '/../../config/sp-attachments.php';
         Config::set('attachments.enabled', true);
         Config::set('attachments.tables', $attachmentConfig['tables'] ?? []);
         SchemaRegistryUtils::refresh();

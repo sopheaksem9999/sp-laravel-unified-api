@@ -44,7 +44,7 @@ class PermissionsConfigIdTypeTest extends TestCase
     {
         config()->set('record.id_type', 'uuid');
 
-        $permissions = require __DIR__ . '/../../config/permissions.php';
+        $permissions = require __DIR__ . '/../../config/sp-permissions.php';
 
         $this->assertSame('uuid', $permissions['tables']['sp_permissions']->columns['id']['type']);
         $this->assertSame('uuid', $permissions['tables']['sp_roles']->columns['id']['type']);
@@ -55,7 +55,7 @@ class PermissionsConfigIdTypeTest extends TestCase
     {
         config()->set('record.id_type', 'integer');
 
-        $permissions = require __DIR__ . '/../../config/permissions.php';
+        $permissions = require __DIR__ . '/../../config/sp-permissions.php';
 
         $this->assertSame('bigIncrements', $permissions['tables']['sp_permissions']->columns['id']['type']);
         $this->assertSame('bigIncrements', $permissions['tables']['sp_roles']->columns['id']['type']);

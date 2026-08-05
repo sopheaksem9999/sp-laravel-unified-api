@@ -8,6 +8,7 @@ use Exception;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Sopheak\Core\Config\ConfigNamespaceBridge;
 use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
@@ -65,44 +66,75 @@ class ValidateSetupCommand extends Command
 
     /**
      * Validate configuration files exist and are properly configured.
+     *
+     * Both filenames count. The package's five previously-unprefixed config
+     * files ship as `sp-*.php` now, but an old-named file on disk still loads
+     * and still works, so a client who has migrated and a client who has not
+     * must both validate clean. Checking only one spelling would have failed
+     * whichever population it did not name — and this is the command the
+     * upgrade guide tells the reader to run to confirm the migration worked.
      */
     private function validateConfigFiles(): void
     {
         $this->info('📋 Checking Configuration Files...');
 
+        // Derived from the bridge's own rename table so a future rename cannot
+        // leave this check naming files nothing publishes any more.
+        $legacyNames = [];
+        foreach (ConfigNamespaceBridge::RENAMES as $canonical => $published) {
+            $legacyNames[$published . '.php'] = $canonical . '.php';
+        }
+
         $configFiles = [
-            'record.php' => 'Record API configuration',
-            'audit.php' => 'Audit logging configuration',
-            'cursor_pagination.php' => 'Cursor pagination configuration',
-            'sp-laravel-api.php' => 'Main package configuration',
-            'attachments.php' => 'Attachments configuration',
-            'webhooks.php' => 'Webhooks configuration',
+            'sp-record.php',
+            'sp-audit.php',
+            'sp-attachments.php',
+            'sp-webhooks.php',
+            'sp-permissions.php',
+            'sp-laravel-api.php',
         ];
 
-        foreach ($configFiles as $file => $description) {
-            $path = config_path($file);
+        foreach ($configFiles as $file) {
+            $legacyName = $legacyNames[$file] ?? null;
+            $found = null;
 
-            if (File::exists($path)) {
-                $this->addResult('✅', 'Config file exists: ' . $file, 'success');
+            if (File::exists(config_path($file))) {
+                $found = $file;
+            } elseif ($legacyName !== null && File::exists(config_path($legacyName))) {
+                $found = $legacyName;
+            }
 
-                // Validate config content
-                try {
-                    $config = include $path;
-                    if (is_array($config) && !empty($config)) {
-                        $this->addResult('✅', 'Config file valid: ' . $file, 'success');
-                    } else {
-                        $this->addResult('⚠️', 'Config file empty or invalid: ' . $file, 'warning');
-                    }
-                } catch (Exception $e) {
-                    $this->addResult('❌', sprintf('Config file syntax error: %s - %s', $file, $e->getMessage()), 'error');
-                }
-            } else {
+            if ($found === null) {
                 $this->addResult('❌', 'Missing config file: ' . $file, 'error');
 
                 if ($this->option('fix')) {
                     $this->info(sprintf('🔧 Attempting to publish %s...', $file));
                     $this->call('sp-laravel-api:setup');
                 }
+
+                continue;
+            }
+
+            $this->addResult('✅', 'Config file exists: ' . $found, 'success');
+
+            if ($found !== $file) {
+                $this->addResult('⚠️', sprintf(
+                    'Deprecated config filename: config/%s — rename it to config/%s',
+                    $found,
+                    $file
+                ), 'warning');
+            }
+
+            // Validate config content
+            try {
+                $config = include config_path($found);
+                if (is_array($config) && !empty($config)) {
+                    $this->addResult('✅', 'Config file valid: ' . $found, 'success');
+                } else {
+                    $this->addResult('⚠️', 'Config file empty or invalid: ' . $found, 'warning');
+                }
+            } catch (Exception $e) {
+                $this->addResult('❌', sprintf('Config file syntax error: %s - %s', $found, $e->getMessage()), 'error');
             }
         }
     }
@@ -122,10 +154,12 @@ class ValidateSetupCommand extends Command
             }
         }
 
-        $globalFunctionPaths = [
-            config_path('records/global-functions'),
-            config_path('records/globalFunctions'),
-        ];
+        // Both accepted spellings come from RecordConfigService, the single
+        // source of truth the runtime scan and config/sp-record.php's
+        // autoloaded scan already share — this used to be a third, independent
+        // hardcoded copy of the same list.
+        $globalFunctionNames = RecordConfigService::globalFunctionDirectoryNames();
+        $globalFunctionPaths = array_map(config_path(...), $globalFunctionNames);
 
         $existingGlobalFunctionPaths = array_values(array_filter($globalFunctionPaths, static fn(string $path): bool => File::isDirectory($path)));
         if ($existingGlobalFunctionPaths !== []) {
@@ -134,8 +168,11 @@ class ValidateSetupCommand extends Command
                 $this->validateGlobalFunctionConfigFiles($globalFunctionsPath);
             }
         } else {
-            $this->addResult('⚠️', 'Missing global function directory: config/records/global-functions', 'warning');
-            $this->addResult('ℹ️', 'Create config/records/global-functions/*.php files or run: php artisan sp-laravel-api:setup', 'info');
+            $this->addResult('⚠️', 'Missing global function directory: ' . implode(' or ', array_map(
+                static fn(string $name): string => 'config/' . $name,
+                $globalFunctionNames
+            )), 'warning');
+            $this->addResult('ℹ️', 'Create config/' . end($globalFunctionNames) . '/*.php files or run: php artisan sp-laravel-api:setup', 'info');
             if ($this->option('fix')) {
                 $this->info('🔧 Attempting to create missing global function directory...');
                 $this->call('sp-laravel-api:setup', ['--force' => false]);
@@ -318,7 +355,7 @@ class ValidateSetupCommand extends Command
                 if (config('permissions.enabled', false)) {
                     $this->addResult('✅', 'Built-in permission system is enabled', 'success');
                 } else {
-                    $this->addResult('ℹ️', 'Built-in permission system is disabled (config/permissions.php enabled=false)', 'info');
+                    $this->addResult('ℹ️', 'Built-in permission system is disabled (config/sp-permissions.php enabled=false)', 'info');
                     $this->addResult('ℹ️', 'Set SP_PERMISSION_ENABLED=true or permission.enabled=true to activate', 'info');
                 }
             } else {
@@ -365,7 +402,7 @@ class ValidateSetupCommand extends Command
                         }
                     }
                 } else {
-                    $this->addResult('⚠️', 'SchemaRegistryUtils returned empty schema - check config/record.php', 'warning');
+                    $this->addResult('⚠️', 'SchemaRegistryUtils returned empty schema - check config/sp-record.php', 'warning');
                 }
             } else {
                 $this->addResult('❌', 'SchemaRegistryUtils::get() did not return array', 'error');
@@ -419,13 +456,13 @@ class ValidateSetupCommand extends Command
         if (is_int($maxDepth) && $maxDepth > 0) {
             $this->addResult('✅', 'max_depth is configured properly: ' . $maxDepth, 'success');
         } else {
-            $this->addResult('⚠️', 'max_depth is missing or invalid in config/record.php', 'warning');
+            $this->addResult('⚠️', 'max_depth is missing or invalid in config/sp-record.php', 'warning');
         }
 
         // Check rate_limits
         $rateLimits = config('record.rate_limits');
         if (is_array($rateLimits)) {
-            $this->addResult('✅', 'rate_limits array is present in config/record.php', 'success');
+            $this->addResult('✅', 'rate_limits array is present in config/sp-record.php', 'success');
         } else {
             $this->addResult('ℹ️', 'rate_limits is not configured (using defaults)', 'info');
         }
@@ -480,7 +517,7 @@ class ValidateSetupCommand extends Command
                 $this->addResult('ℹ️', 'MCP module is disabled (SP_MCP_ENABLED=false)', 'info');
             }
         } else {
-            $this->addResult('⚠️', 'MCP configuration is missing from config/record.php', 'warning');
+            $this->addResult('⚠️', 'MCP configuration is missing from config/sp-record.php', 'warning');
             $this->addResult('ℹ️', 'Add the mcp configuration array or run: php artisan sp-laravel-api:setup', 'info');
         }
     }

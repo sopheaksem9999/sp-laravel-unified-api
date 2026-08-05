@@ -157,6 +157,7 @@ class SchemaRegistryUtils
     public static function refresh(): void
     {
         self::$cache = [];
+        RecordConfigService::flushConfigFileCache();
         RelationshipResolverUtils::clearSchemaCache();
         QueryBuilderFiltersUtils::clearColumnCache();
     }
@@ -166,6 +167,7 @@ class SchemaRegistryUtils
         self::$cache = [];
         self::$uniqueColumnsCache = [];
         self::$foreignKeysCache = [];
+        RecordConfigService::flushConfigFileCache();
         RelationshipResolverUtils::clearSchemaCache();
         QueryBuilderFiltersUtils::clearColumnCache();
     }
