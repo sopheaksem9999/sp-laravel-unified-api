@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Sopheak\Core\Database\MigrationIdHelper;
 use Sopheak\Core\Services\RecordConfigService;
 
 return new class extends Migration {
@@ -16,13 +17,13 @@ return new class extends Migration {
         $enableTenantId = RecordConfigService::enableTenantId();
 
         Schema::create('sp_document_folders', function (Blueprint $table) use ($tenantColumn, $enableTenantId): void {
-            $table->uuid('id')->primary();
+            MigrationIdHelper::primary($table);
             if ($enableTenantId) {
                 $table->string($tenantColumn)->nullable()->index();
             }
 
             $table->string('name');
-            $table->uuid('parent_id')->nullable()->index();
+            MigrationIdHelper::foreign($table, 'parent_id')->nullable()->index();
             $table->string('scope')->default('internal')->index();
             $table->string('visibility')->default('private')->index();
             $table->string('owner_type')->nullable()->index();
@@ -32,12 +33,12 @@ return new class extends Migration {
         });
 
         Schema::create('sp_attachments', function (Blueprint $table) use ($tenantColumn, $enableTenantId): void {
-            $table->uuid('id')->primary();
+            MigrationIdHelper::primary($table);
             if ($enableTenantId) {
                 $table->string($tenantColumn)->nullable()->index();
             }
 
-            $table->uuid('folder_id')->nullable()->index();
+            MigrationIdHelper::foreign($table, 'folder_id')->nullable()->index();
             $table->string('title')->nullable();
             $table->text('caption')->nullable();
             $table->string('disk');
@@ -56,7 +57,7 @@ return new class extends Migration {
                 $table->string($tenantColumn)->nullable()->index();
             }
 
-            $table->uuid('attachment_id')->index();
+            MigrationIdHelper::foreign($table, 'attachment_id')->index();
             $table->string('record_id')->index();
             $table->string('record_type')->index();
             $table->string('collection_name')->nullable()->index();

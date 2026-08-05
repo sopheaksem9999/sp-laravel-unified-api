@@ -9,7 +9,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
@@ -46,7 +45,6 @@ class AttachmentAfterReadAddsUrlsTest extends TestCase
         SchemaRegistryUtils::refresh();
 
         DB::table('sp_attachments')->insert([
-            'id' => Str::uuid()->toString(),
             'disk' => 'local',
             'path' => 'attachments/test.png',
             'filename' => 'test.png',

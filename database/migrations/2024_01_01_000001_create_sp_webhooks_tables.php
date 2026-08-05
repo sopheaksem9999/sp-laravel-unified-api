@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Sopheak\Core\Database\MigrationIdHelper;
 use Sopheak\Core\Services\RecordConfigService;
 
 return new class extends Migration {
@@ -12,7 +13,7 @@ return new class extends Migration {
         $enableTenantId = RecordConfigService::enableTenantId();
 
         Schema::create('sp_webhook_endpoints', function (Blueprint $table) use ($tenantColumn, $enableTenantId) {
-            $table->uuid('id')->primary();
+            MigrationIdHelper::primary($table);
             if ($enableTenantId) {
                 $table->string($tenantColumn)->nullable()->index();
             }
@@ -24,22 +25,22 @@ return new class extends Migration {
         });
 
         Schema::create('sp_webhook_subscriptions', function (Blueprint $table) use ($tenantColumn, $enableTenantId) {
-            $table->uuid('id')->primary();
+            MigrationIdHelper::primary($table);
             if ($enableTenantId) {
                 $table->string($tenantColumn)->nullable()->index();
             }
-            $table->uuid('endpoint_id')->index();
+            MigrationIdHelper::foreign($table, 'endpoint_id')->index();
             $table->string('table_name')->index();
             $table->string('event')->index();
             $table->timestamps();
         });
 
         Schema::create('sp_webhook_deliveries', function (Blueprint $table) use ($tenantColumn, $enableTenantId) {
-            $table->uuid('id')->primary();
+            MigrationIdHelper::primary($table);
             if ($enableTenantId) {
                 $table->string($tenantColumn)->nullable()->index();
             }
-            $table->uuid('endpoint_id')->index();
+            MigrationIdHelper::foreign($table, 'endpoint_id')->index();
             $table->string('event')->index();
             $table->json('payload');
             $table->integer('response_status')->nullable();
