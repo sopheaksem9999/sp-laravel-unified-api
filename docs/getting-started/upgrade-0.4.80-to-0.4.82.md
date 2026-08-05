@@ -208,6 +208,20 @@ php artisan vendor:publish --tag=sp-laravel-api-config --force
 
 `--force` overwrites your customizations. Diff before you run it.
 
+::: danger Diffing is not enough if you still have old-named files
+The package now publishes under `sp-*` names. If your customized
+`config/record.php` is still on disk, publishing writes a *new* file,
+`config/sp-record.php`, holding the packaged defaults — and the `sp-*` file
+takes precedence over its old-named counterpart for every key both set. Your
+`config/record.php` stays byte-identical, so `git diff` shows nothing, while
+`record.api_prefix` and `record.id_type` quietly revert to the packaged
+values.
+
+Rename first (see [Migrating voluntarily](#migrating-voluntarily)), then
+publish. `php artisan sp-laravel-api:setup` refuses to run at all while an
+old-named file is present, for exactly this reason.
+:::
+
 ## Verifying the upgrade
 
 ```bash
@@ -312,18 +326,49 @@ anything other than what your old file already was:
    `sp-webhooks.php`, for whichever of these you've published). A plain `mv`
    works the same outside of git.
 2. Optional: check whether the package added any keys since you last
-   published. For `permissions`, `audit`, `attachments` and `webhooks` this
-   barely matters — a missing key is filled in from the package's own vendor
-   default by `mergeConfigFrom()` regardless of which filename you use. For
-   `record` a missing key stays missing (see
-   [Re-publishing](#re-publishing)), so it's worth diffing against the
+   published. For `permissions`, `audit`, `attachments` and `webhooks`,
+   `mergeConfigFrom()` fills in missing keys from the package's own vendor
+   default regardless of which filename you use — but it is a **shallow**
+   `array_merge`, so only **top-level** keys backfill. If the package adds a
+   new key *inside* an array you have already published (say a new entry under
+   `audit.security`), your published array wins wholesale and the new key does
+   not appear. For `record` nothing backfills at all (see
+   [Re-publishing](#re-publishing)). Either way it is worth diffing against the
    package's current default without publishing it:
    `vendor/sopheak/sp-laravel-api/config/sp-record.php`.
-3. Run `php artisan sp-laravel-api:validate` to confirm.
+3. Run `php artisan sp-laravel-api:validate` to confirm. It accepts either
+   filename, so it passes before and after the rename, and warns (not errors)
+   about any old name still on disk.
 
 No diff-and-copy step against a freshly published default is needed, because
 renaming never puts an uncustomized default file in your live `config/`
 directory in the first place.
+
+### Rolling the package back
+
+**Renaming is not free in one direction: it is a downgrade hazard.** A version
+of the package before this change knows nothing about `sp-record.php`,
+`sp-permissions.php` and friends. Laravel still loads them — under the keys
+`sp-record`, `sp-permissions` and so on — but nothing folds them into the
+canonical namespaces any more, and no old-named file exists to take their
+place. The result is not an error: `config('record.api_prefix')` and
+`config('record.id_type')` come back `null`, every accessor falls back to its
+built-in default, and the application boots normally on settings you never
+chose. Every customization is silently inert.
+
+If you roll back after renaming, rename the files back as part of the
+rollback:
+
+```bash
+git mv config/sp-record.php config/record.php
+git mv config/sp-permissions.php config/permissions.php
+git mv config/sp-audit.php config/audit.php
+git mv config/sp-attachments.php config/attachments.php
+git mv config/sp-webhooks.php config/webhooks.php
+```
+
+Nothing is lost — the contents were never rewritten by the rename, so the old
+names pick up exactly where they left off.
 
 **One limitation to know about:** the mirroring from canonical name to `sp-*`
 name happens once, during `boot()`. A runtime `config()->set('sp-record.x', …)`

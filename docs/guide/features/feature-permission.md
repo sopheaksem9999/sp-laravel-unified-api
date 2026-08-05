@@ -87,7 +87,8 @@ flowchart TB
 SP_PERMISSION_ENABLED=true
 ```
 
-Or in `config/permissions.php`:
+Or in `config/sp-permissions.php` (`config/permissions.php` on a project that
+has not renamed its config files yet — both load under the `permissions` key):
 
 ```php
 'enabled' => true,

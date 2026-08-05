@@ -261,22 +261,46 @@ work. No client action is required either way.
 
 ### Closure caveat — must be documented
 
+**Corrected after implementation.** Two claims in the original draft of this
+section were wrong and are recorded here rather than deleted, because the
+shipped documentation had to be rewritten to match reality:
+
+- `global_functions` does **not** support `'type' => 'closure'`. There is no
+  `type` dispatch for global functions at all —
+  `RecordService::executeCustomFunction()` hands every function to
+  `executeClassFunction()`, which reads only `class` and `functionName`. No
+  closure- or SQL-query-backed function kind exists.
+- Escape hatch 2 below does not work.
+
 `RecordTableType` accepts a `Closure` for `createValidator`, `updateValidator`
-and `deleteValidator`, and `global_functions` supports `'type' => 'closure'`.
-Closures are not `var_export`-able, so once these values live in the config
-file, `php artisan config:cache` fails for any client using one, with Laravel's
-opaque *"Your configuration files are not serializable."*
+and `deleteValidator`. Closures are not `var_export`-able, so `php artisan
+config:cache` fails for any client using one.
 
-This is inherent to putting values in a config file, not a flaw in the helper.
-Today closures work precisely because the scanning happens at runtime.
+The cause is not the `autoloaded` helper. `config/records/tables/` lives inside
+`config/`, and Laravel's own `LoadConfiguration` bootstrapper globs `config/`
+recursively, loading `config/records/tables/orders.php` under the framework key
+`records.tables.orders`. Verified by running `php artisan config:cache` against
+an application with no `config/sp-record.php` at all and one closure-carrying
+file in `config/records/tables/`:
 
-Two documented escape hatches:
+```
+Your configuration files could not be serialized because the value at
+"records.tables.legacy" is non-serializable.
+```
 
-1. Use `[MyValidator::class, 'validate']` instead of a closure. The package
-   already supports the callable-array form and it is better practice — it
-   survives config caching and is testable in isolation.
-2. Remove the `RecordConfigLoader` calls and the `autoloaded` flag from
-   `sp-record.php`, reverting to runtime scanning.
+Note the key — `records.tables.legacy`, the framework's nested-directory key,
+not the package's `record.tables`.
+
+There is therefore exactly one escape hatch:
+
+1. Use `['class' => MyValidator::class, 'functionName' => 'validate']` (or the
+   equivalent `RecordValidationType`) instead of a closure. The bare
+   `[MyValidator::class, 'validate']` callable-array form also survives
+   `var_export()`, but only works when the method is `public static`.
+
+~~2. Remove the `RecordConfigLoader` calls and the `autoloaded` flag from
+`sp-record.php`, reverting to runtime scanning.~~ **Does not work** — see
+above; the framework loads those files whether or not `sp-record.php` does.
 
 The upgrade note must state this plainly, because the failure appears at deploy
 time rather than in development.
@@ -314,11 +338,22 @@ every existing install.
 6. **Mirror reflects `getEnvironmentSetUp`.** A value set on the canonical name
    in `getEnvironmentSetUp()` is visible on the `sp-*` name after boot, proving
    Pass B runs in `boot()` and not `register()`.
-7. **`config:cache` compatibility.** Both passes are skipped when config is
-   cached; confirm the cached payload already holds both namespaces resolved,
-   and that a cached app behaves identically to an uncached one.
-8. **Deprecation notice** fires once per boot, names the right files, and is
-   suppressible.
+7. **`config:cache` compatibility.** *(Corrected after implementation: the two
+   passes are NOT skipped when config is cached. There is no
+   `configurationIsCached()` guard on `adopt()` or `mirror()` — unlike
+   `mergeConfigFrom()`, which has one built in — so both run on every boot.
+   That is harmless: the cached payload already holds both namespaces resolved,
+   so `array_replace_recursive` and the mirror copy are idempotent no-ops.
+   Kept unguarded rather than adding a guard, because a guard would be a
+   behaviour change to a pass that is already correct, at the end of the
+   branch.)* Confirm the cached payload holds both namespaces resolved, and
+   that a cached app behaves identically to an uncached one.
+8. **Deprecation notice** names the right files and is suppressible. *(Corrected
+   after implementation: it fires once per **Artisan invocation**, not once per
+   boot in the sense originally meant. It is gated on `runningInConsole()`,
+   which is false under `fpm-fcgi`, so HTTP requests are silent — without that
+   gate PHP-FPM's shared-nothing per-request boot would have emitted the whole
+   set of notices on every web request.)*
 9. The existing 486-test suite passes **unchanged** — no test edits. If any test
    needs editing, the inversion has been implemented wrongly; that is the
    signal to stop and re-read this section.
@@ -352,7 +387,16 @@ every existing install.
   unchanged), `publishes` map, and the two bridge invocations
 - `src/Services/RecordConfigService.php` — delegate scanning to
   `RecordConfigLoader`; honor the `autoloaded` flag. **No accessor changes.**
-- `src/Console/SetupPackageCommand.php` — emit the loader calls when scaffolding
+- `src/Console/SetupPackageCommand.php` — *(Corrected after implementation: it
+  does NOT emit the loader calls. `defaultRecordConfig()` scaffolds a plain
+  `'tables' => []` and no `autoloaded` key, so a scaffolded config keeps the
+  runtime scan. Left that way deliberately: the scaffold is the client's own
+  file to edit, the runtime scan is the behaviour that honours
+  `record.table_config_path` without further wiring, and emitting the loader
+  calls would change fresh-install behaviour late in the branch for no stated
+  benefit. The packaged `config/sp-record.php` is the file that carries the
+  loader calls.)* Guards against publishing `sp-*` defaults over a
+  still-present old-named config file
 - `docs/getting-started/upgrade-0.4.80-to-0.4.82.md` — replace the "Coming next"
   placeholder with the real section
 - `docs/` — the `config:cache` closure caveat
