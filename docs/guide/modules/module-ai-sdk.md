@@ -35,6 +35,7 @@ In `config/records/tables/customers.php`:
 <?php
 
 use App\Services\Ai\CustomerSummaryService;
+use Sopheak\Core\Enums\RecordFunctionMethodEnum;
 use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Types\RecordTableType;
 
@@ -49,7 +50,7 @@ return new RecordTableType(
             type: 'class',
             class: CustomerSummaryService::class,
             functionName: 'aiSummary',
-            httpMethod: ['POST'],
+            httpMethod: [RecordFunctionMethodEnum::POST->value],
             required_params: ['customer_id'],
             description: 'Generate an AI summary for a single customer.',
         ),
@@ -111,6 +112,7 @@ In `config/records/global-functions/ai.php`:
 <?php
 
 use App\Services\Ai\CustomerSummaryAsyncService;
+use Sopheak\Core\Enums\RecordFunctionMethodEnum;
 use Sopheak\Core\Types\RecordFunctionType;
 
 return [
@@ -118,7 +120,7 @@ return [
         type: 'class',
         class: CustomerSummaryAsyncService::class,
         functionName: 'dispatchCustomerSummary',
-        httpMethod: ['POST'],
+        httpMethod: [RecordFunctionMethodEnum::POST->value],
         required_params: ['customer_id'],
         description: 'Dispatch a background job to generate a customer summary.',
     ),

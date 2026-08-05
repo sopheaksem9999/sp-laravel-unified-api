@@ -269,19 +269,19 @@ return [
                 'stats' => new \Sopheak\Core\Types\RecordFunctionType(
                     class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
                     functionName: 'getStats',
-                    httpMethod: ['GET'],
+                    httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
                     description: 'Get audit statistics'
                 ),
                 'field-timeline/{entityType}/{entityId}/{field}' => new \Sopheak\Core\Types\RecordFunctionType(
                     class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
                     functionName: 'getFieldTimeline',
-                    httpMethod: ['GET'],
+                    httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
                     description: 'Get field timeline'
                 ),
                 'field-stats/{entityType}/{entityId}/{field}' => new \Sopheak\Core\Types\RecordFunctionType(
                     class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
                     functionName: 'getFieldStats',
-                    httpMethod: ['GET'],
+                    httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
                     description: 'Get field statistics'
                 ),
             ]

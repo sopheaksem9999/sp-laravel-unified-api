@@ -424,7 +424,7 @@ return [
     |     'system_status' => [
     |         'class' => 'App\\Services\\SystemStatusService',
     |         'functionName' => 'getStatus',
-    |         'httpMethod' => [HttpMethodEnum::GET->value],
+    |         'httpMethod' => [RecordFunctionMethodEnum::GET->value],
     |     ],
     | ],
     |
