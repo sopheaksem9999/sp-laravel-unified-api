@@ -407,19 +407,21 @@ return [
     | Define global custom functions that can be accessed via the endpoint:
     | POST/GET/PUT/DELETE /api/v1/{functionName}
     |
+    | Every global function is dispatched the same way: the package instantiates
+    | `class` and calls `functionName` on it. There is no `type` key and no
+    | closure- or SQL-backed function kind -- RecordService::executeCustomFunction()
+    | hands everything to executeClassFunction().
+    |
     | Each function can be configured with:
-    | - type: 'class', 'closure', or 'query'
+    | - class: fully-qualified class name (required)
+    | - functionName: method to call on it (default: 'handle')
     | - httpMethod: allowed HTTP methods (optional)
-    | - required_params: array of required parameters (optional)
-    | - class: class name for 'class' type functions
-    | - httpMethod: method name for 'class' type functions (default: 'handle')
-    | - closure: callable for 'closure' type functions
-    | - query: SQL query for 'query' type functions
+    | - required_params: request parameters that must be present (optional)
+    | - pmsName: permission name(s); omit for a public function
     |
     | Example:
     | 'global_functions' => [
     |     'system_status' => [
-    |         'type' => 'class',
     |         'class' => 'App\\Services\\SystemStatusService',
     |         'functionName' => 'getStatus',
     |         'httpMethod' => [HttpMethodEnum::GET->value],
@@ -435,9 +437,13 @@ return [
     // -- the same list the runtime scan (config_path()-based) uses -- so the
     // two cannot drift apart into scanning different directories.
     //
-    // NOTE: values reachable from here must be var_export()-able. A Closure
-    // validator or a 'type' => 'closure' global function will make
-    // `php artisan config:cache` fail. Use [MyValidator::class, 'method'] instead.
+    // NOTE: values reachable from here must be var_export()-able -- a Closure
+    // validator will make `php artisan config:cache` fail. Use
+    // ['class' => MyValidator::class, 'functionName' => 'validate'] instead.
+    // Turning `autoloaded` off does NOT avoid that: config/records/ sits
+    // inside config/, so Laravel's own LoadConfiguration globs it recursively
+    // and loads config/records/tables/x.php as the key `records.tables.x`
+    // regardless of this file. See docs/guide/feature-record-data-types.
     'autoloaded' => true,
     'global_functions' => RecordConfigLoader::globalFunctions(
         ...array_map(

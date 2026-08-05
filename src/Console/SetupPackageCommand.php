@@ -132,7 +132,7 @@ class SetupPackageCommand extends Command
         }
 
         $this->newLine();
-        $this->line('Publishing writes the package\'s packaged DEFAULTS to the sp-* names, and an');
+        $this->line("Publishing writes the package's packaged DEFAULTS to the sp-* names, and an");
         $this->line('sp-* file takes precedence over its old-named counterpart for every key both');
         $this->line('set. Your customizations would stop taking effect while the old file stays');
         $this->line('byte-identical on disk — no diff, no error, nothing to notice.');

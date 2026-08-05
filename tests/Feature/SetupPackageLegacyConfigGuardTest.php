@@ -98,7 +98,7 @@ class SetupPackageLegacyConfigGuardTest extends TestCase
 
         $this->assertFileDoesNotExist(
             $this->configDir . '/sp-record.php',
-            'setup must not publish packaged defaults to a name that would shadow the client\'s '
+            "setup must not publish packaged defaults to a name that would shadow the client's "
             . 'customized config/record.php'
         );
         $this->assertFileDoesNotExist(
@@ -109,7 +109,7 @@ class SetupPackageLegacyConfigGuardTest extends TestCase
         $this->assertSame(
             self::CUSTOMIZED_LEGACY_RECORD_CONFIG,
             file_get_contents($this->configDir . '/record.php'),
-            'the client\'s own file must be left exactly as it was'
+            "the client's own file must be left exactly as it was"
         );
     }
 

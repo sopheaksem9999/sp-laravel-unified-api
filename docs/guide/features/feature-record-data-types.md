@@ -236,31 +236,46 @@ Note that `sp_audit_logs`'s tenant column (present only when
 setting only controls the PostgreSQL RLS cast used by the
 `pgsql:enable-rls` command; it has no effect on any migrated column type.
 
-## 6) `config:cache` and closures in autoloaded table/function configs
+## 6) `config:cache` and closures in table/function configs
 
-`config/sp-record.php` ships with `'autoloaded' => true`. With that flag on,
-`RecordConfigLoader` reads every file under `config/records/tables/*.php` and
-`config/records/global-functions/*.php` while `config/sp-record.php` itself is
-being evaluated, so the resulting `RecordTableType` instances — including any
-`createValidator`/`updateValidator` closures inside them — become part of the
-in-memory `record.tables` / `record.global_functions` array before the request
-even starts.
+**A `Closure` anywhere under `config/records/` breaks `php artisan
+config:cache`.** This is not something the package turns on — it follows from
+where those files live.
 
-`php artisan config:cache` serializes that entire in-memory config tree to one
-PHP file with `var_export()`. On PHP 8.4, `var_export()` does **not** throw or
-warn when it hits a `Closure` — it silently writes the non-functional
-`\Closure::__set_state(array())`. The failure only surfaces one step later,
-when `Illuminate\Foundation\Console\ConfigCacheCommand` `require`s the file it
-just wrote, as a self-check: evaluating `\Closure::__set_state(array())`
-throws, and the command reports it as:
+`config/records/tables/` and `config/records/global-functions/` are inside
+`config/`, and Laravel's own `LoadConfiguration` bootstrapper globs `config/`
+**recursively** (`Finder::create()->files()->name('*.php')->in($configPath)`)
+and loads each nested file under a dotted key built from its path. So
+`config/records/tables/orders.php` is loaded by the framework as the config key
+`records.tables.orders`, exactly like `config/app.php` is loaded as `app` —
+whether or not this package is installed, and whether or not you have ever
+published `config/sp-record.php`.
+
+`php artisan config:cache` then serializes the whole config tree with
+`var_export()`. On PHP 8.4 `var_export()` does **not** throw or warn when it
+hits a `Closure` — it silently writes the non-functional
+`\Closure::__set_state(array())`. The failure surfaces one step later, when
+`Illuminate\Foundation\Console\ConfigCacheCommand` `require`s the file it just
+wrote as a self-check; it then walks the config tree to name the culprit:
 
 ```
-Your configuration files are not serializable.
+Your configuration files could not be serialized because the value at
+"records.tables.orders" is non-serializable.
 ```
 
-So a table with a `Closure` `createValidator`/`updateValidator`/`deleteValidator`
-runs fine normally but breaks `config:cache` as soon as `autoloaded` is enabled
-(the shipped default). Two ways out:
+Read that key carefully: `records.tables.orders`, not `record.tables.orders`.
+It is the framework's nested-directory key, which is the tell that the
+framework loaded the file, not the package.
+
+`config/sp-record.php` ships with `'autoloaded' => true`, which additionally
+reads the same directories through `RecordConfigLoader` while
+`config/sp-record.php` is being evaluated, so the same `RecordTableType`
+instances also land under `record.tables` / `record.global_functions`. That is
+a second copy of the same values; it is not the cause of the failure, and
+turning it off does not avoid it.
+
+There is therefore exactly **one** way out: do not put a `Closure` in those
+files.
 
 - **Use the package's own class-reference validator form instead of a
   `Closure`.** `createValidator`/`updateValidator`/`deleteValidator` accept
@@ -288,10 +303,20 @@ runs fine normally but breaks `config:cache` as soon as `autoloaded` is enabled
   method must be declared `public static`; the config-array form above avoids
   the question entirely.
   :::
-- **Turn `autoloaded` off and go back to the runtime scan.** Remove the
-  `RecordConfigLoader::tables(...)` / `RecordConfigLoader::globalFunctions(...)`
-  calls from `config/sp-record.php` and drop (or set `false`) the `'autoloaded'`
-  key. `RecordConfigService` then scans `config/records/tables` and
-  `config/records/global-functions` itself at runtime, exactly as it did before
-  this feature existed — `Closure` validators work again, at the cost of
-  `config:cache` no longer baking those directories in.
+
+  ::: warning Turning `autoloaded` off does not help
+  Removing the `RecordConfigLoader::tables(...)` /
+  `RecordConfigLoader::globalFunctions(...)` calls from
+  `config/sp-record.php` and dropping the `'autoloaded'` key sends
+  `RecordConfigService` back to scanning those directories at request time —
+  but it does nothing for `config:cache`, because the framework loads the same
+  files itself before the package is even involved. Verified by running
+  `php artisan config:cache` on an application with **no** `config/sp-record.php`
+  at all and one closure-carrying file in `config/records/tables/`: it still
+  fails, with `records.tables.<file>` named as the non-serializable value. Your
+  only real choice is to keep closures out of `config/`.
+  :::
+
+If you want a `Closure` validator badly enough to give something up, the thing
+to give up is `config:cache` itself — not `autoloaded`, which changes nothing
+here.
