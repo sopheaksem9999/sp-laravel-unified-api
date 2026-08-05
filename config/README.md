@@ -17,7 +17,7 @@ When modifying or extending the API, **you must strictly follow these rules**:
     'custom-action' => new \Sopheak\Core\Types\RecordFunctionType(
         class: \App\Http\Controllers\MyCustomController::class,
         functionName: 'handleCustomAction',
-        httpMethod: ['POST'],
+        httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::POST->value],
         description: 'Executes a custom action on the table'
     ),
 ],

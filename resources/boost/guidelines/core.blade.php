@@ -58,7 +58,7 @@ Add to the table config `functions:`:
     type: 'class',
     class: \App\Services\InvoiceService::class,
     functionName: 'recalculate',
-    httpMethod: ['POST'],
+    httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::POST->value],
 ),
 </code-snippet>
 @endverbatim
