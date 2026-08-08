@@ -100,6 +100,196 @@ class OpenApiTest extends TestCase
     }
 
     /** @test */
+    public function it_marks_public_table_read_endpoints_as_not_requiring_auth(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.tables', [
+            'products' => new RecordTableType(
+                table: 'products',
+                isAuthRead: false,
+                isAuthWrite: true,
+                columns: ['id' => ['type' => 'bigint', 'nullable' => false]],
+            ),
+        ]);
+
+        $service = new OpenApiService();
+        $spec = $service->generateInternal();
+
+        $this->assertSame([], $spec['paths']['/api/v2/products']['get']['security']);
+        $this->assertSame([['bearerAuth' => []]], $spec['paths']['/api/v2/products']['post']['security']);
+    }
+
+    /** @test */
+    public function it_marks_protected_table_endpoints_as_requiring_bearer_auth_by_default(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.tables', [
+            'products' => new RecordTableType(
+                table: 'products',
+                columns: ['id' => ['type' => 'bigint', 'nullable' => false]],
+            ),
+        ]);
+
+        $service = new OpenApiService();
+        $spec = $service->generateInternal();
+
+        $this->assertSame([['bearerAuth' => []]], $spec['paths']['/api/v2/products']['get']['security']);
+        $this->assertSame([['bearerAuth' => []]], $spec['paths']['/api/v2/products']['post']['security']);
+    }
+
+    /** @test */
+    public function it_marks_public_global_rpc_function_as_not_requiring_auth(): void
+    {
+        Config::set('app.url', 'http://localhost');
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.rpc_prefix', 'rpc');
+        Config::set('record.tables', []);
+        Config::set('record.global_functions', [
+            'auth/login' => [
+                'httpMethod' => ['POST'],
+                'description' => 'Login',
+            ],
+        ]);
+
+        $service = new OpenApiService();
+        $spec = $service->generateInternal();
+
+        $this->assertSame([], $spec['paths']['/api/v2/rpc/auth/login']['post']['security']);
+    }
+
+    /** @test */
+    public function it_marks_non_public_global_rpc_function_as_requiring_bearer_auth(): void
+    {
+        Config::set('app.url', 'http://localhost');
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.rpc_prefix', 'rpc');
+        Config::set('record.tables', []);
+        Config::set('record.global_functions', [
+            'auth/logout' => [
+                'httpMethod' => ['POST'],
+                'description' => 'Logout',
+                'isPublic' => false,
+            ],
+        ]);
+
+        $service = new OpenApiService();
+        $spec = $service->generateInternal();
+
+        $this->assertSame([['bearerAuth' => []]], $spec['paths']['/api/v2/rpc/auth/logout']['post']['security']);
+    }
+
+    /** @test */
+    public function it_marks_table_scoped_rpc_function_as_requiring_auth_by_default(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.rpc_prefix', 'rpc');
+        Config::set('record.tables', [
+            'invoices' => new RecordTableType(
+                table: 'invoices',
+                columns: ['id' => ['type' => 'bigint', 'nullable' => false]],
+                functions: [
+                    'send' => ['httpMethod' => ['POST'], 'description' => 'Send'],
+                ],
+            ),
+        ]);
+
+        $service = new OpenApiService();
+        $spec = $service->generateInternal();
+
+        $this->assertSame([['bearerAuth' => []]], $spec['paths']['/api/v2/invoices/rpc/send']['post']['security']);
+    }
+
+    /** @test */
+    public function it_marks_public_table_scoped_rpc_function_as_not_requiring_auth(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.rpc_prefix', 'rpc');
+        Config::set('record.tables', [
+            'invoices' => new RecordTableType(
+                table: 'invoices',
+                columns: ['id' => ['type' => 'bigint', 'nullable' => false]],
+                functions: [
+                    'preview' => ['httpMethod' => ['GET'], 'description' => 'Preview', 'isPublic' => true],
+                ],
+            ),
+        ]);
+
+        $service = new OpenApiService();
+        $spec = $service->generateInternal();
+
+        $this->assertSame([], $spec['paths']['/api/v2/invoices/rpc/preview']['get']['security']);
+    }
+
+    /** @test */
+    public function it_uses_name_over_description_for_global_rpc_function_summary(): void
+    {
+        Config::set('app.url', 'http://localhost');
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.rpc_prefix', 'rpc');
+        Config::set('record.tables', []);
+        Config::set('record.global_functions', [
+            'auth/login' => [
+                'httpMethod' => ['POST'],
+                'name' => 'Login',
+                'description' => 'Authenticate a user and return an access token.',
+            ],
+        ]);
+
+        $service = new OpenApiService();
+        $spec = $service->generateInternal();
+
+        $this->assertSame('RPC - Login', $spec['paths']['/api/v2/rpc/auth/login']['post']['summary']);
+    }
+
+    /** @test */
+    public function it_falls_back_to_description_when_name_is_not_set_for_global_rpc_function(): void
+    {
+        Config::set('app.url', 'http://localhost');
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.rpc_prefix', 'rpc');
+        Config::set('record.tables', []);
+        Config::set('record.global_functions', [
+            'auth/login' => [
+                'httpMethod' => ['POST'],
+                'description' => 'Authenticate a user and return an access token.',
+            ],
+        ]);
+
+        $service = new OpenApiService();
+        $spec = $service->generateInternal();
+
+        $this->assertSame(
+            'RPC - Authenticate a user and return an access token.',
+            $spec['paths']['/api/v2/rpc/auth/login']['post']['summary'],
+        );
+    }
+
+    /** @test */
+    public function it_uses_name_over_description_for_table_scoped_rpc_function_summary(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.rpc_prefix', 'rpc');
+        Config::set('record.tables', [
+            'invoices' => new RecordTableType(
+                table: 'invoices',
+                columns: ['id' => ['type' => 'bigint', 'nullable' => false]],
+                functions: [
+                    'send' => [
+                        'httpMethod' => ['POST'],
+                        'name' => 'Send Invoice',
+                        'description' => 'Send the invoice to the customer via email.',
+                    ],
+                ],
+            ),
+        ]);
+
+        $service = new OpenApiService();
+        $spec = $service->generateInternal();
+
+        $this->assertSame('RPC - Send Invoice', $spec['paths']['/api/v2/invoices/rpc/send']['post']['summary']);
+    }
+
+    /** @test */
     public function it_documents_relationship_payload_shapes_clearly(): void
     {
         Config::set('record.api_prefix', 'api/v2');

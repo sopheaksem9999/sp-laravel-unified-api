@@ -78,7 +78,7 @@ class SyncRecordColumnsCommand extends Command
                 // Internal Package Tables
                 'sp_attachments',
                 'sp_attachment_links',
-                'sp_document_folders',
+                'sp_attachment_folders',
                 'sp_webhook_endpoints',
                 'sp_webhook_subscriptions',
                 'sp_webhook_deliveries',
@@ -130,7 +130,7 @@ class SyncRecordColumnsCommand extends Command
                 }
 
                 if (!isset($tableFiles[$tableName])) {
-                    // Table is defined inline in config/record.php or elsewhere; we only manage per-file configs
+                    // Table is defined inline in config/sp-record.php or elsewhere; we only manage per-file configs
                     $this->line(sprintf('Skipping table %s: not found in config/records/tables/*.php', $tableName));
                     continue;
                 }

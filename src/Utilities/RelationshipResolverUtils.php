@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Utilities;
 
+use InvalidArgumentException;
 use Illuminate\Foundation\Auth\User;
 use Sopheak\Core\Enums\RecordRelationshipsEnum;
 use Sopheak\Core\Types\RecordAassociationType;
@@ -12,6 +13,7 @@ use Sopheak\Core\Types\RecordHasManyThroughType;
 use Sopheak\Core\Types\RecordHasManyType;
 use Sopheak\Core\Types\RecordMetaBelongsToManyType;
 use Sopheak\Core\Types\RecordMetaHasManyThroughType;
+use Sopheak\Core\Types\RecordMorphHasManyType;
 use Sopheak\Core\Types\RecordMorphToManyType;
 use Sopheak\Core\Types\RecordSpatiePermissionType;
 use Illuminate\Database\Query\Builder;
@@ -20,6 +22,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Sopheak\Core\Utilities\TimeUtils;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
+use Sopheak\Core\Services\AttachmentUrlService;
 use Sopheak\Core\Services\RecordConfigService;
 
 class RelationshipResolverUtils
@@ -70,6 +73,18 @@ class RelationshipResolverUtils
 
             $config = self::resolveRelationship($table, $alias, $hintTable);
             if (!$config) {
+                $declaredRelationships = isset($schema[$table]) ? ($schema[$table]->relationships ?? []) : [];
+                if (!array_key_exists($alias, $declaredRelationships)) {
+                    $validNames = array_keys($declaredRelationships);
+                    sort($validNames);
+                    throw new InvalidArgumentException(sprintf(
+                        "Unknown relationship '%s' in select for table '%s'. Valid relationships: %s.",
+                        $alias,
+                        $table,
+                        [] === $validNames ? 'none' : implode(', ', $validNames)
+                    ));
+                }
+
                 continue;
             }
 
@@ -103,6 +118,11 @@ class RelationshipResolverUtils
 
                 case 'hasMany':
                     $builder = self::addHasManySubquery($builder, $table, $safeAlias, $config, $columns, $tenantId, $schema);
+
+                    break;
+
+                case 'morphMany':
+                    $builder = self::addMorphManySubquery($builder, $table, $safeAlias, $config, $columns, $tenantId, $schema);
 
                     break;
 
@@ -153,12 +173,22 @@ class RelationshipResolverUtils
                         $decoded = (array) $jsonData;
                     } elseif (null === $jsonData) {
                         // default based on relationship multiplicity
-                        if (in_array($relType, ['hasMany', 'belongsToMany', 'morphToMany', 'hasManyThrough'], true)) {
+                        if (in_array($relType, ['hasMany', 'morphMany', 'belongsToMany', 'morphToMany', 'hasManyThrough'], true)) {
                             $decoded = [];
                         } else {
                             $decoded = null; // belongsTo / hasOne
                         }
                     }
+
+                    // morphMany subquery results decode to assoc arrays; normalize to objects
+                    // to match the shape produced by the non-subquery loading path
+                    if ('morphMany' === $relType && is_array($decoded)) {
+                        $decoded = array_map(static fn(mixed $item): mixed => is_array($item) ? (object) $item : $item, $decoded);
+                    }
+
+                    // Enrich embedded attachment rows with resolved URLs, mirroring
+                    // the direct-read behavior of the AttachmentTrigger
+                    $decoded = self::enrichEmbeddedAttachments($decoded, $relConfig);
 
                     // Assign decoded value back to record using original alias
                     if ($isArrayRecord) {
@@ -180,6 +210,52 @@ class RelationshipResolverUtils
         }
 
         return $records;
+    }
+
+    /**
+     * Determine whether a resolved relationship targets the attachment table.
+     */
+    private static function isAttachmentRelation(array $config): bool
+    {
+        // 'sp_attachments' is the table's config key everywhere else in this codebase
+        // (AttachmentUploadController, AttachmentAccessService); it is not derived from
+        // attachments.route_prefix, which only controls the attachment routes' URL segment.
+        return ($config['table'] ?? null) === 'sp_attachments';
+    }
+
+    /**
+     * Append resolved download/public URLs to embedded attachment records so that
+     * nested attachment relations expose working urls, mirroring the behavior of
+     * the AttachmentTrigger on direct attachment reads.
+     */
+    private static function enrichEmbeddedAttachments(mixed $value, array $config): mixed
+    {
+        if (!self::isAttachmentRelation($config)) {
+            return $value;
+        }
+
+        $isList = is_array($value) && array_is_list($value);
+        $items = $isList ? $value : (null !== $value ? [$value] : []);
+
+        $enriched = array_map(static fn(mixed $item): mixed => self::enrichAttachmentItem($item), $items);
+
+        if ($isList) {
+            return $enriched;
+        }
+
+        return $enriched[0] ?? null;
+    }
+
+    private static function enrichAttachmentItem(mixed $item): mixed
+    {
+        if (null === $item || !(is_array($item) || is_object($item))) {
+            return $item;
+        }
+
+        $isObject = is_object($item);
+        $enriched = app(AttachmentUrlService::class)->appendUrls((array) $item);
+
+        return $isObject ? (object) $enriched : $enriched;
     }
 
     /**
@@ -260,6 +336,44 @@ class RelationshipResolverUtils
     }
 
     /**
+     * Throws if any requested main-table column is not a real column or a
+     * declared computed attribute on the table's schema. '*' is always valid.
+     * No-op for an empty column list or an unregistered table.
+     *
+     * @param string[] $columns
+     */
+    public static function validateMainTableColumns(string $table, array $columns): void
+    {
+        if ([] === $columns) {
+            return;
+        }
+
+        $tableSchema = self::getSchema()[$table] ?? null;
+        if (null === $tableSchema) {
+            return;
+        }
+
+        $validNames = array_merge(
+            array_keys($tableSchema->columns ?? []),
+            array_keys($tableSchema->attributes ?? [])
+        );
+
+        foreach ($columns as $column) {
+            if ('*' === $column || in_array($column, $validNames, true)) {
+                continue;
+            }
+
+            sort($validNames);
+            throw new InvalidArgumentException(sprintf(
+                "Unknown column '%s' in select for table '%s'. Valid columns: %s.",
+                $column,
+                $table,
+                implode(', ', $validNames)
+            ));
+        }
+    }
+
+    /**
      * Resolve relationship configuration for a given alias on a main table.
      * Only uses static configuration - no dynamic inference.
      */
@@ -307,6 +421,25 @@ class RelationshipResolverUtils
                         'type' => 'hasMany',
                         'table' => $rel->table,
                         'foreign_key' => $rel->foreignKey ?? (Str::singular($mainTable) . '_id'),
+                        'local_key' => $rel->localKey ?? $localPk,
+                        'selectable' => ['*'],
+                        'allow_create' => $rel->allowCreate,
+                        'allow_update' => $rel->allowUpdate,
+                        'allow_delete' => $rel->allowDelete,
+                    ];
+                    self::$resolveCache[$cacheKey] = $result;
+
+                    return $result;
+                }
+
+                // Handle RecordMorphHasManyType (polymorphic hasMany)
+                if ($rel instanceof RecordMorphHasManyType) {
+                    $result = [
+                        'type' => 'morphMany',
+                        'table' => $rel->table,
+                        'morph_type' => $rel->morphType,
+                        'morph_id' => $rel->morphId,
+                        'morph_class' => $rel->morphClass,
                         'local_key' => $rel->localKey ?? $localPk,
                         'selectable' => ['*'],
                         'allow_create' => $rel->allowCreate,
@@ -405,7 +538,7 @@ class RelationshipResolverUtils
                 // Handle RecordMorphToManyType (built-in morphToMany)
                 if ($rel instanceof RecordMorphToManyType) {
                     $relatedTableName = $rel->related && class_exists($rel->related)
-                        ? (new $rel->related)->getTable()
+                        ? (new $rel->related())->getTable()
                         : $alias;
 
                     $result = [
@@ -538,7 +671,7 @@ class RelationshipResolverUtils
                 continue;
             }
 
-            $foreignKey = $config['foreign_key'] ?? null;
+            $foreignKey = $config['foreign_key'] ?? ('morphMany' === $type ? ($config['morph_id'] ?? null) : null);
             $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
 
             if (!$foreignKey) {
@@ -569,12 +702,18 @@ class RelationshipResolverUtils
                 // Handle deletion
                 if (($item['_delete'] ?? false) || ($item['_destroy'] ?? false)) {
                     if ($hasPk && $allowDelete) {
+                        $deleteQuery = self::scopeToParent(
+                            DB::table($actualRelatedTableName)->where($relatedPk, $idVal),
+                            $foreignKey,
+                            $recordId,
+                            $type,
+                            $config,
+                        );
+
                         if ($relatedSchema->softDeletes ?? false) {
-                            DB::table($actualRelatedTableName)
-                                ->where($relatedPk, $idVal)
-                                ->update(['deleted_at' => TimeUtils::now()]);
+                            $deleteQuery->update(['deleted_at' => TimeUtils::now()]);
                         } else {
-                            DB::table($actualRelatedTableName)->where($relatedPk, $idVal)->delete();
+                            $deleteQuery->delete();
                         }
                     }
 
@@ -590,6 +729,11 @@ class RelationshipResolverUtils
 
                 // Ensure FK is set to parent ID (cannot be overridden by input)
                 $item[$foreignKey] = $recordId;
+                if ('morphMany' === $type && isset($config['morph_type'], $config['morph_class'])) {
+                    // Force discriminator column to the configured morph class
+                    $item[$config['morph_type']] = $config['morph_class'];
+                }
+
                 if ($tenantId && $hasTenant) {
                     $item[RecordConfigService::tenantColumn()] = $tenantId;
                 }
@@ -613,16 +757,44 @@ class RelationshipResolverUtils
                 if ($hasPk && $allowUpdate) {
                     // Upsert/update path
                     unset($item[$relatedPk]);
-                    DB::table($actualRelatedTableName)->where($relatedPk, $idVal)->update($item);
+                    self::scopeToParent(
+                        DB::table($actualRelatedTableName)->where($relatedPk, $idVal),
+                        $foreignKey,
+                        $recordId,
+                        $type,
+                        $config,
+                    )->update($item);
                 } elseif ('create' === $operation || $allowCreate) {
                     // Create path
                     unset($item['id']);
+                    if (!isset($item[$relatedPk]) && SchemaRegistryUtils::isUuidColumnType($relatedSchema->columns[$relatedPk] ?? null)) {
+                        $item[$relatedPk] = (string) Str::uuid();
+                    }
+
                     DB::table($actualRelatedTableName)->insert($item);
                 }
             }
         }
 
         return $payload;
+    }
+
+    /**
+     * Scope a nested update/delete query to rows that actually belong to the
+     * parent record, so a client can't reference another parent's child row
+     * by id to modify or delete it.
+     *
+     * @param array<string, mixed> $config
+     */
+    private static function scopeToParent(Builder $query, string $foreignKey, mixed $recordId, string $type, array $config): Builder
+    {
+        $query->where($foreignKey, $recordId);
+
+        if ('morphMany' === $type && isset($config['morph_type'], $config['morph_class'])) {
+            $query->where($config['morph_type'], $config['morph_class']);
+        }
+
+        return $query;
     }
 
     /**
@@ -1007,7 +1179,7 @@ class RelationshipResolverUtils
         $subAlias = $actualRelatedTableName === $actualMainTableName ? $actualRelatedTableName . '_sub' : $actualRelatedTableName;
 
         // Build column refs for the inner SELECT
-        $validColumns = self::resolveJsonObjectColumns($columns, $schema[$relatedTable]->columns ?? []);
+        $validColumns = self::resolveJsonObjectColumns($columns, $schema[$relatedTable]->columns ?? [], $relatedTable);
         if ([] === $validColumns) {
             $validColumns = ['id'];
         }
@@ -1096,13 +1268,58 @@ class RelationshipResolverUtils
         $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
 
         // Build column selection for JSON object
-        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
+        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName, $relatedTable);
 
         // Build the JSON array aggregation subquery
         $subqueryRaw = "(
             SELECT {$jsonArrayAggExpr}
             FROM {$actualRelatedTableName}
             WHERE {$actualRelatedTableName}.{$foreignKey} = {$actualMainTableName}.{$localKey}";
+
+        // Add tenant filtering if enabled
+        $tenantCol = RecordConfigService::tenantColumn();
+        if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
+            $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualRelatedTableName, $tenantId);
+        }
+
+        // Add soft delete filtering
+        if ($schema[$relatedTable]->softDeletes ?? false) {
+            $subqueryRaw .= sprintf(' AND %s.deleted_at IS NULL', $actualRelatedTableName);
+        }
+
+        $subqueryRaw .= '
+        )';
+
+        $builder->addSelect([DB::raw(sprintf('%s as %s', $subqueryRaw, $alias))]);
+
+        return $builder;
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     */
+    private static function addMorphManySubquery(Builder $builder, string $table, string $alias, array $config, array $columns, mixed $tenantId, array $schema): Builder
+    {
+        $relatedTable = $config['table'];
+        $morphType = $config['morph_type'];
+        $morphId = $config['morph_id'];
+        $morphClass = $config['morph_class'];
+        $localKey = $config['local_key'] ?? 'id';
+        $enableTenantId = RecordConfigService::enableTenantId();
+
+        // Get actual table names from schema
+        $actualMainTableName = $schema[$table]->table ?? $table;
+        $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;
+
+        // Build column selection for JSON object
+        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName, $relatedTable);
+
+        // Build the JSON array aggregation subquery
+        $subqueryRaw = "(
+            SELECT {$jsonArrayAggExpr}
+            FROM {$actualRelatedTableName}
+            WHERE {$actualRelatedTableName}.{$morphType} = " . DB::getPdo()->quote($morphClass) . "
+              AND {$actualRelatedTableName}.{$morphId} = {$actualMainTableName}.{$localKey}";
 
         // Add tenant filtering if enabled
         $tenantCol = RecordConfigService::tenantColumn();
@@ -1146,7 +1363,7 @@ class RelationshipResolverUtils
         $actualPivotTableName = $schema[$pivotTable]->table ?? $pivotTable;
 
         // Build column selection for JSON object
-        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
+        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName, $relatedTable);
 
         // Build the JSON array aggregation subquery for many-to-many
         $subqueryRaw = "(
@@ -1230,7 +1447,7 @@ class RelationshipResolverUtils
         $actualPivotTableName = $schema[$pivotTable]->table ?? $pivotTable;
 
         // Build column selection for JSON object
-        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
+        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName, $relatedTable);
 
         // Build the JSON array aggregation subquery for morph-to-many
         // Use DB::raw with parameter binding to handle model_type correctly
@@ -1302,7 +1519,7 @@ class RelationshipResolverUtils
         $actualThroughTableName = $schema[$throughTable]->table ?? $throughTable;
 
         // Build column selection for JSON object
-        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName);
+        $jsonArrayAggExpr = self::buildJsonArrayAggExpression($columns, $schema[$relatedTable]->columns ?? [], $actualRelatedTableName, $relatedTable);
 
         // Build the JSON array aggregation subquery with join
         $subqueryRaw = "(
@@ -1343,13 +1560,28 @@ class RelationshipResolverUtils
     /**
      * Resolve and validate JSON object columns for subqueries.
      */
-    private static function resolveJsonObjectColumns(array $columns, array $schemaColumns): array
+    private static function resolveJsonObjectColumns(array $columns, array $schemaColumns, string $relatedTable): array
     {
         if ($columns === ['*'] || [] === $columns) {
             $columns = array_keys($schemaColumns);
         }
 
         // Validate columns against schema
+        foreach ($columns as $column) {
+            if ('*' === $column || isset($schemaColumns[$column])) {
+                continue;
+            }
+
+            $validNames = array_keys($schemaColumns);
+            sort($validNames);
+            throw new InvalidArgumentException(sprintf(
+                "Unknown column '%s' in select for table '%s'. Valid columns: %s.",
+                $column,
+                $relatedTable,
+                [] === $validNames ? 'none' : implode(', ', $validNames)
+            ));
+        }
+
         $validColumns = array_filter($columns, fn($column): bool => isset($schemaColumns[$column]));
 
         // Remove tenant_id if it's not enabled in configuration
@@ -1365,10 +1597,10 @@ class RelationshipResolverUtils
     /**
      * Build database-specific JSON object expression from requested columns.
      */
-    private static function buildJsonObjectExpression(array $columns, array $schemaColumns, string $tableName = ''): string
+    private static function buildJsonObjectExpression(array $columns, array $schemaColumns, string $tableName, string $relatedTable): string
     {
         $driver = DB::getDriverName();
-        $validColumns = self::resolveJsonObjectColumns($columns, $schemaColumns);
+        $validColumns = self::resolveJsonObjectColumns($columns, $schemaColumns, $relatedTable);
         if ([] === $validColumns) {
             $validColumns = ['id'];
         }
@@ -1400,9 +1632,9 @@ class RelationshipResolverUtils
     /**
      * Build database-specific JSON array aggregation expression of JSON objects.
      */
-    private static function buildJsonArrayAggExpression(array $columns, array $schemaColumns, string $tableName = ''): string
+    private static function buildJsonArrayAggExpression(array $columns, array $schemaColumns, string $tableName, string $relatedTable): string
     {
-        $jsonObjectExpr = self::buildJsonObjectExpression($columns, $schemaColumns, $tableName);
+        $jsonObjectExpr = self::buildJsonObjectExpression($columns, $schemaColumns, $tableName, $relatedTable);
         $driver = DB::getDriverName();
 
         return match ($driver) {
@@ -1521,6 +1753,7 @@ class RelationshipResolverUtils
 
                 case 'hasMany':
                 case 'hasManyThrough':
+                case 'morphMany':
                     $value = $recordArray[$localKey] ?? null;
 
                     break;
@@ -1554,7 +1787,7 @@ class RelationshipResolverUtils
 
         // Optimized non-through relationships with advanced bulk loading
         // For belongsToMany, we don't need foreignKey and ownerKey in the traditional sense
-        $effectiveForeignKey = $foreignKey ?? 'id';
+        $effectiveForeignKey = $foreignKey ?? ('morphMany' === $type ? ($config['morph_id'] ?? 'id') : 'id');
         $effectiveOwnerKey = $ownerKey ?? 'id';
 
         return self::loadStandardRelationshipOptimized($type, $relatedTable, $effectiveForeignKey, $effectiveOwnerKey, $matchValues, $columns, $tenantId, $schema, $config);
@@ -1585,6 +1818,19 @@ class RelationshipResolverUtils
 
             $config = self::resolveRelationship($table, $alias, $hintTable);
             if (!$config) {
+                $schema = self::getSchema();
+                $declaredRelationships = isset($schema[$table]) ? ($schema[$table]->relationships ?? []) : [];
+                if (!array_key_exists($alias, $declaredRelationships)) {
+                    $validNames = array_keys($declaredRelationships);
+                    sort($validNames);
+                    throw new InvalidArgumentException(sprintf(
+                        "Unknown relationship '%s' in select for table '%s'. Valid relationships: %s.",
+                        $alias,
+                        $table,
+                        [] === $validNames ? 'none' : implode(', ', $validNames)
+                    ));
+                }
+
                 continue;
             }
 
@@ -1599,14 +1845,14 @@ class RelationshipResolverUtils
                 if ('belongsTo' === $config['type']) {
                     $foreign = $recordArray[$config['foreign_key']] ?? null;
                     $related = null !== $foreign ? ($relatedGrouped[$foreign] ?? null) : null;
-                    $record->{$alias} = $related;
+                    $record->{$alias} = self::enrichEmbeddedAttachments($related, $config);
                     if ($related) {
                         $flatRelated[] = $related;
                     }
-                } elseif ('hasMany' === $config['type'] || 'hasManyThrough' === $config['type']) {
+                } elseif ('hasMany' === $config['type'] || 'morphMany' === $config['type'] || 'hasManyThrough' === $config['type']) {
                     $local = $recordArray[$config['local_key'] ?? 'id'] ?? null;
                     $related = null !== $local ? ($relatedGrouped[$local] ?? []) : [];
-                    $record->{$alias} = $related;
+                    $record->{$alias} = self::enrichEmbeddedAttachments($related, $config);
 
                     foreach ($related as $r) {
                         $flatRelated[] = $r;
@@ -1619,14 +1865,14 @@ class RelationshipResolverUtils
                         : ($recordArray[$parentKey] ?? null);
                     $related = null !== $local ? ($relatedGrouped[$local] ?? []) : [];
 
-                    $record->{$alias} = $related;
+                    $record->{$alias} = self::enrichEmbeddedAttachments($related, $config);
                     foreach ($related as $r) {
                         $flatRelated[] = $r;
                     }
                 } else { // hasOne or unknown
                     $local = $recordArray[$config['local_key'] ?? 'id'] ?? null;
                     $related = null !== $local ? ($relatedGrouped[$local] ?? null) : null;
-                    $record->{$alias} = $related;
+                    $record->{$alias} = self::enrichEmbeddedAttachments($related, $config);
                     if ($related) {
                         $flatRelated[] = $related;
                     }
@@ -1651,12 +1897,14 @@ class RelationshipResolverUtils
 
                 self::includeRelationshipsRecursive($flat, $config['table'], $children, $tenantId, $depth + 1, $maxDepth);
                 // Map enriched children back to records when hasMany/through with memory cleanup
-                if ('hasMany' === $config['type']) {
+                if ('hasMany' === $config['type'] || 'morphMany' === $config['type']) {
                     // Rebuild grouped map
                     $grouped = [];
                     foreach ($flat as $fr) {
                         $fa = (array) $fr;
-                        $key = $fa[$config['foreign_key']] ?? null;
+                        $key = ('morphMany' === $config['type'])
+                            ? ($fa[$config['morph_id']] ?? null)
+                            : ($fa[$config['foreign_key']] ?? null);
                         if (null !== $key) {
                             $grouped[$key][] = $fr;
                         }
@@ -2046,7 +2294,7 @@ class RelationshipResolverUtils
         }
 
         // Apply column selection with validation
-        self::applyColumnSelection($builder, $columns, $schema[$relatedTable]->columns ?? []);
+        self::applyColumnSelection($builder, $columns, $schema[$relatedTable]->columns ?? [], $relatedTable);
 
         // Handle belongsToMany and morphToMany relationships with pivot table
         if ('belongsToMany' === $type || 'morphToMany' === $type) {
@@ -2175,8 +2423,12 @@ class RelationshipResolverUtils
 
             foreach (array_chunk($matchValues, $chunkSize) as $chunk) {
                 $chunkQuery = clone $builder;
-                $chunkResults = $chunkQuery->whereIn($queryKey, $chunk)->get();
 
+                if ('morphMany' === $type && isset($relationshipConfig['morph_type'])) {
+                    $chunkQuery->where($relationshipConfig['morph_type'], $relationshipConfig['morph_class']);
+                }
+
+                $chunkResults = $chunkQuery->whereIn($queryKey, $chunk)->get();
                 $relatedRecords = $relatedRecords->merge($chunkResults);
             }
         }
@@ -2204,7 +2456,7 @@ class RelationshipResolverUtils
                 $key = $recordArray[$groupKey] ?? null;
 
                 if (null !== $key) {
-                    if ('hasMany' === $type) {
+                    if ('hasMany' === $type || 'morphMany' === $type) {
                         $grouped[$key][] = $relatedRecord;
                     } else {
                         // belongsTo or hasOne - single record
@@ -2238,17 +2490,28 @@ class RelationshipResolverUtils
      * @param array   $columns       Requested columns to select
      * @param array   $schemaColumns Available columns from database schema
      */
-    private static function applyColumnSelection($query, array $columns, array $schemaColumns): void
+    private static function applyColumnSelection($query, array $columns, array $schemaColumns, string $relatedTable): void
     {
         if ($columns === ['*'] || [] === $columns) {
             return; // No filtering needed
         }
 
-        // Validate and filter columns against schema
-        $validColumns = array_values(array_filter($columns, fn($column): bool => '*' === $column || isset($schemaColumns[$column])));
+        foreach ($columns as $column) {
+            if ('*' === $column || isset($schemaColumns[$column])) {
+                continue;
+            }
 
-        if ([] !== $validColumns) {
-            $query->select($validColumns);
+            $validNames = array_keys($schemaColumns);
+            sort($validNames);
+            throw new InvalidArgumentException(sprintf(
+                "Unknown column '%s' in select for table '%s'. Valid columns: %s.",
+                $column,
+                $relatedTable,
+                [] === $validNames ? 'none' : implode(', ', $validNames)
+            ));
         }
+
+        $query->select($columns);
     }
+
 }

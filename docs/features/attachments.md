@@ -29,7 +29,7 @@ The attachment module provides dynamic endpoints for file management using `Reco
 
 - `sp_attachments`
 - `sp_attachment_links`
-- `sp_document_folders`
+- `sp_attachment_folders` (renamed from `sp_document_folders`; the old config key is kept registered, pointing at the same table, as a deprecated alias for the generic `/{table}` CRUD route — see [Attachment Folder Management](/guide/feature-attachments-folders))
 
 ## Main Endpoints
 

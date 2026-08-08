@@ -1,5 +1,7 @@
 <?php
 
+use Sopheak\Core\Enums\RecordFunctionMethodEnum;
+use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Triggers\AttachmentTrigger;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordFunctionType;
@@ -95,7 +97,9 @@ return [
             isAuthWrite: true,
             primaryKey: 'id',
             columns: [
-                'id' => ['type' => 'string', 'nullable' => false],
+                // Governed by record.id_type — see MigrationIdHelper::primary()
+                // in 2024_01_01_000000_create_sp_attachments_tables.
+                'id' => ['type' => RecordConfigService::idType() === 'uuid' ? 'uuid' : 'bigIncrements', 'nullable' => false],
                 'folder_id' => ['type' => 'string', 'nullable' => true],
                 'title' => ['type' => 'string', 'nullable' => true],
                 'caption' => ['type' => 'string', 'nullable' => true],
@@ -109,7 +113,7 @@ return [
             ],
             functions: [
                 'upload' => new RecordFunctionType(
-                    httpMethod: ['POST'],
+                    httpMethod: [RecordFunctionMethodEnum::POST->value],
                     class: AttachmentUploadController::class,
                     functionName: 'upload',
                     description: 'Upload a new attachment',
@@ -144,7 +148,7 @@ return [
                     ]
                 ),
                 'clone-temp' => new RecordFunctionType(
-                    httpMethod: ['POST'],
+                    httpMethod: [RecordFunctionMethodEnum::POST->value],
                     class: AttachmentUploadController::class,
                     functionName: 'cloneTemp',
                     description: 'Clone an existing attachment as temporary attachment',
@@ -172,7 +176,7 @@ return [
                     ]
                 ),
                 '{id}/download' => new RecordFunctionType(
-                    httpMethod: ['GET'],
+                    httpMethod: [RecordFunctionMethodEnum::GET->value],
                     class: AttachmentUploadController::class,
                     functionName: 'download',
                     description: 'Download an attachment',
@@ -182,7 +186,7 @@ return [
                     ]
                 ),
                 '{id}/view' => new RecordFunctionType(
-                    httpMethod: ['GET'],
+                    httpMethod: [RecordFunctionMethodEnum::GET->value],
                     class: AttachmentUploadController::class,
                     functionName: 'view',
                     description: 'View an attachment inline',
@@ -192,7 +196,7 @@ return [
                     ]
                 ),
                 'folders' => new RecordFunctionType(
-                    httpMethod: ['GET', 'POST'],
+                    httpMethod: [RecordFunctionMethodEnum::GET->value, RecordFunctionMethodEnum::POST->value],
                     class: AttachmentUploadController::class,
                     functionName: 'folders',
                     description: 'List or create folders',
@@ -233,7 +237,7 @@ return [
                     ]
                 ),
                 'folders/{id}' => new RecordFunctionType(
-                    httpMethod: ['PUT', 'PATCH', 'DELETE'],
+                    httpMethod: [RecordFunctionMethodEnum::PUT->value, RecordFunctionMethodEnum::PATCH->value, RecordFunctionMethodEnum::DELETE->value],
                     class: AttachmentUploadController::class,
                     functionName: 'folderItem',
                     description: 'Update or delete folder',
@@ -251,7 +255,7 @@ return [
                     ]
                 ),
                 'record/{table}/{record_id}' => new RecordFunctionType(
-                    httpMethod: ['GET', 'POST'],
+                    httpMethod: [RecordFunctionMethodEnum::GET->value, RecordFunctionMethodEnum::POST->value],
                     class: AttachmentUploadController::class,
                     functionName: 'record',
                     description: 'Get or link attachments for a specific record',
@@ -271,7 +275,7 @@ return [
                     ]
                 ),
                 'record/{table}/{record_id}/{attachment_id}' => new RecordFunctionType(
-                    httpMethod: ['DELETE'],
+                    httpMethod: [RecordFunctionMethodEnum::DELETE->value],
                     class: AttachmentUploadController::class,
                     functionName: 'unlinkFromRecord',
                     description: 'Unlink an attachment from a record'
@@ -281,16 +285,22 @@ return [
                 AttachmentTrigger::class,
             ]
         ),
-        'sp_document_folders' => new RecordTableType(
-            table: 'sp_document_folders',
+        // Canonical key as of the sp_document_folders -> sp_attachment_folders rename.
+        'sp_attachment_folders' => new RecordTableType(
+            table: 'sp_attachment_folders',
             pmsName: 'attachment',
             hasTenantId: true,
             softDeletes: false,
             isAuthRead: true,
             isAuthWrite: true,
             primaryKey: 'id',
+            disableCache: true,
             columns: [
-                'id' => ['type' => 'string', 'nullable' => false],
+                // Governed by record.id_type — see MigrationIdHelper::primary()
+                // in 2024_01_01_000000_create_sp_attachments_tables. The table
+                // is created as sp_document_folders and renamed by
+                // 2026_08_02_000000_rename_sp_document_folders_table.
+                'id' => ['type' => RecordConfigService::idType() === 'uuid' ? 'uuid' : 'bigIncrements', 'nullable' => false],
                 'name' => ['type' => 'string', 'nullable' => false],
                 'parent_id' => ['type' => 'string', 'nullable' => true],
                 'scope' => ['type' => 'string', 'nullable' => false],

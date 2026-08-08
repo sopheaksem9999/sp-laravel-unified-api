@@ -48,7 +48,7 @@ Add two Artisan commands that export the package's existing OpenAPI 3 spec to re
 
 ```bash
 php artisan sp-laravel-api:export-bruno
-php artisan sp-laravel-api:export-bruno --output=tests/bruno/users.bru
+php artisan sp-laravel-api:export-bruno --output=tests/bruno
 php artisan sp-laravel-api:export-bruno --regen=users
 php artisan sp-laravel-api:export-bruno --regen=users,orders
 php artisan sp-laravel-api:export-bruno --regen=all
@@ -57,13 +57,13 @@ php artisan sp-laravel-api:export-bruno --dry-run
 
 ### 3.2 `sp-laravel-api:export-postman`
 
-Same flag set; default output is `api-clients/postman/collection.json`.
+Same flag set; default output is `api-client/postman/collection.json`.
 
 ### 3.3 Flags
 
 | Flag | Required | Default | Behavior |
 |---|---|---|---|
-| `--output=<path>` | no | `api-clients/bruno/collection.bru` (Bruno) or `api-clients/postman/collection.json` (Postman) | Output file path. Relative to project root or absolute. Auto-creates parent dirs. |
+| `--output=<path>` | no | `api-client/bruno` (Bruno) or `api-client/postman/collection.json` (Postman) | Output folder or file path. Relative to project root or absolute. Auto-creates parent dirs. |
 | `--regen=<list\|all>` | no | (none — skip existing) | Comma-separated table keys (e.g., `users,orders`) or `all`. Tables in this list are always regenerated; others are skipped if already present. |
 | `--dry-run` | no | false | Print diff summary; do not write. |
 
@@ -78,7 +78,7 @@ Same flag set; default output is `api-clients/postman/collection.json`.
 ```
 OpenApiService::generateInternal()
         ↓
-ApiClientExportService  (new, shared)
+ApiClientExportService  (shared)
    - loads existing collection (if any)
    - builds request name from OpenAPI `summary` (fallback `operationId`)
    - diffs existing-vs-new by name
@@ -88,18 +88,18 @@ ApiClientExportService  (new, shared)
    - returns ExportResult DTO
         ↓
 ┌──────────────────────┐    ┌──────────────────────┐
-│ BrunoEmitter (v3)    │    │ PostmanEmitter (v2.1)│
+│ BrunoEmitter         │    │ PostmanEmitter (v2.1)│
 └──────────────────────┘    └──────────────────────┘
         ↓                              ↓
 ExportBrunoCommand         ExportPostmanCommand
 ```
 
-### 4.1 New files
+### 4.1 Files
 
 | File | Role |
 |---|---|
 | `src/Services/ApiClient/ApiClientEmitterInterface.php` | Contract for emitters |
-| `src/Services/ApiClient/BrunoEmitter.php` | Bruno v3 JSON emitter |
+| `src/Services/ApiClient/BrunoEmitter.php` | Bruno collection emitter (multi-file `.bru` output) |
 | `src/Services/ApiClient/PostmanEmitter.php` | Postman v2.1 JSON emitter |
 | `src/Services/ApiClient/ExportResult.php` | DTO: `added[]`, `regenerated[]`, `skipped[]`, `suggestions[]` |
 | `src/Services/ApiClientExportService.php` | Shared merge/regen logic (sibling of `OpenApiService`) |
@@ -112,17 +112,23 @@ ExportBrunoCommand         ExportPostmanCommand
 
 ### 4.2 Modified files
 
-- `src/CoreSpLaravelApiProvider.php` — register the two new commands in the `runningInConsole()` block (line ~85)
-- `docs/ai/architecture.md` — add a short section for the new exporters
-- `CHANGELOG.md` — note the new feature
+- `src/CoreSpLaravelApiProvider.php` — register the two new commands in the `runningInConsole()` block
+- `docs/ai/architecture.md` — architecture section for exporters
+- `CHANGELOG.md` — note the feature
 
 ## 5. Output folder layout
 
 ```
 project-root/
-└── api-clients/
+└── api-client/
     ├── bruno/
-    │   └── collection.bru          # Bruno v3 JSON
+    │   ├── bruno.json              # Collection manifest
+    │   ├── collection.bru          # Variables & bearer auth
+    │   ├── Users/                  # Subfolder per table tag
+    │   │   ├── List Users.bru
+    │   │   └── ...
+    │   └── RPC/
+    │       └── ...
     └── postman/
         └── collection.json         # Postman v2.1 JSON
 ```

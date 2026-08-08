@@ -23,6 +23,19 @@ class AttachmentTempOptionsTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function getEnvironmentSetUp($app): void
+    {
+        parent::getEnvironmentSetUp($app);
+
+        // The Schema::create() calls below are guarded by !hasTable() and
+        // never actually run: RefreshDatabase already migrates the real
+        // sp_attachments/sp_attachment_links tables first. This test inserts
+        // uuid-shaped ids directly, so the real table's id column must
+        // actually be uuid-typed. Must be set here, not in setUp(): Testbench
+        // migrates before setUp().
+        $app['config']->set('record.id_type', 'uuid');
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -71,7 +84,7 @@ class AttachmentTempOptionsTest extends TestCase
                 isAuthRead: false,
                 isAuthWrite: false,
                 columns: [
-                    'id' => ['type' => 'string', 'nullable' => false],
+                    'id' => ['type' => 'uuid', 'nullable' => false],
                     'folder_id' => ['type' => 'string', 'nullable' => true],
                     'title' => ['type' => 'string', 'nullable' => true],
                     'caption' => ['type' => 'string', 'nullable' => true],

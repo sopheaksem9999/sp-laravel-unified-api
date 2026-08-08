@@ -1,5 +1,6 @@
 <?php
 
+use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Types\RecordMetaBelongsToManyType;
 use Sopheak\Core\Types\RecordTableType;
 
@@ -24,7 +25,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | When set to true, the package will:
-    | 1. Auto-register permissions from config/record.php (pmsName + can* flags)
+    | 1. Auto-register permissions from config/sp-record.php (pmsName + can* flags)
     | 2. Check permissions via the HasRoles trait (direct + role-based)
     | 3. Cache resolved permissions for the authenticated user
     |
@@ -38,7 +39,7 @@ return [
     | Auto-Register Permissions from Config
     |--------------------------------------------------------------------------
     |
-    | When enabled, on every boot the system scans all tables in config/record.php
+    | When enabled, on every boot the system scans all tables in config/sp-record.php
     | and auto-creates permissions based on pmsName + canRead/canCreate/etc flags.
     |
     | Example: pmsName: 'invoice', canRead: true → creates 'view:invoice' permission
@@ -144,7 +145,7 @@ return [
             canDelete: false,
             canUpsert: false,
             columns: [
-                'id' => ['type' => 'bigIncrements', 'nullable' => false],
+                'id' => ['type' => RecordConfigService::idType() === 'uuid' ? 'uuid' : 'bigIncrements', 'nullable' => false],
                 'name' => ['type' => 'string', 'nullable' => false],
                 'group' => ['type' => 'string', 'nullable' => true],
                 'guard_name' => ['type' => 'string', 'nullable' => false],
@@ -177,7 +178,7 @@ return [
             canUpsert: false,
             columns: array_merge(
                 [
-                    'id' => ['type' => 'bigIncrements', 'nullable' => false],
+                    'id' => ['type' => RecordConfigService::idType() === 'uuid' ? 'uuid' : 'bigIncrements', 'nullable' => false],
                     'name' => ['type' => 'string', 'nullable' => false],
                     'key' => ['type' => 'string', 'nullable' => true],
                     'guard_name' => ['type' => 'string', 'nullable' => true, 'default' => 'api'],

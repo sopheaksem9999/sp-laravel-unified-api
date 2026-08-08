@@ -32,8 +32,9 @@ use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Console\McpServerCommand;
 use Sopheak\Core\Console\EnablePgsqlRlsCommand;
 use Illuminate\Support\Facades\Route;
-
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
+use Sopheak\Core\Config\ConfigNamespaceBridge;
 use Sopheak\Core\Events\RecordCreated;
 use Sopheak\Core\Events\RecordDeleted;
 use Sopheak\Core\Events\RecordUpdated;
@@ -45,11 +46,16 @@ class CoreSpLaravelApiProvider extends ServiceProvider
 {
     public function register(): void
     {
+        // Pass A: fold a client's published sp-*.php into the canonical
+        // namespaces BEFORE the merges below, because sp-permissions.php reads
+        // config('record.id_type') while it is being merged.
+        ConfigNamespaceBridge::adopt($this->app['config']);
+
         $this->mergeConfigFrom(__DIR__ . '/../config/sp-laravel-api.php', 'sp-laravel-api');
-        $this->mergeConfigFrom(__DIR__ . '/../config/attachments.php', 'attachments');
-        $this->mergeConfigFrom(__DIR__ . '/../config/webhooks.php', 'webhooks');
-        $this->mergeConfigFrom(__DIR__ . '/../config/audit.php', 'audit');
-        $this->mergeConfigFrom(__DIR__ . '/../config/permissions.php', 'permissions');
+        $this->mergeConfigFrom(__DIR__ . '/../config/sp-attachments.php', 'attachments');
+        $this->mergeConfigFrom(__DIR__ . '/../config/sp-webhooks.php', 'webhooks');
+        $this->mergeConfigFrom(__DIR__ . '/../config/sp-audit.php', 'audit');
+        $this->mergeConfigFrom(__DIR__ . '/../config/sp-permissions.php', 'permissions');
         $this->mergeConfigFrom(__DIR__ . '/../config/sp-api-mcp.php', 'sp-api-mcp');
 
 
@@ -60,13 +66,20 @@ class CoreSpLaravelApiProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Pass B: mirror the resolved canonical values onto the sp-* names so a
+        // migrated client can read either. In boot() rather than register() so
+        // it reflects anything Testbench's getEnvironmentSetUp() changed.
+        ConfigNamespaceBridge::mirror($this->app['config']);
+
+        $this->reportDeprecatedConfigFiles();
+
         $this->publishes([
             __DIR__ . '/../config/sp-laravel-api.php' => config_path('sp-laravel-api.php'),
-            __DIR__ . '/../config/audit.php' => config_path('audit.php'),
-            __DIR__ . '/../config/record.php' => config_path('record.php'),
-            __DIR__ . '/../config/attachments.php' => config_path('attachments.php'),
-            __DIR__ . '/../config/webhooks.php' => config_path('webhooks.php'),
-            __DIR__ . '/../config/permissions.php' => config_path('permissions.php'),
+            __DIR__ . '/../config/sp-audit.php' => config_path('sp-audit.php'),
+            __DIR__ . '/../config/sp-record.php' => config_path('sp-record.php'),
+            __DIR__ . '/../config/sp-attachments.php' => config_path('sp-attachments.php'),
+            __DIR__ . '/../config/sp-webhooks.php' => config_path('sp-webhooks.php'),
+            __DIR__ . '/../config/sp-permissions.php' => config_path('sp-permissions.php'),
             __DIR__ . '/../config/sp-api-mcp.php' => config_path('sp-api-mcp.php'),
         ], 'sp-laravel-api-config');
 
@@ -159,5 +172,60 @@ class CoreSpLaravelApiProvider extends ServiceProvider
             /** @var Builder $this */
             return RecordService::applyRequestFilters($request, $this, $tenantId, $isArray, $orderBy);
         });
+    }
+
+    /**
+     * Log one notice per deprecated (unprefixed) config file the client still has.
+     *
+     * Console-only, deliberately. boot() runs once per application instance,
+     * which under Octane or a queue worker means once per worker — but PHP-FPM
+     * is shared-nothing and boots the application afresh on every request, so
+     * an unmigrated client with all five old files would otherwise get five
+     * Log::info lines on *every* HTTP request at Laravel's default log level.
+     * The notice's audience is a developer running artisan (migrate,
+     * vendor:publish), not a request being served, so gate it on the console.
+     *
+     * Public so a test can exercise it without re-running the whole of boot().
+     */
+    public function reportDeprecatedConfigFiles(): void
+    {
+        if (!$this->app->runningInConsole()) {
+            return;
+        }
+
+        if ((bool) config('sp-laravel-api.suppress_config_rename_notice', false)) {
+            return;
+        }
+
+        $superseded = ConfigNamespaceBridge::supersededFiles();
+
+        foreach (ConfigNamespaceBridge::deprecatedFiles() as $old => $new) {
+            // "It keeps working" is only true while the old file is the only
+            // one of the pair on disk. Once the sp-* counterpart exists too,
+            // adopt() gives it precedence for every key both files set, so the
+            // old file has stopped being fully in effect and telling the
+            // client it still works would be a false promise.
+            if (isset($superseded[$old])) {
+                Log::warning(sprintf(
+                    'sp-laravel-api: config/%s is deprecated AND no longer fully in effect — '
+                    . 'config/%s is also present and its values win for every key both files set. '
+                    . 'Copy anything you still need into config/%s and delete config/%s. '
+                    . 'Set sp-laravel-api.suppress_config_rename_notice to silence this.',
+                    $old,
+                    $new,
+                    $new,
+                    $old
+                ));
+
+                continue;
+            }
+
+            Log::info(sprintf(
+                'sp-laravel-api: config/%s is deprecated; rename it to config/%s. '
+                . 'It keeps working — set sp-laravel-api.suppress_config_rename_notice to silence this.',
+                $old,
+                $new
+            ));
+        }
     }
 }

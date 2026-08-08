@@ -20,9 +20,7 @@ class PermissionRegistrar
 
     protected string $configHashKey = 'sp_permissions_config_hash';
 
-    public function __construct(protected Gate $gate, protected CacheManager $cache)
-    {
-    }
+    public function __construct(protected Gate $gate, protected CacheManager $cache) {}
 
     public function registerPermissions(): void
     {

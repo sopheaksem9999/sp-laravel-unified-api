@@ -50,11 +50,11 @@ trait HasFunctionOperations
         // For endpoints like {table}/{id}/{functionName} (e.g. sp_attachments/{id}/download),
         // we can inject the 'id' into the request payload so the custom controller function can access it.
         // However, standard custom functions are usually mapped to methods like `download(Request $request, string $id)`.
-        // The executeTableFunction inside RecordService does not natively pass the $id as a separate param 
+        // The executeTableFunction inside RecordService does not natively pass the $id as a separate param
         // to the custom controller method unless we modify it or merge it into the request.
         // For now, we inject it into the request so the controller can retrieve it via $request->route('id') or $request->input('id').
         $request->merge(['id' => $id]);
-        
+
         // Also ensure the route parameters are set properly if they aren't already
         $request->route()->setParameter('id', $id);
 

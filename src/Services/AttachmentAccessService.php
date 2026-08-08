@@ -24,7 +24,7 @@ class AttachmentAccessService
             return true;
         }
 
-        return [] !== $this->findRecord('sp_document_folders', $folderId, $tenantId);
+        return [] !== $this->findRecord('sp_attachment_folders', $folderId, $tenantId);
     }
 
     public function shouldValidateTargetRecords(): bool
@@ -65,7 +65,7 @@ class AttachmentAccessService
             return true;
         }
 
-        return 0 === $this->countRecords('sp_document_folders', ['parent_id' => 'eq.' . $folderId], $tenantId)
+        return 0 === $this->countRecords('sp_attachment_folders', ['parent_id' => 'eq.' . $folderId], $tenantId)
             && 0 === $this->countRecords('sp_attachments', ['folder_id' => 'eq.' . $folderId], $tenantId);
     }
 

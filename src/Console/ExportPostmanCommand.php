@@ -10,7 +10,7 @@ use Sopheak\Core\Services\ApiClient\PostmanEmitter;
 class ExportPostmanCommand extends AbstractExportCommand
 {
     protected $signature = 'sp-laravel-api:export-postman
-                            {--output= : Output file path. Defaults to api-clients/postman/collection.json (relative to project root).}
+                            {--output= : Output file path. Defaults to api-client/postman/collection.json (relative to project root).}
                             {--regen= : Comma-separated table keys to regenerate, or "all". Tables not listed are skipped if already in the collection.}
                             {--dry-run : Print the diff summary; do not write the file.}';
 
@@ -23,7 +23,7 @@ class ExportPostmanCommand extends AbstractExportCommand
 
     protected function defaultOutputPath(): string
     {
-        return 'api-clients/postman/collection.json';
+        return 'api-client/postman/collection.json';
     }
 
     protected function formatName(): string

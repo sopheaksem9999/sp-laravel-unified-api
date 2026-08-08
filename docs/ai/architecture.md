@@ -1,3 +1,14 @@
+---
+title: "Architecture"
+description: "Architecture overview covering MCP endpoints, schema tools, and API client exporters."
+keywords:
+  - architecture
+  - mcp
+  - exporters
+  - bruno
+  - postman
+---
+
 # Architecture
 
 ## MCP (Model Context Protocol)
@@ -28,8 +39,8 @@ The package provides two MCP endpoints via a single `McpServerService`:
 Two Artisan commands turn the OpenAPI spec into ready-to-use API client collections with diff-aware updates.
 
 ### Commands
-- `sp-laravel-api:export-bruno` → `api-clients/bruno/collection.bru` (Bruno v3)
-- `sp-laravel-api:export-postman` → `api-clients/postman/collection.json` (Postman v2.1)
+- `sp-laravel-api:export-bruno` → `api-client/bruno` (Bruno collection folder with sub-folders for each table)
+- `sp-laravel-api:export-postman` → `api-client/postman/collection.json` (Postman v2.1)
 
 Both commands are thin shells over `AbstractExportCommand` (the only differences are the emitter, default output path, and format name).
 
@@ -37,8 +48,8 @@ Both commands are thin shells over `AbstractExportCommand` (the only differences
 1. `SchemaRegistryUtils::refresh()` — ensure the cached table list is current
 2. `OpenApiService::generateInternal()` — produces the live OpenAPI spec
 3. `ApiClientExportService::build(spec, existing, regenKeys, emitter)` — produces an `ExportResult` (4 buckets: `added`, `regenerated`, `skipped`, `suggestions`)
-4. `ApiClientEmitterInterface::render(ExportResult)` — converts the result to the target format's on-disk representation
-5. `json_encode(...)` → `file_put_contents(...)`
+4. `ApiClientEmitterInterface::render(ExportResult)` — converts the result to the target format's on-disk representation (multi-file map for Bruno, single JSON array for Postman)
+5. Write files to output folder/path on disk
 
 ### Key design points
 - **Diff-aware**: the service asks each emitter to enumerate the request names already on disk via `extractRequestNames(?array)`. This keeps the diff logic in the service and lets each emitter parse its own disk format.

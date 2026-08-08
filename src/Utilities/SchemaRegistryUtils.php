@@ -157,6 +157,7 @@ class SchemaRegistryUtils
     public static function refresh(): void
     {
         self::$cache = [];
+        RecordConfigService::flushConfigFileCache();
         RelationshipResolverUtils::clearSchemaCache();
         QueryBuilderFiltersUtils::clearColumnCache();
     }
@@ -166,6 +167,7 @@ class SchemaRegistryUtils
         self::$cache = [];
         self::$uniqueColumnsCache = [];
         self::$foreignKeysCache = [];
+        RecordConfigService::flushConfigFileCache();
         RelationshipResolverUtils::clearSchemaCache();
         QueryBuilderFiltersUtils::clearColumnCache();
     }
@@ -252,6 +254,45 @@ class SchemaRegistryUtils
 
         // Existing config wins on key conflicts.
         $existingConfig->functions = array_merge($attributeFunctions, $existingFunctions);
+    }
+
+    /**
+     * Detect whether a column definition is uuid-typed across supported drivers.
+     *
+     * - a hand-written config declares the type as 'uuid'
+     * - pgsql reports the native 'uuid' type (also visible via udt_name)
+     * - mysql reports 'char(36)' / 'varchar(36)'
+     *
+     * Deliberately driver-independent: the answer depends only on the column
+     * definition, so every driver gets the same one. An earlier revision added
+     * an sqlite-only branch treating any bare 'varchar'/'char' as a uuid,
+     * because SQLite's PRAGMA reports uuid() columns that way. It could not
+     * tell a uuid PK from a natural string PK — a table registered without
+     * declared `columns`, keyed by e.g. string('sku')->primary(), introspects
+     * as 'varchar' — so createRecord silently overwrote that natural key with a
+     * generated uuid. The branch is gone; declare 'uuid' in the table's
+     * `columns` to get key generation.
+     *
+     * Shared by every write path that must supply a primary key value the
+     * database has no default for: RecordService::createRecord and the nested
+     * create in RelationshipResolverUtils. Keeping one implementation is the
+     * point — the two paths must not disagree about what a uuid column is.
+     *
+     * @param array<string, mixed>|null $colDef
+     */
+    public static function isUuidColumnType(?array $colDef): bool
+    {
+        if ($colDef === null) {
+            return false;
+        }
+
+        $type = strtolower((string) ($colDef['type'] ?? ''));
+
+        if ('uuid' === $type || 'uuid' === strtolower((string) ($colDef['udt_name'] ?? ''))) {
+            return true;
+        }
+
+        return preg_match('/^(char|varchar)\(36\)$/', $type) === 1;
     }
 
     /**

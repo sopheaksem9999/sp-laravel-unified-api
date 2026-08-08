@@ -65,7 +65,7 @@ class AttributeDiscoveryService
                 foreach ($method->getAttributes(RecordFunction::class) as $attrRef) {
                     /** @var RecordFunction $functionAttr */
                     $functionAttr = $attrRef->newInstance();
-                    
+
                     if ($functionAttr->table === null) {
                         continue;
                     }
@@ -90,6 +90,7 @@ class AttributeDiscoveryService
                         pmsName: $functionAttr->pmsName,
                         disableCache: $functionAttr->disableCache,
                         cacheTTL: $functionAttr->cacheTTL,
+                        displayName: $functionAttr->displayName,
                         description: $functionAttr->description,
                         querySchema: $functionAttr->querySchema,
                         payloadSchema: $functionAttr->payloadSchema,
@@ -128,6 +129,7 @@ class AttributeDiscoveryService
                         pmsName: $functionAttr->pmsName,
                         disableCache: $functionAttr->disableCache,
                         cacheTTL: $functionAttr->cacheTTL,
+                        displayName: $functionAttr->displayName,
                         description: $functionAttr->description,
                         querySchema: $functionAttr->querySchema,
                         payloadSchema: $functionAttr->payloadSchema,
@@ -421,6 +423,7 @@ class AttributeDiscoveryService
                     pmsName: $functionAttr->pmsName,
                     disableCache: $functionAttr->disableCache,
                     cacheTTL: $functionAttr->cacheTTL,
+                    displayName: $functionAttr->displayName,
                     description: $functionAttr->description,
                     querySchema: $functionAttr->querySchema,
                     payloadSchema: $functionAttr->payloadSchema,
@@ -446,6 +449,7 @@ class AttributeDiscoveryService
         array|string|null $pmsName,
         bool $disableCache,
         ?int $cacheTTL,
+        ?string $displayName,
         ?string $description,
         ?array $querySchema,
         ?array $payloadSchema,
@@ -461,6 +465,7 @@ class AttributeDiscoveryService
             pmsName: $pmsName,
             disableCache: $disableCache,
             cacheTTL: $cacheTTL,
+            name: $displayName,
             description: $description ?? sprintf('Attribute function: %s', $name),
             querySchema: $querySchema,
             payloadSchema: $payloadSchema,

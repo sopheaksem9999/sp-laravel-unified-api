@@ -59,7 +59,7 @@ use Closure;
  *             type: 'class',
  *             class: 'App\\Services\\UserService',
  *             functionName: 'getFullName',
- *             httpMethod: ['GET'],
+ *             httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
  *             description: 'Get the full name of the user'
  *         ),
  *
@@ -68,7 +68,7 @@ use Closure;
  *             'type' => 'class',
  *             'class' => 'App\\Services\\UserStatsService',
  *             'functionName' => 'calculate',
- *             'httpMethod' => ['POST'],
+ *             'httpMethod' => [\Sopheak\Core\Enums\RecordFunctionMethodEnum::POST->value],
  *             'required_params' => ['period'],
  *             'description' => 'Calculate user statistics'
  *         ],
@@ -77,7 +77,7 @@ use Closure;
  *         'getActiveUsers' => new RecordFunctionType(
  *             type: 'query',
  *             query: 'SELECT * FROM users WHERE active = 1 AND created_at >= ::since',
- *             httpMethod: ['GET'],
+ *             httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
  *             required_params: ['since'],
  *             description: 'Get active users since a specific date'
  *         ),

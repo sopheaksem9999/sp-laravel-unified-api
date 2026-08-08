@@ -4,11 +4,10 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Services;
 
+use InvalidArgumentException;
 use Throwable;
 use Sopheak\Core\Jobs\AuditLogJob;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
-use Sopheak\Core\Types\RecordTableType;
+use Sopheak\Core\Support\RecordConfigLoader;
 
 class RecordConfigService
 {
@@ -25,6 +24,39 @@ class RecordConfigService
     public static function tenantColumnType(): string
     {
         return (string) config('record.tenant_column_type', 'string');
+    }
+
+    /**
+     * Primary key type for the bundled sp_permissions and sp_roles tables.
+     *
+     * Config is a system boundary, so an unrecognized value fails loudly here
+     * rather than silently falling back to integer, which would be expensive
+     * to discover once tables are already migrated.
+     *
+     * @throws InvalidArgumentException when the configured value is not
+     *                                  'uuid' or 'integer'
+     */
+    public static function idType(): string
+    {
+        $configured = config('record.id_type') ?? 'integer';
+
+        if (!is_string($configured)) {
+            throw new InvalidArgumentException(sprintf(
+                'record.id_type must be "uuid" or "integer", got %s',
+                get_debug_type($configured)
+            ));
+        }
+
+        $normalized = strtolower(trim($configured));
+
+        if (!in_array($normalized, ['uuid', 'integer'], true)) {
+            throw new InvalidArgumentException(sprintf(
+                'record.id_type must be "uuid" or "integer", got "%s"',
+                $configured
+            ));
+        }
+
+        return $normalized;
     }
 
     public static function tenantHeader(): string
@@ -303,25 +335,11 @@ class RecordConfigService
      */
     private static function tableConfigFiles(): array
     {
-        $directory = config_path(self::tableConfigPath());
-        if (!is_dir($directory)) {
+        if ((bool) config('record.autoloaded', false)) {
             return [];
         }
 
-        $tables = [];
-        foreach (self::phpFilesInDirectory($directory) as $path) {
-            $config = require $path;
-            if ($config instanceof RecordTableType) {
-                $tables[pathinfo($path, PATHINFO_FILENAME)] = $config;
-                continue;
-            }
-
-            if (is_array($config)) {
-                $tables = array_merge($tables, $config);
-            }
-        }
-
-        return $tables;
+        return RecordConfigLoader::tables(config_path(self::tableConfigPath()));
     }
 
     /**
@@ -329,39 +347,30 @@ class RecordConfigService
      */
     private static function globalFunctionConfigFiles(): array
     {
-        $functions = [];
-        foreach (self::globalFunctionConfigDirectories() as $directory) {
-            if (!is_dir($directory)) {
-                continue;
-            }
-
-            foreach (self::phpFilesInDirectory($directory) as $path) {
-                $config = require $path;
-                if (!is_array($config)) {
-                    continue;
-                }
-
-                $group = pathinfo($path, PATHINFO_FILENAME);
-                foreach ($config as $functionName => $functionConfig) {
-                    if (!is_string($functionName)) {
-                        continue;
-                    }
-
-                    if ($functionName === '') {
-                        continue;
-                    }
-
-                    $normalizedFunctionName = ltrim($functionName, '/');
-                    $prefixedFunctionName = str_contains($normalizedFunctionName, '/')
-                        ? $normalizedFunctionName
-                        : $group . '/' . $normalizedFunctionName;
-
-                    $functions[$prefixedFunctionName] = $functionConfig;
-                }
-            }
+        if ((bool) config('record.autoloaded', false)) {
+            return [];
         }
 
-        return $functions;
+        return RecordConfigLoader::globalFunctions(...self::globalFunctionConfigDirectories());
+    }
+
+    /**
+     * The two accepted spellings of the global-function config directory,
+     * relative to a config/ directory.
+     *
+     * Single source of truth for both call sites that need this list:
+     * globalFunctionConfigDirectories() below maps these onto config_path()
+     * for the runtime scan, and config/sp-record.php maps the same list onto
+     * __DIR__ for the config-cache-friendly autoloaded scan. Add or remove a
+     * spelling here only -- editing either call site's own hardcoded list
+     * would let the two drift apart silently, since config/sp-record.php is
+     * publish-only and no test exercises it directly.
+     *
+     * @return string[]
+     */
+    public static function globalFunctionDirectoryNames(): array
+    {
+        return ['records/globalFunctions', 'records/global-functions'];
     }
 
     /**
@@ -369,35 +378,20 @@ class RecordConfigService
      */
     private static function globalFunctionConfigDirectories(): array
     {
-        return [
-            config_path('records/globalFunctions'),
-            config_path('records/global-functions'),
-        ];
+        return array_map(config_path(...), self::globalFunctionDirectoryNames());
     }
 
     /**
-     * @return string[]
+     * Clear the memoized table/global-function directory scans.
+     *
+     * RecordConfigLoader is an implementation detail of this service; callers
+     * that need to bust its cache (e.g. SchemaRegistryUtils's test-hygiene
+     * and runtime-refresh sweep) go through here rather than reaching into
+     * Support directly.
      */
-    private static function phpFilesInDirectory(string $directory): array
+    public static function flushConfigFileCache(): void
     {
-        $files = [];
-        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory));
-
-        foreach ($iterator as $file) {
-            if (!$file->isFile()) {
-                continue;
-            }
-
-            if ($file->getExtension() !== 'php') {
-                continue;
-            }
-
-            $files[] = $file->getPathname();
-        }
-
-        sort($files);
-
-        return $files;
+        RecordConfigLoader::flush();
     }
 
     public static function subqueryOptimizationMaxRecords(): int

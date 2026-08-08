@@ -10,24 +10,35 @@ use Illuminate\Support\Facades\RateLimiter;
 use Throwable;
 use RuntimeException;
 use Illuminate\Console\Command;
+use Sopheak\Core\Config\ConfigNamespaceBridge;
 
 class SetupPackageCommand extends Command
 {
-    protected $signature = 'sp-laravel-api:setup {--force : Overwrite existing configs}';
+    protected $signature = 'sp-laravel-api:setup {--force : Overwrite existing config files, including publishing packaged defaults over old-named ones}';
 
-    protected $description = 'Setup SP Laravel API package: publish configs and create record/audit configurations using config/record.php + config/records/tables/*.php + config/records/global-functions/*.php.';
+    protected $description = 'Setup SP Laravel API package: publish configs and create record/audit configurations using config/sp-record.php + config/records/tables/*.php + config/records/global-functions/*.php.';
 
     public function handle(): int
     {
         $this->info('Setting up SP Laravel API package...');
         $this->newLine();
 
+        $force = (bool) $this->option('force');
+
+        if (!$this->guardAgainstShadowingOldNamedConfigFiles($force)) {
+            return self::FAILURE;
+        }
+
         // Publish package config
         $this->line('📦 Publishing package configurations...');
         try {
+            // --force follows the command's own flag rather than being pinned
+            // on: publishing the package's packaged defaults over a client's
+            // customized config is destructive, and this command is the one
+            // the setup docs tell people to run.
             $this->call('vendor:publish', [
                 '--tag' => 'sp-laravel-api-config',
-                '--force' => true,
+                '--force' => $force,
             ]);
             $this->info('✅ Package configurations published successfully.');
         } catch (Throwable $throwable) {
@@ -36,7 +47,6 @@ class SetupPackageCommand extends Command
         }
 
         $this->newLine();
-        $force = (bool) $this->option('force');
 
         $this->line('🔧 Creating application configuration files...');
         $created = 0;
@@ -44,13 +54,45 @@ class SetupPackageCommand extends Command
         try {
             $this->ensureDirectory('config/records/tables');
             $this->ensureDirectory('config/records/global-functions');
+            $this->ensureDirectory('app/Record/Validators');
             $created += $this->ensureFile('config/records/tables/README.md', $this->defaultRecordTablesReadme(), $force);
+            // Static-method class reference, not a Closure: config/sp-record.php ships
+            // with 'autoloaded' => true, which evaluates this file's RecordTableType
+            // while the config file itself is being merged, so it must survive
+            // php artisan config:cache. var_export() cannot serialize a Closure; a
+            // [ClassName::class, 'method'] array of strings survives unchanged, but
+            // the method it names must be `public static` -- HasControllerHelpers
+            // invokes it as a plain PHP callable, which is only resolvable without
+            // an object instance (i.e. is_callable() only returns true) when the
+            // method is static.
+            $created += $this->ensureFile('app/Record/Validators/UserValidator.php', $this->defaultUserValidatorClass(), $force);
             $created += $this->ensureFile('config/records/tables/users.php', $this->defaultUsersTableConfig(), $force);
             $created += $this->ensureFile('config/records/global-functions/README.md', $this->defaultRecordGlobalFunctionsReadme(), $force);
-            $created += $this->ensureFile('config/record.php', $this->defaultRecordConfig(), $force);
-            $created += $this->ensureFile('config/audit.php', $this->defaultAuditConfig(), $force);
-            $created += $this->ensureFile('config/attachments.php', $this->defaultAttachmentsConfig(), $force);
-            $created += $this->ensureFile('config/webhooks.php', $this->defaultWebhooksConfig(), $force);
+            // sp-* names: the package ships and reads these under the canonical
+            // namespaces regardless, and scaffolding the old unprefixed names
+            // would trip the package's own config-rename deprecation notice.
+            //
+            // These four are NEVER force-overwritten, whatever --force says.
+            // vendor:publish above already emits all four, so by the time we
+            // get here the file on disk is the package's full packaged config.
+            // Forcing the scaffold over it would replace the ~540-line
+            // config/sp-record.php — `autoloaded` flag, RecordConfigLoader
+            // calls and all — with a ~207-line minimal file that has neither,
+            // silently switching off config:cache baking of table configs, and
+            // would leave a state that is neither the packaged defaults nor
+            // the client's own config: keys the scaffold omits (id_type, for
+            // one) survive from wherever they were, keys it sets get the
+            // scaffold's value. --force means "the packaged defaults win",
+            // and the packaged defaults are what vendor:publish just wrote.
+            //
+            // They stay here as a fallback for the one case that still needs
+            // them: the file is genuinely absent after publishing (a client
+            // who deleted it, or a publish that produced nothing).
+            $publishedByVendorPublish = false;
+            $created += $this->ensureFile('config/sp-record.php', $this->defaultRecordConfig(), $publishedByVendorPublish);
+            $created += $this->ensureFile('config/sp-audit.php', $this->defaultAuditConfig(), $publishedByVendorPublish);
+            $created += $this->ensureFile('config/sp-attachments.php', $this->defaultAttachmentsConfig(), $publishedByVendorPublish);
+            $created += $this->ensureFile('config/sp-webhooks.php', $this->defaultWebhooksConfig(), $publishedByVendorPublish);
             $created += $this->ensureAppServiceProviderRateLimiters();
         } catch (Throwable $throwable) {
             $this->error('❌ Failed to create configuration files: ' . $throwable->getMessage());
@@ -74,6 +116,68 @@ class SetupPackageCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Refuse to publish `sp-*.php` on top of a still-present old-named config.
+     *
+     * Publishing writes the package's packaged DEFAULTS to the new name, and
+     * ConfigNamespaceBridge::adopt() gives the new name precedence over the old
+     * one for every key both files set. So on a client who has customized
+     * `config/record.php` and not yet migrated, publishing silently reverts
+     * their settings to the packaged defaults — `api_prefix` back to `api/v1`,
+     * `id_type` back to `integer` — while `config/record.php` stays
+     * byte-identical on disk. There is nothing in `git diff` to see, no error,
+     * and this command even prints "Skipped (exists)" for the old file. The
+     * only safe move is not to create that state.
+     *
+     * @return bool false when the caller must abort without publishing
+     */
+    private function guardAgainstShadowingOldNamedConfigFiles(bool $force): bool
+    {
+        $oldNamed = ConfigNamespaceBridge::deprecatedFiles();
+
+        if ($oldNamed === []) {
+            return true;
+        }
+
+        $this->newLine();
+        $this->warn('⚠️  Old-named package config files are still present in config/:');
+        $this->newLine();
+
+        foreach ($oldNamed as $old => $new) {
+            $this->line(sprintf('    config/%s  →  config/%s', $old, $new));
+        }
+
+        $this->newLine();
+        $this->line("Publishing writes the package's packaged DEFAULTS to the sp-* names, and an");
+        $this->line('sp-* file takes precedence over its old-named counterpart for every key both');
+        $this->line('set. Your customizations would stop taking effect while the old file stays');
+        $this->line('byte-identical on disk — no diff, no error, nothing to notice.');
+        $this->newLine();
+        $this->line('Rename your existing files instead, then re-run this command:');
+        $this->newLine();
+
+        foreach ($oldNamed as $old => $new) {
+            $this->line(sprintf('    git mv config/%s config/%s', $old, $new));
+        }
+
+        $this->newLine();
+
+        if ($force) {
+            $this->warn('--force given: publishing packaged defaults over the names above anyway.');
+            $this->warn('Copy anything you still need out of the old files before the next boot.');
+            $this->newLine();
+
+            return true;
+        }
+
+        $this->error('❌ Aborted without publishing or creating anything.');
+        $this->line('   Re-run with --force only if you really want the packaged defaults to win:');
+        $this->line("   it publishes the package's own sp-* files verbatim and leaves the");
+        $this->line('   old-named files on disk, superseded.');
+
+        return false;
     }
 
     private function ensureAppServiceProviderRateLimiters(): int
@@ -285,7 +389,7 @@ class SetupPackageCommand extends Command
         return <<<'MD'
             # Record Table Configs
 
-            Put table config files in this folder to keep `config/record.php` clean.
+            Put table config files in this folder to keep `config/sp-record.php` clean.
 
             ## Rules
 
@@ -301,9 +405,7 @@ class SetupPackageCommand extends Command
             ```php
             <?php
 
-            use Illuminate\Http\Request;
-            use Illuminate\Contracts\Validation\Validator as ValidatorContract;
-            use Illuminate\Support\Facades\Validator;
+            use App\Record\Validators\CustomerValidator;
             use Sopheak\Core\Types\RecordTableType;
 
             return new RecordTableType(
@@ -314,13 +416,42 @@ class SetupPackageCommand extends Command
                 relationships: [],
                 softDeletes: true,
                 hasTenantId: false,
-                createValidator: function (Request $request, ?int $id = null): ValidatorContract {
+                createValidator: [CustomerValidator::class, 'createCustomer'],
+            );
+            ```
+
+            `config/sp-record.php` ships with `'autoloaded' => true`, which evaluates
+            every file in this directory while the config file itself is being merged
+            -- so its content must survive `php artisan config:cache`. Avoid Closures
+            here (`var_export()` cannot serialize one); reference a `public static`
+            method on a class instead, e.g.:
+
+            ```php
+            <?php
+
+            declare(strict_types=1);
+
+            namespace App\Record\Validators;
+
+            use Illuminate\Contracts\Validation\Validator as ValidatorContract;
+            use Illuminate\Http\Request;
+            use Illuminate\Support\Facades\Validator;
+
+            class CustomerValidator
+            {
+                public static function createCustomer(Request $request, int|string|null $id = null): ValidatorContract
+                {
                     return Validator::make($request->all(), [
                         'name' => 'required|string|max:255',
                     ]);
-                },
-            );
+                }
+            }
             ```
+
+            The method must be `public static`: the package invokes a
+            `[ClassName::class, 'method']` reference as a plain PHP callable, and
+            `is_callable()` only resolves that array form without an object
+            instance when the method is static.
 
             ## Example (multiple tables in one file)
 
@@ -367,11 +498,12 @@ class SetupPackageCommand extends Command
             ```php
             <?php
 
+            use Sopheak\Core\Enums\RecordFunctionMethodEnum;
             use Sopheak\Core\Types\RecordFunctionType;
 
             return [
                 'login' => new RecordFunctionType(
-                    httpMethod: ['POST'],
+                    httpMethod: [RecordFunctionMethodEnum::POST->value],
                     class: \App\Services\AuthService::class,
                     functionName: 'login',
                     description: 'Login',
@@ -386,10 +518,14 @@ class SetupPackageCommand extends Command
         return <<<'PHP'
             <?php
 
-            use Illuminate\Http\Request;
-            use Illuminate\Contracts\Validation\Validator;
+            use App\Record\Validators\UserValidator;
             use Sopheak\Core\Types\RecordTableType;
 
+            // Validators are [ClassName::class, 'method'] references, not Closures:
+            // config/sp-record.php ships with 'autoloaded' => true, which evaluates
+            // this file while the config file itself is being merged, so its content
+            // must survive `php artisan config:cache` (var_export() cannot serialize
+            // a Closure). See app/Record/Validators/UserValidator.php.
             return new RecordTableType(
                 pmsName: 'user',
                 table: 'users',
@@ -399,20 +535,66 @@ class SetupPackageCommand extends Command
                 functions: [],
                 softDeletes: false,
                 hasTenantId: false,
-                createValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make($request->all(), [
-                    'name' => 'required|string|max:255',
-                    'email' => 'required|email',
-                    'password' => 'required|string|min:8',
-                ]),
-                updateValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make($request->all(), [
-                    'name' => 'sometimes|required|string|max:255',
-                    'email' => 'sometimes|required|email',
-                    'password' => 'sometimes|required|string|min:8',
-                ]),
-                deleteValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make(['id' => $id], [
-                    'id' => 'required|integer',
-                ]),
+                createValidator: [UserValidator::class, 'createUser'],
+                updateValidator: [UserValidator::class, 'updateUser'],
+                deleteValidator: [UserValidator::class, 'deleteUser'],
             );
+            PHP;
+    }
+
+    private function defaultUserValidatorClass(): string
+    {
+        return <<<'PHP'
+            <?php
+
+            declare(strict_types=1);
+
+            namespace App\Record\Validators;
+
+            use Illuminate\Contracts\Validation\Validator as ValidatorContract;
+            use Illuminate\Http\Request;
+            use Illuminate\Support\Facades\Validator;
+
+            /**
+             * Referenced from config/records/tables/users.php as
+             * [UserValidator::class, 'createUser'] etc. Methods must stay `public
+             * static`: the package invokes that array as a plain callable, and
+             * `is_callable()` only resolves a [Class, 'method'] array without an
+             * object instance when the method is static. config/sp-record.php's
+             * 'autoloaded' scan also requires the table config (including this
+             * reference) to survive `php artisan config:cache`, which a Closure
+             * cannot.
+             */
+            class UserValidator
+            {
+                public static function createUser(Request $request, int|string|null $id = null): ValidatorContract
+                {
+                    return Validator::make($request->all(), [
+                        'name' => 'required|string|max:255',
+                        'email' => 'required|email',
+                        'password' => 'required|string|min:8',
+                    ]);
+                }
+
+                public static function updateUser(Request $request, int|string|null $id = null): ValidatorContract
+                {
+                    return Validator::make($request->all(), [
+                        'name' => 'sometimes|required|string|max:255',
+                        'email' => 'sometimes|required|email',
+                        'password' => 'sometimes|required|string|min:8',
+                    ]);
+                }
+
+                public static function deleteUser(Request $request, int|string|null $id = null): ValidatorContract
+                {
+                    // Not `integer`: this package supports uuid primary keys via
+                    // record.id_type, so the scaffold cannot assume the key is
+                    // numeric. Narrow this to match your own table's key type.
+                    return Validator::make(['id' => $id], [
+                        'id' => 'required',
+                    ]);
+                }
+            }
             PHP;
     }
 
@@ -762,19 +944,19 @@ class SetupPackageCommand extends Command
                             'stats' => new \Sopheak\Core\Types\RecordFunctionType(
                                 class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
                                 functionName: 'getStats',
-                                httpMethod: ['GET'],
+                                httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
                                 description: 'Get audit statistics'
                             ),
                             'field-timeline/{entityType}/{entityId}/{field}' => new \Sopheak\Core\Types\RecordFunctionType(
                                 class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
                                 functionName: 'getFieldTimeline',
-                                httpMethod: ['GET'],
+                                httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
                                 description: 'Get field timeline'
                             ),
                             'field-stats/{entityType}/{entityId}/{field}' => new \Sopheak\Core\Types\RecordFunctionType(
                                 class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
                                 functionName: 'getFieldStats',
-                                httpMethod: ['GET'],
+                                httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
                                 description: 'Get field statistics'
                             ),
                         ]
@@ -786,11 +968,31 @@ class SetupPackageCommand extends Command
 
     private function defaultWebhooksConfig(): string
     {
-        return file_get_contents(__DIR__ . '/../../config/webhooks.php') ?: "<?php\n\nreturn [];";
+        return $this->shippedConfig('sp-webhooks.php');
     }
 
     private function defaultAttachmentsConfig(): string
     {
-        return file_get_contents(__DIR__ . '/../../config/attachments.php') ?: "<?php\n\nreturn [];";
+        return $this->shippedConfig('sp-attachments.php');
+    }
+
+    /**
+     * Read one of the package's own shipped config files verbatim.
+     *
+     * Throws rather than falling back to an empty config: a falsy read means
+     * the shipped file moved or is unreadable, and silently scaffolding
+     * `<?php return [];` into a client's application would hand them a
+     * working-looking but empty config.
+     */
+    private function shippedConfig(string $filename): string
+    {
+        $path = __DIR__ . '/../../config/' . $filename;
+        $contents = is_file($path) ? file_get_contents($path) : false;
+
+        if ($contents === false || $contents === '') {
+            throw new RuntimeException('Failed to read packaged config file: ' . $path);
+        }
+
+        return $contents;
     }
 }

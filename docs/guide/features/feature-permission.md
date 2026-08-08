@@ -87,7 +87,8 @@ flowchart TB
 SP_PERMISSION_ENABLED=true
 ```
 
-Or in `config/permissions.php`:
+Or in `config/sp-permissions.php` (`config/permissions.php` on a project that
+has not renamed its config files yet — both load under the `permissions` key):
 
 ```php
 'enabled' => true,
@@ -96,7 +97,7 @@ Or in `config/permissions.php`:
 ### Full Config Reference
 
 ```php
-// config/permissions.php (published after php artisan vendor:publish --tag=sp-laravel-api-config)
+// config/sp-permissions.php (published after php artisan vendor:publish --tag=sp-laravel-api-config)
 return [
     'enabled'                 => env('SP_PERMISSION_ENABLED', false),
     'auto_register'           => env('SP_PERMISSION_AUTO_REGISTER', true),

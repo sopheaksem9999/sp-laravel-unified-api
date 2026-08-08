@@ -192,6 +192,89 @@ class PostmanEmitterTest extends TestCase
         $this->assertTrue($query[1]['disabled']);
     }
 
+    public function test_omits_auth_override_when_request_requires_auth(): void
+    {
+        $request = $this->req('List Users', 'GET', '/users');
+
+        $result = $this->buildResult(folders: [new ExportFolder('Users', [$request])]);
+        $output = $this->emitter->render($result);
+
+        $this->assertArrayNotHasKey('auth', $output['item'][0]['item'][0]['request']);
+    }
+
+    public function test_sets_noauth_override_when_request_does_not_require_auth(): void
+    {
+        $request = new ExportRequest(
+            name: 'List Public Products',
+            method: 'GET',
+            urlTemplate: '{{baseUrl}}{{apiPrefix}}/public_products',
+            description: 'desc',
+            pathParams: [],
+            queryParams: [],
+            headers: [],
+            requiresAuth: false,
+        );
+
+        $result = $this->buildResult(folders: [new ExportFolder('Products', [$request])]);
+        $output = $this->emitter->render($result);
+
+        $this->assertSame(['type' => 'noauth'], $output['item'][0]['item'][0]['request']['auth']);
+    }
+
+    public function test_attaches_test_event_script_to_login_request(): void
+    {
+        $request = new ExportRequest(
+            name: 'RPC - Login',
+            method: 'POST',
+            urlTemplate: '{{baseUrl}}{{apiPrefix}}/rpc/auth/login',
+            description: 'desc',
+            pathParams: [],
+            queryParams: [],
+            headers: [],
+            requiresAuth: false,
+            isLoginRequest: true,
+        );
+
+        $result = $this->buildResult(folders: [new ExportFolder('RPC - Auth', [$request])]);
+        $output = $this->emitter->render($result);
+        $item = $output['item'][0]['item'][0];
+
+        $this->assertSame('test', $item['event'][0]['listen']);
+        $script = implode("\n", $item['event'][0]['script']['exec']);
+        $this->assertStringContainsString('"access_token"', $script);
+        $this->assertStringContainsString('pm.collectionVariables.set("bearerToken", token)', $script);
+    }
+
+    public function test_uses_configured_access_token_key_in_login_test_script(): void
+    {
+        $request = new ExportRequest(
+            name: 'RPC - Login',
+            method: 'POST',
+            urlTemplate: '{{baseUrl}}{{apiPrefix}}/rpc/auth/login',
+            description: 'desc',
+            pathParams: [],
+            queryParams: [],
+            headers: [],
+            isLoginRequest: true,
+        );
+
+        $result = $this->buildResult(folders: [new ExportFolder('RPC - Auth', [$request])], accessTokenKey: 'token');
+        $output = $this->emitter->render($result);
+        $script = implode("\n", $output['item'][0]['item'][0]['event'][0]['script']['exec']);
+
+        $this->assertStringContainsString('"token"', $script);
+    }
+
+    public function test_does_not_attach_event_script_to_non_login_requests(): void
+    {
+        $request = $this->req('List Users', 'GET', '/users');
+
+        $result = $this->buildResult(folders: [new ExportFolder('Users', [$request])]);
+        $output = $this->emitter->render($result);
+
+        $this->assertArrayNotHasKey('event', $output['item'][0]['item'][0]);
+    }
+
     public function test_extracts_request_names_from_existing_postman_collection(): void
     {
         $existing = [
@@ -230,12 +313,14 @@ class PostmanEmitterTest extends TestCase
         string $baseUrl = 'http://localhost',
         string $apiPrefix = '/api/v1',
         array $folders = [],
+        string $accessTokenKey = 'access_token',
     ): ExportResult {
         return new ExportResult(
             appName: $appName,
             baseUrl: $baseUrl,
             apiPrefix: $apiPrefix,
             folders: $folders,
+            accessTokenKey: $accessTokenKey,
         );
     }
 

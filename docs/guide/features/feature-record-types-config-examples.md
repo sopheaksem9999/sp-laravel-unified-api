@@ -39,7 +39,7 @@ new RecordTableType(
     ],
     functions: [
         'publish' => new RecordFunctionType(
-            httpMethod: ['POST'],
+            httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::POST->value],
             class: \App\Http\Controllers\ProductFunctionController::class,
             functionName: 'publish',
             pmsName: 'product',
@@ -62,7 +62,7 @@ new RecordTableType(
 
 ```php
 new RecordFunctionType(
-    httpMethod: ['GET', 'POST'],
+    httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value, \Sopheak\Core\Enums\RecordFunctionMethodEnum::POST->value],
     class: \App\Http\Controllers\InvoiceFunctionController::class,
     functionName: 'calculateTotals',
     pmsName: ['invoice', 'billing'],

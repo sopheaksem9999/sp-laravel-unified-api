@@ -1,5 +1,6 @@
 <?php
 
+use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Types\RecordTableType;
 
 return [
@@ -39,7 +40,13 @@ return [
             isAuthRead: true,
             isAuthWrite: true,
             columns: [
-                'id' => ['type' => 'string', 'nullable' => false],
+                // Governed by record.id_type — see MigrationIdHelper::primary()
+                // in 2024_01_01_000001_create_sp_webhooks_tables. The declared
+                // type is what tells RecordService::createRecord to generate a
+                // key; declaring 'string' left the column with no value and no
+                // database default, so a POST without a client-supplied id
+                // failed the not-null constraint.
+                'id' => ['type' => RecordConfigService::idType() === 'uuid' ? 'uuid' : 'bigIncrements', 'nullable' => false],
                 'name' => ['type' => 'string', 'nullable' => false],
                 'url' => ['type' => 'string', 'nullable' => false],
                 'secret' => ['type' => 'string', 'nullable' => false],
@@ -55,7 +62,7 @@ return [
             isAuthRead: true,
             isAuthWrite: true,
             columns: [
-                'id' => ['type' => 'string', 'nullable' => false],
+                'id' => ['type' => RecordConfigService::idType() === 'uuid' ? 'uuid' : 'bigIncrements', 'nullable' => false],
                 'endpoint_id' => ['type' => 'string', 'nullable' => false],
                 'table_name' => ['type' => 'string', 'nullable' => false],
                 'event' => ['type' => 'string', 'nullable' => false],
@@ -70,7 +77,7 @@ return [
             isAuthRead: true,
             isAuthWrite: false, // Deliveries should be read-only via API
             columns: [
-                'id' => ['type' => 'string', 'nullable' => false],
+                'id' => ['type' => RecordConfigService::idType() === 'uuid' ? 'uuid' : 'bigIncrements', 'nullable' => false],
                 'endpoint_id' => ['type' => 'string', 'nullable' => false],
                 'event' => ['type' => 'string', 'nullable' => false],
                 'payload' => ['type' => 'json', 'nullable' => false],

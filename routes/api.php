@@ -89,7 +89,7 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
         Route::get('llms.txt', $llmsMdxResponse);
     });
 
-     /*
+    /*
     |--------------------------------------------------------------------------
     | API Schema MCP Endpoint (Schema-only Model Context Protocol)
     |--------------------------------------------------------------------------
@@ -111,7 +111,7 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
             Route::post('message', [\Sopheak\Core\Http\Controllers\McpHttpController::class, 'handlePost'])->name('mcp.message');
         });
     }
-    
+
 
     /*
     |--------------------------------------------------------------------------
@@ -169,7 +169,7 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
         Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/' . RecordConfigService::rpcPrefix() . '/{functionName}', [CoreRecordController::class, 'executeTableFunction'])
             ->where(['table' => $tableWhere, 'functionName' => '.*'])
             ->middleware(['throttle:api-functions', 'record.route.middleware:table_function']);
-            
+
         Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/{id}/' . RecordConfigService::rpcPrefix() . '/{functionName}', [CoreRecordController::class, 'executeTableFunctionWithId'])
             ->where(['table' => $tableWhere, 'id' => '.*', 'functionName' => '.*'])
             ->middleware(['throttle:api-functions', 'record.route.middleware:table_function']);
@@ -177,7 +177,7 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
         Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/{functionName}', [CoreRecordController::class, 'executeTableFunction'])
             ->where(['table' => $tableWhere, 'functionName' => '(?!(?:upsert$|bulk(?:/|$)))(?!\d+$).+'])
             ->middleware(['throttle:api-functions', 'record.route.middleware:table_function']);
-            
+
         Route::match(['get', 'post', 'put', 'patch', 'delete'], '{table}/{id}/{functionName}', [CoreRecordController::class, 'executeTableFunctionWithId'])
             ->where(['table' => $tableWhere, 'id' => '[a-zA-Z0-9_\-]+', 'functionName' => '(?!(?:restore$|force$)).+'])
             ->middleware(['throttle:api-functions', 'record.route.middleware:table_function']);

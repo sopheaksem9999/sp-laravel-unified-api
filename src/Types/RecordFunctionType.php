@@ -18,6 +18,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  * @property array|string       $httpMethod      Allowed HTTP methods (GET, POST, PUT, DELETE, etc.)
  * @property string             $class           Class name for class-based functions (required)
  * @property string             $functionName Method name for class-based functions (required)
+ * @property null|string        $name            Display name for OpenAPI summary generation (optional; falls back to $description, then a humanized function key, when empty)
  * @property null|string        $description     Function description for documentation purposes
  *
  * @since 1.0.0
@@ -29,7 +30,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  * // Public function (no pmsName)
  * $publicFunction = new RecordFunctionType(
  *     pmsName: null,
- *     httpMethod: 'POST',
+ *     httpMethod: RecordFunctionMethodEnum::POST->value,
  *     class: 'App\\Services\\AuthService',
  *     functionName: 'login',
  *     disableCache: false,
@@ -39,7 +40,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  * // Class-based function for business logic
  * $classFunction = new RecordFunctionType(
  *     pmsName: 'calculate_total',
- *     httpMethod: ['POST'],
+ *     httpMethod: [RecordFunctionMethodEnum::POST->value],
  *     class: 'App\\Services\\CalculationService',
  *     functionName: 'calculateTotal',
  *     disableCache: false,
@@ -49,7 +50,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  * // Simple GET endpoint
  * $getFunction = new RecordFunctionType(
  *     pmsName: 'get_status',
- *     httpMethod: 'GET',
+ *     httpMethod: RecordFunctionMethodEnum::GET->value,
  *     class: 'App\\Services\\StatusService',
  *     functionName: 'getStatus',
  *     disableCache: false,
@@ -59,7 +60,12 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  * // Multiple HTTP methods supported
  * $crudFunction = new RecordFunctionType(
  *     pmsName: 'manage_records',
- *     httpMethod: ['GET', 'POST', 'PUT', 'DELETE'],
+ *     httpMethod: [
+ *         RecordFunctionMethodEnum::GET->value,
+ *         RecordFunctionMethodEnum::POST->value,
+ *         RecordFunctionMethodEnum::PUT->value,
+ *         RecordFunctionMethodEnum::DELETE->value,
+ *     ],
  *     class: 'App\\Services\\RecordManagementService',
  *     functionName: 'handleRequest',
  *     disableCache: false,
@@ -69,7 +75,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  * // Multiple permissions (user needs at least one)
  * $multiPermissionFunction = new RecordFunctionType(
  *     pmsName: ['create_employeeRoster', 'update_employeeRoster'],
- *     httpMethod: ['POST'],
+ *     httpMethod: [RecordFunctionMethodEnum::POST->value],
  *     class: 'App\\Http\\Controllers\\EmployeeRosterController',
  *     functionName: 'upsertEmployeeRosters',
  *     disableCache: false,
@@ -85,6 +91,7 @@ class RecordFunctionType
      * @param array|string|RecordFunctionMethodEnum $httpMethod      Allowed HTTP methods (e.g., 'GET', ['GET', 'POST'])
      * @param string       $class           Class name for class-based functions (required)
      * @param string       $functionName Method name for class-based functions (required)
+     * @param null|string  $name            Display name for OpenAPI summary generation (optional; falls back to $description, then a humanized function key, when empty)
      * @param null|string  $description     Function description for documentation purposes
      * @param array|string|null $pmsName   The PMS name identifier(s) for this function (optional, null for public)
      * @param bool $isPublic Whether the function is public (default: false)
@@ -105,6 +112,7 @@ class RecordFunctionType
         public array|string|null $pmsName = null,
         public bool $disableCache = false,
         public ?int $cacheTTL = null,
+        public ?string $name = null,
         public ?string $description = null,
         public ?array $querySchema = null,
         public ?array $payloadSchema = null,
@@ -151,6 +159,7 @@ class RecordFunctionType
             pmsName: $properties['pmsName'] ?? null,
             disableCache: $properties['disableCache'] ?? false,
             cacheTTL: $properties['cacheTTL'] ?? null,
+            name: $properties['name'] ?? null,
             description: $properties['description'] ?? null,
             querySchema: $properties['querySchema'] ?? null,
             payloadSchema: $properties['payloadSchema'] ?? null,
@@ -179,6 +188,10 @@ class RecordFunctionType
             'clearCacheTables' => $this->clearCacheTables,
             'middleware' => $this->middleware,
         ];
+
+        if (null !== $this->name) {
+            $config['name'] = $this->name;
+        }
 
         if (null !== $this->description) {
             $config['description'] = $this->description;
@@ -215,7 +228,7 @@ class RecordFunctionType
      * ```php
      * $config = [
      *     'pmsName' => 'user_report',
-     *     'httpMethod' => ['GET', 'POST'],
+     *     'httpMethod' => [RecordFunctionMethodEnum::GET->value, RecordFunctionMethodEnum::POST->value],
      *     'class' => 'App\\Services\\UserReportService',
      *     'functionName' => 'generateReport',
      *     'description' => 'Generate user reports'
@@ -233,6 +246,7 @@ class RecordFunctionType
             pmsName: $config['pmsName'] ?? null,
             disableCache: $config['disableCache'] ?? false,
             cacheTTL: $config['cacheTTL'] ?? null,
+            name: $config['name'] ?? null,
             description: $config['description'] ?? null,
             querySchema: $config['querySchema'] ?? null,
             payloadSchema: $config['payloadSchema'] ?? null,

@@ -12,6 +12,5 @@ class ExportFolder
     public function __construct(
         public readonly string $name,
         public readonly array $requests = [],
-    ) {
-    }
+    ) {}
 }

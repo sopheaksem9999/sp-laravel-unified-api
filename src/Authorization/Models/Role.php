@@ -5,14 +5,18 @@ declare(strict_types=1);
 namespace Sopheak\Core\Authorization\Models;
 
 use RuntimeException;
+use Sopheak\Core\Authorization\Models\Pivots\RolePermissionPivot;
 use Sopheak\Core\Authorization\PermissionRegistrar;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Str;
+use Sopheak\Core\Authorization\Traits\HasConfigurableKey;
 use Sopheak\Core\Services\RecordConfigService;
 
 class Role extends Model
 {
+    use HasConfigurableKey;
+
     protected $table = 'sp_roles';
 
     protected $fillable = [
@@ -100,7 +104,7 @@ class Role extends Model
             'sp_role_permissions',
             'role_id',
             'permission_id'
-        );
+        )->using(RolePermissionPivot::class);
     }
 
     public function hasPermissionTo(string $permission): bool

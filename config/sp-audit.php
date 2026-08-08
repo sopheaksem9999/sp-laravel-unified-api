@@ -241,11 +241,11 @@ return [
             canDelete: false,
             canUpsert: false,
             columns: [
-                'id' => ['type' => 'integer', 'nullable' => false],
+                'id' => ['type' => \Sopheak\Core\Services\RecordConfigService::idType() === 'uuid' ? 'uuid' : 'bigIncrements', 'nullable' => false],
                 'entity_name' => ['type' => 'string', 'nullable' => true],
                 'entity_type' => ['type' => 'string', 'nullable' => true],
-                'entity_id' => ['type' => 'integer', 'nullable' => true],
-                'user_id' => ['type' => 'integer', 'nullable' => true],
+                'entity_id' => ['type' => 'string', 'nullable' => true],
+                'user_id' => ['type' => 'string', 'nullable' => true],
                 'event' => ['type' => 'string', 'nullable' => true],
                 'title' => ['type' => 'string', 'nullable' => true],
                 'subject' => ['type' => 'string', 'nullable' => true],
@@ -269,19 +269,19 @@ return [
                 'stats' => new \Sopheak\Core\Types\RecordFunctionType(
                     class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
                     functionName: 'getStats',
-                    httpMethod: ['GET'],
+                    httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
                     description: 'Get audit statistics'
                 ),
                 'field-timeline/{entityType}/{entityId}/{field}' => new \Sopheak\Core\Types\RecordFunctionType(
                     class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
                     functionName: 'getFieldTimeline',
-                    httpMethod: ['GET'],
+                    httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
                     description: 'Get field timeline'
                 ),
                 'field-stats/{entityType}/{entityId}/{field}' => new \Sopheak\Core\Types\RecordFunctionType(
                     class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
                     functionName: 'getFieldStats',
-                    httpMethod: ['GET'],
+                    httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
                     description: 'Get field statistics'
                 ),
             ]

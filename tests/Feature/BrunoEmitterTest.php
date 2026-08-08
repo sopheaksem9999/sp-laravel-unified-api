@@ -23,42 +23,42 @@ class BrunoEmitterTest extends TestCase
         $this->emitter = new BrunoEmitter();
     }
 
-    public function test_renders_meta_with_app_name_and_v3_version(): void
+    public function test_renders_bruno_json_and_collection_bru(): void
     {
-        $result = $this->buildResult(appName: 'MyApp');
+        $result = $this->buildResult(appName: 'MyApp', baseUrl: 'http://localhost:8000', apiPrefix: '/api/v1');
 
         $output = $this->emitter->render($result);
 
-        $this->assertSame('MyApp API', $output['meta']['name']);
-        $this->assertSame('collection', $output['meta']['type']);
-        $this->assertSame('v3', $output['meta']['version']);
+        $this->assertArrayHasKey('bruno.json', $output);
+        $this->assertArrayHasKey('collection.bru', $output);
+
+        $brunoJson = json_decode($output['bruno.json'], true);
+        $this->assertSame('MyApp API', $brunoJson['name']);
+        $this->assertSame('collection', $brunoJson['type']);
+
+        $collectionBru = $output['collection.bru'];
+        $this->assertStringContainsString('name: MyApp API', $collectionBru);
+        $this->assertStringContainsString('mode: bearer', $collectionBru);
+        $this->assertStringNotContainsString('baseUrl:', $collectionBru);
+        $this->assertStringNotContainsString('apiPrefix:', $collectionBru);
     }
 
-    public function test_renders_collection_level_bearer_auth_with_token_var(): void
-    {
-        $result = $this->buildResult();
-
-        $output = $this->emitter->render($result);
-
-        $this->assertSame('bearer', $output['auth']['mode']);
-        $this->assertSame('{{bearerToken}}', $output['auth']['bearer']['token']);
-    }
-
-    public function test_renders_baseUrl_apiPrefix_and_bearerToken_vars(): void
+    public function test_renders_local_environment_with_base_url_and_api_prefix(): void
     {
         $result = $this->buildResult(baseUrl: 'http://localhost:8000', apiPrefix: '/api/v1');
 
         $output = $this->emitter->render($result);
 
-        $this->assertSame('http://localhost:8000', $output['vars']['baseUrl']['value']);
-        $this->assertFalse($output['vars']['baseUrl']['secret']);
-        $this->assertSame('/api/v1', $output['vars']['apiPrefix']['value']);
-        $this->assertFalse($output['vars']['apiPrefix']['secret']);
-        $this->assertSame('', $output['vars']['bearerToken']['value']);
-        $this->assertTrue($output['vars']['bearerToken']['secret']);
+        $this->assertArrayHasKey('environments/Local.bru', $output);
+
+        $envBru = $output['environments/Local.bru'];
+        $this->assertStringContainsString('baseUrl: http://localhost:8000', $envBru);
+        $this->assertStringContainsString('apiPrefix: /api/v1', $envBru);
+        $this->assertStringContainsString('vars:secret [', $envBru);
+        $this->assertStringContainsString('bearerToken', $envBru);
     }
 
-    public function test_renders_folders_in_input_order(): void
+    public function test_renders_subfolders_and_bru_files(): void
     {
         $result = $this->buildResult(folders: [
             new ExportFolder('Users', [$this->req('List Users', 'GET', '/users')]),
@@ -67,9 +67,11 @@ class BrunoEmitterTest extends TestCase
 
         $output = $this->emitter->render($result);
 
-        $this->assertCount(2, $output['folders']);
-        $this->assertSame('Users', $output['folders'][0]['name']);
-        $this->assertSame('Orders', $output['folders'][1]['name']);
+        $this->assertArrayHasKey('Users/List Users.bru', $output);
+        $this->assertArrayHasKey('Orders/List Orders.bru', $output);
+
+        $this->assertStringContainsString('name: List Users', $output['Users/List Users.bru']);
+        $this->assertStringContainsString('name: List Orders', $output['Orders/List Orders.bru']);
     }
 
     public function test_renders_request_with_method_url_params_headers_docs(): void
@@ -91,15 +93,15 @@ class BrunoEmitterTest extends TestCase
         $result = $this->buildResult(folders: [new ExportFolder('Users', [$request])]);
 
         $output = $this->emitter->render($result);
-        $r = $output['folders'][0]['requests'][0];
+        $bru = $output['Users/List Users.bru'];
 
-        $this->assertSame('List Users', $r['name']);
-        $this->assertSame('http', $r['type']);
-        $this->assertSame('GET', $r['method']);
-        $this->assertSame('{{baseUrl}}{{apiPrefix}}/users', $r['url']);
-        $this->assertSame('Retrieve users', $r['docs']);
-        $this->assertCount(2, $r['params']); // page + injected select
-        $this->assertCount(1, $r['headers']);
+        $this->assertStringContainsString('name: List Users', $bru);
+        $this->assertStringContainsString('get {', $bru);
+        $this->assertStringContainsString('url: {{baseUrl}}{{apiPrefix}}/users', $bru);
+        $this->assertStringContainsString('page: 1', $bru);
+        $this->assertStringContainsString('~select:', $bru);
+        $this->assertStringContainsString('Accept: application/json', $bru);
+        $this->assertStringContainsString('Retrieve users', $bru);
     }
 
     public function test_injects_disabled_select_param_on_get_requests(): void
@@ -111,14 +113,9 @@ class BrunoEmitterTest extends TestCase
         $result = $this->buildResult(folders: [new ExportFolder('Users', [$request])]);
 
         $output = $this->emitter->render($result);
-        $params = $output['folders'][0]['requests'][0]['params'];
+        $bru = $output['Users/List Users.bru'];
 
-        $this->assertCount(2, $params);
-        $select = array_values(array_filter($params, static fn (array $p): bool => $p['name'] === 'select'))[0];
-        $this->assertSame('', $select['value']);
-        $this->assertFalse($select['enabled']);
-        $this->assertSame('query', $select['type']);
-        $this->assertStringContainsString('relationships', $select['description']);
+        $this->assertStringContainsString('~select:', $bru);
     }
 
     public function test_does_not_inject_select_param_on_post_requests(): void
@@ -128,10 +125,9 @@ class BrunoEmitterTest extends TestCase
         $result = $this->buildResult(folders: [new ExportFolder('Users', [$request])]);
 
         $output = $this->emitter->render($result);
-        $params = $output['folders'][0]['requests'][0]['params'];
+        $bru = $output['Users/Create Users.bru'];
 
-        $paramNames = array_column($params, 'name');
-        $this->assertNotContains('select', $paramNames);
+        $this->assertStringNotContainsString('select:', $bru);
     }
 
     public function test_includes_body_for_post_put_patch_requests(): void
@@ -150,10 +146,11 @@ class BrunoEmitterTest extends TestCase
         $result = $this->buildResult(folders: [new ExportFolder('Users', [$request])]);
 
         $output = $this->emitter->render($result);
-        $r = $output['folders'][0]['requests'][0];
+        $bru = $output['Users/Create Users.bru'];
 
-        $this->assertSame('json', $r['body']['mode']);
-        $this->assertSame('{"name": ""}', $r['body']['json']);
+        $this->assertStringContainsString('body: json', $bru);
+        $this->assertStringContainsString('body:json {', $bru);
+        $this->assertStringContainsString('{"name": ""}', $bru);
     }
 
     public function test_omits_body_for_get_and_delete_requests(): void
@@ -167,22 +164,105 @@ class BrunoEmitterTest extends TestCase
 
         $output = $this->emitter->render($result);
 
-        $this->assertArrayNotHasKey('body', $output['folders'][0]['requests'][0]);
-        $this->assertArrayNotHasKey('body', $output['folders'][0]['requests'][1]);
+        $this->assertStringContainsString('body: none', $output['Users/List Users.bru']);
+        $this->assertStringContainsString('body: none', $output['Users/Delete Users.bru']);
+        $this->assertStringNotContainsString('body:json {', $output['Users/List Users.bru']);
+    }
+
+    public function test_renders_auth_inherit_when_request_requires_auth(): void
+    {
+        $request = $this->req('List Users', 'GET', '/users');
+
+        $result = $this->buildResult(folders: [new ExportFolder('Users', [$request])]);
+
+        $output = $this->emitter->render($result);
+
+        $this->assertStringContainsString('auth: inherit', $output['Users/List Users.bru']);
+    }
+
+    public function test_renders_auth_none_when_request_does_not_require_auth(): void
+    {
+        $request = new ExportRequest(
+            name: 'List Public Products',
+            method: 'GET',
+            urlTemplate: '{{baseUrl}}{{apiPrefix}}/public_products',
+            description: 'desc',
+            pathParams: [],
+            queryParams: [],
+            headers: [],
+            requiresAuth: false,
+        );
+
+        $result = $this->buildResult(folders: [new ExportFolder('Products', [$request])]);
+
+        $output = $this->emitter->render($result);
+        $bru = $output['Products/List Public Products.bru'];
+
+        $this->assertStringContainsString('auth: none', $bru);
+        $this->assertStringNotContainsString('auth: inherit', $bru);
+    }
+
+    public function test_attaches_post_response_login_script_to_login_request(): void
+    {
+        $request = new ExportRequest(
+            name: 'RPC - Login',
+            method: 'POST',
+            urlTemplate: '{{baseUrl}}{{apiPrefix}}/rpc/auth/login',
+            description: 'desc',
+            pathParams: [],
+            queryParams: [],
+            headers: [],
+            bodyJson: '{"email": "", "password": ""}',
+            requiresAuth: false,
+            isLoginRequest: true,
+        );
+
+        $result = $this->buildResult(folders: [new ExportFolder('RPC - Auth', [$request])]);
+        $output = $this->emitter->render($result);
+        $bru = $output['RPC - Auth/RPC - Login.bru'];
+
+        $this->assertStringContainsString('script:post-response {', $bru);
+        $this->assertStringContainsString('"access_token"', $bru);
+        $this->assertStringContainsString('bru.setVar("bearerToken", token)', $bru);
+    }
+
+    public function test_uses_configured_access_token_key_in_login_script(): void
+    {
+        $request = new ExportRequest(
+            name: 'RPC - Login',
+            method: 'POST',
+            urlTemplate: '{{baseUrl}}{{apiPrefix}}/rpc/auth/login',
+            description: 'desc',
+            pathParams: [],
+            queryParams: [],
+            headers: [],
+            isLoginRequest: true,
+        );
+
+        $result = $this->buildResult(folders: [new ExportFolder('RPC - Auth', [$request])], accessTokenKey: 'token');
+        $output = $this->emitter->render($result);
+        $bru = $output['RPC - Auth/RPC - Login.bru'];
+
+        $this->assertStringContainsString('"token"', $bru);
+    }
+
+    public function test_does_not_attach_login_script_to_non_login_requests(): void
+    {
+        $request = $this->req('List Users', 'GET', '/users');
+
+        $result = $this->buildResult(folders: [new ExportFolder('Users', [$request])]);
+        $output = $this->emitter->render($result);
+        $bru = $output['Users/List Users.bru'];
+
+        $this->assertStringNotContainsString('script:post-response', $bru);
     }
 
     public function test_extracts_request_names_from_existing_bruno_collection(): void
     {
         $existing = [
-            'folders' => [
-                ['name' => 'Users', 'requests' => [
-                    ['name' => 'List Users'],
-                    ['name' => 'Create Users'],
-                ]],
-                ['name' => 'Orders', 'requests' => [
-                    ['name' => 'List Orders'],
-                ]],
-            ],
+            'Users/List Users.bru' => "meta {\n  name: List Users\n}",
+            'Users/Create Users.bru' => "meta {\n  name: Create Users\n}",
+            'Orders/List Orders.bru' => "meta {\n  name: List Orders\n}",
         ];
 
         $names = $this->emitter->extractRequestNames($existing);
@@ -197,7 +277,6 @@ class BrunoEmitterTest extends TestCase
 
     public function test_extract_request_names_returns_empty_for_invalid_existing(): void
     {
-        $this->assertSame([], $this->emitter->extractRequestNames(['not' => 'a bruno collection']));
         $this->assertSame([], $this->emitter->extractRequestNames([]));
     }
 
@@ -209,12 +288,14 @@ class BrunoEmitterTest extends TestCase
         string $baseUrl = 'http://localhost',
         string $apiPrefix = '/api/v1',
         array $folders = [],
+        string $accessTokenKey = 'access_token',
     ): ExportResult {
         return new ExportResult(
             appName: $appName,
             baseUrl: $baseUrl,
             apiPrefix: $apiPrefix,
             folders: $folders,
+            accessTokenKey: $accessTokenKey,
         );
     }
 

@@ -89,7 +89,7 @@ Example:
 ```php
 'global_functions' => [
     'health/check' => new RecordFunctionType(
-        httpMethod: ['GET'],
+        httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
         class: \App\Api\Functions\HealthCheckFunction::class,
         functionName: 'handle',
         middleware: ['auth:sanctum', 'subscribed'],

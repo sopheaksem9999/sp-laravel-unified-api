@@ -59,7 +59,17 @@ class RecordService
         $actualTableName = $tableSchema->table ?? $table;
         $pk = $tableSchema->primaryKey ?? 'id';
 
-        // Insert record
+        // Insert record.
+        //
+        // A uuid primary key has no database default and is not auto-incrementing,
+        // so when the client supplies no id the value has to be generated here or
+        // the insert violates the column's not-null constraint. This mirrors the
+        // nested-create path in RelationshipResolverUtils::processRelatedData and
+        // shares its uuid detection so the two cannot drift.
+        if ((!array_key_exists($pk, $payloadMain) || null === $payloadMain[$pk]) && SchemaRegistryUtils::isUuidColumnType($tableSchema->columns[$pk] ?? null)) {
+            $payloadMain[$pk] = (string) Str::uuid();
+        }
+
         if (array_key_exists($pk, $payloadMain) && null !== $payloadMain[$pk]) {
             DB::table($actualTableName)->insert($payloadMain);
             $insertedId = $payloadMain[$pk];
@@ -2131,6 +2141,7 @@ class RecordService
                 if ([] !== $recordIds) {
                     $optimizedBuilder = $this->createReadBuilder($actualTableName);
                     $mainCols = RelationshipResolverUtils::getMainTableColumns(is_string($selectParam) ? $selectParam : '');
+                    RelationshipResolverUtils::validateMainTableColumns($table, $mainCols);
                     // Strip computed attribute keys — they are not real DB columns
                     $attributeKeys = array_keys($tableSchema->attributes ?? []);
                     $dbMainCols = $attributeKeys !== []
@@ -2180,6 +2191,7 @@ class RecordService
             $requestedCols = $effectiveSelectParam !== ''
                 ? RelationshipResolverUtils::getMainTableColumns(is_string($selectParam) ? $selectParam : '')
                 : [];
+            RelationshipResolverUtils::validateMainTableColumns($table, $requestedCols);
             $data = RecordApiResponseService::applyAttributes($data, $table, $tableSchema->attributes, $requestedCols);
         }
 
@@ -2769,6 +2781,7 @@ class RecordService
                 if ([] !== $recordIds) {
                     $optimizedBuilder = $service->createReadBuilder($actualTableName);
                     $mainCols = RelationshipResolverUtils::getMainTableColumns(is_string($selectParam) ? $selectParam : '');
+                    RelationshipResolverUtils::validateMainTableColumns($table, $mainCols);
                     // Strip computed attribute keys — they are not real DB columns
                     $attributeKeys = $tableSchema instanceof RecordTableType ? array_keys($tableSchema->attributes ?? []) : [];
                     $dbMainCols = $attributeKeys !== []
@@ -2818,6 +2831,7 @@ class RecordService
             $requestedCols = $effectiveSelectParam !== ''
                 ? RelationshipResolverUtils::getMainTableColumns(is_string($selectParam) ? $selectParam : '')
                 : [];
+            RelationshipResolverUtils::validateMainTableColumns($table, $requestedCols);
             $data = RecordApiResponseService::applyAttributes($data, $table, $tableSchema->attributes, $requestedCols);
         }
 
@@ -2914,6 +2928,7 @@ class RecordService
         $dbMainCols = [];
         if ($effectiveSelectParam !== '') {
             $mainCols = RelationshipResolverUtils::getMainTableColumns(is_string($selectParam) ? $selectParam : '');
+            RelationshipResolverUtils::validateMainTableColumns($table, $mainCols);
             // Build DB-safe column list: strip computed attribute keys (not real DB columns)
             $attributeKeys = array_keys($tableSchema->attributes ?? []);
             $dbMainCols = $attributeKeys !== []
@@ -3006,6 +3021,7 @@ class RecordService
             $requestedCols = $effectiveSelectParam !== ''
                 ? RelationshipResolverUtils::getMainTableColumns(is_string($selectParam) ? $selectParam : '')
                 : [];
+            RelationshipResolverUtils::validateMainTableColumns($table, $requestedCols);
             $record = RecordApiResponseService::applyAttributes($record, $table, $tableSchema->attributes, $requestedCols);
         }
 
@@ -3179,7 +3195,7 @@ class RecordService
         } catch (Exception $exception) {
             return RecordApiResponseService::errorFromException(
                 exception: $exception,
-                message: 'Function execution failed: ' . $exception->getMessage(),
+                message: $exception->getMessage(),
                 status: RecordApiJsonResponseEnum::SERVER_ERROR->value
             );
         }

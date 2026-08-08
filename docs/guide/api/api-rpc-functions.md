@@ -24,7 +24,7 @@ You can create public endpoints by setting `pmsName` to `null`. These functions 
 ```php
 'global_functions' => [
     'login' => [
-        'httpMethod' => ['POST'],
+        'httpMethod' => [\Sopheak\Core\Enums\RecordFunctionMethodEnum::POST->value],
         'class' => \App\Http\Controllers\AuthController::class,
         'functionName' => 'login',
         'description' => 'User login',
@@ -52,7 +52,7 @@ By providing a `pmsName`, the function requires authentication and the user must
 ```php
 'global_functions' => [
     'system_stats' => [
-        'httpMethod' => ['GET'],
+        'httpMethod' => [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
         'class' => \App\Services\StatsService::class,
         'functionName' => 'getSystemStats',
         'description' => 'Get system statistics',

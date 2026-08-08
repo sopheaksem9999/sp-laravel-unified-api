@@ -41,7 +41,7 @@ GET /api/v1/sp_audit_logs
 POST /api/v1/sp_audit_logs  # 403 Forbidden
 ```
 
-To modify this behavior, publish the configuration and edit `config/audit.php`.
+To modify this behavior, publish the configuration and edit `config/sp-audit.php`.
 
 ## Core Controls
 

@@ -48,6 +48,22 @@ class AttributeFunctionDiscoveryTest extends TestCase
         $this->assertSame('sync', $schema['invoices']->functions['sync']->functionName);
     }
 
+    public function test_display_name_attribute_flows_into_function_type_name(): void
+    {
+        $schema = SchemaRegistryUtils::get();
+
+        $this->assertArrayHasKey('archive', $schema['invoices']->functions);
+        $this->assertSame('Archive Invoice', $schema['invoices']->functions['archive']->name);
+    }
+
+    public function test_omitting_display_name_leaves_function_type_name_null_and_description_unchanged(): void
+    {
+        $schema = SchemaRegistryUtils::get();
+
+        $this->assertNull($schema['invoices']->functions['sync']->name);
+        $this->assertSame('Attribute function: sync', $schema['invoices']->functions['sync']->description);
+    }
+
     public function test_file_config_functions_override_discovered_table_functions_with_same_name(): void
     {
         Config::set('record.tables', [

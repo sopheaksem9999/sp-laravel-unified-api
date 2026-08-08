@@ -50,7 +50,7 @@ class SuperAdminBypassTest extends TestCase
     /** @test */
     public function it_allows_super_admin_callback_to_bypass_permissions(): void
     {
-        $this->app['config']->set('permissions.super_admin_callback', fn ($user): true => true);
+        $this->app['config']->set('permissions.super_admin_callback', fn($user): true => true);
 
         $this->actingAs($this->user, 'api')
             ->getJson('/api/sp_roles')
@@ -61,7 +61,7 @@ class SuperAdminBypassTest extends TestCase
     /** @test */
     public function it_respects_super_admin_callback_returning_false(): void
     {
-        $this->app['config']->set('permissions.super_admin_callback', fn ($user): false => false);
+        $this->app['config']->set('permissions.super_admin_callback', fn($user): false => false);
 
         $this->actingAs($this->user, 'api')
             ->getJson('/api/sp_roles')
@@ -128,7 +128,7 @@ class SuperAdminBypassTest extends TestCase
             Schema::create('sp_model_has_roles', function (Blueprint $table): void {
                 $table->bigIncrements('id');
                 $table->string('model_type');
-                $table->unsignedBigInteger('model_id');
+                $table->string('model_id');
                 $table->unsignedBigInteger('role_id');
                 $table->string('tenant_id')->nullable();
                 $table->timestamps();
@@ -140,7 +140,7 @@ class SuperAdminBypassTest extends TestCase
             Schema::create('sp_model_permissions', function (Blueprint $table): void {
                 $table->bigIncrements('id');
                 $table->string('model_type');
-                $table->unsignedBigInteger('model_id');
+                $table->string('model_id');
                 $table->unsignedBigInteger('permission_id');
                 $table->string('tenant_id')->nullable();
                 $table->timestamps();

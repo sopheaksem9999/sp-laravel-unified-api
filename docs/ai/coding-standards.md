@@ -1,3 +1,12 @@
+---
+title: "Coding Standards"
+description: "Coding standards, PSR-12 conventions, and package guidelines."
+keywords:
+  - coding standards
+  - psr-12
+  - conventions
+---
+
 # Coding Standards (Shared)
 
 ## General

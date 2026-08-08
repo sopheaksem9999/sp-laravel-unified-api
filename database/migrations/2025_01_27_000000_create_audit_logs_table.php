@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Sopheak\Core\Database\MigrationIdHelper;
 use Sopheak\Core\Services\RecordConfigService;
 
 return new class extends Migration {
@@ -13,18 +14,23 @@ return new class extends Migration {
     {
         if (RecordConfigService::auditEnabled()) {
             Schema::create('sp_audit_logs', function (Blueprint $blueprint): void {
-                $blueprint->id();
+                MigrationIdHelper::primary($blueprint);
 
                 if (RecordConfigService::enableTenantId()) {
                     $tenantColumn = RecordConfigService::tenantColumn();
-                    $blueprint->unsignedBigInteger($tenantColumn)->nullable();
+                    // String, matching every other package migration. A string
+                    // holds either an integer or a uuid tenant id, the same
+                    // reasoning as the client-reference columns below.
+                    $blueprint->string($tenantColumn)->nullable();
                     $blueprint->index([$tenantColumn]);
                 }
 
                 $blueprint->string('entity_name')->nullable();
                 $blueprint->string('entity_type')->nullable();
-                $blueprint->unsignedBigInteger('entity_id')->nullable();
-                $blueprint->unsignedBigInteger('user_id')->nullable();
+                // Both reference client-owned records whose key may be a uuid
+                // or an integer, so they must be strings.
+                MigrationIdHelper::morph($blueprint, 'entity_id')->nullable();
+                MigrationIdHelper::morph($blueprint, 'user_id')->nullable();
                 $blueprint->string('event')->nullable();
                 $blueprint->string('title')->nullable();
                 $blueprint->string('subject')->nullable();

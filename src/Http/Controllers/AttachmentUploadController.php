@@ -440,7 +440,7 @@ class AttachmentUploadController extends Controller
     public function getFolders(Request $request): JsonResponse
     {
         $tenantId = $this->resolveTenantId($request);
-        $result = RecordService::executeGetByFilter('sp_document_folders', $request->query(), $tenantId);
+        $result = RecordService::executeGetByFilter('sp_attachment_folders', $request->query(), $tenantId);
 
         return RecordApiResponseService::success($result['data'] ?? []);
     }
@@ -463,8 +463,7 @@ class AttachmentUploadController extends Controller
         }
 
         $tenantColumn = RecordConfigService::tenantColumn();
-        $payload = $this->onlyExistingColumns('sp_document_folders', [
-            'id' => Str::uuid()->toString(),
+        $payload = $this->onlyExistingColumns('sp_attachment_folders', [
             'name' => $request->input('name'),
             'parent_id' => $request->input('parent_id'),
             'scope' => $request->input('scope', 'internal'),
@@ -478,7 +477,7 @@ class AttachmentUploadController extends Controller
             $payload[$tenantColumn] = $tenantId;
         }
 
-        $folder = RecordService::executeCreate('sp_document_folders', $payload, [], $tenantId);
+        $folder = RecordService::executeCreate('sp_attachment_folders', $payload, [], $tenantId);
         $folder = $this->extractRecordPayload($folder);
 
         return RecordApiResponseService::success($folder);
@@ -502,10 +501,10 @@ class AttachmentUploadController extends Controller
         }
 
         $payload = $this->onlyExistingColumns(
-            'sp_document_folders',
+            'sp_attachment_folders',
             $request->only(['name', 'parent_id', 'scope', 'visibility', 'owner_type', 'owner_id', 'metadata'])
         );
-        $folder = RecordService::executeUpdate('sp_document_folders', $id, $payload, [], $tenantId);
+        $folder = RecordService::executeUpdate('sp_attachment_folders', $id, $payload, [], $tenantId);
         $folder = $this->extractRecordPayload($folder);
 
         return RecordApiResponseService::success($folder);
@@ -518,7 +517,7 @@ class AttachmentUploadController extends Controller
             return RecordApiResponseService::errorWrapped('Folder is not empty', Response::HTTP_CONFLICT);
         }
 
-        RecordService::executeDelete('sp_document_folders', $id, [], $tenantId);
+        RecordService::executeDelete('sp_attachment_folders', $id, [], $tenantId);
 
         return RecordApiResponseService::success();
     }
@@ -763,7 +762,6 @@ class AttachmentUploadController extends Controller
 
         // 3. Prepare Payload with Dynamic Tenant Column
         $attachmentPayload = [
-            'id' => Str::uuid()->toString(),
             'folder_id' => $request->input('folder_id'),
             'title' => $request->input('title'),
             'caption' => $request->input('caption'),
@@ -866,7 +864,6 @@ class AttachmentUploadController extends Controller
         $size = isset($sourceAttachment['size']) ? (int) $sourceAttachment['size'] : (int) Storage::disk($disk)->size($fullPath);
 
         $attachmentPayload = [
-            'id' => Str::uuid()->toString(),
             'folder_id' => $request->input('folder_id', $sourceAttachment['folder_id'] ?? null),
             'title' => $request->input('title', $sourceAttachment['title'] ?? null),
             'caption' => $request->input('caption', $sourceAttachment['caption'] ?? null),

@@ -368,6 +368,7 @@ Create a class extending `Sopheak\Core\Resources\GlobalFunction`:
 ```php
 namespace App\Api\Functions\Auth;
 
+use Sopheak\Core\Enums\RecordFunctionMethodEnum;
 use Sopheak\Core\Resources\GlobalFunction;
 use Sopheak\Core\Types\RecordFunctionType;
 
@@ -376,7 +377,7 @@ class LoginFunction extends GlobalFunction
     public function configure(): RecordFunctionType
     {
         return new RecordFunctionType(
-            httpMethod: 'POST',
+            httpMethod: RecordFunctionMethodEnum::POST->value,
             class: \App\Services\AuthService::class,
             functionName: 'login',
             payloadSchema: [ ... ]
@@ -447,14 +448,16 @@ Defines a callable RPC endpoint config (table RPC or global RPC).
 - `disableCache` (bool, default: `false`): Disable caching for this function.
 - `cacheTTL` (?int, default: `null`): Custom cache TTL (seconds). When set, overrides the default cache TTL.
 - `clearCacheTables` (array|string|null, default: `null`): Tables to clear after successful write methods (`POST`, `PUT`, `PATCH`, `DELETE`). If omitted for table functions, the current table is cleared.
+- `name` (?string, default: `null`): Display name used for the OpenAPI operation summary. Falls back to `description`, then a humanized function key, when empty.
 - `description` (?string, default: `null`): Optional description.
 - `querySchema`, `payloadSchema`, `responseSchema` (?array, default: `null`): Optional schema metadata used by OpenAPI generation.
 
 ```php
+use Sopheak\Core\Enums\RecordFunctionMethodEnum;
 use Sopheak\Core\Types\RecordFunctionType;
 
 $function = new RecordFunctionType(
-    httpMethod: ['POST'],
+    httpMethod: [RecordFunctionMethodEnum::POST->value],
     class: \App\Services\ReportService::class,
     functionName: 'generate',
     pmsName: 'view_report',
@@ -542,6 +545,32 @@ $payments = new RecordHasManyThroughType(
     allowCreate: true,
     allowUpdate: true,
     allowDelete: false, // Prevent deleting payments via this relationship
+);
+```
+
+#### RecordMorphHasManyType
+
+Polymorphic has-many relationship configuration (no pivot table): links a parent table to a related table through a discriminator column plus a foreign key column, with a per-parent discriminator value.
+
+- `table` (string, required): Related table name.
+- `morphType` (string, required): Discriminator column on the related table (e.g. `target_type`).
+- `morphId` (string, required): FK column on the related table (e.g. `target_id`).
+- `morphClass` (string, required): Discriminator value for this parent table (e.g. `videos`).
+- `type` (RecordRelationshipsEnum, default: `RecordRelationshipsEnum::MORPH_MANY`)
+- `localKey` (string, default: `'id'`): Parent key column.
+- `allowCreate`, `allowUpdate`, `allowDelete` (bool, default: `true`): Controls nested write operations for this relationship. Nested creates always set `morphType`/`morphId` from server-side config — any client-supplied discriminator values in the payload are overridden.
+
+```php
+use Sopheak\Core\Types\RecordMorphHasManyType;
+use Sopheak\Core\Enums\RecordRelationshipsEnum;
+
+$translations = new RecordMorphHasManyType(
+    table: 'translations',
+    morphType: 'target_type',
+    morphId: 'target_id',
+    morphClass: 'videos',
+    type: RecordRelationshipsEnum::MORPH_MANY,
+    localKey: 'id',
 );
 ```
 

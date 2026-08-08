@@ -401,13 +401,51 @@ Example usage:
 
 Morph relationships are detected via `RecordRelationshipsEnum::isMorphRelationship()` and are supported anywhere relationship selection is supported.
 
-##### morphTo / morphOne / morphMany
+##### morphMany (`RecordMorphHasManyType`)
 
-These are typically configured via specialized resource classes or custom loaders. The enum types are:
+A polymorphic one-to-many relationship (no pivot table): the related table has a discriminator column (e.g. `target_type`) and a foreign key column (e.g. `target_id`), and each parent table supplies its own discriminator value via `morphClass`.
+
+```php
+use Sopheak\Core\Types\RecordMorphHasManyType;
+
+'videos' => new RecordTableType(
+    table: 'videos',
+    relationships: [
+        'translations' => new RecordMorphHasManyType(
+            table: 'translations',
+            morphType: 'target_type',
+            morphId: 'target_id',
+            morphClass: 'videos',
+            localKey: 'id',
+        ),
+    ],
+),
+'promotions' => new RecordTableType(
+    table: 'promotions',
+    relationships: [
+        'translations' => new RecordMorphHasManyType(
+            table: 'translations',
+            morphType: 'target_type',
+            morphId: 'target_id',
+            morphClass: 'promotions',
+            localKey: 'id',
+        ),
+    ],
+),
+```
+
+Example usage:
+
+- `GET /api/v1/videos?select=*,translations(*)` — only returns `translations` rows where `target_type = 'videos'` and `target_id` matches the video, even if a `promotions` row shares the same id.
+- Nested create (`POST /api/v1/videos` with a `translations` array in the payload) sets `target_type`/`target_id` on each child row automatically — any client-supplied `target_type`/`target_id` in the payload is overridden, so a request can't link a translation to the wrong parent or table.
+- `allowCreate` / `allowUpdate` / `allowDelete` (all default `true`) control whether nested writes are permitted for this relationship.
+
+##### morphTo / morphOne
+
+These don't have a dedicated `RecordXxxType` class yet — they're typically configured via specialized resource classes or custom loaders. The enum types are:
 
 - `MORPH_TO`
 - `MORPH_ONE`
-- `MORPH_MANY`
 
 Example conceptual usage (comments only):
 
