@@ -27,6 +27,22 @@ class QueryBuilderFiltersUtils
         'nxl', 'not_nxl', 'nxr', 'not_nxr', 'adj', 'not_adj',
     ];
 
+    /**
+     * Maps common symbol-style operators to their named equivalent, used only to build
+     * a helpful suggestion when a client mistakenly sends bracket-style filters
+     * (e.g. filter[created_at][>=]=value instead of created_at=gte.value).
+     */
+    private const FILTER_SYMBOL_OPERATOR_MAP = [
+        '=' => 'eq',
+        '==' => 'eq',
+        '!=' => 'neq',
+        '<>' => 'neq',
+        '>' => 'gt',
+        '>=' => 'gte',
+        '<' => 'lt',
+        '<=' => 'lte',
+    ];
+
     private static array $columnCache = [];
 
     private static array $operatorCache = [];
@@ -1696,7 +1712,11 @@ class QueryBuilderFiltersUtils
             }
 
             $values = is_array($values) ? $values : [$values];
-            foreach ($values as $value) {
+            foreach ($values as $subKey => $value) {
+                if (is_array($value)) {
+                    throw new InvalidArgumentException(self::invalidNestedFilterMessage((string) $key, [$subKey => $value]));
+                }
+
                 $raw = (string) $value;
                 $parsedOperator = self::parseOperatorExpression($raw);
                 if (null !== $parsedOperator) {
@@ -1806,7 +1826,11 @@ class QueryBuilderFiltersUtils
             }
 
             $values = is_array($values) ? $values : [$values];
-            foreach ($values as $value) {
+            foreach ($values as $subKey => $value) {
+                if (is_array($value)) {
+                    throw new InvalidArgumentException(self::invalidNestedFilterMessage((string) $key, [$subKey => $value]));
+                }
+
                 $raw = (string) $value;
                 $parsedOperator = self::parseOperatorExpression($raw);
                 if (null !== $parsedOperator) {
@@ -2154,6 +2178,96 @@ class QueryBuilderFiltersUtils
         }
 
         return $trimmed;
+    }
+
+    /**
+     * Resolve a bracket-style operator token (symbol or word, e.g. '>=' or 'gte') to its
+     * canonical operator name, or null if it isn't a recognized operator at all.
+     */
+    private static function resolveBracketOperatorName(string $token): ?string
+    {
+        $normalized = strtolower($token);
+
+        return self::FILTER_SYMBOL_OPERATOR_MAP[$token]
+            ?? (in_array($normalized, self::FILTER_OPERATORS, true) ? $normalized : null);
+    }
+
+    /**
+     * Walk a nested filter value looking for the common mistakes of bracket-nesting an
+     * operator, at either one level (created_at[gte]=value) or two levels
+     * (filter[created_at][gte]=value), and return [column, operator, value] tuples for
+     * every recognizable operator found.
+     *
+     * @return array<int, array{0: string, 1: string, 2: string}>
+     */
+    private static function collectBracketFilterExpressions(string $key, array $nestedValue): array
+    {
+        $expressions = [];
+        foreach ($nestedValue as $subKey => $subValue) {
+            if (is_array($subValue)) {
+                if (!is_string($subKey)) {
+                    continue;
+                }
+
+                foreach ($subValue as $operatorToken => $operatorValue) {
+                    if (!is_string($operatorToken) || is_array($operatorValue)) {
+                        continue;
+                    }
+
+                    $operatorName = self::resolveBracketOperatorName($operatorToken);
+                    if (null !== $operatorName) {
+                        $expressions[] = [$subKey, $operatorName, (string) $operatorValue];
+                    }
+                }
+
+                continue;
+            }
+
+            if (!is_string($subKey)) {
+                continue;
+            }
+
+            $operatorName = self::resolveBracketOperatorName($subKey);
+            if (null !== $operatorName) {
+                $expressions[] = [$key, $operatorName, (string) $subValue];
+            }
+        }
+
+        return $expressions;
+    }
+
+    /**
+     * Build a clear, actionable error message for the common mistake of sending a
+     * bracket-nested filter (e.g. filter[created_at][>=]=2026-08-01) instead of the
+     * supported '{column}={operator}.{value}' query-parameter syntax.
+     */
+    private static function invalidNestedFilterMessage(string $key, mixed $nestedValue): string
+    {
+        $expressions = is_array($nestedValue) ? self::collectBracketFilterExpressions($key, $nestedValue) : [];
+
+        if ([] === $expressions) {
+            return sprintf(
+                "Invalid filter for '%s': bracket-style filters (e.g. %s[operator]=value or %s[column][operator]=value) are not supported. "
+                . "Pass filters as '{column}={operator}.{value}' query parameters instead, e.g. created_at=gte.2026-08-01T00:00:00.000.",
+                $key,
+                $key,
+                $key
+            );
+        }
+
+        $suggestion = 1 === count($expressions)
+            ? sprintf('%s=%s.%s', ...$expressions[0])
+            : sprintf('and=(%s)', implode(',', array_map(
+                static fn(array $expr): string => sprintf('%s.%s.%s', ...$expr),
+                $expressions
+            )));
+
+        return sprintf(
+            "Invalid filter for '%s': bracket-style filters (e.g. %s[operator]=value) are not supported. Use %s instead.",
+            $key,
+            $key,
+            $suggestion
+        );
     }
 
     private static function parseOperatorExpression(string $raw): ?array

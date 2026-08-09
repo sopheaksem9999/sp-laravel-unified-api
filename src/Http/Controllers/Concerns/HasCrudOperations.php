@@ -249,7 +249,10 @@ trait HasCrudOperations
                 }
             }
 
-            $payload = $request->all();
+            // Request::all() merges the query string in, so a `?select=...` (or any other
+            // query param) riding along on a write request must not be treated as a payload
+            // field to write/validate — only the actual body belongs in the create/update payload.
+            $payload = $request->except(array_keys($request->query()));
 
             return $this->withinTransaction(function () use ($request, $table, $payload, $tenantId, $tableSchema): JsonResponse {
                 $result     = $this->recordService->createRecord(table: $table, payload: $payload, tenantId: $tenantId);
@@ -345,7 +348,8 @@ trait HasCrudOperations
                 }
             }
 
-            $payload = $request->all();
+            // See createRecord() for why the query string is excluded from the payload.
+            $payload = $request->except(array_keys($request->query()));
 
             return $this->withinTransaction(function () use ($request, $table, $id, $payload, $tenantId, $tableSchema): JsonResponse {
                 $result  = $this->recordService->updateRecord(table: $table, id: $id, payload: $payload, tenantId: $tenantId);
@@ -666,7 +670,8 @@ trait HasCrudOperations
 
             $matchOn = explode(',', $matchOn);
 
-            $payload = $request->all();
+            // See createRecord() for why the query string (match_on included) is excluded from the payload.
+            $payload = $request->except(array_keys($request->query()));
 
             foreach ($matchOn as $col) {
                 if (!array_key_exists($col, $payload)) {

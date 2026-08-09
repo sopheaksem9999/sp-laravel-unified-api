@@ -280,6 +280,7 @@ You can configure route middleware stacks per action and per table in `config/sp
 - **Advanced**: `not.<operator>` syntax, `any/all` modifiers (example: `name=like(any).{ACME,SHOP}`), grouped logic `and=(...)` and `or=(...)`
 - **Postgres Native**: `fts`, `plfts`, `phfts`, `wfts`, `cs`, `cd`, `ov`, `sl`, `sr`, `nxl`, `nxr`, `adj`
 - **Compatibility**: If an operator is not supported by the current database driver, API returns a validation error
+- **Common mistake**: filters are top-level query parameters in the form `{column}={operator}.{value}` (e.g. `created_at=gte.2026-08-01`). Bracket-style filters such as `filter[column]=value` or `filter[column][operator]=value` are **not** a supported syntax — they either silently filter nothing or return a `422` explaining the correct format.
 
 ### Grouped Logic Examples
 - `vendor_id=eq.27&or=(balance_due.gt.0,id.eq.5)`
@@ -1916,6 +1917,8 @@ Accepts an array of IDs or an array of objects with the primary key.
         $lines[] = '- hasMany: `{"items": [{"name":"Line A"},{"id": 15,"_delete": true}]}`';
         $lines[] = '- belongsToMany/morphToMany: `{"roles": [1, {"id": 2}]}`';
         $lines[] = '- Full relationship type examples: [Relationship Write Payload Guide](#relationship-write-payload-guide)';
+        $lines[] = '';
+        $lines[] = '**Unknown fields are rejected:** every top-level payload key must be a real column or one of the relationship aliases above — an invented or misspelled key returns `422` naming it and listing the valid columns/relationships, instead of being silently dropped.';
         $lines[] = '';
         $lines[] = 'These rules align with docs/api-documentation.md relationship sections.';
 

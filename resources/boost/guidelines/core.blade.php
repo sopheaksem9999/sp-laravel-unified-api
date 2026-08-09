@@ -28,6 +28,18 @@ This package provides a config-driven dynamic CRUD API for database tables and c
   - Reads automatically use the latest namespace token.
   - Old cached entries expire by TTL.
 
+### Filtering
+
+- Filters are top-level query parameters in the form `{column}={operator}.{value}` (e.g. `status=eq.open`, `created_at=gte.2026-08-01T00:00:00.000`). Do not wrap filters in a `filter[...]` key or use bracket syntax like `column[operator]=value` — that shape is rejected (or silently ignored), not supported.
+- Combine filters on the same column with grouped logic: `and=(created_at.gte.X,created_at.lte.Y)`.
+
+### Create/Update Payloads
+
+- Every top-level payload key must be a real column or a declared relationship alias for that table. An unknown key (typo or invented field) returns `422` naming it and listing every valid column/relationship, instead of being silently dropped and the write succeeding anyway.
+- Nested relationship writes (single request): a relationship declared `hasMany`, `belongsToMany`, `hasManyThrough`, `morphMany`, `morphToMany`, `morphByMany`, or `spatiePermission` can be written in the *same* create/update payload as the parent — no separate request per child table. Send an array mixing plain ids (`1`, attach/reference), objects (`{"name": "..."}`, create), and `{"id": 5, "_delete": true}` (remove).
+- `belongsTo`/`hasOne`/`hasOneThrough`/`morphTo`/`morphOne` are **not** nested-array writes — set the root FK/discriminator field instead (e.g. `"customer_id": 10`, not `"customer": {"id": 10}`).
+- `allowCreate`/`allowUpdate`/`allowDelete` (default `true` each) on a relationship gate which nested operations are permitted. Sending a disallowed one (e.g. a `_delete` item when `allowDelete: false`) returns `422` and rolls back the entire request — it does not silently skip just that item.
+
 ### Triggers / Validators
 
 You can attach triggers and validators using either:

@@ -125,6 +125,7 @@ Notes:
   - `or=(balance_due.gt.0,id.in.(5,6,9))`
 - Complex grouped examples are best URL-encoded when sent from frontend clients.
 - If an operator is not supported by the current database driver, API returns validation error with an explicit message.
+- **Common mistake**: do not send bracket-nested filters such as `filter[column]=value` or `filter[column][operator]=value` — filters are top-level query parameters (`{column}={operator}.{value}`), not wrapped in a `filter[...]` key. A single-level bracket value (e.g. `filter[status]=eq.open`) is silently ignored (no error, no filtering applied); a doubly-nested one (e.g. `filter[created_at][gte]=2026-08-01`) returns a `422` naming the exact query parameter that needs fixing and a corrected example.
 
 #### Config-Driven `search`
 
@@ -282,6 +283,8 @@ Create a new record.
 
 If a `createValidator` is defined for the target table in `config/record.php`, the request body is validated using that validator before any database changes. On validation failure, the endpoint returns `422` with detailed error messages.
 
+**Unknown field/relationship names are rejected**: every top-level key in the request body must be either a real column or a declared relationship alias for the table — a typo'd or invented field name (e.g. `{"custommer_id": 5}` instead of `customer_id`, or a relationship alias that was never declared) returns `422` with the field name and the full list of valid columns and relationships, instead of the field being silently dropped and the record saved without it. This does **not** apply to a column listed in that table's `columnWriteDisabled` — sending one of those is still a silent no-op (useful for round-tripping a GET response back as a write without stripping server-managed fields first), not an error. See the [Relationship Write Payload Guide](/core-concepts/relationships) for the shape each relationship type expects.
+
 #### Create With Relationships In Response
 
 To return related records in the response of the create call, pass a nested `select` query parameter. Relationship selection uses parentheses:
@@ -410,6 +413,8 @@ PATCH /{api_prefix}/{table}/{id}
 Update an existing record. `PUT` expects complete data, `PATCH` allows partial updates.
 
 If an `updateValidator` is defined for the target table, the request is validated with access to both the incoming payload and the current record ID. Validation failures return `422` with error details.
+
+Same unknown-field/relationship validation as the "Create Record" section above applies here.
 
 #### Request Body
 
