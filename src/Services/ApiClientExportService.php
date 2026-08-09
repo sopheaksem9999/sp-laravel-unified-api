@@ -198,10 +198,19 @@ class ApiClientExportService
                 $pathParams = [];
                 foreach ($op['parameters'] ?? [] as $param) {
                     $in = (string) ($param['in'] ?? '');
+                    $paramName = (string) ($param['name'] ?? '');
+
                     if ($in === 'query') {
+                        // 'select' has complex nested-parentheses syntax with no sensible
+                        // placeholder value; the emitters already surface it via a "Tip:"
+                        // note in GET request descriptions instead of a blank query field.
+                        if ($paramName === 'select') {
+                            continue;
+                        }
+
                         $queryParams[] = $this->buildQueryParam($param);
                     } elseif ($in === 'path') {
-                        $pathParams[] = (string) $param['name'];
+                        $pathParams[] = $paramName;
                     }
                 }
 

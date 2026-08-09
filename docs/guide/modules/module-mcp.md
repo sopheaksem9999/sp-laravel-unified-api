@@ -162,8 +162,8 @@ Available on **both** endpoints (Data MCP and Schema MCP):
 
 | Tool | Description |
 |------|-------------|
-| `sp_api_list_endpoints` | List all API endpoints (tables + custom RPCs). Returns endpoint name, HTTP method, URI, table, and supported actions. Accepts `?search` for substring filtering. |
-| `sp_api_get_endpoint` | Get full schema for a single endpoint: fields (name, type, nullable, writeable), filters (field + operators), sortable columns, relationship includes, validation rules, and required permissions. Requires `?endpoint` param. |
+| `sp_api_list_endpoints` | List all API endpoints (tables + custom RPCs). Returns endpoint name, HTTP method, URI, table, and supported actions — including `upsert`, `restore`, `forceDelete`, and the four `bulk*` endpoints when the table/config enables them, not just list/read/create/update/delete. Accepts `?search` for substring filtering. |
+| `sp_api_get_endpoint` | Get full schema for a single endpoint: `actions` (every enabled operation — CRUD, `upsert`, `restore`, `forceDelete`, `bulkCreate`/`bulkUpdate`/`bulkDelete`/`bulkUpsert`/`bulkMixed` — each with method, URI, and a `note` on non-obvious ones like the `match_on` query param or the bulk-item shape), fields (name, type, nullable, writeable), filters (field + operators), sortable columns, relationship includes, validation rules, and required permissions. Requires `?endpoint` param. |
 | `sp_api_list_permissions` | List all available permissions across all configured tables: `{name, guard, table}`. Deduplicated and grouped by resource. |
 
 ## Use Case 1: Local AI IDE Integration (Stdio)
@@ -307,7 +307,15 @@ Authorization: Bearer YOUR_MCP_TOKEN
           \"create\":{\"method\":\"POST\",\"uri\":\"/api/v1/invoices\"},
           \"read\":{\"method\":\"GET\",\"uri\":\"/api/v1/invoices/{id}\"},
           \"update\":{\"method\":[\"PUT\",\"PATCH\"],\"uri\":\"/api/v1/invoices/{id}\"},
-          \"delete\":{\"method\":\"DELETE\",\"uri\":\"/api/v1/invoices/{id}\"}
+          \"delete\":{\"method\":\"DELETE\",\"uri\":\"/api/v1/invoices/{id}\"},
+          \"upsert\":{\"method\":\"POST\",\"uri\":\"/api/v1/invoices/upsert\",\"note\":\"Requires a ?match_on=col1,col2 query parameter naming the columns to match an existing record on.\"},
+          \"restore\":{\"method\":\"POST\",\"uri\":\"/api/v1/invoices/{id}/restore\",\"note\":\"Restores a soft-deleted record.\"},
+          \"forceDelete\":{\"method\":\"DELETE\",\"uri\":\"/api/v1/invoices/{id}/force\",\"note\":\"Permanently deletes the record, bypassing soft deletes.\"},
+          \"bulkCreate\":{\"method\":\"POST\",\"uri\":\"/api/v1/invoices/bulk/create\",\"note\":\"Body: a JSON array of records to create (max 1000 per request).\"},
+          \"bulkUpdate\":{\"method\":\"POST\",\"uri\":\"/api/v1/invoices/bulk/update\",\"note\":\"Body: a JSON array of records to update, each including its primary key (max 1000 per request).\"},
+          \"bulkDelete\":{\"method\":\"POST\",\"uri\":\"/api/v1/invoices/bulk/delete\",\"note\":\"Body: a JSON array of records naming the primary key to delete (max 1000 per request).\"},
+          \"bulkUpsert\":{\"method\":\"POST\",\"uri\":\"/api/v1/invoices/bulk/upsert\",\"note\":\"Body: a JSON array of records to upsert (max 1000 per request). Requires ?match_on=col1,col2.\"},
+          \"bulkMixed\":{\"method\":\"POST\",\"uri\":\"/api/v1/invoices/bulk\",\"note\":\"Body: a JSON array of records (max 1000 per request). Each item's operation (create/update/delete/upsert) is auto-detected from its shape, or set explicitly via an 'operation' field per item.\"}
         },
         \"fields\":[
           {\"name\":\"id\",\"type\":\"integer\",\"nullable\":false,\"in\":[\"read\"]},
@@ -432,7 +440,7 @@ With token (production):
 
 | Knowledge | Source |
 |-----------|--------|
-| Every API route, HTTP method, and URI | `sp_api_list_endpoints` |
+| Every API route, HTTP method, and URI — including upsert, restore, force-delete, and bulk endpoints, not just plain CRUD | `sp_api_list_endpoints`, `sp_api_get_endpoint` → `actions` |
 | Which fields are writable vs read-only | `sp_api_get_endpoint` → `fields[].in` |
 | Available filters + operators per field | `sp_api_get_endpoint` → `filters[]` |
 | Sortable fields | `sp_api_get_endpoint` → `sorts[]` |
