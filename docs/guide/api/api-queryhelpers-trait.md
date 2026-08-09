@@ -147,7 +147,7 @@ $result = Invoice::query()->applyRequestFilters(
 
 ### Filter Operators
 
-Operators are passed as `{column}={operator}.{value}`:
+This trait supports a smaller, fixed operator set than the dynamic `/api/v1/{table}` CRUD endpoints (see [Standard CRUD Operations](/guide/api-crud-operations) for the full list, including negation, date, and Postgres-native operators). Operators are passed the same way, as `{column}={operator}.{value}`:
 
 - `is.null`
 - `eq.{value}`, `neq.{value}`

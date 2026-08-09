@@ -574,4 +574,5 @@ Do not send:
 
 - Array relationship aliases are accepted only when declared in table `relationships` config.
 - For `BELONGS_TO`, the payload should use root FK scalar fields, not nested objects.
-- `_delete` / `_destroy` can be used on alias-array items where relationship handling supports detach/remove.
+- `_delete` / `_destroy` can be used on alias-array items where relationship handling supports detach/remove — it requires the related row's primary key, since that's what identifies which row to remove.
+- **`allowCreate`/`allowUpdate`/`allowDelete: false` rejects the request, it does not silently skip the item**: an alias-array item that asks for an operation the relationship's config disallows (e.g. a `_delete` item when `allowDelete: false`, or a new item with no id when `allowCreate: false`) returns `422` naming the relationship, the action, and the disabled flag — the whole write (parent included) is rolled back, not just that item. The one exception is re-sending an already-linked `belongsToMany`/`morphToMany`/`morphByMany`/`spatiePermission` item with no pivot fields to change: that's a no-op regardless of `allowUpdate`, since nothing would actually change.

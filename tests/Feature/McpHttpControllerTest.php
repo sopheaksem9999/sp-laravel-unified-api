@@ -228,4 +228,32 @@ class McpHttpControllerTest extends TestCase
             'title' => 'New Task from MCP',
         ]);
     }
+
+    /** @test */
+    public function it_reports_unknown_payload_field_as_a_tool_error_not_a_silent_drop(): void
+    {
+        $payload = [
+            'jsonrpc' => '2.0',
+            'id' => 5,
+            'method' => 'tools/call',
+            'params' => [
+                'name' => 'create_mcp_tasks',
+                'arguments' => [
+                    'payload' => [
+                        'title' => 'New Task from MCP',
+                        'bogus_field' => 'x',
+                    ],
+                ],
+            ],
+        ];
+
+        $response = $this->postJson('/api/mcp/message', $payload);
+
+        $response->assertStatus(200);
+
+        $result = $response->json('result');
+        $this->assertTrue($result['isError'] ?? false);
+        $this->assertStringContainsString("Unknown field 'bogus_field'", $result['content'][0]['text']);
+        $this->assertDatabaseMissing('mcp_tasks', ['title' => 'New Task from MCP']);
+    }
 }

@@ -21,6 +21,29 @@ Use this skill when you are adding or modifying:
 - Do not create standard CRUD routes or controllers. Configure tables/functions via `RecordTableType`.
 - Do not create custom endpoints for listing/filtering records. Use `GET /api/v1/{table}`.
 - Keep backward compatibility unless explicitly asked to break.
+- Filters are `{column}={operator}.{value}` query params (e.g. `status=eq.open`) — never `filter[column]=value` or `column[operator]=value` bracket syntax; those aren't supported.
+- Every create/update payload key must be a real column or declared relationship alias, or the API returns `422` naming it — don't guess field names.
+- A `hasMany`/`belongsToMany`/`hasManyThrough`/`morphMany`/`morphToMany`/`morphByMany`/`spatiePermission` relationship can be written in the same request as its parent (see "Nested relationship writes" below) instead of a separate create call per child table.
+
+## Nested relationship writes (single request)
+
+Write a parent record and its related rows in one call instead of one request per table:
+
+```php
+// POST /api/v1/invoices
+[
+    'customer_id' => 10,               // belongsTo: root FK field, not a nested object
+    'status' => 'draft',
+    'items' => [                       // hasMany: array of id / {fields} / {id, _delete}
+        1,                              // attach/reference existing item id
+        ['name' => 'Line A', 'qty' => 1],   // create a new item
+        ['id' => 5, '_delete' => true],     // remove an existing item
+    ],
+]
+```
+
+- `allowCreate`/`allowUpdate`/`allowDelete` on the relationship (default `true`) gate which of those are permitted. A disallowed operation (e.g. `_delete` when `allowDelete: false`) returns `422` and rolls back the whole request — it does not silently drop just that item.
+- `belongsTo`/`hasOne`/`hasOneThrough`/`morphTo`/`morphOne` are not nested-array writes; use the root FK/discriminator column instead.
 
 ## Where things live
 

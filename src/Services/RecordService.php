@@ -51,6 +51,8 @@ class RecordService
      */
     public function createRecord(string $table, array $payload, mixed $tenantId): array
     {
+        RelationshipResolverUtils::validatePayloadFields($table, $payload);
+
         $tableSchema = SchemaRegistryUtils::getTable($table);
 
         $payloadMain = $this->buildCrudPayload($payload, $tableSchema, $tenantId, false);
@@ -100,6 +102,8 @@ class RecordService
      */
     public function updateRecord(string $table, mixed $id, array $payload, mixed $tenantId): array
     {
+        RelationshipResolverUtils::validatePayloadFields($table, $payload);
+
         $tableSchema = SchemaRegistryUtils::getTable($table);
 
         $payloadMain = $this->buildCrudPayload($payload, $tableSchema, $tenantId, true);
@@ -253,6 +257,8 @@ class RecordService
      */
     public function upsertRecord(Request $request, string $table, array $payload, mixed $tenantId, array $matchOn = []): array
     {
+        RelationshipResolverUtils::validatePayloadFields($table, $payload);
+
         $tableSchema = SchemaRegistryUtils::getTable($table);
 
         $actualTableName = $tableSchema->table ?? $table;
@@ -866,6 +872,8 @@ class RecordService
         try {
             foreach ($items as $item) {
                 $operation = $this->determineOperation($item, $pk, $legacyAction);
+                // 'operation' is a per-item control field consumed above, not a data column/relationship.
+                unset($item['operation']);
 
                 if ('create' === $operation) {
                     $this->executeTableTrigger($tableSchema->beforeCreate ?? null, [$request, $table, $item]);

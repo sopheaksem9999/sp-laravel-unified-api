@@ -129,6 +129,34 @@ For every table where `isAuthWrite` is enabled (and `mcp.read_only` is false):
 - `update_{table}`: Updates an existing record by ID.
 - `delete_{table}`: Soft or force deletes a record by ID.
 
+#### Filter syntax for `list_{table}` / `read_{table}`
+
+`queryParams` filters are `{column: "operator.value"}` pairs — the same `{column}={operator}.{value}` syntax the HTTP API uses, just expressed as JSON instead of a query string:
+
+```json
+{ "queryParams": { "status": "eq.open", "total_amount": "gte.100" } }
+```
+
+Call `sp_api_get_endpoint` first to see which operators (`eq`, `neq`, `gt`, `lt`, `gte`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `ends_with`, `between`, ...) each field supports. Do **not** nest filters under a `filter` key or use bracket syntax like `column[operator]=value` — that shape is rejected (or silently ignored) by the underlying query engine; pass the column name directly as the `queryParams` key.
+
+#### Writing related data in a single `create_{table}` / `update_{table}` call
+
+Before writing related rows with separate `create_{childTable}` calls, check `sp_api_get_endpoint`'s `includes[]` for that relationship:
+
+- `"writable": true` (hasMany, belongsToMany, hasManyThrough, morphMany, morphToMany, morphByMany, spatiePermission) — the relationship can be nested directly in the parent's `payload`, so the parent row and its related rows are written in **one** `create_{table}`/`update_{table}` call instead of one call per table. `allowCreate`/`allowUpdate`/`allowDelete` say which of those operations are permitted through the nested array, and `payloadHint` gives the exact shape:
+  ```json
+  {
+    "payload": {
+      "invoice_number": "INV-1001",
+      "customer_id": 10,
+      "items": [1, { "id": 2 }, { "name": "Line A", "qty": 1 }, { "id": 5, "_delete": true }]
+    }
+  }
+  ```
+- `"writable": false` (belongsTo, hasOne, hasOneThrough, morphTo, morphOne) — there is no nested-array form; set the relationship via its own root field(s) in the same payload (`payloadHint` names them), e.g. `"customer_id": 10` instead of `"customer": { "id": 10 }`.
+
+See [Standard CRUD Operations](/guide/api-crud-operations) and the "Relationship Write Payload Guide" in [Relationships](/core-concepts/relationships) for the full HTTP-side reference this mirrors.
+
 ### Schema Tools (Discovery)
 Available on **both** endpoints (Data MCP and Schema MCP):
 
@@ -288,15 +316,15 @@ Authorization: Bearer YOUR_MCP_TOKEN
           {\"name\":\"total_amount\",\"type\":\"decimal\",\"nullable\":true,\"in\":[\"read\",\"write\"]}
         ],
         \"filters\":[
-          {\"field\":\"id\",\"operators\":[\"=\",\"!=\",\">\",\"<\",\">=\",\"<=\",\"in\",\"not_in\"]},
-          {\"field\":\"status\",\"operators\":[\"=\",\"!=\",\"in\"]},
-          {\"field\":\"invoice_number\",\"operators\":[\"=\",\"contains\",\"starts_with\",\"ends_with\"]},
-          {\"field\":\"total_amount\",\"operators\":[\"=\",\">\",\"<\",\">=\",\"<=\",\"between\"]}
+          {\"field\":\"id\",\"operators\":[\"eq\",\"neq\",\"gt\",\"lt\",\"gte\",\"lte\",\"in\",\"not_in\"]},
+          {\"field\":\"status\",\"operators\":[\"eq\",\"neq\",\"in\",\"not_in\"]},
+          {\"field\":\"invoice_number\",\"operators\":[\"eq\",\"neq\",\"in\",\"not_in\",\"contains\",\"starts_with\",\"ends_with\"]},
+          {\"field\":\"total_amount\",\"operators\":[\"eq\",\"neq\",\"in\",\"not_in\",\"gt\",\"lt\",\"gte\",\"lte\",\"between\"]}
         ],
         \"sorts\":[\"id\",\"invoice_number\",\"total_amount\",\"created_at\"],
         \"includes\":[
-          {\"name\":\"customer\",\"type\":\"belongsTo\",\"table\":\"customers\",\"foreignKey\":\"customer_id\"},
-          {\"name\":\"items\",\"type\":\"hasMany\",\"table\":\"invoice_items\",\"foreignKey\":\"invoice_id\"}
+          {\"name\":\"customer\",\"type\":\"belongsTo\",\"table\":\"customers\",\"foreignKey\":\"customer_id\",\"writable\":false,\"payloadHint\":\"Use the root field \\\"customer_id\\\": <id> in the same request — do not nest a \\\"customer\\\" object in the payload\"},
+          {\"name\":\"items\",\"type\":\"hasMany\",\"table\":\"invoice_items\",\"foreignKey\":\"invoice_id\",\"writable\":true,\"allowCreate\":true,\"allowUpdate\":true,\"allowDelete\":true,\"payloadHint\":\"\\\"items\\\": [1, {\\\"id\\\": 2}, {...fields to create}, {\\\"id\\\": 5, \\\"_delete\\\": true}] — send this alongside the parent fields in one create/update call\"}
         ],
         \"permissions\":{
           \"read\":[\"invoices.read\"],
@@ -409,6 +437,7 @@ With token (production):
 | Available filters + operators per field | `sp_api_get_endpoint` → `filters[]` |
 | Sortable fields | `sp_api_get_endpoint` → `sorts[]` |
 | Relationship structure (foreign keys, table names, types) | `sp_api_get_endpoint` → `includes[]` |
+| Which relationships can be written in the same request as the parent, and the exact payload shape | `sp_api_get_endpoint` → `includes[].writable`/`allowCreate`/`allowUpdate`/`allowDelete`/`payloadHint` |
 | Required permissions per action | `sp_api_get_endpoint` → `permissions` |
 | All permission names across the app | `sp_api_list_permissions` |
 

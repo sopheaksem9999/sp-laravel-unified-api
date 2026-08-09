@@ -32,16 +32,18 @@ Retrieve audit logs using the standard dynamic CRUD API. You can use standard fi
 
 #### Query Parameters
 
-- `filter[entity_type]` (string, optional) - Filter by entity type (table name, e.g. `invoices`)
-- `filter[entity_id]` (integer, optional) - Filter by specific entity ID
-- `filter[event]` (string, optional) - Filter by event type
-- `filter[user_id]` (integer, optional) - Filter by user ID
+- `entity_type` (string, optional) - Filter by entity type (table name, e.g. `eq.invoices`)
+- `entity_id` (integer, optional) - Filter by specific entity ID (e.g. `eq.123`)
+- `event` (string, optional) - Filter by event type
+- `user_id` (integer, optional) - Filter by user ID
 - `per_page` (integer) - Max results (default: 15)
+
+Filters use the standard `{column}={operator}.{value}` syntax described in the "Filter Operators" section of [Standard CRUD Operations](/guide/api-crud-operations) — do not wrap them in a `filter[...]` key.
 
 #### Example Request
 
 ```http
-GET /api/v1/audit_logs?filter[entity_type]=invoices&filter[entity_id]=123&per_page=20
+GET /api/v1/audit_logs?entity_type=eq.invoices&entity_id=eq.123&per_page=20
 Authorization: Bearer {access_token}
 ```
 

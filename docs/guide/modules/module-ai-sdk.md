@@ -162,7 +162,7 @@ class CustomerSummaryAsyncService
 For queued AI results, store outputs in a table such as `ai_jobs` or `ai_results` and expose it via normal `sp-laravel-api` CRUD reads:
 
 ```http
-GET /api/v1/ai_jobs?filter[job_id]=...
+GET /api/v1/ai_jobs?job_id=eq.{jobId}
 ```
 
 ## Security Notes

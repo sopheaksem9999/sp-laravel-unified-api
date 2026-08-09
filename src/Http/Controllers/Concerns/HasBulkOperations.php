@@ -141,7 +141,8 @@ trait HasBulkOperations
             $this->authorizeAction($table, 'create');
             $this->resolveActualTableName($table);
 
-            $payload = $request->all();
+            // See HasCrudOperations::createRecord() for why the query string is excluded from the payload.
+            $payload = $request->except(array_keys($request->query()));
             $items   = (!is_array($payload) || (is_array($payload) && !array_key_exists(0, $payload) && !empty($payload)))
                 ? [$payload]
                 : $payload;
@@ -259,7 +260,8 @@ trait HasBulkOperations
             $this->resolveActualTableName($table);
 
             $pk      = $tableSchema->primaryKey ?? 'id';
-            $payload = $request->all();
+            // See HasCrudOperations::createRecord() for why the query string is excluded from the payload.
+            $payload = $request->except(array_keys($request->query()));
             $items   = (!is_array($payload) || (is_array($payload) && !array_key_exists(0, $payload) && !empty($payload)))
                 ? [$payload]
                 : $payload;
