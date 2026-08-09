@@ -591,6 +591,108 @@ class McpServerService
                 ];
             }
 
+            // Upsert endpoint
+            if ($config->canUpsert ?? true) {
+                $tableEndpoints[] = [
+                    'name' => $table . '.upsert',
+                    'method' => ['POST'],
+                    'uri' => '/' . $apiPrefix . '/' . $table . '/upsert',
+                    'table' => $table,
+                    'actions' => ['upsert'],
+                    'isRead' => false,
+                    'isWrite' => true,
+                ];
+            }
+
+            // Restore endpoint (soft-deletable tables only)
+            if ($config->canUpdate && ($config->softDeletes ?? false)) {
+                $tableEndpoints[] = [
+                    'name' => $table . '.restore',
+                    'method' => ['POST'],
+                    'uri' => '/' . $apiPrefix . '/' . $table . '/{id}/restore',
+                    'table' => $table,
+                    'actions' => ['restore'],
+                    'isRead' => false,
+                    'isWrite' => true,
+                ];
+            }
+
+            // Force delete endpoint
+            if ($config->canDelete) {
+                $tableEndpoints[] = [
+                    'name' => $table . '.forceDelete',
+                    'method' => ['DELETE'],
+                    'uri' => '/' . $apiPrefix . '/' . $table . '/{id}/force',
+                    'table' => $table,
+                    'actions' => ['forceDelete'],
+                    'isRead' => false,
+                    'isWrite' => true,
+                ];
+            }
+
+            // Bulk endpoints
+            if (RecordConfigService::bulkOperationsEnabled()) {
+                if ($config->canCreate) {
+                    $tableEndpoints[] = [
+                        'name' => $table . '.bulkCreate',
+                        'method' => ['POST'],
+                        'uri' => '/' . $apiPrefix . '/' . $table . '/bulk/create',
+                        'table' => $table,
+                        'actions' => ['bulkCreate'],
+                        'isRead' => false,
+                        'isWrite' => true,
+                    ];
+                }
+
+                if ($config->canUpdate) {
+                    $tableEndpoints[] = [
+                        'name' => $table . '.bulkUpdate',
+                        'method' => ['POST'],
+                        'uri' => '/' . $apiPrefix . '/' . $table . '/bulk/update',
+                        'table' => $table,
+                        'actions' => ['bulkUpdate'],
+                        'isRead' => false,
+                        'isWrite' => true,
+                    ];
+                }
+
+                if ($config->canDelete) {
+                    $tableEndpoints[] = [
+                        'name' => $table . '.bulkDelete',
+                        'method' => ['POST'],
+                        'uri' => '/' . $apiPrefix . '/' . $table . '/bulk/delete',
+                        'table' => $table,
+                        'actions' => ['bulkDelete'],
+                        'isRead' => false,
+                        'isWrite' => true,
+                    ];
+                }
+
+                if ($config->canUpsert ?? true) {
+                    $tableEndpoints[] = [
+                        'name' => $table . '.bulkUpsert',
+                        'method' => ['POST'],
+                        'uri' => '/' . $apiPrefix . '/' . $table . '/bulk/upsert',
+                        'table' => $table,
+                        'actions' => ['bulkUpsert'],
+                        'isRead' => false,
+                        'isWrite' => true,
+                    ];
+                }
+
+                if ($config->canCreate && $config->canUpdate && $config->canDelete) {
+                    $tableEndpoints[] = [
+                        'name' => $table . '.bulk',
+                        'method' => ['POST'],
+                        'uri' => '/' . $apiPrefix . '/' . $table . '/bulk',
+                        'table' => $table,
+                        'actions' => ['bulkMixed'],
+                        'isRead' => false,
+                        'isWrite' => true,
+                    ];
+                }
+            }
+
             // Table RPC functions
             if (!empty($config->functions)) {
                 foreach ($config->functions as $fnName => $fn) {
@@ -690,6 +792,75 @@ class McpServerService
 
         if ($config->canDelete) {
             $actions['delete'] = ['method' => 'DELETE', 'uri' => '/' . $apiPrefix . '/' . $config->table . '/{id}'];
+        }
+
+        if ($config->canUpsert ?? true) {
+            $actions['upsert'] = [
+                'method' => 'POST',
+                'uri' => '/' . $apiPrefix . '/' . $config->table . '/upsert',
+                'note' => 'Requires a ?match_on=col1,col2 query parameter naming the columns to match an existing record on.',
+            ];
+        }
+
+        if ($config->canUpdate && ($config->softDeletes ?? false)) {
+            $actions['restore'] = [
+                'method' => 'POST',
+                'uri' => '/' . $apiPrefix . '/' . $config->table . '/{id}/restore',
+                'note' => 'Restores a soft-deleted record.',
+            ];
+        }
+
+        if ($config->canDelete) {
+            $actions['forceDelete'] = [
+                'method' => 'DELETE',
+                'uri' => '/' . $apiPrefix . '/' . $config->table . '/{id}/force',
+                'note' => 'Permanently deletes the record, bypassing soft deletes.',
+            ];
+        }
+
+        if (RecordConfigService::bulkOperationsEnabled()) {
+            $bulkMax = RecordConfigService::bulkMax();
+
+            if ($config->canCreate) {
+                $actions['bulkCreate'] = [
+                    'method' => 'POST',
+                    'uri' => '/' . $apiPrefix . '/' . $config->table . '/bulk/create',
+                    'note' => "Body: a JSON array of records to create (max {$bulkMax} per request).",
+                ];
+            }
+
+            if ($config->canUpdate) {
+                $actions['bulkUpdate'] = [
+                    'method' => 'POST',
+                    'uri' => '/' . $apiPrefix . '/' . $config->table . '/bulk/update',
+                    'note' => "Body: a JSON array of records to update, each including its primary key (max {$bulkMax} per request).",
+                ];
+            }
+
+            if ($config->canDelete) {
+                $actions['bulkDelete'] = [
+                    'method' => 'POST',
+                    'uri' => '/' . $apiPrefix . '/' . $config->table . '/bulk/delete',
+                    'note' => "Body: a JSON array of records naming the primary key to delete (max {$bulkMax} per request).",
+                ];
+            }
+
+            if ($config->canUpsert ?? true) {
+                $actions['bulkUpsert'] = [
+                    'method' => 'POST',
+                    'uri' => '/' . $apiPrefix . '/' . $config->table . '/bulk/upsert',
+                    'note' => "Body: a JSON array of records to upsert (max {$bulkMax} per request). Requires ?match_on=col1,col2.",
+                ];
+            }
+
+            if ($config->canCreate && $config->canUpdate && $config->canDelete) {
+                $actions['bulkMixed'] = [
+                    'method' => 'POST',
+                    'uri' => '/' . $apiPrefix . '/' . $config->table . '/bulk',
+                    'note' => "Body: a JSON array of records (max {$bulkMax} per request). Each item's operation (create/update/delete/upsert) "
+                        . "is auto-detected from its shape, or set explicitly via an 'operation' field per item.",
+                ];
+            }
         }
 
         // Fields from column definitions

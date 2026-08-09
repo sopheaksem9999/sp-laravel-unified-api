@@ -288,6 +288,28 @@ class RecordService
         // Apply timestamps and audit fields
         $item = $this->applyTimestampsAndAuditFields($item, $tableSchema, true);
 
+        // The UPDATE branch above only sets updated_at. Fill created_at for the
+        // INSERT branch of the upsert (no existing row matches match_on), which
+        // would otherwise insert NULL into a nullable timestamp column. Safe for
+        // existing rows: created_at is excluded from $updateColumns below.
+        if (isset($tableSchema->columns['created_at']) && !array_key_exists('created_at', $item)) {
+            $item['created_at'] = TimeUtils::now();
+        }
+
+        // Restore an explicit primary key (e.g. a client-generated UUID) or generate one for
+        // a UUID-typed key with no database default. sanitizePayload() strips 'id'
+        // unconditionally, and the INSERT branch of an upsert (no existing row matches
+        // match_on) needs a value for the same reason createRecord() does: a uuid column
+        // has no database default and does not auto-increment, so a NULL insert violates
+        // its NOT NULL constraint. Harmless when the row actually matches and updates
+        // instead — $pk is excluded from $updateColumns below, so this value is never
+        // applied to an existing row.
+        if (isset($tableSchema->columns[$pk]) && array_key_exists($pk, $payload) && null !== $payload[$pk]) {
+            $item[$pk] = $payload[$pk];
+        } elseif (!array_key_exists($pk, $item) && SchemaRegistryUtils::isUuidColumnType($tableSchema->columns[$pk] ?? null)) {
+            $item[$pk] = (string) Str::uuid();
+        }
+
         // Upsert requires update columns; exclude match columns, primary key and system timestamps
         $excludeColumns = array_merge($matchOn, [$pk, 'id', 'created_at', 'deleted_at']);
 
@@ -367,12 +389,28 @@ class RecordService
         $updateColumns = [];
 
         foreach ($payloads as $payload) {
+            RelationshipResolverUtils::validatePayloadFields($table, $payload);
+
             $item = $this->sanitizePayload($payload, $tableSchema);
             if ($tenantEnabled) {
                 $item[RecordConfigService::tenantColumn()] = $cacheTenantId;
             }
 
             $item = $this->applyTimestampsAndAuditFields($item, $tableSchema, true);
+
+            // See upsertRecord() for why created_at must also be filled here for
+            // the INSERT branch of the upsert (NULL timestamp otherwise).
+            if (isset($tableSchema->columns['created_at']) && !array_key_exists('created_at', $item)) {
+                $item['created_at'] = TimeUtils::now();
+            }
+
+            // See upsertRecord() for why an explicit/generated primary key is needed here.
+            if (isset($tableSchema->columns[$pk]) && array_key_exists($pk, $payload) && null !== $payload[$pk]) {
+                $item[$pk] = $payload[$pk];
+            } elseif (!array_key_exists($pk, $item) && SchemaRegistryUtils::isUuidColumnType($tableSchema->columns[$pk] ?? null)) {
+                $item[$pk] = (string) Str::uuid();
+            }
+
             $preparedItems[] = $item;
         }
 

@@ -990,9 +990,32 @@ class RelationshipResolverUtils
 
             $pivotData[$foreignPivotKey] = $mainId;
             $pivotData[$relatedPivotKey] = $relatedId;
+            // Polymorphic pivots (morphToMany, e.g. sp_model_has_roles) have a
+            // NOT NULL discriminator column identifying which model table
+            // $mainId belongs to. resolveRelationship() already computes the
+            // model class for this ('relation', e.g. 'App\Models\User') —
+            // the client payload has no way to supply it and shouldn't need
+            // to, since it's implied entirely by which endpoint was called.
+            if (isset($config['morph_type']) && !array_key_exists($config['morph_type'], $pivotData)) {
+                $pivotData[$config['morph_type']] = $config['relation'] ?? null;
+            }
             if (($config['with_timestamps'] ?? false)) {
                 $pivotData['created_at'] = TimeUtils::now();
                 $pivotData['updated_at'] = TimeUtils::now();
+            }
+
+            // Pivot tables created via MigrationIdHelper::primary() (e.g.
+            // sp_model_has_roles) have their own uuid primary key with no
+            // database default — same reasoning as RecordService::createRecord():
+            // an insert with no id violates the NOT NULL constraint. Gated on
+            // the column actually existing so this is a no-op for ordinary
+            // two-column pivot tables that only have a composite key.
+            if (
+                !array_key_exists('id', $pivotData)
+                && 'uuid' === RecordConfigService::idType()
+                && Schema::hasColumn($pivotTable, 'id')
+            ) {
+                $pivotData['id'] = (string) Str::uuid();
             }
 
             DB::table($pivotTable)->insert($pivotData);
