@@ -329,4 +329,109 @@ class OpenApiTest extends TestCase
         $this->assertStringContainsString('Payload examples', $createDescription);
         $this->assertStringContainsString('#relationship-write-payload-guide', $createDescription);
     }
+
+    /** @test */
+    public function it_declares_a_structured_filter_parameter_per_column_on_the_list_operation(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.tables', [
+            'invoices' => new RecordTableType(
+                table: 'invoices',
+                columns: [
+                    'id' => ['type' => 'bigint', 'nullable' => false],
+                    'status' => ['type' => 'string', 'nullable' => false],
+                    'total' => ['type' => 'decimal', 'nullable' => true],
+                    'created_at' => ['type' => 'datetime', 'nullable' => true],
+                ],
+            ),
+        ]);
+
+        $spec = (new OpenApiService())->generateInternal();
+        $parameters = $spec['paths']['/api/v2/invoices']['get']['parameters'] ?? [];
+        $byName = collect($parameters)->keyBy('name');
+
+        foreach (['id', 'status', 'total', 'created_at'] as $column) {
+            $this->assertTrue($byName->has($column), "Expected a '{$column}' filter parameter on the list operation");
+            $param = $byName->get($column);
+            $this->assertSame('query', $param['in']);
+            $this->assertSame('string', $param['schema']['type']);
+            $this->assertStringContainsString('{operator}.{value}', $param['description']);
+            $this->assertStringContainsString('filter[', $param['description']);
+        }
+
+        $this->assertSame('gte.100', $byName->get('total')['example']);
+        $this->assertSame('gte.2026-01-01', $byName->get('created_at')['example']);
+        $this->assertSame('eq.value', $byName->get('status')['example']);
+    }
+
+    /** @test */
+    public function it_declares_select_sortby_order_and_search_as_structured_parameters(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.tables', [
+            'invoices' => new RecordTableType(
+                table: 'invoices',
+                columns: [
+                    'id' => ['type' => 'bigint', 'nullable' => false],
+                    'ref_number' => ['type' => 'varchar', 'nullable' => true],
+                ],
+                relationships: [
+                    'customer' => new RecordBelongsToType(table: 'customers', foreignKey: 'customer_id'),
+                ],
+                searchable: ['ref_number'],
+            ),
+            'customers' => new RecordTableType(
+                table: 'customers',
+                columns: ['id' => ['type' => 'bigint', 'nullable' => false]],
+            ),
+        ]);
+
+        $spec = (new OpenApiService())->generateInternal();
+        $parameters = $spec['paths']['/api/v2/invoices']['get']['parameters'] ?? [];
+        $byName = collect($parameters)->keyBy('name');
+
+        $this->assertTrue($byName->has('select'));
+        $this->assertSame('*,customer(*)', $byName->get('select')['example']);
+
+        $this->assertTrue($byName->has('sortby'));
+        $this->assertSame(['id', 'ref_number'], $byName->get('sortby')['schema']['enum']);
+
+        $this->assertTrue($byName->has('order'));
+        $this->assertSame(['asc', 'desc'], $byName->get('order')['schema']['enum']);
+
+        $this->assertTrue($byName->has('search'));
+        $this->assertStringContainsString('ref_number', $byName->get('search')['description']);
+    }
+
+    /** @test */
+    public function list_only_parameters_do_not_leak_onto_the_create_operation(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.tables', [
+            'invoices' => new RecordTableType(
+                table: 'invoices',
+                columns: [
+                    'id' => ['type' => 'bigint', 'nullable' => false],
+                    'status' => ['type' => 'string', 'nullable' => false],
+                ],
+            ),
+        ]);
+
+        $spec = (new OpenApiService())->generateInternal();
+        $path = $spec['paths']['/api/v2/invoices'];
+
+        // Pagination/filter/select params belong to the 'get' operation only.
+        $this->assertArrayHasKey('parameters', $path['get']);
+        $getNames = collect($path['get']['parameters'])->pluck('name');
+        $this->assertTrue($getNames->contains('page'));
+        $this->assertTrue($getNames->contains('status'));
+        $this->assertTrue($getNames->contains('select'));
+
+        // The 'post' (create) operation has no parameters of its own, and the shared
+        // path-level 'parameters' (if present) must not include list-only params.
+        $this->assertArrayNotHasKey('parameters', $path['post']);
+        foreach ($path['parameters'] ?? [] as $sharedParam) {
+            $this->assertNotContains($sharedParam['name'], ['page', 'per_page', 'status', 'select', 'sortby', 'order', 'search']);
+        }
+    }
 }

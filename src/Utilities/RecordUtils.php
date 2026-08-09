@@ -84,7 +84,7 @@ class RecordUtils
             $typeName = null;
             if (is_string($overrideType) && $overrideType !== '') {
                 $typeName = $overrideType;
-            } elseif ($type === 'user-defined' || $udtName) {
+            } elseif ($type === 'user-defined' && $udtName) {
                 if (is_string($udtName) && $udtName !== '') {
                     if (is_string($udtSchema) && $udtSchema !== '' && $udtSchema !== 'public') {
                         $typeName = $udtSchema . '.' . $udtName;

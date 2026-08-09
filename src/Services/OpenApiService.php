@@ -702,7 +702,8 @@ Accepts an array of IDs or an array of objects with the primary key.
 
             // List & create (API endpoints use record name, but descriptions reference actual table)
             $basePath = '/' . $apiPrefix . '/' . $recordName;
-            $listParameters = array_merge($tenantHeaderParameters, [
+            $columns = $config->columns ?? [];
+            $paginationParameters = [
                 [
                     'name' => 'page',
                     'in' => 'query',
@@ -753,7 +754,13 @@ Accepts an array of IDs or an array of objects with the primary key.
                     'description' => "Legacy alias for `total=false`. Skip the total count query for performance (default: " . ($skipTotalDefault ? 'true' : 'false') . ", configurable via `pagination.skip_total_default`).",
                     'schema' => ['type' => 'boolean', 'default' => $skipTotalDefault],
                 ],
-            ]);
+            ];
+
+            $getOnlyParameters = array_merge(
+                $paginationParameters,
+                self::queryShapeParameters($columns, $config->relationships ?? [], $config->searchable ?? []),
+                self::columnFilterParameters($columns)
+            );
 
             $listMetaProperties = [
                 'request_id' => ['type' => 'string'],
@@ -770,11 +777,15 @@ Accepts an array of IDs or an array of objects with the primary key.
                 'last_cursor' => ['type' => 'string', 'description' => 'Cursor to jump to last page (cursor pagination). Omitted when total=false or skip_total=true.'],
             ];
             $paths[$basePath] = array_filter([
-                'parameters' => $listParameters,
+                // Shared by GET and POST on this path — list-only params (pagination, filters,
+                // select/sortby/order/search) live on the 'get' operation below instead, so they
+                // aren't misrepresented as also applying to POST (create).
+                'parameters' => $tenantHeaderParameters,
                 'get' => $canRead ? [
                     'tags' => [$formattedRecordName],
                     'summary' => 'List ' . $formattedRecordName,
                     'description' => "Retrieve {$formattedRecordName} records with comprehensive query capabilities:\n\n**Advanced Filtering:** Multiple operators ([Filter](#description/-getting-started))\n\n{$relationshipDescription}",
+                    'parameters' => $getOnlyParameters,
                     'responses' => [
                         '200' => [
                             'description' => 'Successful response',
@@ -1849,6 +1860,110 @@ Accepts an array of IDs or an array of objects with the primary key.
         }
 
         return [self::tenantHeaderParameter(true)];
+    }
+
+    /**
+     * A representative '{operator}.{value}' example per column type, used only to make
+     * the filter parameter's syntax immediately obvious from the schema itself.
+     */
+    private static function columnFilterExample(string $type): string
+    {
+        return match ($type) {
+            'integer', 'bigint', 'smallint', 'tinyint', 'int',
+            'decimal', 'float', 'double', 'numeric', 'unsigned' => 'gte.100',
+            'datetime', 'date', 'timestamp', 'time' => 'gte.2026-01-01',
+            'boolean', 'bool' => 'eq.true',
+            default => 'eq.value',
+        };
+    }
+
+    /**
+     * One query parameter per table column, documenting the actual '{column}={operator}.{value}'
+     * filter syntax directly in the OpenAPI schema — not just in the free-text description —
+     * so a schema-driven client/agent doesn't have to guess (or invent unsupported bracket
+     * syntax like 'filter[column]=value').
+     *
+     * @param array<string, mixed> $columns
+     * @return array<int, array<string, mixed>>
+     */
+    private static function columnFilterParameters(array $columns): array
+    {
+        $parameters = [];
+        foreach ($columns as $columnName => $columnDef) {
+            if (!is_string($columnName)) {
+                continue;
+            }
+
+            $type = is_array($columnDef) ? (string) ($columnDef['type'] ?? 'string') : (string) $columnDef;
+
+            $parameters[] = [
+                'name' => $columnName,
+                'in' => 'query',
+                'required' => false,
+                'description' => sprintf(
+                    "Filter by `%s` using `{operator}.{value}` syntax (e.g. `eq.`, `neq.`, `gt.`, `gte.`, `lt.`, `lte.`, `in.`, `contains.`, ...) — see \"Filter Operators\" in the API description for the full list. Do not wrap this in a `filter[...]` key.",
+                    $columnName
+                ),
+                'schema' => ['type' => 'string'],
+                'example' => self::columnFilterExample($type),
+            ];
+        }
+
+        return $parameters;
+    }
+
+    /**
+     * 'select' / 'sortby' / 'order' / 'search' query parameters for the list endpoint,
+     * structurally declared (not just described in prose) so a schema-driven client/agent
+     * knows they exist without having to read the free-text description.
+     *
+     * @param array<string, mixed> $columns
+     * @param array<string, mixed> $relationships
+     * @param string[] $searchable
+     * @return array<int, array<string, mixed>>
+     */
+    private static function queryShapeParameters(array $columns, array $relationships, array $searchable): array
+    {
+        $relationAliases = array_values(array_filter(array_keys($relationships), 'is_string'));
+        $selectExample = [] !== $relationAliases ? '*,' . $relationAliases[0] . '(*)' : '*';
+
+        $sortableColumns = array_values(array_filter(array_keys($columns), 'is_string'));
+
+        return [
+            [
+                'name' => 'select',
+                'in' => 'query',
+                'required' => false,
+                'description' => 'Comma-separated columns to return. Embed relationships with parentheses: `relation(cols)`. Use `*` for all main-table columns.',
+                'schema' => ['type' => 'string'],
+                'example' => $selectExample,
+            ],
+            [
+                'name' => 'sortby',
+                'in' => 'query',
+                'required' => false,
+                'description' => 'Column to sort by.',
+                'schema' => [] !== $sortableColumns
+                    ? ['type' => 'string', 'enum' => $sortableColumns]
+                    : ['type' => 'string'],
+            ],
+            [
+                'name' => 'order',
+                'in' => 'query',
+                'required' => false,
+                'description' => 'Sort direction.',
+                'schema' => ['type' => 'string', 'enum' => ['asc', 'desc'], 'default' => 'desc'],
+            ],
+            [
+                'name' => 'search',
+                'in' => 'query',
+                'required' => false,
+                'description' => [] !== $searchable
+                    ? 'Search across this table\'s configured searchable fields: ' . implode(', ', $searchable) . '.'
+                    : 'Search across this table\'s configured searchable fields (none configured).',
+                'schema' => ['type' => 'string'],
+            ],
+        ];
     }
 
     /**
