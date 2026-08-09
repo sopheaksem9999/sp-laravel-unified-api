@@ -18,6 +18,7 @@ use Sopheak\Core\Services\RecordConfigService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Gate;
 use Sopheak\Core\Constants\RecordConstants;
+use Sopheak\Core\Enums\RecordRelationshipsEnum;
 
 class McpServerService
 {
@@ -194,7 +195,8 @@ class McpServerService
 
         $tools[] = [
             'name' => 'sp_api_get_endpoint',
-            'description' => 'Get full schema for a single endpoint: fields, filters, sorts, includes, relationships, validation rules, and auth requirements.',
+            'description' => 'Get full schema for a single endpoint: fields, filters, sorts, includes, relationships, validation rules, and auth requirements. '
+                . 'Check includes[].writable/payloadHint before writing related data — relationships marked writable:true can be nested in the SAME create/update payload (one request) instead of a separate request per child table.',
             'inputSchema' => [
                 'type' => 'object',
                 'properties' => [
@@ -234,7 +236,10 @@ class McpServerService
                         'properties' => [
                             'queryParams' => [
                                 'type' => 'object',
-                                'description' => 'Query parameters (e.g., filters, sortby, select)',
+                                'description' => "Filters are {column: 'operator.value'} pairs, e.g. {\"status\": \"eq.open\", \"total_amount\": \"gte.100\"} "
+                                    . '(see filters[] on sp_api_get_endpoint for the operators each field supports). '
+                                    . "Also supports 'select', 'sortby', 'order', 'per_page', 'page', 'search', and grouped-logic 'and'/'or' params. "
+                                    . "Do not nest a filter under a 'filter' key or use bracket syntax like column[operator]=value — pass the column name directly as the queryParams key.",
                                 'additionalProperties' => true,
                             ],
                             'tenantId' => ['type' => ['string', 'integer', 'null']],
@@ -261,9 +266,17 @@ class McpServerService
                 ];
 
                 if (!$readOnly) {
+                    $relationshipHint = !empty($config->relationships)
+                        ? ' This table has relationships — call sp_api_get_endpoint first and check includes[].writable/payloadHint: '
+                            . 'writable relations can be nested directly in payload to write parent + related rows in a single call, '
+                            . 'instead of one request per table.'
+                        : '';
+                    $unknownFieldHint = ' Every payload key must be a real column or relationship alias from sp_api_get_endpoint '
+                        . '(fields[]/includes[]) — an invented or misspelled key is rejected with an error naming it, not silently dropped.';
+
                     $tools[] = [
                         'name' => 'create_' . $table,
-                        'description' => 'Create a new record in ' . $table,
+                        'description' => 'Create a new record in ' . $table . '.' . $relationshipHint . $unknownFieldHint,
                         'inputSchema' => [
                             'type' => 'object',
                             'properties' => [
@@ -277,7 +290,7 @@ class McpServerService
 
                     $tools[] = [
                         'name' => 'update_' . $table,
-                        'description' => 'Update an existing record in ' . $table,
+                        'description' => 'Update an existing record in ' . $table . '.' . $relationshipHint . $unknownFieldHint,
                         'inputSchema' => [
                             'type' => 'object',
                             'properties' => [
@@ -711,12 +724,43 @@ class McpServerService
         if (!empty($config->relationships)) {
             foreach ($config->relationships as $relName => $rel) {
                 $relConfig = is_object($rel) && method_exists($rel, 'toArray') ? $rel->toArray() : (array) $rel;
-                $includes[] = [
+                $type = $relConfig['type'] ?? 'unknown';
+                $typeValue = $type instanceof RecordRelationshipsEnum ? $type->value : (string) $type;
+                $foreignKey = $relConfig['foreignKey'] ?? ($relConfig['foreignPivotKey'] ?? null);
+
+                $include = [
                     'name' => $relName,
-                    'type' => $relConfig['type'] ?? 'unknown',
+                    'type' => $typeValue,
                     'table' => $relConfig['table'] ?? ($relConfig['relatedTable'] ?? null),
-                    'foreignKey' => $relConfig['foreignKey'] ?? ($relConfig['foreignPivotKey'] ?? null),
+                    'foreignKey' => $foreignKey,
+                    // Whether this relationship can be sent inline in the parent's create/update
+                    // payload — i.e. written in the SAME request instead of a separate follow-up
+                    // request per child table. See payloadHint for the exact shape.
+                    'writable' => in_array($typeValue, [
+                        'hasMany', 'belongsToMany', 'hasManyThrough',
+                        'morphMany', 'morphToMany', 'morphByMany', 'spatiePermission',
+                    ], true),
                 ];
+
+                if ($include['writable']) {
+                    $include['allowCreate'] = $relConfig['allowCreate'] ?? true;
+                    $include['allowUpdate'] = $relConfig['allowUpdate'] ?? true;
+                    $include['allowDelete'] = $relConfig['allowDelete'] ?? true;
+                    $include['payloadHint'] = sprintf(
+                        '"%s": [1, {"id": 2}, {...fields to create}, {"id": 5, "_delete": true}] — send this alongside the parent fields in one create/update call',
+                        $relName
+                    );
+                } elseif ('belongsTo' === $typeValue) {
+                    $include['payloadHint'] = sprintf(
+                        'Use the root field "%s": <id> in the same request — do not nest a "%s" object in the payload',
+                        $foreignKey ?? ($relName . '_id'),
+                        $relName
+                    );
+                } else {
+                    $include['payloadHint'] = 'Not a nested-write alias — set the underlying columns directly on the parent, or use a custom function';
+                }
+
+                $includes[] = $include;
             }
         }
 
@@ -909,9 +953,14 @@ class McpServerService
 
     // ─── Helpers ────────────────────────────────────────────────────────────
 
+    /**
+     * Operator tokens returned here must match QueryBuilderFiltersUtils::FILTER_OPERATORS —
+     * they are used as-is in the '{operator}.{value}' filter syntax (e.g. 'eq.5'), not as
+     * SQL/comparison symbols.
+     */
     private function filterOperatorsForType(string $type): array
     {
-        $base = ['=', '!=', 'in', 'not_in'];
+        $base = ['eq', 'neq', 'in', 'not_in'];
 
         return match ($type) {
             'string', 'text', 'varchar', 'char', 'longtext', 'mediumtext' => [
@@ -919,13 +968,13 @@ class McpServerService
             ],
             'integer', 'bigint', 'smallint', 'tinyint', 'int',
             'decimal', 'float', 'double', 'numeric', 'unsigned' => [
-                ...$base, '>', '<', '>=', '<=', 'between',
+                ...$base, 'gt', 'lt', 'gte', 'lte', 'between',
             ],
             'datetime', 'date', 'timestamp', 'time' => [
-                '=', '!=', '>', '<', '>=', '<=', 'between',
+                'eq', 'neq', 'gt', 'lt', 'gte', 'lte', 'between',
             ],
-            'boolean', 'bool' => ['=', '!='],
-            'json', 'array' => ['=', 'contains'],
+            'boolean', 'bool' => ['eq', 'neq'],
+            'json', 'array' => ['eq', 'contains'],
             default => $base,
         };
     }

@@ -172,7 +172,7 @@ class RelationshipPermissionsTest extends TestCase
             'task_id' => $taskId,
         ]);
 
-        // 2. Try to Detach Task (Delete) - Should be BLOCKED/IGNORED
+        // 2. Try to Detach Task (Delete) - Should be REJECTED, not silently ignored
         $updatePayload = [
             'tasks' => [
                 ['id' => $taskId, '_delete' => true],
@@ -180,7 +180,11 @@ class RelationshipPermissionsTest extends TestCase
         ];
 
         $response = $this->putJson('/api/projects/' . $projectId, $updatePayload);
-        $response->assertStatus(200);
+        $response->assertStatus(422);
+        $response->assertJsonPath(
+            'message',
+            "Cannot delete item in relationship 'tasks' for table 'projects': allowDelete is disabled for this relationship."
+        );
 
         // The link should STILL exist because allowDelete = false
         $this->assertDatabaseHas('project_tasks', [

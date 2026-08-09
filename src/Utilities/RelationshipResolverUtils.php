@@ -374,6 +374,55 @@ class RelationshipResolverUtils
     }
 
     /**
+     * Validate that every top-level key in a create/update payload is either a real
+     * column or a declared relationship alias on the table. Without this, a typo'd or
+     * invented field name is silently dropped by RecordPayloadExtractor/sanitizePayload
+     * (columns) or processRelatedData (relationships) instead of failing loud, so the
+     * client gets a 200/201 that quietly ignored part of what it sent.
+     *
+     * A column listed in `columnWriteDisabled` is still a *known* field — sending it is
+     * deliberately a silent no-op (e.g. round-tripping a GET response back as a PUT body
+     * without stripping server-computed fields), not an error. Only names that match
+     * neither a column nor a relationship at all are rejected.
+     *
+     * @param array<string, mixed> $payload
+     */
+    public static function validatePayloadFields(string $table, array $payload): void
+    {
+        if ([] === $payload) {
+            return;
+        }
+
+        $tableSchema = self::getSchema()[$table] ?? null;
+        if (null === $tableSchema) {
+            return;
+        }
+
+        $columns = array_keys($tableSchema->columns ?? []);
+        $relationships = array_keys($tableSchema->relationships ?? []);
+
+        foreach ($payload as $field => $value) {
+            if (!is_string($field)) {
+                continue;
+            }
+
+            if (in_array($field, $columns, true) || in_array($field, $relationships, true)) {
+                continue;
+            }
+
+            sort($columns);
+            sort($relationships);
+            throw new InvalidArgumentException(sprintf(
+                "Unknown field '%s' in payload for table '%s'. Valid columns: %s. Valid relationships: %s.",
+                $field,
+                $table,
+                [] === $columns ? 'none' : implode(', ', $columns),
+                [] === $relationships ? 'none' : implode(', ', $relationships)
+            ));
+        }
+    }
+
+    /**
      * Resolve relationship configuration for a given alias on a main table.
      * Only uses static configuration - no dynamic inference.
      */
@@ -662,12 +711,12 @@ class RelationshipResolverUtils
             $allowDelete = $config['allow_delete'] ?? true;
 
             if ($type === 'belongsToMany' || $type === 'morphToMany') {
-                self::processBelongsToManyOperation($relatedData, $recordId, $config, $schema, $tenantId, $allowCreate, $allowUpdate, $allowDelete);
+                self::processBelongsToManyOperation($table, (string) $alias, $relatedData, $recordId, $config, $schema, $tenantId, $allowCreate, $allowUpdate, $allowDelete);
                 continue;
             }
 
             if ($type === 'hasManyThrough') {
-                self::processHasManyThroughOperation($relatedData, $recordId, $config, $schema, $tenantId, $allowCreate, $allowUpdate, $allowDelete);
+                self::processHasManyThroughOperation($table, (string) $alias, $relatedData, $recordId, $config, $schema, $tenantId, $allowCreate, $allowUpdate, $allowDelete);
                 continue;
             }
 
@@ -701,24 +750,40 @@ class RelationshipResolverUtils
 
                 // Handle deletion
                 if (($item['_delete'] ?? false) || ($item['_destroy'] ?? false)) {
-                    if ($hasPk && $allowDelete) {
-                        $deleteQuery = self::scopeToParent(
-                            DB::table($actualRelatedTableName)->where($relatedPk, $idVal),
-                            $foreignKey,
-                            $recordId,
-                            $type,
-                            $config,
-                        );
+                    if (!$hasPk) {
+                        throw new InvalidArgumentException(sprintf(
+                            "Cannot delete item in relationship '%s' for table '%s': '_delete' requires the related '%s' primary key.",
+                            $alias,
+                            $table,
+                            $relatedPk
+                        ));
+                    }
 
-                        if ($relatedSchema->softDeletes ?? false) {
-                            $deleteQuery->update(['deleted_at' => TimeUtils::now()]);
-                        } else {
-                            $deleteQuery->delete();
-                        }
+                    self::assertRelationshipOperationAllowed($table, (string) $alias, 'delete', $allowDelete);
+
+                    $deleteQuery = self::scopeToParent(
+                        DB::table($actualRelatedTableName)->where($relatedPk, $idVal),
+                        $foreignKey,
+                        $recordId,
+                        $type,
+                        $config,
+                    );
+
+                    if ($relatedSchema->softDeletes ?? false) {
+                        $deleteQuery->update(['deleted_at' => TimeUtils::now()]);
+                    } else {
+                        $deleteQuery->delete();
                     }
 
                     continue;
                 }
+
+                self::assertRelationshipOperationAllowed(
+                    $table,
+                    (string) $alias,
+                    $hasPk ? 'update' : 'create',
+                    $hasPk ? $allowUpdate : $allowCreate
+                );
 
                 // Sanitize payload: only allowed columns; drop system/protected fields
                 $item = array_intersect_key($item, array_flip($allowedCols));
@@ -754,8 +819,8 @@ class RelationshipResolverUtils
                 //     }
                 // }
 
-                if ($hasPk && $allowUpdate) {
-                    // Upsert/update path
+                if ($hasPk) {
+                    // Update path (already asserted allowUpdate above)
                     unset($item[$relatedPk]);
                     self::scopeToParent(
                         DB::table($actualRelatedTableName)->where($relatedPk, $idVal),
@@ -764,8 +829,8 @@ class RelationshipResolverUtils
                         $type,
                         $config,
                     )->update($item);
-                } elseif ('create' === $operation || $allowCreate) {
-                    // Create path
+                } else {
+                    // Create path (already asserted allowCreate above)
                     unset($item['id']);
                     if (!isset($item[$relatedPk]) && SchemaRegistryUtils::isUuidColumnType($relatedSchema->columns[$relatedPk] ?? null)) {
                         $item[$relatedPk] = (string) Str::uuid();
@@ -798,9 +863,30 @@ class RelationshipResolverUtils
     }
 
     /**
+     * Reject a nested relationship write outright when the relationship's
+     * allowCreate/allowUpdate/allowDelete config disallows the action the payload is
+     * asking for, instead of silently dropping that item and returning as if it had
+     * succeeded.
+     */
+    private static function assertRelationshipOperationAllowed(string $table, string $alias, string $action, bool $allowed): void
+    {
+        if ($allowed) {
+            return;
+        }
+
+        throw new InvalidArgumentException(sprintf(
+            "Cannot %s item in relationship '%s' for table '%s': allow%s is disabled for this relationship.",
+            $action,
+            $alias,
+            $table,
+            ucfirst($action)
+        ));
+    }
+
+    /**
      * @param array<string, mixed> $config
      */
-    private static function processBelongsToManyOperation(array $data, mixed $mainId, array $config, array $schema, mixed $tenantId, bool $allowCreate, bool $allowUpdate, bool $allowDelete): void
+    private static function processBelongsToManyOperation(string $table, string $alias, array $data, mixed $mainId, array $config, array $schema, mixed $tenantId, bool $allowCreate, bool $allowUpdate, bool $allowDelete): void
     {
         $pivotTable = $config['pivot_table'];
         $foreignPivotKey = $config['foreign_pivot_key'];
@@ -825,17 +911,28 @@ class RelationshipResolverUtils
             $relatedId = $item[$relatedPk] ?? null;
 
             if ($isDelete) {
-                if ($allowDelete && $relatedId) {
-                    DB::table($pivotTable)
-                        ->where($foreignPivotKey, $mainId)
-                        ->where($relatedPivotKey, $relatedId)
-                        ->delete();
+                if (!$relatedId) {
+                    throw new InvalidArgumentException(sprintf(
+                        "Cannot delete item in relationship '%s' for table '%s': '_delete' requires the related '%s' primary key.",
+                        $alias,
+                        $table,
+                        $relatedPk
+                    ));
                 }
+
+                self::assertRelationshipOperationAllowed($table, $alias, 'delete', $allowDelete);
+
+                DB::table($pivotTable)
+                    ->where($foreignPivotKey, $mainId)
+                    ->where($relatedPivotKey, $relatedId)
+                    ->delete();
 
                 continue;
             }
 
-            if (!$relatedId && $allowCreate) {
+            if (!$relatedId) {
+                self::assertRelationshipOperationAllowed($table, $alias, 'create', $allowCreate);
+
                 // Create new related record
                 $relatedFields = array_intersect_key($item, array_flip($allowedRelatedCols));
                 unset($relatedFields['id'], $relatedFields['created_at'], $relatedFields['updated_at'], $relatedFields['deleted_at']);
@@ -855,50 +952,57 @@ class RelationshipResolverUtils
                 $relatedId = DB::table($actualRelatedTableName)->insertGetId($relatedFields);
             }
 
-            if ($relatedId && ($allowCreate || $allowUpdate)) {
-                $pivotData = [];
-                $pivotFields = $config['with_pivot'] ?? [];
+            $pivotData = [];
+            $pivotFields = $config['with_pivot'] ?? [];
 
-                foreach ($pivotFields as $field) {
-                    if (array_key_exists($field, $item)) {
-                        $pivotData[$field] = $item[$field];
-                    }
-                }
-
-                $exists = DB::table($pivotTable)
-                    ->where($foreignPivotKey, $mainId)
-                    ->where($relatedPivotKey, $relatedId)
-                    ->exists();
-
-                if ($exists) {
-                    if ($allowUpdate && !empty($pivotData)) {
-                        if (($config['with_timestamps'] ?? false)) {
-                            $pivotData['updated_at'] = TimeUtils::now();
-                        }
-
-                        DB::table($pivotTable)
-                            ->where($foreignPivotKey, $mainId)
-                            ->where($relatedPivotKey, $relatedId)
-                            ->update($pivotData);
-                    }
-                } elseif ($allowCreate) {
-                    $pivotData[$foreignPivotKey] = $mainId;
-                    $pivotData[$relatedPivotKey] = $relatedId;
-                    if (($config['with_timestamps'] ?? false)) {
-                        $pivotData['created_at'] = TimeUtils::now();
-                        $pivotData['updated_at'] = TimeUtils::now();
-                    }
-
-                    DB::table($pivotTable)->insert($pivotData);
+            foreach ($pivotFields as $field) {
+                if (array_key_exists($field, $item)) {
+                    $pivotData[$field] = $item[$field];
                 }
             }
+
+            $exists = DB::table($pivotTable)
+                ->where($foreignPivotKey, $mainId)
+                ->where($relatedPivotKey, $relatedId)
+                ->exists();
+
+            if ($exists) {
+                if ([] === $pivotData) {
+                    // Already linked, nothing to change — a no-op regardless of allowUpdate.
+                    continue;
+                }
+
+                self::assertRelationshipOperationAllowed($table, $alias, 'update', $allowUpdate);
+
+                if (($config['with_timestamps'] ?? false)) {
+                    $pivotData['updated_at'] = TimeUtils::now();
+                }
+
+                DB::table($pivotTable)
+                    ->where($foreignPivotKey, $mainId)
+                    ->where($relatedPivotKey, $relatedId)
+                    ->update($pivotData);
+
+                continue;
+            }
+
+            self::assertRelationshipOperationAllowed($table, $alias, 'create', $allowCreate);
+
+            $pivotData[$foreignPivotKey] = $mainId;
+            $pivotData[$relatedPivotKey] = $relatedId;
+            if (($config['with_timestamps'] ?? false)) {
+                $pivotData['created_at'] = TimeUtils::now();
+                $pivotData['updated_at'] = TimeUtils::now();
+            }
+
+            DB::table($pivotTable)->insert($pivotData);
         }
     }
 
     /**
      * @param array<string, mixed> $config
      */
-    private static function processHasManyThroughOperation(array $data, mixed $mainId, array $config, array $schema, mixed $tenantId, bool $allowCreate, bool $allowUpdate, bool $allowDelete): void
+    private static function processHasManyThroughOperation(string $table, string $alias, array $data, mixed $mainId, array $config, array $schema, mixed $tenantId, bool $allowCreate, bool $allowUpdate, bool $allowDelete): void
     {
         $throughTable = $config['through_table'];
         $firstKey = $config['first_key'];
@@ -921,26 +1025,37 @@ class RelationshipResolverUtils
             $targetId = $item[$targetPk] ?? null;
 
             if ($isDelete) {
-                if ($allowDelete && $targetId) {
-                    $deleteQuery = DB::table($throughTable)
-                        ->where($firstKey, $mainId)
-                        ->where($secondLocalKey, $targetId);
-
-                    if ($ownerColumn && null !== $ownerValue) {
-                        $deleteQuery->where($ownerColumn, $ownerValue);
-                    }
-
-                    if ($targetColumn && null !== $targetValue) {
-                        $deleteQuery->where($targetColumn, $targetValue);
-                    }
-
-                    $deleteQuery->delete();
+                if (!$targetId) {
+                    throw new InvalidArgumentException(sprintf(
+                        "Cannot delete item in relationship '%s' for table '%s': '_delete' requires the related '%s' primary key.",
+                        $alias,
+                        $table,
+                        $targetPk
+                    ));
                 }
+
+                self::assertRelationshipOperationAllowed($table, $alias, 'delete', $allowDelete);
+
+                $deleteQuery = DB::table($throughTable)
+                    ->where($firstKey, $mainId)
+                    ->where($secondLocalKey, $targetId);
+
+                if ($ownerColumn && null !== $ownerValue) {
+                    $deleteQuery->where($ownerColumn, $ownerValue);
+                }
+
+                if ($targetColumn && null !== $targetValue) {
+                    $deleteQuery->where($targetColumn, $targetValue);
+                }
+
+                $deleteQuery->delete();
 
                 continue;
             }
 
-            if (!$targetId && $allowCreate) {
+            if (!$targetId) {
+                self::assertRelationshipOperationAllowed($table, $alias, 'create', $allowCreate);
+
                 $targetFields = array_intersect_key($item, array_flip(array_keys($targetSchema->columns ?? [])));
                 $writeDisabled = is_array($targetSchema->columnWriteDisabled ?? null) ? $targetSchema->columnWriteDisabled : [];
                 if ([] !== $writeDisabled) {
@@ -964,38 +1079,40 @@ class RelationshipResolverUtils
                 $targetId = DB::table($actualTargetTableName)->insertGetId($targetFields);
             }
 
-            if ($targetId && ($allowCreate || $allowUpdate)) {
-                $existsQuery = DB::table($throughTable)
-                    ->where($firstKey, $mainId)
-                    ->where($secondLocalKey, $targetId);
+            $existsQuery = DB::table($throughTable)
+                ->where($firstKey, $mainId)
+                ->where($secondLocalKey, $targetId);
 
-                if ($ownerColumn && null !== $ownerValue) {
-                    $existsQuery->where($ownerColumn, $ownerValue);
-                }
-
-                if ($targetColumn && null !== $targetValue) {
-                    $existsQuery->where($targetColumn, $targetValue);
-                }
-
-                $exists = $existsQuery->exists();
-
-                if (!$exists && $allowCreate) {
-                    $insertData = [
-                        $firstKey => $mainId,
-                        $secondLocalKey => $targetId,
-                    ];
-
-                    if ($ownerColumn && null !== $ownerValue) {
-                        $insertData[$ownerColumn] = $ownerValue;
-                    }
-
-                    if ($targetColumn && null !== $targetValue) {
-                        $insertData[$targetColumn] = $targetValue;
-                    }
-
-                    DB::table($throughTable)->insert($insertData);
-                }
+            if ($ownerColumn && null !== $ownerValue) {
+                $existsQuery->where($ownerColumn, $ownerValue);
             }
+
+            if ($targetColumn && null !== $targetValue) {
+                $existsQuery->where($targetColumn, $targetValue);
+            }
+
+            if ($existsQuery->exists()) {
+                // Already linked; this relationship type has no extra link-table fields
+                // to update, so there is nothing left to do — a no-op regardless of allowUpdate.
+                continue;
+            }
+
+            self::assertRelationshipOperationAllowed($table, $alias, 'create', $allowCreate);
+
+            $insertData = [
+                $firstKey => $mainId,
+                $secondLocalKey => $targetId,
+            ];
+
+            if ($ownerColumn && null !== $ownerValue) {
+                $insertData[$ownerColumn] = $ownerValue;
+            }
+
+            if ($targetColumn && null !== $targetValue) {
+                $insertData[$targetColumn] = $targetValue;
+            }
+
+            DB::table($throughTable)->insert($insertData);
         }
     }
 
