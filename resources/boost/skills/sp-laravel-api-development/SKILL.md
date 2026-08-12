@@ -61,8 +61,43 @@ php artisan sp-laravel-api:record {name}
 php artisan sp-laravel-api:sync-record-columns --force
 php artisan sp-laravel-api:generate-record-tables-from-db
 php artisan sp-laravel-api:validate
+php artisan sp-laravel-api:export-openapi
+php artisan sp-laravel-api:export-bruno
+php artisan sp-laravel-api:export-postman
 vendor/bin/phpunit
 ```
+
+## Live schema lookups (MCP)
+
+Prefer the `sp-laravel-api` MCP tools over guessing at schema/endpoints:
+
+- `sp_api_list_endpoints` — all registered table/function endpoints
+- `sp_api_get_endpoint` — live schema for one endpoint (columns, relationships, auth flags)
+- `sp_api_list_permissions` — permission map (pmsName + can* flags + custom permissions)
+
+## Debug a failing record request
+
+Follow this loop in order:
+
+1. **Reproduce the exact request** — method, path, query params, tenant headers (`X-Tenant-ID`), payload.
+2. Run `php artisan sp-laravel-api:validate` and fix any reported config issues.
+3. Confirm the table is registered — `php artisan sp-laravel-api:list-tables` (or `cache-status` if present); stale schema registry caches are a common cause.
+4. Inspect the endpoint's live schema via `sp_api_get_endpoint` (columns, relationship aliases, `isAuthRead`/`isAuthWrite`, `can*` flags).
+5. Replay via the exported collection (`sp-laravel-api:export-bruno` / `:export-postman`).
+6. Check the response against the `RecordApiResponseService` contract (`success`, `error_code`, `data`, `meta`).
+7. For auth/tenant 403s: walk the permission flow (`HasControllerHelpers::authorizeAction()` order), check `sp_api_list_permissions`, verify tenant resolution precedence (request attr → `record_context.tenant_id` → `X-Tenant-ID` header).
+
+## Quality gates before done
+
+Before claiming a change works, run in order and add tests for any behavior change (tenant, auth, filters, permission, triggers, response wrapper):
+
+```bash
+composer format-check   # rector:check (dry-run)
+composer analyse        # phpstan
+composer test           # phpunit
+```
+
+Fix any failures, then add/adjust tests and re-run until green.
 
 ## Caching mental model
 
