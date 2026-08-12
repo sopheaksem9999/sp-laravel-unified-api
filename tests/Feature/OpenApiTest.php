@@ -434,4 +434,345 @@ class OpenApiTest extends TestCase
             $this->assertNotContains($sharedParam['name'], ['page', 'per_page', 'status', 'select', 'sortby', 'order', 'search']);
         }
     }
+
+    /** @test */
+    public function it_documents_auth_permissions_and_tenant_on_table_operations(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.tables', [
+            'products' => new RecordTableType(
+                table: 'products',
+                isAuthRead: true,
+                isAuthWrite: true,
+                hasTenantId: true,
+                permissions: [
+                    'read' => ['products:view'],
+                    'create' => ['products:create', 'admin:inventory'],
+                ],
+                columns: ['id' => ['type' => 'bigint', 'nullable' => false]],
+            ),
+        ]);
+
+        $spec = (new OpenApiService())->generateInternal();
+        $path = $spec['paths']['/api/v2/products'];
+
+        $list = $path['get'];
+        $this->assertSame('read', $list['x-sp-auth']['mode']);
+        $this->assertSame('isAuthRead', $list['x-sp-auth']['flag']);
+        $this->assertTrue($list['x-sp-auth']['flag_value']);
+        $this->assertSame('bearer', $list['x-sp-auth']['auth']);
+        $this->assertFalse($list['x-sp-auth']['public']);
+        $this->assertSame(['products:view'], $list['x-sp-auth']['permissions']);
+        $this->assertTrue($list['x-sp-auth']['tenant']);
+        $this->assertSame('config/records/tables/products.php', $list['x-sp-auth']['source']);
+        $this->assertStringContainsString('**Authorization:** Bearer token required — read auth (`isAuthRead=true` in config/records/tables/products.php)', $list['description']);
+        $this->assertStringContainsString('**Permission scope(s):** `products:view`', $list['description']);
+
+        $create = $path['post'];
+        $this->assertSame('write', $create['x-sp-auth']['mode']);
+        $this->assertSame('isAuthWrite', $create['x-sp-auth']['flag']);
+        $this->assertSame(['products:create', 'admin:inventory'], $create['x-sp-auth']['permissions']);
+        $this->assertStringContainsString('**Authorization:** Bearer token required — write auth (`isAuthWrite=true` in config/records/tables/products.php)', $create['description']);
+        $this->assertStringContainsString('**Permission scope(s):** `products:create`, `admin:inventory`', $create['description']);
+    }
+
+    /** @test */
+    public function it_documents_public_table_operations_without_permission_scopes(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.tables', [
+            'products' => new RecordTableType(
+                table: 'products',
+                isAuthRead: false,
+                isAuthWrite: false,
+                columns: ['id' => ['type' => 'bigint', 'nullable' => false]],
+            ),
+        ]);
+
+        $spec = (new OpenApiService())->generateInternal();
+        $list = $spec['paths']['/api/v2/products']['get'];
+
+        $this->assertSame('public', $list['x-sp-auth']['auth']);
+        $this->assertTrue($list['x-sp-auth']['public']);
+        $this->assertFalse($list['x-sp-auth']['flag_value']);
+        $this->assertSame([], $list['x-sp-auth']['permissions']);
+        $this->assertStringContainsString('**Authorization:** Public — no authentication required (`isAuthRead=false` in config/records/tables/products.php)', $list['description']);
+    }
+
+    /** @test */
+    public function it_documents_middleware_from_the_middleware_map_merging_default_and_table_entries(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.middleware_map', [
+            'default' => [
+                '*' => ['throttle:api'],
+                'write' => ['auth:sanctum'],
+            ],
+            'tables' => [
+                'products' => [
+                    'write' => ['subscribed'],
+                ],
+            ],
+        ]);
+        Config::set('record.tables', [
+            'products' => new RecordTableType(
+                table: 'products',
+                columns: ['id' => ['type' => 'bigint', 'nullable' => false]],
+            ),
+        ]);
+
+        $spec = (new OpenApiService())->generateInternal();
+        $create = $spec['paths']['/api/v2/products']['post'];
+
+        $this->assertSame(['throttle:api', 'auth:sanctum', 'subscribed'], $create['x-sp-auth']['middleware']);
+        $this->assertStringContainsString('**Route middleware:** `throttle:api`, `auth:sanctum`, `subscribed`', $create['description']);
+
+        $list = $spec['paths']['/api/v2/products']['get'];
+        $this->assertSame(['throttle:api'], $list['x-sp-auth']['middleware']);
+    }
+
+    /** @test */
+    public function it_documents_global_function_publicity_from_config(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.rpc_prefix', '');
+        Config::set('record.tables', []);
+        Config::set('record.global_functions', [
+            'auth/login' => [
+                'httpMethod' => ['POST'],
+            ],
+            'health' => [
+                'httpMethod' => ['GET'],
+                'isPublic' => false,
+            ],
+        ]);
+
+        $spec = (new OpenApiService())->generateInternal();
+
+        $login = $spec['paths']['/api/v2/auth/login']['post'];
+        $this->assertSame('public', $login['x-sp-auth']['auth']);
+        $this->assertTrue($login['x-sp-auth']['public']);
+        $this->assertStringContainsString('Public — no authentication required', $login['description']);
+
+        $health = $spec['paths']['/api/v2/health']['get'];
+        $this->assertSame('bearer', $health['x-sp-auth']['auth']);
+        $this->assertFalse($health['x-sp-auth']['public']);
+        $this->assertStringContainsString('**Authorization:** Bearer token required — function call (`isPublic=false` in config/records/global-functions/health.php)', $health['description']);
+    }
+
+    /** @test */
+    public function it_documents_table_rpc_function_publicity_from_config(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.rpc_prefix', '');
+        Config::set('record.tables', [
+            'invoices' => new RecordTableType(
+                table: 'invoices',
+                functions: [
+                    'send' => [
+                        'httpMethod' => ['POST'],
+                    ],
+                    'preview' => [
+                        'httpMethod' => ['GET'],
+                        'isPublic' => true,
+                    ],
+                ],
+                columns: ['id' => ['type' => 'bigint', 'nullable' => false]],
+            ),
+        ]);
+
+        $spec = (new OpenApiService())->generateInternal();
+
+        $send = $spec['paths']['/api/v2/invoices/send']['post'];
+        $this->assertSame('bearer', $send['x-sp-auth']['auth']);
+        $this->assertFalse($send['x-sp-auth']['public']);
+        $this->assertStringContainsString('`isPublic=false`', $send['description']);
+
+        $preview = $spec['paths']['/api/v2/invoices/preview']['get'];
+        $this->assertSame('public', $preview['x-sp-auth']['auth']);
+        $this->assertTrue($preview['x-sp-auth']['public']);
+        $this->assertStringContainsString('`isPublic=true`', $preview['description']);
+    }
+
+    /** @test */
+    public function it_documents_pagination_defaults_in_main_document_and_list_operation(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.pagination.default_mode', 'cursor');
+        Config::set('record.pagination.cursor.default_column', 'created_at');
+        Config::set('record.tables', [
+            'invoices' => new RecordTableType(
+                table: 'invoices',
+                columns: ['id' => ['type' => 'bigint', 'nullable' => false]],
+            ),
+        ]);
+
+        $spec = (new OpenApiService())->generateInternal();
+
+        $this->assertStringContainsString('`record.pagination.default_mode` = `cursor`', $spec['info']['description']);
+        $this->assertStringContainsString('cursor default column: `created_at`', $spec['info']['description']);
+
+        $list = $spec['paths']['/api/v2/invoices']['get'];
+        $this->assertStringContainsString('**Pagination:** Default mode: `cursor` (config `record.pagination.default_mode`); cursor pagination via `cursor` parameter (default cursor column `created_at`).', $list['description']);
+    }
+
+    /** @test */
+    public function it_documents_offset_pagination_when_that_is_the_configured_default(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.pagination.default_mode', 'offset');
+        Config::set('record.tables', [
+            'invoices' => new RecordTableType(
+                table: 'invoices',
+                columns: ['id' => ['type' => 'bigint', 'nullable' => false]],
+            ),
+        ]);
+
+        $spec = (new OpenApiService())->generateInternal();
+
+        $this->assertStringContainsString('`record.pagination.default_mode` = `offset`', $spec['info']['description']);
+        $this->assertStringContainsString('**Pagination:** Default mode: `offset`', $spec['paths']['/api/v2/invoices']['get']['description']);
+    }
+
+    /** @test */
+    public function it_excludes_column_hiddens_from_read_schemas_but_keeps_them_writable(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.tables', [
+            'users' => new RecordTableType(
+                table: 'users',
+                columnHiddens: ['password'],
+                columns: [
+                    'id' => ['type' => 'bigint', 'nullable' => false],
+                    'email' => ['type' => 'string', 'nullable' => false],
+                    'password' => ['type' => 'string', 'nullable' => false],
+                ],
+            ),
+        ]);
+
+        $spec = (new OpenApiService())->generateInternal();
+        $schemas = $spec['components']['schemas'];
+
+        $this->assertArrayNotHasKey('password', $schemas['Users']['properties']);
+        $this->assertArrayNotHasKey('password', $schemas['UsersRead']['properties']);
+        $this->assertArrayHasKey('password', $schemas['UsersWrite']['properties']);
+        $this->assertStringContainsString('columnHiddens', $schemas['Users']['description']);
+    }
+
+    /** @test */
+    public function it_marks_column_write_disabled_fields_as_read_only_in_the_write_schema(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.tables', [
+            'invoices' => new RecordTableType(
+                table: 'invoices',
+                columnWriteDisabled: ['total'],
+                columns: [
+                    'id' => ['type' => 'bigint', 'nullable' => false],
+                    'total' => ['type' => 'decimal', 'nullable' => false],
+                ],
+            ),
+        ]);
+
+        $spec = (new OpenApiService())->generateInternal();
+        $write = $spec['components']['schemas']['InvoicesWrite']['properties']['total'];
+
+        $this->assertTrue($write['readOnly']);
+        $this->assertStringContainsString('columnWriteDisabled', $write['description']);
+        $this->assertStringContainsString('Write schema', $spec['components']['schemas']['InvoicesWrite']['description']);
+    }
+
+    /** @test */
+    public function it_excludes_auto_increment_id_from_the_write_schema_but_keeps_uuid_id(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.id_type', 'integer');
+        Config::set('record.tables', [
+            'invoices' => new RecordTableType(
+                table: 'invoices',
+                columns: [
+                    'id' => ['type' => 'bigint', 'nullable' => false],
+                    'ref' => ['type' => 'string', 'nullable' => false],
+                ],
+            ),
+        ]);
+
+        $spec = (new OpenApiService())->generateInternal();
+        $this->assertArrayNotHasKey('id', $spec['components']['schemas']['InvoicesWrite']['properties']);
+        $this->assertStringContainsString('auto-increment', $spec['components']['schemas']['InvoicesWrite']['description']);
+        $this->assertSame('integer', $spec['paths']['/api/v2/invoices/{id}']['parameters'][0]['schema']['type']);
+
+        Config::set('record.id_type', 'uuid');
+        $spec = (new OpenApiService())->generateInternal();
+        $writeId = $spec['components']['schemas']['InvoicesWrite']['properties']['id'];
+        $this->assertSame('string', $writeId['type']);
+        $this->assertSame('uuid', $writeId['format']);
+        $this->assertStringContainsString('server generate one', $spec['components']['schemas']['InvoicesWrite']['description']);
+        $this->assertSame('string', $spec['paths']['/api/v2/invoices/{id}']['parameters'][0]['schema']['type']);
+        $this->assertSame('uuid', $spec['paths']['/api/v2/invoices/{id}']['parameters'][0]['schema']['format']);
+    }
+
+    /** @test */
+    public function it_declares_the_lazy_parameter_on_list_operations(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.tables', [
+            'invoices' => new RecordTableType(
+                table: 'invoices',
+                columns: ['id' => ['type' => 'bigint', 'nullable' => false]],
+            ),
+        ]);
+
+        $spec = (new OpenApiService())->generateInternal();
+        $parameters = $spec['paths']['/api/v2/invoices']['get']['parameters'];
+        $lazy = collect($parameters)->firstWhere('name', 'lazy');
+
+        $this->assertNotNull($lazy);
+        $this->assertSame('query', $lazy['in']);
+        $this->assertSame('boolean', $lazy['schema']['type']);
+        $this->assertStringContainsString('lazy=true', $lazy['description']);
+    }
+
+    /** @test */
+    public function it_does_not_emit_an_orphaned_audit_tag(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.tables', []);
+        Config::set('audit.enabled', true);
+
+        $spec = (new OpenApiService())->generateInternal();
+        $tagNames = collect($spec['tags'])->pluck('name')->all();
+
+        $this->assertNotContains('Audit', $tagNames);
+    }
+
+    /** @test */
+    public function it_documents_id_type_max_depth_and_rate_limits_in_the_main_document(): void
+    {
+        Config::set('record.api_prefix', 'api/v2');
+        Config::set('record.id_type', 'uuid');
+        Config::set('record.max_depth', 4);
+        Config::set('record.rate_limits', [
+            'users' => [
+                'create' => ['limit' => 50, 'decay_minutes' => 1],
+            ],
+        ]);
+        Config::set('record.tables', [
+            'invoices' => new RecordTableType(
+                table: 'invoices',
+                columns: ['id' => ['type' => 'bigint', 'nullable' => false]],
+            ),
+        ]);
+
+        $spec = (new OpenApiService())->generateInternal();
+        $description = $spec['info']['description'];
+
+        $this->assertStringContainsString('record.id_type', $description);
+        $this->assertStringContainsString('uuid', $description);
+        $this->assertStringContainsString('limited to `4` levels (config `record.max_depth`)', $description);
+        $this->assertStringContainsString('Rate Limits', $description);
+        $this->assertStringContainsString('`users` — create: 50/1min', $description);
+        $this->assertStringContainsString('Public', $description);
+        $this->assertStringContainsString('x-sp-auth', $description);
+    }
 }
