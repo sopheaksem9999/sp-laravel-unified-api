@@ -31,6 +31,7 @@ use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Console\McpServerCommand;
 use Sopheak\Core\Console\EnablePgsqlRlsCommand;
+use Sopheak\Core\Console\BoostInstallCommand;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
@@ -95,11 +96,10 @@ class CoreSpLaravelApiProvider extends ServiceProvider
         // Load package routes
         $this->loadRoutesFrom(__DIR__ . '/../routes/api.php');
         $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
-        if (config('record.mcp.enabled', false)) {
-            $this->commands([
-                McpServerCommand::class,
-            ]);
-        }
+
+        $this->commands([
+            McpServerCommand::class,
+        ]);
 
         if ($this->app->runningInConsole()) {
             $commands = [
@@ -116,6 +116,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
                 CacheStatusCommand::class,
                 CleanTempAttachmentsCommand::class,
                 EnablePgsqlRlsCommand::class,
+                BoostInstallCommand::class,
             ];
 
             $commands = array_values(array_filter($commands, class_exists(...)));
