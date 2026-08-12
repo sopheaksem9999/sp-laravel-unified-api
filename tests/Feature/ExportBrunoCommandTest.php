@@ -76,6 +76,25 @@ class ExportBrunoCommandTest extends TestCase
         $this->assertStringContainsString('url: {{baseUrl}}{{apiPrefix}}/users', $listUsersBru);
     }
 
+    public function test_disabled_placeholder_params_are_marked_with_tilde_in_bruno_output(): void
+    {
+        $this->artisan('sp-laravel-api:export-bruno', [
+            '--output' => $this->outputPath,
+        ])->assertExitCode(0);
+
+        $listUsersBru = (string) file_get_contents($this->outputPath . '/Users/List Users.bru');
+
+        // Placeholder-only params (no default) are rendered as disabled (~param:)
+        // so a one-click send doesn't fire empty values the API rejects.
+        foreach (['id', 'name', 'cursor', 'sortby', 'search'] as $placeholder) {
+            $this->assertStringContainsString('~' . $placeholder . ':', $listUsersBru, sprintf("Expected disabled '~%s:' in Bruno output", $placeholder));
+        }
+
+        // Params with real defaults are enabled with their default values.
+        $this->assertStringContainsString('page: 1', $listUsersBru);
+        $this->assertStringContainsString('per_page: 25', $listUsersBru);
+    }
+
     public function test_dry_run_does_not_write_files(): void
     {
         $this->artisan('sp-laravel-api:export-bruno', [

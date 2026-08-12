@@ -2,6 +2,16 @@
 
 All notable changes to `sp-laravel-api` will be documented in this file.
 
+## [0.4.86] - 2026-08-12
+
+### Added
+- **Every OpenAPI operation now documents its auth/permission contract, derived live from config**: each operation's `description` gains an `**Authorization:**` line (e.g. `**Authorization:** Bearer token required — write auth (\`isAuthWrite=true\` in config/records/tables/invoices.php)`; public endpoints read `Public — no authentication required`) plus, when configured, `**Permission scope(s):**` (from the table's `permissions[action]` map) and `**Route middleware:**` (resolved with the same precedence as `RecordRouteMiddleware`: function `middleware` override → `middleware_map` default + per-table merge across `*`/group/action). A machine-readable `x-sp-auth` extension on every operation carries the same data (`auth`, `mode` (`read`/`write`/`function`), `flag`, `flag_value`, `public`, `permissions`, `middleware`, `tenant`, `source`) so tooling and AI agents can query it without parsing prose. Sources: table CRUD uses `isAuthRead`/`isAuthWrite`; global functions use `isPublic` (default `true`); table RPC functions use `isPublic` (default `false`). The `security` arrays are unchanged. See `tests/Feature/OpenApiTest.php` (`it_documents_auth_permissions_and_tenant_on_table_operations`, `it_documents_middleware_from_the_middleware_map_merging_default_and_table_entries`, `it_documents_global_function_publicity_from_config`, ...).
+- **OpenAPI schemas now mirror table config behavior**: `columnHiddens` columns are omitted from response/`Read` schemas (they never appear in responses) but stay in the `Write` schema; `columnWriteDisabled` fields are marked `readOnly: true` with a "silent no-op" note; with `record.id_type=integer` the `id` is excluded from the `Write` schema (auto-increment) while `id_type=uuid` keeps it as an optional `string`/`uuid` (server-generated via `Str::uuid()` when omitted); the `{id}` path parameter's schema type follows `id_type`; list operations declare the `lazy` query parameter.
+- **Main OpenAPI document now states configured behavior**: pagination defaults (`record.pagination.default_mode`, cursor default column, composite cursors, `skip_total_default`), relationship nesting depth limit (`record.max_depth`), primary-key type (`record.id_type`), per-table rate-limit overrides (`record.rate_limits`), and a corrected Authentication section pointing at per-operation Authorization docs (the old "all endpoints require a token" text was false once public endpoints exist). The orphaned `Audit` tag (no audit operations exist) was removed.
+
+### Fixed
+- **Bruno/Postman exports fired non-callable requests**: `ApiClientExportService::buildQueryParam()` enabled every query parameter, so one-click sends included all per-column filter placeholders with empty values (`?id=&name=&...`) which the API rejects. Parameters without a real default are now exported but disabled — Postman `"disabled": true`, Bruno `~param:` syntax — while parameters with defaults (`page`, `per_page`, `order`, `lazy`, ...) stay enabled with their default values. See `tests/Feature/ExportPostmanCommandTest.php` and `tests/Feature/ExportBrunoCommandTest.php`.
+
 ## [Unreleased]
 
 ### Fixed

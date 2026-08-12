@@ -99,6 +99,32 @@ class ExportPostmanCommandTest extends TestCase
         $this->assertStringContainsString('Tip:', $listUsers['request']['description']);
     }
 
+    public function test_disables_placeholder_query_params_so_the_request_is_callable(): void
+    {
+        $this->artisan('sp-laravel-api:export-postman', [
+            '--output' => $this->outputPath,
+        ])->assertExitCode(0);
+
+        $decoded = json_decode((string) file_get_contents($this->outputPath), true);
+        $usersFolder = array_values(array_filter($decoded['item'], static fn(array $f): bool => $f['name'] === 'Users'))[0];
+        $listUsers = array_values(array_filter($usersFolder['item'], static fn(array $r): bool => $r['name'] === 'List Users'))[0];
+
+        $query = collect($listUsers['request']['url']['query'] ?? [])->keyBy('key');
+
+        // Placeholder-only params (no default) must be disabled so a one-click
+        // send doesn't fire empty/example values the API rejects.
+        foreach (['id', 'name', 'cursor', 'sortby', 'search'] as $placeholder) {
+            $this->assertTrue($query->has($placeholder), sprintf("Expected '%s' to be present", $placeholder));
+            $this->assertTrue($query->get($placeholder)['disabled'], sprintf("Expected '%s' to be disabled", $placeholder));
+        }
+
+        // Params with real defaults stay enabled with their default values.
+        $this->assertFalse($query->get('page')['disabled']);
+        $this->assertSame('1', $query->get('page')['value']);
+        $this->assertFalse($query->get('per_page')['disabled']);
+        $this->assertSame('25', $query->get('per_page')['value']);
+    }
+
     public function test_dry_run_does_not_write_the_file(): void
     {
         $this->artisan('sp-laravel-api:export-postman', [

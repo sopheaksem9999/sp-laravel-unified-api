@@ -153,6 +153,58 @@ use Sopheak\Core\Types\RecordFunctionType;
 
 Once set, the schema appears in the exported OpenAPI file and in the live `/docs/openapi.json` endpoint automatically.
 
+#### Authorization, Permission, and Pagination Documentation
+
+Every operation in the generated schema documents its auth requirement, derived live from the table or function config:
+
+- **Description block** — each operation's `description` gains an `**Authorization:**` line (and, when configured, `**Permission scope(s):**` and `**Route middleware:**` lines):
+
+  ```markdown
+  **Authorization:** Bearer token required — write auth (`isAuthWrite=true` in config/records/tables/invoices.php)
+  **Permission scope(s):** `invoice:create`
+  **Route middleware:** `auth:sanctum`, `subscribed`
+  ```
+
+  Public endpoints read as `**Authorization:** Public — no authentication required (...)`. Sources: table CRUD uses `isAuthRead` (read ops) / `isAuthWrite` (write ops) from `config/records/tables/{table}.php`; global and table RPC functions use `isPublic` from their function config (global functions default to public, table RPC functions to authenticated).
+
+- **`x-sp-auth` extension** — machine-readable counterpart on every operation, so tooling and AI agents can query the contract without parsing prose:
+
+  ```json
+  {
+    "x-sp-auth": {
+      "auth": "bearer",
+      "mode": "write",
+      "flag": "isAuthWrite",
+      "flag_value": true,
+      "public": false,
+      "permissions": ["invoice:create"],
+      "middleware": ["auth:sanctum", "subscribed"],
+      "tenant": true,
+      "source": "config/records/tables/invoices.php"
+    }
+  }
+  ```
+
+  - `permissions` — from the table's `permissions[action]` map (same source the runtime authorization flow checks); omitted when not configured.
+  - `middleware` — resolved with the same precedence as route execution: a function's own `middleware` setting replaces the map; otherwise `middleware_map` default + per-table entries merge across `*`, the action group, and the exact action.
+  - `tenant` — `hasTenantId` on the table config.
+
+- **Pagination defaults** — the main document's Pagination section states the configured values (`record.pagination.default_mode`, cursor default column, composite cursors, `skip_total_default`), and every list operation's description notes the effective default mode and cursor column.
+
+The `security` arrays (the OpenAPI auth contract) are unchanged — this is documentation only.
+
+#### Schema Alignment with Table Config
+
+The component schemas mirror the runtime behavior of the table config:
+
+- **`columnHiddens`** — hidden columns are omitted from the response and `Read` schemas (they never appear in responses), but stay in the `Write` schema (they remain writable).
+- **`columnWriteDisabled`** — these fields appear in the `Write` schema with `readOnly: true` and a note that sending them is a silent no-op (matching `RecordPayloadExtractor` behavior).
+- **`id` and `record.id_type`** — with `id_type=integer` the `id` is omitted from the `Write` schema (auto-increment, must not be sent); with `id_type=uuid` it is an optional `string`/`uuid` field (server-generated via `Str::uuid()` when omitted). The `{id}` path parameter's schema type follows the same `id_type` (`integer`/`int64` vs `string`/`uuid`).
+- **`lazy` parameter** — list operations declare the `lazy` query parameter (deferred query execution for large/complex filters).
+- **`max_depth`** — the main document's Column Selection section states the relationship nesting depth limit from `record.max_depth`.
+- **Rate limits** — the main document's Rate Limits section documents the `throttle:api-reads` / `api-writes` / `api-functions` buckets and any per-table overrides from `record.rate_limits`.
+- **Primary keys** — the main document's Getting Started section states whether keys are auto-increment integers or UUIDs.
+
 ---
 
 ### PHP 8.3 Attribute-Based Config
