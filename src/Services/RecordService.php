@@ -1309,6 +1309,21 @@ class RecordService
         return $this->cacheService()->isCacheableRequest($request, $table);
     }
 
+    /**
+     * Normalize a payload to JSON-safe arrays/scalars before it is stored in
+     * the cache. Query results come back as stdClass rows (DB query builder);
+     * serializing cache stores (database, file, redis-php) persist with PHP
+     * serialize() and can fail to restore those objects on read, which turns
+     * every cached request into a 500 "incomplete object" until TTL expiry.
+     */
+    private static function cacheSafePayload(mixed $value): mixed
+    {
+        $encoded = json_encode($value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+        $decoded = json_decode($encoded, true);
+
+        return json_last_error() === JSON_ERROR_NONE ? $decoded : $value;
+    }
+
     public function generateOptimizedCacheKey(string $table, array $filters, array $includes, int $page, int $limit, bool $tenantEnabled): string
     {
         return $this->cacheService()->generateOptimizedCacheKey($table, $filters, $includes, $page, $limit, $tenantEnabled);
@@ -2250,7 +2265,11 @@ class RecordService
                 'tenant_enabled' => $this->shouldApplyTenantId($tableSchema),
             ];
             $ttl = $this->calculateOptimalCacheTTL($table, count($data), $effectiveSelectParam !== '');
-            QueryCacheService::put($cacheKey, $cacheData, $ttl);
+            // Rows come off the query builder as stdClass objects; serializing
+            // stores (database, file, redis-php) persist with PHP serialize()
+            // and can fail to restore them on read ("incomplete object").
+            // Cache JSON-safe arrays only.
+            QueryCacheService::put($cacheKey, self::cacheSafePayload($cacheData), $ttl);
         }
 
         if ($this->shouldIncludeDebug($request)) {
@@ -2890,7 +2909,7 @@ class RecordService
                 'tenant_enabled' => $tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema),
             ];
             $ttl = $service->calculateOptimalCacheTTL($table, count($data), $effectiveSelectParam !== '');
-            QueryCacheService::put($cacheKey, $cacheData, $ttl);
+            QueryCacheService::put($cacheKey, self::cacheSafePayload($cacheData), $ttl);
         }
 
         if ($service->shouldIncludeDebug($request)) {
@@ -3073,7 +3092,9 @@ class RecordService
 
         if ($this->isCacheableRequest($request, $table)) {
             $ttl = $this->calculateOptimalCacheTTL($table, 1, $effectiveSelectParam !== '');
-            QueryCacheService::put($recordCacheKey, $record, $ttl);
+            // Single records are stdClass objects off the query builder; cache
+            // JSON-safe arrays only (see listRecords for why).
+            QueryCacheService::put($recordCacheKey, self::cacheSafePayload($record), $ttl);
         }
 
         return ['data' => $record, 'request' => $request];
