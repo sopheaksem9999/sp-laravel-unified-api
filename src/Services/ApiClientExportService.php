@@ -239,6 +239,11 @@ class ApiClientExportService
     private function buildQueryParam(array $param): array
     {
         $schema = $param['schema'] ?? [];
+        // Only parameters with a real default are enabled in the exported
+        // request. Placeholders (e.g. per-column filters, sortby, search)
+        // are included but disabled so a one-click send doesn't fire a
+        // request full of empty/example values that the API rejects.
+        $hasDefault = array_key_exists('default', $schema);
         $value = $schema['default'] ?? '';
 
         if (is_bool($value)) {
@@ -248,7 +253,7 @@ class ApiClientExportService
         return [
             'name' => (string) $param['name'],
             'value' => (string) $value,
-            'enabled' => true,
+            'enabled' => $hasDefault,
             'type' => 'query',
         ];
     }

@@ -10,6 +10,8 @@ use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Utilities\RelationshipResolverUtils;
 use Sopheak\Core\Constants\HttpErrorCodeConstant;
+use Sopheak\Core\Http\Middleware\RecordRouteMiddleware;
+use Illuminate\Routing\Router;
 use Illuminate\Support\Arr;
 
 class OpenApiService
@@ -103,19 +105,24 @@ class OpenApiService
 
         $maxPerPage = RecordConfigService::perPageMax();
 
+        $defaultPaginationMode = RecordConfigService::paginationDefaultMode();
+        $defaultCursorColumn = RecordConfigService::cursorDefaultColumn();
+        $compositeCursorsEnabled = RecordConfigService::cursorCompositeEnabled();
+        $skipTotalDefault = RecordConfigService::skipTotalDefault();
+
         $schemas = [];
         foreach ($tables as $recordName => $config) {
             $columns = $config->columns ?? [];
             $actualTableName = $config->table ?? $recordName; // Use actual table name from config
 
             // Full schema (for responses)
-            $schemas[self::schemaName($recordName)] = self::tableSchema($actualTableName, $columns);
+            $schemas[self::schemaName($recordName)] = self::tableSchema($actualTableName, $columns, $config);
 
             // Read schema (for GET operations - exclude created_at, updated_at)
-            $schemas[self::schemaName($recordName) . 'Read'] = self::tableSchemaRead($actualTableName, $columns);
+            $schemas[self::schemaName($recordName) . 'Read'] = self::tableSchemaRead($actualTableName, $columns, $config);
 
             // Write schema (for POST/PUT/PATCH operations - exclude created_at, updated_at, deleted_at)
-            $schemas[self::schemaName($recordName) . 'Write'] = self::tableSchemaWrite($actualTableName, $columns);
+            $schemas[self::schemaName($recordName) . 'Write'] = self::tableSchemaWrite($actualTableName, $columns, $config);
         }
 
         $paths = self::paths($tables);
@@ -158,10 +165,15 @@ This API provides **unified access** to all tables through a single endpoint pat
 
 ## 🔑 Authentication
 
-All endpoints require a valid API token in the `Authorization` header:
+Endpoints document their auth requirement per operation (see each operation\'s `**Authorization:**` block and the `x-sp-auth` extension):
+
+- **Public** operations (e.g. `isAuthRead=false`, `isAuthWrite=false`, or a function with `isPublic=true`) need no token.
+- **All other operations** require a valid API token in the `Authorization` header:
 ```
 Authorization: Bearer <your-api-token>
 ```
+
+Required permission scopes (when configured) and route middleware are listed in the same per-operation documentation.
 
 ## Error Code
 
@@ -228,6 +240,8 @@ GET /' . $apiPrefix . '/customers?name=like.John
 GET /' . $apiPrefix . '/products?price=between.100,1000
 ```
 
+Primary keys are governed by `record.id_type`: `integer` (auto-increment) by default, or `uuid` — UUIDs are generated server-side when the `id` is omitted on create, and may be supplied by the client.
+
 ### Documentation References
 - Interactive package docs: https://sp-laravel-api-docs.vercel.app/#/
 - Runtime OpenAPI JSON: /' . $apiPrefix . '/docs/openapi.json
@@ -268,6 +282,20 @@ You can configure route middleware stacks per action and per table in `config/sp
 ]
 ```
 
+## 🚦 Rate Limits
+
+Routes are throttled via the `throttle:api-reads`, `throttle:api-writes`, and `throttle:api-functions` buckets (defined in the host application\'s `AppServiceProvider`). Per-table overrides can be configured in `config/sp-record.php` under `record.rate_limits`:
+
+```php
+"rate_limits" => [
+  "users" => [
+    "create" => ["limit" => 50, "decay_minutes" => 1],
+  ],
+],
+```
+
+Configured overrides for this API:' . self::rateLimitsSummary() . '
+
 ## 🔧 Key Features
 
 ### Filtering & Search
@@ -293,6 +321,7 @@ You can configure route middleware stacks per action and per table in `config/sp
 - **Relationships**: `select=id,name,customer:customers(id,name)` (include related data)
 - **Nested**: `select=id,items(id,name,product:products(*))` (deep relationships)
 - **Mixed**: `select=*,customer:customers(id,name),items(*)` (combine table and relationship columns)
+- **Depth**: relationship nesting is limited to `' . RecordConfigService::maxDepth() . '` levels (config `record.max_depth`)
 
 <h3 id="relationship-write-payload-guide">Relationship Write Payload Guide</h3>
 
@@ -343,6 +372,7 @@ Full relationship examples and payload guides: https://sp-laravel-api-docs.verce
 - **Composite**: `composite_cursor=true&sortby=created_at` (multi-column cursors; configurable via `pagination.cursor.composite_enabled`)
 - **Total Control**: `total=false` omits the total count query for performance; `total=true` includes totals even when `pagination.skip_total_default=true`. Legacy `skip_total=true` remains supported.
 - **Limits**: `per_page` max ' . $maxPerPage . ', default 25
+- **Configured defaults**: `record.pagination.default_mode` = `' . $defaultPaginationMode . '` (cursor default column: `' . $defaultCursorColumn . '`, composite cursors: ' . ($compositeCursorsEnabled ? 'enabled' : 'disabled') . ', `record.pagination.skip_total_default` = ' . ($skipTotalDefault ? 'true' : 'false') . ')
 
 ### Bulk Operations (Available for All Tables)
 
@@ -471,7 +501,7 @@ Accepts an array of IDs or an array of objects with the primary key.
     /**
      * @return array<string, string|mixed[][]|int[]|string[]>
      */
-    private static function tableSchema(string $table, array $columns): array
+    private static function tableSchema(string $table, array $columns, ?RecordTableType $config = null): array
     {
         $properties = [];
         $required = [];
@@ -479,8 +509,16 @@ Accepts an array of IDs or an array of objects with the primary key.
         // Exclude deleted_at from all response schemas
         $excludeFields = ['deleted_at'];
 
+        // Columns hidden from responses via columnHiddens are omitted too.
+        $hidden = is_array($config?->columnHiddens ?? null) ? $config->columnHiddens : [];
+        $hiddenSet = array_flip(array_filter($hidden, is_string(...)));
+
         foreach ($columns as $name => $info) {
             if (in_array($name, $excludeFields, true)) {
+                continue;
+            }
+
+            if (isset($hiddenSet[$name])) {
                 continue;
             }
 
@@ -496,7 +534,7 @@ Accepts an array of IDs or an array of objects with the primary key.
             'type' => 'object',
             'properties' => $properties,
             'required' => $required,
-            'description' => sprintf('Schema for table `%s` (excludes soft delete field)', $table),
+            'description' => sprintf('Schema for table `%s` (excludes soft delete field%s)', $table, [] !== $hidden ? ' and columns hidden via `columnHiddens`' : ''),
         ];
     }
 
@@ -558,7 +596,7 @@ Accepts an array of IDs or an array of objects with the primary key.
     /**
      * @return array<string, string|mixed[][]|int[]|string[]>
      */
-    private static function tableSchemaRead(string $table, array $columns): array
+    private static function tableSchemaRead(string $table, array $columns, ?RecordTableType $config = null): array
     {
         $properties = [];
         $required = [];
@@ -566,8 +604,16 @@ Accepts an array of IDs or an array of objects with the primary key.
         // Exclude created_at, updated_at, and deleted_at for read operations
         $excludeFields = ['created_at', 'updated_at', 'deleted_at'];
 
+        // Columns hidden from responses via columnHiddens are omitted too.
+        $hidden = is_array($config?->columnHiddens ?? null) ? $config->columnHiddens : [];
+        $hiddenSet = array_flip(array_filter($hidden, is_string(...)));
+
         foreach ($columns as $name => $info) {
             if (in_array($name, $excludeFields, true)) {
+                continue;
+            }
+
+            if (isset($hiddenSet[$name])) {
                 continue;
             }
 
@@ -583,14 +629,14 @@ Accepts an array of IDs or an array of objects with the primary key.
             'type' => 'object',
             'properties' => $properties,
             'required' => $required,
-            'description' => sprintf('Read schema for table `%s` (excludes system timestamps and soft delete)', $table),
+            'description' => sprintf('Read schema for table `%s` (excludes system timestamps, soft delete%s)', $table, [] !== $hidden ? ', and columns hidden via `columnHiddens`' : ''),
         ];
     }
 
     /**
      * @return array<string, string|mixed[][]|int[]|string[]>
      */
-    private static function tableSchemaWrite(string $table, array $columns): array
+    private static function tableSchemaWrite(string $table, array $columns, ?RecordTableType $config = null): array
     {
         $properties = [];
         $required = [];
@@ -598,12 +644,35 @@ Accepts an array of IDs or an array of objects with the primary key.
         // Exclude created_at, updated_at, and deleted_at for write operations
         $excludeFields = ['created_at', 'updated_at', 'deleted_at'];
 
+        // Auto-increment primary keys are server-managed; uuid keys are optional
+        // (generated server-side via Str::uuid() when omitted) — see RecordService.
+        $idType = RecordConfigService::idType();
+        if ('integer' === $idType) {
+            $excludeFields[] = 'id';
+        }
+
+        // columnWriteDisabled fields are server-computed: sending them is a
+        // deliberate silent no-op, so they are documented as read-only.
+        $writeDisabled = is_array($config?->columnWriteDisabled ?? null) ? $config->columnWriteDisabled : [];
+        $writeDisabledSet = array_flip(array_filter($writeDisabled, is_string(...)));
+
         foreach ($columns as $name => $info) {
             if (in_array($name, $excludeFields, true)) {
                 continue;
             }
 
             $mapped = self::mapColumnToOpenApi($info['type'] ?? 'string');
+            if (isset($writeDisabledSet[$name])) {
+                $mapped['readOnly'] = true;
+                $mapped['description'] = 'Write-disabled (columnWriteDisabled): sending this field is ignored (silent no-op).';
+            }
+
+            if ('uuid' === $idType && 'id' === $name) {
+                // Primary keys hold server-generated UUID strings regardless of
+                // the underlying column type mapping.
+                $mapped = ['type' => 'string', 'format' => 'uuid'];
+            }
+
             $properties[$name] = $mapped;
             // Avoid forcing typical system fields as required
             if (!(bool) ($info['nullable'] ?? true) && !in_array($name, ['id', 'created_at', 'updated_at', 'deleted_at'], true)) {
@@ -615,7 +684,12 @@ Accepts an array of IDs or an array of objects with the primary key.
             'type' => 'object',
             'properties' => $properties,
             'required' => $required,
-            'description' => sprintf('Write schema for table `%s` (excludes system-managed fields)', $table),
+            'description' => sprintf(
+                'Write schema for table `%s` (excludes system-managed fields%s).%s',
+                $table,
+                [] !== $writeDisabled ? '; marks `columnWriteDisabled` fields as read-only' : '',
+                'integer' === $idType ? ' `id` is auto-increment and must not be sent.' : ' `id` is a UUID; omit it to have the server generate one.'
+            ),
         ];
     }
 
@@ -654,10 +728,6 @@ Accepts an array of IDs or an array of objects with the primary key.
             $tags[] = ['name' => 'RPC - ' . $formatted, 'description' => sprintf('Global RPC functions under `%s/*`', $group)];
         }
 
-        if (RecordConfigService::auditEnabled()) {
-            $tags[] = ['name' => 'Audit', 'description' => 'Audit log operations'];
-        }
-
         return $tags;
     }
 
@@ -670,6 +740,320 @@ Accepts an array of IDs or an array of objects with the primary key.
     private static function security(bool $requiresAuth): array
     {
         return $requiresAuth ? [['bearerAuth' => []]] : [];
+    }
+
+    /**
+     * Append Authorization documentation to an OpenAPI operation: a
+     * human-readable description block plus the machine-readable `x-sp-auth`
+     * extension, both derived from the table/function config.
+     *
+     * @param array<string, mixed> $operation
+     * @param string[]             $permissions
+     * @param string[]             $middleware
+     *
+     * @return array<string, mixed>
+     */
+    private static function appendAuthDocs(
+        array $operation,
+        string $mode,
+        string $flag,
+        bool $flagValue,
+        bool $public,
+        string $source,
+        array $permissions = [],
+        array $middleware = [],
+        bool $tenant = false
+    ): array {
+        $modeLabel = 'function' === $mode ? 'function call' : $mode . ' auth';
+
+        $lines = $public
+            ? [sprintf('**Authorization:** Public — no authentication required (`%s=%s` in %s)', $flag, $flagValue ? 'true' : 'false', $source)]
+            : [sprintf('**Authorization:** Bearer token required — %s (`%s=%s` in %s)', $modeLabel, $flag, $flagValue ? 'true' : 'false', $source)];
+
+        if ([] !== $permissions) {
+            $lines[] = '**Permission scope(s):** ' . implode(', ', array_map(
+                static fn(string $scope): string => '`' . $scope . '`',
+                $permissions
+            ));
+        }
+
+        if ([] !== $middleware) {
+            $lines[] = '**Route middleware:** ' . implode(', ', array_map(
+                static fn(string $middleware): string => '`' . $middleware . '`',
+                $middleware
+            ));
+        }
+
+        $operation = self::appendNote($operation, implode("\n", $lines));
+
+        $operation['x-sp-auth'] = [
+            'auth' => $public ? 'public' : 'bearer',
+            'mode' => $mode,
+            'flag' => $flag,
+            'flag_value' => $flagValue,
+            'public' => $public,
+            'permissions' => $permissions,
+            'middleware' => $middleware,
+            'tenant' => $tenant,
+            'source' => $source,
+        ];
+
+        return $operation;
+    }
+
+    /**
+     * Append a documentation block to an operation's description.
+     *
+     * @param array<string, mixed> $operation
+     *
+     * @return array<string, mixed>
+     */
+    private static function appendNote(array $operation, string $note): array
+    {
+        $description = (string) ($operation['description'] ?? '');
+        $operation['description'] = '' === $description ? $note : $description . "\n\n" . $note;
+
+        return $operation;
+    }
+
+    /**
+     * Build the Authorization docs for a table CRUD operation.
+     *
+     * @param array<string, mixed> $operation
+     *
+     * @return array<string, mixed>
+     */
+    private static function tableOperationDocs(
+        array $operation,
+        RecordTableType $config,
+        string $recordName,
+        string $action,
+        bool $isRead,
+        string $source,
+        bool $tenant
+    ): array {
+        $flag = $isRead ? 'isAuthRead' : 'isAuthWrite';
+        $flagValue = $isRead ? (bool) $config->isAuthRead : (bool) $config->isAuthWrite;
+        $permissionAction = in_array($action, ['list', 'show'], true) ? 'read' : $action;
+
+        return self::appendAuthDocs(
+            $operation,
+            mode: $isRead ? 'read' : 'write',
+            flag: $flag,
+            flagValue: $flagValue,
+            public: !$flagValue,
+            source: $source,
+            permissions: self::permissionScopesForAction($config, $permissionAction),
+            middleware: self::middlewareForAction($recordName, $action),
+            tenant: $tenant,
+        );
+    }
+
+    /**
+     * Build the Authorization docs for a function (global or table RPC) operation.
+     *
+     * @param array<string, mixed> $operation
+     *
+     * @return array<string, mixed>
+     */
+    private static function functionOperationDocs(
+        array $operation,
+        object $functionConfig,
+        bool $isPublic,
+        string $source,
+        string $table,
+        string $action
+    ): array {
+        return self::appendAuthDocs(
+            $operation,
+            mode: 'function',
+            flag: 'isPublic',
+            flagValue: $isPublic,
+            public: $isPublic,
+            source: $source,
+            permissions: [],
+            middleware: self::middlewareForAction($table, $action, $functionConfig instanceof RecordFunctionType ? $functionConfig : null),
+            tenant: false,
+        );
+    }
+
+    /**
+     * Resolve the permission scopes declared for an action on a table config.
+     *
+     * @return string[]
+     */
+    private static function permissionScopesForAction(RecordTableType $config, string $action): array
+    {
+        $permissions = $config->permissions ?? null;
+        if (!is_array($permissions) || !isset($permissions[$action])) {
+            return [];
+        }
+
+        $scopes = $permissions[$action];
+
+        return array_values(array_filter(
+            array_map(
+                static fn(mixed $scope): string => is_string($scope) ? trim($scope) : '',
+                is_array($scopes) ? $scopes : [$scopes]
+            ),
+            static fn(string $scope): bool => '' !== $scope
+        ));
+    }
+
+    /**
+     * Resolve the route middleware stack for an action with the same
+     * precedence as RecordRouteMiddleware: a function-level `middleware`
+     * setting replaces the map; otherwise default + per-table maps merge
+     * across `*`, the action group, and the exact action.
+     *
+     * @return string[]
+     */
+    private static function middlewareForAction(string $table, string $action, ?RecordFunctionType $function = null): array
+    {
+        $map = RecordConfigService::middlewareMap();
+        $globalMap = is_array($map['default'] ?? null) ? $map['default'] : [];
+        $tablesMap = is_array($map['tables'] ?? null) ? $map['tables'] : [];
+        $tableMap = is_array($tablesMap[$table] ?? null) ? $tablesMap[$table] : [];
+
+        if (('table_function' === $action || 'global_function' === $action) && ($function instanceof RecordFunctionType && null !== $function->middleware)) {
+            return self::resolveMiddlewareAliases(self::normalizeMiddleware($function->middleware));
+        }
+
+        $group = self::middlewareActionGroup($action);
+
+        return self::resolveMiddlewareAliases(array_merge(
+            self::resolveMiddlewareMapForAction($globalMap, $group, $action),
+            self::resolveMiddlewareMapForAction($tableMap, $group, $action)
+        ));
+    }
+
+    /**
+     * @param array<string, mixed> $map
+     *
+     * @return string[]
+     */
+    private static function resolveMiddlewareMapForAction(array $map, string $group, string $action): array
+    {
+        return array_merge(
+            self::normalizeMiddleware($map['*'] ?? []),
+            self::normalizeMiddleware($map[$group] ?? []),
+            self::normalizeMiddleware($map[$action] ?? [])
+        );
+    }
+
+    private static function middlewareActionGroup(string $action): string
+    {
+        return match ($action) {
+            'list', 'show' => 'read',
+            'create', 'update', 'delete', 'restore', 'force_delete', 'upsert', 'bulk', 'bulk_create', 'bulk_update', 'bulk_delete', 'bulk_upsert' => 'write',
+            'table_function', 'global_function' => 'function',
+            default => 'misc',
+        };
+    }
+
+    /**
+     * @return string[]
+     */
+    private static function normalizeMiddleware(mixed $middlewares): array
+    {
+        if (is_string($middlewares)) {
+            $middlewares = [$middlewares];
+        }
+
+        if (!is_array($middlewares)) {
+            return [];
+        }
+
+        return array_values(array_filter(
+            array_map(static fn(mixed $middleware): string => is_string($middleware) ? trim($middleware) : '', $middlewares),
+            static fn(string $middleware): bool => '' !== $middleware
+        ));
+    }
+
+    /**
+     * Resolve middleware aliases to class names, mirroring
+     * RecordRouteMiddleware::sanitizeMiddlewares().
+     *
+     * @param string[] $middlewares
+     *
+     * @return string[]
+     */
+    private static function resolveMiddlewareAliases(array $middlewares): array
+    {
+        /** @var Router $router */
+        $router = app('router');
+        $aliases = $router->getMiddleware();
+
+        $result = [];
+        foreach ($middlewares as $middleware) {
+            [$name, $params] = array_pad(explode(':', $middleware, 2), 2, null);
+            $resolved = $aliases[$name] ?? $name;
+            if (is_string($params) && '' !== $params) {
+                $resolved .= ':' . $params;
+            }
+
+            if (str_starts_with((string) $resolved, RecordRouteMiddleware::class)) {
+                continue;
+            }
+
+            if (str_starts_with($middleware, 'record.route.middleware')) {
+                continue;
+            }
+
+            $result[] = $resolved;
+        }
+
+        return array_values(array_unique($result));
+    }
+
+    /**
+     * One-line pagination note reflecting the configured defaults, appended
+     * to list operations.
+     */
+    private static function paginationDefaultNote(): string
+    {
+        return sprintf(
+            '**Pagination:** Default mode: `%s` (config `record.pagination.default_mode`); cursor pagination via `cursor` parameter (default cursor column `%s`).',
+            RecordConfigService::paginationDefaultMode(),
+            RecordConfigService::cursorDefaultColumn()
+        );
+    }
+
+    /**
+     * Markdown summary of configured per-table rate limit overrides for the
+     * main document's Rate Limits section.
+     */
+    private static function rateLimitsSummary(): string
+    {
+        $overrides = (array) config('record.rate_limits', []);
+        $lines = [];
+
+        foreach ($overrides as $table => $rules) {
+            if (!is_array($rules)) {
+                continue;
+            }
+
+            $parts = [];
+            foreach ($rules as $action => $rule) {
+                if (!is_array($rule)) {
+                    continue;
+                }
+
+                $limit = (int) ($rule['limit'] ?? 0);
+                $decay = (int) ($rule['decay_minutes'] ?? 1);
+                $parts[] = sprintf('%s: %d/%dmin', $action, $limit, $decay);
+            }
+
+            if ([] !== $parts) {
+                $lines[] = sprintf(' - `%s` — %s', $table, implode(', ', $parts));
+            }
+        }
+
+        if ([] === $lines) {
+            return ' none (global `api-reads` / `api-writes` / `api-functions` limits apply)';
+        }
+
+        return "\n" . implode("\n", $lines);
     }
 
     private static function paths(array $tables): array
@@ -691,10 +1075,15 @@ Accepts an array of IDs or an array of objects with the primary key.
             $canDelete = (bool) ($config->canDelete ?? true);
             $canUpsert = (bool) ($config->canUpsert ?? true);
 
+            $tableConfigSource = 'config/records/tables/' . $recordName . '.php';
+            $tenantScoped = (bool) ($config->hasTenantId ?? false);
+
             // Generate relationship description
             $relationshipDescription = self::generateRelationshipDescription($recordName, $config);
 
             $maxPerPage = RecordConfigService::perPageMax();
+            $defaultPaginationMode = RecordConfigService::paginationDefaultMode();
+            $compositeCursorsEnabled = RecordConfigService::cursorCompositeEnabled();
             $defaultPerPage = 25;
             $defaultMode = RecordConfigService::paginationDefaultMode();
             $skipTotalDefault = RecordConfigService::skipTotalDefault();
@@ -853,6 +1242,17 @@ Accepts an array of IDs or an array of objects with the primary key.
                 ] : [],
             ], static fn(mixed $value): bool => [] !== $value);
 
+            if (isset($paths[$basePath]['get'])) {
+                $paths[$basePath]['get'] = self::appendNote(
+                    self::tableOperationDocs($paths[$basePath]['get'], $config, $recordName, 'list', true, $tableConfigSource, $tenantScoped),
+                    self::paginationDefaultNote()
+                );
+            }
+
+            if (isset($paths[$basePath]['post'])) {
+                $paths[$basePath]['post'] = self::tableOperationDocs($paths[$basePath]['post'], $config, $recordName, 'create', false, $tableConfigSource, $tenantScoped);
+            }
+
             if (!isset($paths[$basePath]['get']) && !isset($paths[$basePath]['post'])) {
                 unset($paths[$basePath]);
             }
@@ -932,6 +1332,8 @@ Accepts an array of IDs or an array of objects with the primary key.
                         'security' => self::security($config->isAuthWrite),
                     ],
                 ];
+
+                $paths[$upsertPath]['post'] = self::tableOperationDocs($paths[$upsertPath]['post'], $config, $recordName, 'upsert', false, $tableConfigSource, $tenantScoped);
 
                 // Bulk Upsert
                 $bulkUpsertPath = $basePath . '/bulk/upsert';
@@ -1016,6 +1418,8 @@ Accepts an array of IDs or an array of objects with the primary key.
                         'security' => self::security($config->isAuthWrite),
                     ],
                 ];
+
+                $paths[$bulkUpsertPath]['post'] = self::tableOperationDocs($paths[$bulkUpsertPath]['post'], $config, $recordName, 'bulk_upsert', false, $tableConfigSource, $tenantScoped);
             }
 
             // Read/Update/Delete
@@ -1191,6 +1595,18 @@ Accepts an array of IDs or an array of objects with the primary key.
                 ] : [],
             ], static fn(mixed $value): bool => [] !== $value);
 
+            if (isset($paths[$idPath]['get'])) {
+                $paths[$idPath]['get'] = self::tableOperationDocs($paths[$idPath]['get'], $config, $recordName, 'show', true, $tableConfigSource, $tenantScoped);
+            }
+
+            if (isset($paths[$idPath]['put'])) {
+                $paths[$idPath]['put'] = self::tableOperationDocs($paths[$idPath]['put'], $config, $recordName, 'update', false, $tableConfigSource, $tenantScoped);
+            }
+
+            if (isset($paths[$idPath]['delete'])) {
+                $paths[$idPath]['delete'] = self::tableOperationDocs($paths[$idPath]['delete'], $config, $recordName, 'delete', false, $tableConfigSource, $tenantScoped);
+            }
+
             $idPathOperations = array_diff_key($paths[$idPath], ['parameters' => true]);
             if ([] === $idPathOperations) {
                 unset($paths[$idPath]);
@@ -1244,6 +1660,8 @@ Accepts an array of IDs or an array of objects with the primary key.
                         'security' => self::security($config->isAuthWrite),
                     ],
                 ];
+
+                $paths[$basePath . '/{id}/restore']['post'] = self::tableOperationDocs($paths[$basePath . '/{id}/restore']['post'], $config, $recordName, 'restore', false, $tableConfigSource, $tenantScoped);
             }
 
             // Force Delete
@@ -1298,6 +1716,8 @@ Accepts an array of IDs or an array of objects with the primary key.
                         'security' => self::security($config->isAuthWrite),
                     ],
                 ];
+
+                $paths[$basePath . '/{id}/force']['delete'] = self::tableOperationDocs($paths[$basePath . '/{id}/force']['delete'], $config, $recordName, 'force_delete', false, $tableConfigSource, $tenantScoped);
             }
         }
 
@@ -1496,6 +1916,15 @@ Accepts an array of IDs or an array of objects with the primary key.
                     'security' => self::security(!($functionConfig->isPublic ?? true)),
                 ];
 
+                $paths[$endpoint][$methodLower] = self::functionOperationDocs(
+                    $paths[$endpoint][$methodLower],
+                    $functionConfig,
+                    (bool) ($functionConfig->isPublic ?? true),
+                    'config/records/global-functions/' . $functionName . '.php',
+                    '',
+                    'global_function'
+                );
+
                 // Add request body for POST, PUT, PATCH methods
                 if (in_array($methodLower, ['post', 'put', 'patch'])) {
                     $bodySchema = [
@@ -1541,6 +1970,7 @@ Accepts an array of IDs or an array of objects with the primary key.
             $formattedTableName = ucwords(str_replace('_', ' ', $tableName));
             $functions = Arr::get((array) $config, 'functions', []);
             $tenantHeaderParameters = self::tenantHeaderParametersForTableConfig($config);
+            $tableConfigSource = 'config/records/tables/' . $tableName . '.php';
 
             foreach ($functions as $functionName => $functionConfig) {
                 // Normalize Array Config to Object (for legacy support)
@@ -1739,6 +2169,15 @@ Accepts an array of IDs or an array of objects with the primary key.
                         'security' => self::security(!($functionConfig->isPublic ?? false)),
                     ];
 
+                    $paths[$endpoint][$methodLower] = self::functionOperationDocs(
+                        $paths[$endpoint][$methodLower],
+                        $functionConfig,
+                        (bool) ($functionConfig->isPublic ?? false),
+                        $tableConfigSource,
+                        $tableName,
+                        'table_function'
+                    );
+
                     // Add path parameters if any
                     if (!empty($parameters)) {
                         $paths[$endpoint][$methodLower]['parameters'] = array_merge($paths[$endpoint][$methodLower]['parameters'], $parameters);
@@ -1823,12 +2262,17 @@ Accepts an array of IDs or an array of objects with the primary key.
      */
     private static function pathIdParameter(): array
     {
+        $idType = RecordConfigService::idType();
+        $schema = 'integer' === $idType
+            ? ['type' => 'integer', 'format' => 'int64']
+            : ['type' => 'string', 'format' => 'uuid'];
+
         return [
             'name' => 'id',
             'in' => 'path',
             'required' => true,
-            'schema' => ['type' => 'string'],
-            'description' => 'Record identifier (UUID or string)',
+            'schema' => $schema,
+            'description' => 'Primary key of the record (' . ('integer' === $idType ? 'auto-increment integer' : 'UUID string') . '; governed by `record.id_type`).',
         ];
     }
 
@@ -1962,6 +2406,13 @@ Accepts an array of IDs or an array of objects with the primary key.
                     ? 'Search across this table\'s configured searchable fields: ' . implode(', ', $searchable) . '.'
                     : 'Search across this table\'s configured searchable fields (none configured).',
                 'schema' => ['type' => 'string'],
+            ],
+            [
+                'name' => 'lazy',
+                'in' => 'query',
+                'required' => false,
+                'description' => 'Defer query execution for performance: filters are stored and executed only when the query actually runs (batching + caching). Use `lazy=true` for large datasets or complex multi-filter queries.',
+                'schema' => ['type' => 'boolean', 'enum' => [true, false], 'default' => false],
             ],
         ];
     }
