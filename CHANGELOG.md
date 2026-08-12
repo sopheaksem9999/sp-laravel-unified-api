@@ -2,6 +2,11 @@
 
 All notable changes to `sp-laravel-api` will be documented in this file.
 
+## [0.4.87] - 2026-08-12
+
+### Fixed
+- **Record API cache stored PHP-serialized stdClass rows → every cached list/show request failed with a 500 "incomplete object stdClass"**: `RecordService` reads rows through a DB query builder (`DB::table()`), so `->get()` returns stdClass objects, and the list, cursor-pagination, dynamic-query, and show cache-write paths stored them raw. Serializing cache stores (database, file, redis-php) persist with PHP `serialize()`; restoring those objects on read could fail ("incomplete object"), and the failed response was then itself cached until TTL expiry. All four cache-write sites now normalize the payload to JSON-safe arrays/scalars first (`RecordService::cacheSafePayload()`, a JSON round-trip) — the same shape the custom-function cache path already used. Cache reads return plain arrays, which the response layer already handles. See `tests/Feature/RecordListCacheSerializationTest.php` (list/show/cursor round-trips through a real serializing store, plus a structural assertion that no cached payload contains serialized objects).
+
 ## [0.4.86] - 2026-08-12
 
 ### Added
