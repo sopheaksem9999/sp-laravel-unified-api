@@ -254,11 +254,9 @@ trait HasCrudOperations
             // field to write/validate — only the actual body belongs in the create/update payload.
             $payload = $request->except(array_keys($request->query()));
 
-            return $this->withinTransaction(function () use ($request, $table, $payload, $tenantId, $tableSchema): JsonResponse {
+            return $this->withinTransaction(function () use ($request, $table, $payload, $tenantId): JsonResponse {
                 $result     = $this->recordService->createRecord(table: $table, payload: $payload, tenantId: $tenantId);
                 $insertedId = $result['id'];
-
-                $this->recordService->invalidateTableCache($table, $tenantId, $this->recordService->shouldApplyTenantId($tableSchema));
 
                 $recordData     = $this->fetchRecordData(request: $request, table: $table, id: $insertedId, tenantId: $tenantId);
                 $recordResponse = RecordApiResponseService::successWrapped($recordData);
@@ -351,15 +349,13 @@ trait HasCrudOperations
             // See createRecord() for why the query string is excluded from the payload.
             $payload = $request->except(array_keys($request->query()));
 
-            return $this->withinTransaction(function () use ($request, $table, $id, $payload, $tenantId, $tableSchema): JsonResponse {
+            return $this->withinTransaction(function () use ($request, $table, $id, $payload, $tenantId): JsonResponse {
                 $result  = $this->recordService->updateRecord(table: $table, id: $id, payload: $payload, tenantId: $tenantId);
                 $updated = $result['updated'];
 
                 if (!$result['exists']) {
                     throw new RecordNotFoundException('Not found');
                 }
-
-                $this->recordService->invalidateTableCache($table, $tenantId, $this->recordService->shouldApplyTenantId($tableSchema));
 
                 $recordData     = $this->fetchRecordData(request: $request, table: $table, id: $id, tenantId: $tenantId);
                 $recordResponse = RecordApiResponseService::successWrapped($recordData);
@@ -452,8 +448,6 @@ trait HasCrudOperations
                     throw new RecordNotFoundException('Not found');
                 }
 
-                $this->recordService->invalidateTableCache($table, $tenantId, $this->recordService->shouldApplyTenantId($tableSchema));
-
                 $response = RecordApiResponseService::successWrapped(['deleted' => $affected]);
 
                 $this->recordService->processPostWriteLogic(
@@ -526,15 +520,13 @@ trait HasCrudOperations
                 $request = $triggerParams[0];
             }
 
-            return $this->withinTransaction(function () use ($request, $table, $id, $tenantId, $tableSchema, $record): JsonResponse {
+            return $this->withinTransaction(function () use ($request, $table, $id, $tenantId, $record): JsonResponse {
                 $result   = $this->recordService->restoreRecord(table: $table, id: $id, tenantId: $tenantId);
                 $affected = $result['restored'];
 
                 if (0 === $affected) {
                     throw new RecordNotFoundException('Not found');
                 }
-
-                $this->recordService->invalidateTableCache($table, $tenantId, $this->recordService->shouldApplyTenantId($tableSchema));
 
                 $response = RecordApiResponseService::successWrapped(['restored' => $affected]);
 
@@ -602,15 +594,13 @@ trait HasCrudOperations
                 $request = $triggerParams[0];
             }
 
-            return $this->withinTransaction(function () use ($request, $table, $id, $tenantId, $tableSchema, $record): JsonResponse {
+            return $this->withinTransaction(function () use ($request, $table, $id, $tenantId, $record): JsonResponse {
                 $result  = $this->recordService->forceDeleteRecord($request, $table, $id, $tenantId);
                 $deleted = $result['deleted'];
 
                 if (0 === $deleted) {
                     throw new RecordNotFoundException('Not found');
                 }
-
-                $this->recordService->invalidateTableCache($table, $tenantId, $this->recordService->shouldApplyTenantId($tableSchema));
 
                 $response = RecordApiResponseService::successWrapped(['deleted' => $deleted]);
 

@@ -50,11 +50,89 @@ class RecordCacheService
             return false;
         }
 
-        if ($request->has(['search', 'filter', 'where'])) {
+        // hasAny(), not has(): has() with an array is ALL-of, so it only ever
+        // rejected a request carrying all three params at once.
+        if ($request->hasAny(['search', 'filter', 'where'])) {
             return false;
         }
 
         return $this->passesAdmissionRules($request, $table, $schemaTableName);
+    }
+
+    /**
+     * Table-less counterpart of isCacheableRequest() for global functions.
+     *
+     * Global functions have no table, so only_tables/except_tables cannot apply,
+     * but the enable flag, method check, dynamic-query guard, action rules and
+     * skip_query_params all must -- RecordService used to re-implement a partial
+     * version of this inline and silently bypassed the last three.
+     */
+    public function isCacheableGlobalRequest(Request $request): bool
+    {
+        if (!RecordConfigService::cacheEnabled()) {
+            return false;
+        }
+
+        if ('GET' !== $request->method()) {
+            return false;
+        }
+
+        if ($request->hasAny(['search', 'filter', 'where'])) {
+            return false;
+        }
+
+        if (!RecordConfigService::cacheAdmissionEnabled()) {
+            return true;
+        }
+
+        $action = $this->resolveCacheAction($request);
+
+        $onlyActions = array_filter(array_map(strval(...), RecordConfigService::cacheAdmissionOnlyActions()));
+        if ([] !== $onlyActions && (null === $action || !in_array($action, $onlyActions, true))) {
+            return false;
+        }
+
+        $exceptActions = array_filter(array_map(strval(...), RecordConfigService::cacheAdmissionExceptActions()));
+        if (null !== $action && [] !== $exceptActions && in_array($action, $exceptActions, true)) {
+            return false;
+        }
+
+        foreach (RecordConfigService::cacheAdmissionSkipQueryParams() as $param) {
+            if (!is_string($param) && !is_int($param)) {
+                continue;
+            }
+
+            // has() routes through all(), which is body-aware (see
+            // queryFingerprint() below) -- query->has() is not, and was
+            // silently blind to skip_query_params sent in a JSON body.
+            if ($request->has((string) $param)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Stable fingerprint of the full request query.
+     *
+     * The consumers that actually shape a read -- with_trashed, only_trashed,
+     * add_total, and anything added later -- read through input()/boolean(),
+     * which sources from the parsed JSON body instead of the query string
+     * whenever Content-Type: application/json is set (see
+     * Request::getInputSource()). A fingerprint built from query() alone is
+     * blind to that path: a JSON-body request and a plain one can carry an
+     * empty query() while behaving completely differently. So this folds in
+     * the JSON body too. Parameters are opt-out, not opt-in: forgetting to
+     * list one can only split a cache entry, never merge two that should
+     * differ.
+     */
+    public function queryFingerprint(Request $request): string
+    {
+        $query = $request->json()->all() + $request->query();
+        $this->recursiveKsort($query);
+
+        return md5(serialize($query));
     }
 
     private function passesAdmissionRules(Request $request, string $table, ?string $schemaTableName): bool
@@ -128,7 +206,7 @@ class RecordCacheService
     /**
      * @param array<string, mixed> $filters
      */
-    public function generateOptimizedCacheKey(string $table, array $filters, array $includes, int $page, int $limit, bool $tenantEnabled): string
+    public function generateOptimizedCacheKey(string $table, array $filters, array $includes, int $page, int $limit, bool $tenantEnabled, string $queryFingerprint = ''): string
     {
         $tenantColumn = RecordConfigService::tenantColumn();
         $tenantKey = $this->resolveTenantCacheKey(tenantId: $filters[$tenantColumn] ?? null, tenantEnabled: $tenantEnabled);
@@ -140,6 +218,7 @@ class RecordCacheService
             'page' => $page,
             'limit' => $limit,
             'tenant_enabled' => $tenantEnabled,
+            'query' => $queryFingerprint,
         ];
 
         return sprintf('record_index:table:%s:tenant:%s:hash:%s', $table, $tenantKey, md5(serialize($keyData)));
@@ -148,7 +227,7 @@ class RecordCacheService
     /**
      * @param array<string, mixed> $filters
      */
-    public function generateCursorCacheKey(string $table, array $filters, array $includes, string $cursor, string $direction, string $cursorColumn, int $limit, bool $tenantEnabled): string
+    public function generateCursorCacheKey(string $table, array $filters, array $includes, string $cursor, string $direction, string $cursorColumn, int $limit, bool $tenantEnabled, string $queryFingerprint = ''): string
     {
         $tenantColumn = RecordConfigService::tenantColumn();
         $tenantKey = $this->resolveTenantCacheKey(tenantId: $filters[$tenantColumn] ?? null, tenantEnabled: $tenantEnabled);
@@ -162,12 +241,13 @@ class RecordCacheService
             'cursor_column' => $cursorColumn,
             'limit' => $limit,
             'tenant_enabled' => $tenantEnabled,
+            'query' => $queryFingerprint,
         ];
 
         return sprintf('record_cursor:table:%s:tenant:%s:hash:%s', $table, $tenantKey, md5(serialize($keyData)));
     }
 
-    public function generateRecordCacheKey(string $table, mixed $id, mixed $tenantId, mixed $select, bool $tenantEnabled): string
+    public function generateRecordCacheKey(string $table, mixed $id, mixed $tenantId, mixed $select, bool $tenantEnabled, string $queryFingerprint = ''): string
     {
         $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
         if (is_array($select)) {
@@ -178,12 +258,13 @@ class RecordCacheService
             'id' => $id,
             'select' => $select,
             'tenant_enabled' => $tenantEnabled,
+            'query' => $queryFingerprint,
         ];
 
         return sprintf('record_show:table:%s:id:%s:tenant:%s:select:%s', $table, $id, $tenantKey, md5(serialize($keyData)));
     }
 
-    public function generateTableFunctionCacheKey(string $table, string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled): string
+    public function generateTableFunctionCacheKey(string $table, string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled, string $queryFingerprint = ''): string
     {
         $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
         $this->recursiveKsort($queryParams);
@@ -191,12 +272,13 @@ class RecordCacheService
             'function' => $functionName,
             'query' => $queryParams,
             'tenant_enabled' => $tenantEnabled,
+            'query_fingerprint' => $queryFingerprint,
         ];
 
         return sprintf('record_func:table:%s:function:%s:tenant:%s:hash:%s', $table, $functionName, $tenantKey, md5(serialize($keyData)));
     }
 
-    public function generateGlobalFunctionCacheKey(string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled): string
+    public function generateGlobalFunctionCacheKey(string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled, string $queryFingerprint = ''): string
     {
         $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
         $this->recursiveKsort($queryParams);
@@ -204,6 +286,7 @@ class RecordCacheService
             'function' => $functionName,
             'query' => $queryParams,
             'tenant_enabled' => $tenantEnabled,
+            'query_fingerprint' => $queryFingerprint,
         ];
 
         return sprintf('record_func_global:function:%s:tenant:%s:hash:%s', $functionName, $tenantKey, md5(serialize($keyData)));
@@ -250,6 +333,53 @@ class RecordCacheService
 
             $this->clearTableCache($table, $tenantId);
         }
+    }
+
+    /**
+     * Turn a function's declared clearCacheTables into a cache dependency list.
+     *
+     * clearCacheTables already tells us which tables a function touches on write;
+     * the same list is what its cached result depends on for reads. Declaring it
+     * both ways is what makes a CRUD write to one of those tables invalidate the
+     * function's cached output.
+     *
+     * @return array<int, array<string, string>>
+     */
+    public function functionCacheDependencies(array|string|null $tables, mixed $tenantId, bool $tenantEnabled): array
+    {
+        if (null === $tables || [] === $tables || '' === $tables) {
+            return [];
+        }
+
+        $tableList = is_array($tables) ? $tables : array_filter(array_map(trim(...), explode(',', $tables)));
+
+        $dependencies = [];
+        foreach ($tableList as $table) {
+            if (!is_string($table)) {
+                continue;
+            }
+
+            if ('' === $table) {
+                continue;
+            }
+
+            // Tenancy must be resolved per table, exactly as clearTableCache() does
+            // it on the write side. A single hoisted key would point at a namespace
+            // nothing bumps whenever a dependency table's hasTenantId differs from
+            // the declaring function's tenancy.
+            $tableSchema = SchemaRegistryUtils::getTable($table);
+            $tableTenantEnabled = $tableSchema instanceof RecordTableType
+                ? RecordUtils::shouldApplyTenantId($tableSchema)
+                : $tenantEnabled;
+
+            $dependencies[] = [
+                'scope' => 'table',
+                'name' => $table,
+                'tenant' => $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tableTenantEnabled),
+            ];
+        }
+
+        return $dependencies;
     }
 
     public function invalidateTableFunctionCache(string $table, string $functionName, mixed $tenantId, bool $tenantEnabled): void

@@ -708,15 +708,29 @@ class RecordService
         $tenantId = $tenantEnabled ? $this->resolveTenantFromRequest($request, $tableSchema) : null;
         $cacheKey = null;
 
+        $clearCacheTables = null;
+        if ($functionConfig instanceof RecordFunctionType) {
+            $clearCacheTables = $functionConfig->clearCacheTables;
+        } elseif (is_array($functionConfig)) {
+            $clearCacheTables = $functionConfig['clearCacheTables'] ?? null;
+        }
+
+        if (null === $clearCacheTables || [] === $clearCacheTables || '' === $clearCacheTables) {
+            $clearCacheTables = $table;
+        }
+
+        $cacheDependencies = $this->cacheService()->functionCacheDependencies($clearCacheTables, $tenantId, $tenantEnabled);
+
         if (!$disableCache && $this->isCacheableRequest($request, $table)) {
             $cacheKey = $this->generateTableFunctionCacheKey(
                 table: $table,
                 functionName: $functionName,
                 queryParams: $request->query(),
                 tenantId: $tenantId,
-                tenantEnabled: $tenantEnabled
+                tenantEnabled: $tenantEnabled,
+                queryFingerprint: $this->cacheService()->queryFingerprint($request)
             );
-            $cached = QueryCacheService::get($cacheKey);
+            $cached = QueryCacheService::get($cacheKey, $cacheDependencies);
             if (is_array($cached) && isset($cached['data'], $cached['status'])) {
                 return new JsonResponse($cached['data'], $cached['status'], $cached['headers'] ?? []);
             }
@@ -733,17 +747,6 @@ class RecordService
                 tenantEnabled: $tenantEnabled
             );
 
-            $clearCacheTables = null;
-            if ($functionConfig instanceof RecordFunctionType) {
-                $clearCacheTables = $functionConfig->clearCacheTables;
-            } elseif (is_array($functionConfig)) {
-                $clearCacheTables = $functionConfig['clearCacheTables'] ?? null;
-            }
-
-            if (null === $clearCacheTables || [] === $clearCacheTables || '' === $clearCacheTables) {
-                $clearCacheTables = $table;
-            }
-
             $this->cacheService()->clearCacheForTables($clearCacheTables, $tenantId);
         }
 
@@ -757,7 +760,7 @@ class RecordService
                 'data' => $response->getData(true),
                 'status' => $response->getStatusCode(),
                 'headers' => $response->headers->all(),
-            ], $ttl);
+            ], $ttl, $cacheDependencies);
         }
 
         return $response;
@@ -808,14 +811,24 @@ class RecordService
         $tenantId = $tenantEnabled ? RecordUtils::resolveTenantIdFromRequest($request) : null;
         $cacheKey = null;
 
-        if (!$disableCache && RecordConfigService::cacheEnabled() && 'GET' === $request->method() && !$request->has(['search', 'filter', 'where'])) {
+        $clearCacheTables = null;
+        if ($functionConfig instanceof RecordFunctionType) {
+            $clearCacheTables = $functionConfig->clearCacheTables;
+        } elseif (is_array($functionConfig)) {
+            $clearCacheTables = $functionConfig['clearCacheTables'] ?? null;
+        }
+
+        $cacheDependencies = $this->cacheService()->functionCacheDependencies($clearCacheTables, $tenantId, $tenantEnabled);
+
+        if (!$disableCache && $this->cacheService()->isCacheableGlobalRequest($request)) {
             $cacheKey = $this->generateGlobalFunctionCacheKey(
                 functionName: $functionName,
                 queryParams: $request->query(),
                 tenantId: $tenantId,
-                tenantEnabled: $tenantEnabled
+                tenantEnabled: $tenantEnabled,
+                queryFingerprint: $this->cacheService()->queryFingerprint($request)
             );
-            $cached = QueryCacheService::get($cacheKey);
+            $cached = QueryCacheService::get($cacheKey, $cacheDependencies);
             if (is_array($cached) && isset($cached['data'], $cached['status'])) {
                 return new JsonResponse($cached['data'], $cached['status'], $cached['headers'] ?? []);
             }
@@ -831,13 +844,6 @@ class RecordService
                 tenantEnabled: $tenantEnabled
             );
 
-            $clearCacheTables = null;
-            if ($functionConfig instanceof RecordFunctionType) {
-                $clearCacheTables = $functionConfig->clearCacheTables;
-            } elseif (is_array($functionConfig)) {
-                $clearCacheTables = $functionConfig['clearCacheTables'] ?? null;
-            }
-
             $this->cacheService()->clearCacheForTables($clearCacheTables, $tenantId);
         }
 
@@ -847,7 +853,7 @@ class RecordService
                 'data' => $response->getData(true),
                 'status' => $response->getStatusCode(),
                 'headers' => $response->headers->all(),
-            ], $ttl);
+            ], $ttl, $cacheDependencies);
         }
 
         return $response;
@@ -1324,24 +1330,24 @@ class RecordService
         return json_last_error() === JSON_ERROR_NONE ? $decoded : $value;
     }
 
-    public function generateOptimizedCacheKey(string $table, array $filters, array $includes, int $page, int $limit, bool $tenantEnabled): string
+    public function generateOptimizedCacheKey(string $table, array $filters, array $includes, int $page, int $limit, bool $tenantEnabled, string $queryFingerprint = ''): string
     {
-        return $this->cacheService()->generateOptimizedCacheKey($table, $filters, $includes, $page, $limit, $tenantEnabled);
+        return $this->cacheService()->generateOptimizedCacheKey($table, $filters, $includes, $page, $limit, $tenantEnabled, $queryFingerprint);
     }
 
-    public function generateRecordCacheKey(string $table, mixed $id, mixed $tenantId, mixed $select, bool $tenantEnabled): string
+    public function generateRecordCacheKey(string $table, mixed $id, mixed $tenantId, mixed $select, bool $tenantEnabled, string $queryFingerprint = ''): string
     {
-        return $this->cacheService()->generateRecordCacheKey($table, $id, $tenantId, $select, $tenantEnabled);
+        return $this->cacheService()->generateRecordCacheKey($table, $id, $tenantId, $select, $tenantEnabled, $queryFingerprint);
     }
 
-    public function generateTableFunctionCacheKey(string $table, string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled): string
+    public function generateTableFunctionCacheKey(string $table, string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled, string $queryFingerprint = ''): string
     {
-        return $this->cacheService()->generateTableFunctionCacheKey($table, $functionName, $queryParams, $tenantId, $tenantEnabled);
+        return $this->cacheService()->generateTableFunctionCacheKey($table, $functionName, $queryParams, $tenantId, $tenantEnabled, $queryFingerprint);
     }
 
-    public function generateGlobalFunctionCacheKey(string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled): string
+    public function generateGlobalFunctionCacheKey(string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled, string $queryFingerprint = ''): string
     {
-        return $this->cacheService()->generateGlobalFunctionCacheKey($functionName, $queryParams, $tenantId, $tenantEnabled);
+        return $this->cacheService()->generateGlobalFunctionCacheKey($functionName, $queryParams, $tenantId, $tenantEnabled, $queryFingerprint);
     }
 
     public function invalidateTableCache(string $table, mixed $tenantId, bool $tenantEnabled): void
@@ -1671,9 +1677,9 @@ class RecordService
         return in_array($normalized, ['1', 'true', 'yes', 'on'], true);
     }
 
-    public function generateCursorCacheKey(string $table, array $filters, array $includes, string $cursor, string $direction, string $cursorColumn, int $limit, bool $tenantEnabled): string
+    public function generateCursorCacheKey(string $table, array $filters, array $includes, string $cursor, string $direction, string $cursorColumn, int $limit, bool $tenantEnabled, string $queryFingerprint = ''): string
     {
-        return $this->cacheService()->generateCursorCacheKey($table, $filters, $includes, $cursor, $direction, $cursorColumn, $limit, $tenantEnabled);
+        return $this->cacheService()->generateCursorCacheKey($table, $filters, $includes, $cursor, $direction, $cursorColumn, $limit, $tenantEnabled, $queryFingerprint);
     }
 
     private function getReadConnection(): ?ConnectionInterface
@@ -2040,7 +2046,8 @@ class RecordService
                     direction: $request->input('direction', 'next'),
                     cursorColumn: $request->input('cursor_column', RecordConfigService::cursorDefaultColumn()),
                     limit: $perPage ?? $limit,
-                    tenantEnabled: $tenantEnabled
+                    tenantEnabled: $tenantEnabled,
+                    queryFingerprint: $this->cacheService()->queryFingerprint($request)
                 );
             } else {
                 $cacheKey = $this->generateOptimizedCacheKey(
@@ -2049,7 +2056,8 @@ class RecordService
                     includes: $includes,
                     page: $page,
                     limit: $perPage ?? $limit,
-                    tenantEnabled: $tenantEnabled
+                    tenantEnabled: $tenantEnabled,
+                    queryFingerprint: $this->cacheService()->queryFingerprint($request)
                 );
             }
 
@@ -2684,7 +2692,8 @@ class RecordService
                     direction: $request->input('direction', 'next'),
                     cursorColumn: $request->input('cursor_column', RecordConfigService::cursorDefaultColumn()),
                     limit: $perPage ?? $limit,
-                    tenantEnabled: $tenantEnabled
+                    tenantEnabled: $tenantEnabled,
+                    queryFingerprint: app(RecordCacheService::class)->queryFingerprint($request)
                 );
             } else {
                 $cacheKey = $service->generateOptimizedCacheKey(
@@ -2693,7 +2702,8 @@ class RecordService
                     includes: $includes,
                     page: $page,
                     limit: $perPage ?? $limit,
-                    tenantEnabled: $tenantEnabled
+                    tenantEnabled: $tenantEnabled,
+                    queryFingerprint: app(RecordCacheService::class)->queryFingerprint($request)
                 );
             }
 
@@ -2973,11 +2983,12 @@ class RecordService
             id: $id,
             tenantId: $tenantId,
             select: $effectiveSelectParam,
-            tenantEnabled: $tenantEnabled
+            tenantEnabled: $tenantEnabled,
+            queryFingerprint: $this->cacheService()->queryFingerprint($request)
         );
         if ($this->isCacheableRequest(request: $request, table: $table)) {
             $cachedRecord = QueryCacheService::get($recordCacheKey);
-            if ($cachedRecord) {
+            if (null !== $cachedRecord) {
                 return ['data' => $cachedRecord, 'request' => $request, 'from_cache' => true];
             }
         }

@@ -7,15 +7,11 @@ namespace Sopheak\Core\Services;
 use Throwable;
 use Exception;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use Sopheak\Core\Support\CacheRequestContext;
 
 class QueryCacheService
 {
-    private const REQUEST_NAMESPACE_MEMO_KEY = 'sp_laravel_api.cache.namespace_versions';
-
-    private const REQUEST_BUMPED_NAMESPACES_KEY = 'sp_laravel_api.cache.bumped_namespaces';
-
-    private const REQUEST_STATS_KEY = 'sp_laravel_api.cache.stats';
-
     private const DEFAULT_STATS = [
         'cache_hits' => 0,
         'cache_misses' => 0,
@@ -25,6 +21,17 @@ class QueryCacheService
         'invalidation_bumps' => 0,
         'invalidation_dedupe_hits' => 0,
     ];
+
+    /**
+     * Ten years, in seconds.
+     *
+     * A TTL is REQUIRED here, not cosmetic: Repository::add() only delegates to
+     * the store's atomic add() when one is passed, and falls back to a plain
+     * get-then-put when it is not. Without it two concurrent first-bumps can
+     * each read null, each seed 1, and clobber one another's increment --
+     * resurrecting entries cached under the version that was overwritten.
+     */
+    private const NAMESPACE_SEED_TTL = 315360000;
 
     /**
      * Check if caching is enabled globally
@@ -58,7 +65,7 @@ class QueryCacheService
     /**
      * Get cached query result or execute and cache the callback
      */
-    public static function remember(string $key, callable $callback, ?int $ttl = null): mixed
+    public static function remember(string $key, callable $callback, ?int $ttl = null, array $dependencies = []): mixed
     {
         // If caching is disabled, execute callback directly
         if (!self::isCacheEnabled()) {
@@ -66,7 +73,7 @@ class QueryCacheService
         }
 
         $ttl ??= self::getCacheTtl();
-        $cacheKey = self::getCachePrefix() . $key . ':' . self::resolveNamespaceToken($key);
+        $cacheKey = self::getCachePrefix() . $key . ':' . self::resolveNamespaceToken($key, $dependencies);
 
         try {
             return Cache::remember($cacheKey, $ttl, $callback);
@@ -78,7 +85,7 @@ class QueryCacheService
     /**
      * Cache a query result
      */
-    public static function put(string $key, mixed $value, ?int $ttl = null): bool
+    public static function put(string $key, mixed $value, ?int $ttl = null, array $dependencies = []): bool
     {
         // If caching is disabled, return true (no-op)
         if (!self::isCacheEnabled()) {
@@ -86,7 +93,7 @@ class QueryCacheService
         }
 
         $ttl ??= self::getCacheTtl();
-        $cacheKey = self::getCachePrefix() . $key . ':' . self::resolveNamespaceToken($key);
+        $cacheKey = self::getCachePrefix() . $key . ':' . self::resolveNamespaceToken($key, $dependencies);
 
         try {
             $stored = Cache::put($cacheKey, $value, $ttl);
@@ -103,14 +110,14 @@ class QueryCacheService
     /**
      * Get cached query result
      */
-    public static function get(string $key): mixed
+    public static function get(string $key, array $dependencies = []): mixed
     {
         // If caching is disabled, return null (cache miss)
         if (!self::isCacheEnabled()) {
             return null;
         }
 
-        $cacheKey = self::getCachePrefix() . $key . ':' . self::resolveNamespaceToken($key);
+        $cacheKey = self::getCachePrefix() . $key . ':' . self::resolveNamespaceToken($key, $dependencies);
 
         try {
             $value = Cache::get($cacheKey);
@@ -125,14 +132,14 @@ class QueryCacheService
     /**
      * Invalidate cache by key
      */
-    public static function forget(string $key): bool
+    public static function forget(string $key, array $dependencies = []): bool
     {
         // If caching is disabled, return true (no-op)
         if (!self::isCacheEnabled()) {
             return true;
         }
 
-        $cacheKey = self::getCachePrefix() . $key . ':' . self::resolveNamespaceToken($key);
+        $cacheKey = self::getCachePrefix() . $key . ':' . self::resolveNamespaceToken($key, $dependencies);
 
         try {
             return Cache::forget($cacheKey);
@@ -206,9 +213,7 @@ class QueryCacheService
 
     public static function requestStats(): array
     {
-        $stats = self::getRequestAttribute(self::REQUEST_STATS_KEY, []);
-
-        return array_merge(self::DEFAULT_STATS, is_array($stats) ? $stats : []);
+        return array_merge(self::DEFAULT_STATS, self::context()?->stats() ?? []);
     }
 
     public static function invalidateRecordForTenant(string $table, mixed $id, string $tenantKey): int
@@ -222,8 +227,17 @@ class QueryCacheService
         return 1;
     }
 
+    /**
+     * Invalidate a table function's cache.
+     *
+     * $functionName is accepted for call-site clarity and API stability but is
+     * deliberately unused: a table function's output can depend on any row in the
+     * table, so the whole table namespace is bumped rather than one function's.
+     */
     public static function invalidateTableFunctionForTenant(string $table, string $functionName, string $tenantKey): int
     {
+        unset($functionName);
+
         return self::invalidateTableForTenant($table, $tenantKey);
     }
 
@@ -238,17 +252,13 @@ class QueryCacheService
         return 1;
     }
 
-    private static function resolveNamespaceToken(string $key): string
+    private static function resolveNamespaceToken(string $key, array $dependencies = []): string
     {
+        $dependencyToken = self::resolveDependencyToken($dependencies);
+
         $parsed = self::parseScopeFromKey($key);
         if (null === $parsed) {
-            return 'v1';
-        }
-
-        $globalVersion = self::getNamespaceVersion(scope: $parsed['scope'], name: $parsed['name']);
-        $tenantVersion = 1;
-        if ('' !== $parsed['tenant']) {
-            $tenantVersion = self::getNamespaceVersion(scope: $parsed['scope'], name: $parsed['name'], tenantKey: $parsed['tenant']);
+            return 'v1' . $dependencyToken;
         }
 
         if ('record' === $parsed['scope'] && isset($parsed['record_id'])) {
@@ -259,10 +269,89 @@ class QueryCacheService
                 recordId: $parsed['record_id']
             );
 
-            return sprintf('v%s.%s.%s', $globalVersion, $tenantVersion, $recordVersion);
+            // A single record's cache must also die when the whole table is cleared.
+            // Without these two components, clearTableCache() busts list caches and
+            // leaves every record_show entry for the table stale until TTL.
+            $tableGlobalVersion = self::getNamespaceVersion(scope: 'table', name: $parsed['name']);
+            $tableTenantVersion = '' !== $parsed['tenant']
+                ? self::getNamespaceVersion(scope: 'table', name: $parsed['name'], tenantKey: $parsed['tenant'])
+                : 1;
+
+            // The ns:record:{table} and ns:record:{table}:tenant:{t} namespaces
+            // (scope 'record' without a recordId) are intentionally omitted here:
+            // bumpNamespace() is private, and the only caller that ever passes
+            // scope: 'record' is invalidateRecordForTenant(), which always supplies
+            // a recordId. No code path can bump those two namespaces, so including
+            // them would only add two constant, always-1 cache round-trips per
+            // record_show request.
+            return sprintf(
+                'v%s.t%s.%s',
+                $recordVersion,
+                $tableGlobalVersion,
+                $tableTenantVersion
+            ) . $dependencyToken;
         }
 
-        return sprintf('v%s.%s', $globalVersion, $tenantVersion);
+        $globalVersion = self::getNamespaceVersion(scope: $parsed['scope'], name: $parsed['name']);
+        $tenantVersion = 1;
+        if ('' !== $parsed['tenant']) {
+            $tenantVersion = self::getNamespaceVersion(scope: $parsed['scope'], name: $parsed['name'], tenantKey: $parsed['tenant']);
+        }
+
+        return sprintf('v%s.%s', $globalVersion, $tenantVersion) . $dependencyToken;
+    }
+
+    /**
+     * Hash the versions of every namespace this entry declares a dependency on.
+     *
+     * This is what lets a cached function die when a table it reads is written to.
+     * Parts are sorted so declaration order does not change the key. An empty list
+     * yields an empty string, reproducing the pre-dependency token exactly.
+     *
+     * @param array<int, array<string, mixed>> $dependencies
+     */
+    private static function resolveDependencyToken(array $dependencies): string
+    {
+        if ([] === $dependencies) {
+            return '';
+        }
+
+        $parts = [];
+        foreach ($dependencies as $dependency) {
+            if (!is_array($dependency)) {
+                continue;
+            }
+
+            $scope = isset($dependency['scope']) ? (string) $dependency['scope'] : '';
+            $name = isset($dependency['name']) ? (string) $dependency['name'] : '';
+            if ('' === $scope) {
+                continue;
+            }
+
+            if ('' === $name) {
+                continue;
+            }
+
+            $tenant = isset($dependency['tenant']) && '' !== (string) $dependency['tenant']
+                ? (string) $dependency['tenant']
+                : null;
+
+            $version = self::getNamespaceVersion(scope: $scope, name: $name, tenantKey: $tenant);
+            $parts[] = sprintf('%s:%s:%s:%s', $scope, $name, $tenant ?? '-', $version);
+        }
+
+        if ([] === $parts) {
+            return '';
+        }
+
+        sort($parts);
+
+        // Full digest, not a truncated prefix: a collision here would return
+        // the token to a previously-used value while an entry cached under
+        // it is still within TTL, silently serving data already known to be
+        // stale. 32 hex chars (128 bits) adds ~20 bytes per key, far inside
+        // memcached's 250-byte key limit.
+        return '.d' . md5(implode('|', $parts));
     }
 
     private static function parseScopeFromKey(string $key): ?array
@@ -271,7 +360,7 @@ class QueryCacheService
             return ['scope' => 'record', 'name' => $matches[1], 'record_id' => $matches[2], 'tenant' => $matches[3]];
         }
 
-        if (preg_match('/^record_(?:index|func):table:([^:]+):.*tenant:([^:]*):/', $key, $matches)) {
+        if (preg_match('/^record_(?:index|cursor|func):table:([^:]+):.*tenant:([^:]*):/', $key, $matches)) {
             return ['scope' => 'table', 'name' => $matches[1], 'tenant' => $matches[2]];
         }
 
@@ -298,25 +387,60 @@ class QueryCacheService
 
     private static function bumpNamespace(string $scope, string $name, ?string $tenantKey = null, ?string $recordId = null): void
     {
+        $key = self::namespaceKey(scope: $scope, name: $name, tenantKey: $tenantKey, recordId: $recordId);
+
         try {
-            $key = self::namespaceKey(scope: $scope, name: $name, tenantKey: $tenantKey, recordId: $recordId);
-            $bumped = self::getRequestAttribute(self::REQUEST_BUMPED_NAMESPACES_KEY, []);
-            $bumped = is_array($bumped) ? $bumped : [];
-            if (isset($bumped[$key])) {
-                self::incrementRequestStat('invalidation_dedupe_hits');
-
-                return;
-            }
-
-            $bumped[$key] = true;
-            self::setRequestAttribute(self::REQUEST_BUMPED_NAMESPACES_KEY, $bumped);
-
-            $current = self::getNamespaceVersion(scope: $scope, name: $name, tenantKey: $tenantKey, recordId: $recordId);
-            $next = $current + 1;
-            Cache::forever($key, $next);
+            $next = self::incrementNamespaceVersion($key);
             self::memoizeNamespaceVersion($key, $next);
             self::incrementRequestStat('invalidation_bumps');
-        } catch (Exception) {
+        } catch (Throwable $throwable) {
+            self::reportInvalidationFailure($key, $throwable);
+        }
+    }
+
+    /**
+     * Atomically move a namespace to its next version.
+     *
+     * add() seeds the counter at 1 so the first increment lands on 2 -- unseeded
+     * namespaces already resolve to v1 via getNamespaceVersion(), so a bump has to
+     * move off it. add() is a no-op once the counter exists, making this safe to
+     * call on every bump. Passing a TTL is what routes that seed through the
+     * store's atomic add() instead of Repository's plain get-then-put fallback;
+     * the increment that follows is atomic on database, redis and memcached.
+     * Together they are what stops two concurrent writers from losing an update.
+     */
+    private static function incrementNamespaceVersion(string $key): int
+    {
+        Cache::add($key, 1, self::NAMESPACE_SEED_TTL);
+
+        $next = Cache::increment($key);
+        if (is_int($next) && $next > 0) {
+            return $next;
+        }
+
+        // Store has no usable atomic increment -- fall back to read-modify-write.
+        $current = (int) Cache::get($key, 1);
+        $next = max($current, 1) + 1;
+        Cache::forever($key, $next);
+
+        return $next;
+    }
+
+    /**
+     * A failed bump is a correctness event, not a cache miss.
+     *
+     * Reads are allowed to degrade silently -- a failed read just means a miss.
+     * A failed bump means the old cached value stays live, so the API keeps
+     * serving data it has already been told is wrong. That must not be silent.
+     */
+    private static function reportInvalidationFailure(string $key, Throwable $e): void
+    {
+        try {
+            Log::warning('sp-laravel-api: cache namespace bump failed, stale data may be served', [
+                'namespace_key' => $key,
+                'exception' => $e->getMessage(),
+            ]);
+        } catch (Throwable) {
         }
     }
 
@@ -324,12 +448,11 @@ class QueryCacheService
     {
         $key = self::namespaceKey(scope: $scope, name: $name, tenantKey: $tenantKey, recordId: $recordId);
 
-        $memo = self::getRequestAttribute(self::REQUEST_NAMESPACE_MEMO_KEY, []);
-        $memo = is_array($memo) ? $memo : [];
-        if (isset($memo[$key])) {
+        $memoized = self::context()?->namespaceVersion($key);
+        if (null !== $memoized) {
             self::incrementRequestStat('namespace_memo_hits');
 
-            return (int) $memo[$key];
+            return $memoized;
         }
 
         try {
@@ -347,33 +470,29 @@ class QueryCacheService
 
     private static function memoizeNamespaceVersion(string $key, int $version): void
     {
-        $memo = self::getRequestAttribute(self::REQUEST_NAMESPACE_MEMO_KEY, []);
-        $memo = is_array($memo) ? $memo : [];
-        $memo[$key] = $version;
-        self::setRequestAttribute(self::REQUEST_NAMESPACE_MEMO_KEY, $memo);
+        self::context()?->rememberNamespaceVersion($key, $version);
     }
 
     private static function incrementRequestStat(string $key): void
     {
-        $stats = self::requestStats();
-        $stats[$key] = (int) ($stats[$key] ?? 0) + 1;
-        self::setRequestAttribute(self::REQUEST_STATS_KEY, $stats);
+        self::context()?->incrementStat($key);
     }
 
-    private static function getRequestAttribute(string $key, mixed $default = null): mixed
+    /**
+     * app() cannot actually return null here: CacheRequestContext is concrete and
+     * dependency-free, so even an unbound make() just constructs one. The scoped
+     * binding is what makes memoization work across calls within one request/job --
+     * outside of that scope (or if resolution somehow throws) this returns either a
+     * fresh, unshared instance or null, and either way the memo never hits and stats
+     * read zero. Memoization and stats are both optional accelerations, so that just
+     * makes every namespace read go to the cache store -- correct, only slower.
+     */
+    private static function context(): ?CacheRequestContext
     {
         try {
-            return request()->attributes->get($key, $default);
+            return app(CacheRequestContext::class);
         } catch (Throwable) {
-            return $default;
-        }
-    }
-
-    private static function setRequestAttribute(string $key, mixed $value): void
-    {
-        try {
-            request()->attributes->set($key, $value);
-        } catch (Throwable) {
+            return null;
         }
     }
 }
