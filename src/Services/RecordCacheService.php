@@ -57,6 +57,23 @@ class RecordCacheService
         return $this->passesAdmissionRules($request, $table, $schemaTableName);
     }
 
+    /**
+     * Stable fingerprint of the full request query.
+     *
+     * Every cache key folds this in so that any parameter which shapes the read --
+     * with_trashed, only_trashed, distinct, add_total, and anything added later --
+     * discriminates the key without having to be enumerated. Parameters are
+     * opt-out, not opt-in: forgetting to list one can only split a cache entry,
+     * never merge two that should differ.
+     */
+    public function queryFingerprint(Request $request): string
+    {
+        $query = $request->query();
+        $this->recursiveKsort($query);
+
+        return md5(serialize($query));
+    }
+
     private function passesAdmissionRules(Request $request, string $table, ?string $schemaTableName): bool
     {
         if (!RecordConfigService::cacheAdmissionEnabled()) {
@@ -128,7 +145,7 @@ class RecordCacheService
     /**
      * @param array<string, mixed> $filters
      */
-    public function generateOptimizedCacheKey(string $table, array $filters, array $includes, int $page, int $limit, bool $tenantEnabled): string
+    public function generateOptimizedCacheKey(string $table, array $filters, array $includes, int $page, int $limit, bool $tenantEnabled, string $queryFingerprint = ''): string
     {
         $tenantColumn = RecordConfigService::tenantColumn();
         $tenantKey = $this->resolveTenantCacheKey(tenantId: $filters[$tenantColumn] ?? null, tenantEnabled: $tenantEnabled);
@@ -140,6 +157,7 @@ class RecordCacheService
             'page' => $page,
             'limit' => $limit,
             'tenant_enabled' => $tenantEnabled,
+            'query' => $queryFingerprint,
         ];
 
         return sprintf('record_index:table:%s:tenant:%s:hash:%s', $table, $tenantKey, md5(serialize($keyData)));
@@ -148,7 +166,7 @@ class RecordCacheService
     /**
      * @param array<string, mixed> $filters
      */
-    public function generateCursorCacheKey(string $table, array $filters, array $includes, string $cursor, string $direction, string $cursorColumn, int $limit, bool $tenantEnabled): string
+    public function generateCursorCacheKey(string $table, array $filters, array $includes, string $cursor, string $direction, string $cursorColumn, int $limit, bool $tenantEnabled, string $queryFingerprint = ''): string
     {
         $tenantColumn = RecordConfigService::tenantColumn();
         $tenantKey = $this->resolveTenantCacheKey(tenantId: $filters[$tenantColumn] ?? null, tenantEnabled: $tenantEnabled);
@@ -162,12 +180,13 @@ class RecordCacheService
             'cursor_column' => $cursorColumn,
             'limit' => $limit,
             'tenant_enabled' => $tenantEnabled,
+            'query' => $queryFingerprint,
         ];
 
         return sprintf('record_cursor:table:%s:tenant:%s:hash:%s', $table, $tenantKey, md5(serialize($keyData)));
     }
 
-    public function generateRecordCacheKey(string $table, mixed $id, mixed $tenantId, mixed $select, bool $tenantEnabled): string
+    public function generateRecordCacheKey(string $table, mixed $id, mixed $tenantId, mixed $select, bool $tenantEnabled, string $queryFingerprint = ''): string
     {
         $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
         if (is_array($select)) {
@@ -178,6 +197,7 @@ class RecordCacheService
             'id' => $id,
             'select' => $select,
             'tenant_enabled' => $tenantEnabled,
+            'query' => $queryFingerprint,
         ];
 
         return sprintf('record_show:table:%s:id:%s:tenant:%s:select:%s', $table, $id, $tenantKey, md5(serialize($keyData)));
