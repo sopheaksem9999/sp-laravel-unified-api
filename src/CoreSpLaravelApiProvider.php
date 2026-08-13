@@ -12,6 +12,7 @@ use Sopheak\Core\Console\ExportBrunoCommand;
 use Sopheak\Core\Console\ExportPostmanCommand;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Events\RouteMatched;
 use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
 use Sopheak\Core\Console\CleanAuditLogsCommand;
@@ -29,6 +30,7 @@ use Sopheak\Core\Services\QueryCacheService;
 use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Services\RecordService;
+use Sopheak\Core\Support\CacheRequestContext;
 use Sopheak\Core\Console\McpServerCommand;
 use Sopheak\Core\Console\EnablePgsqlRlsCommand;
 use Sopheak\Core\Console\BoostInstallCommand;
@@ -63,6 +65,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
         $this->app->singleton('api.response', fn(): RecordApiResponseService => new RecordApiResponseService());
         $this->app->singleton(AuditLogService::class);
         $this->app->singleton(QueryCacheService::class);
+        $this->app->scoped(CacheRequestContext::class);
     }
 
     public function boot(): void
@@ -131,6 +134,13 @@ class CoreSpLaravelApiProvider extends ServiceProvider
 
         Event::listen([RecordCreated::class, RecordUpdated::class, RecordDeleted::class], InvalidateRecordCacheListener::class);
         Event::listen([RecordCreated::class, RecordUpdated::class, RecordDeleted::class], LogRecordAuditListener::class);
+
+        // The container is not rebuilt per request under Octane or in Testbench, so
+        // scoped bindings alone are not enough for HTTP. Queue jobs are covered by
+        // QueueServiceProvider's forgetScopedInstances().
+        Event::listen(RouteMatched::class, static function (): void {
+            app(CacheRequestContext::class)->reset();
+        });
 
         if (config('permissions.enabled', false)) {
             $this->app->singleton(PermissionRegistrar::class);

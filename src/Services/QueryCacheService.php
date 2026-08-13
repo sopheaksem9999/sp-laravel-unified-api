@@ -8,13 +8,10 @@ use Throwable;
 use Exception;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Sopheak\Core\Support\CacheRequestContext;
 
 class QueryCacheService
 {
-    private const REQUEST_NAMESPACE_MEMO_KEY = 'sp_laravel_api.cache.namespace_versions';
-
-    private const REQUEST_STATS_KEY = 'sp_laravel_api.cache.stats';
-
     private const DEFAULT_STATS = [
         'cache_hits' => 0,
         'cache_misses' => 0,
@@ -216,9 +213,7 @@ class QueryCacheService
 
     public static function requestStats(): array
     {
-        $stats = self::getRequestAttribute(self::REQUEST_STATS_KEY, []);
-
-        return array_merge(self::DEFAULT_STATS, is_array($stats) ? $stats : []);
+        return array_merge(self::DEFAULT_STATS, self::context()?->stats() ?? []);
     }
 
     public static function invalidateRecordForTenant(string $table, mixed $id, string $tenantKey): int
@@ -434,12 +429,11 @@ class QueryCacheService
     {
         $key = self::namespaceKey(scope: $scope, name: $name, tenantKey: $tenantKey, recordId: $recordId);
 
-        $memo = self::getRequestAttribute(self::REQUEST_NAMESPACE_MEMO_KEY, []);
-        $memo = is_array($memo) ? $memo : [];
-        if (isset($memo[$key])) {
+        $memoized = self::context()?->namespaceVersion($key);
+        if (null !== $memoized) {
             self::incrementRequestStat('namespace_memo_hits');
 
-            return (int) $memo[$key];
+            return $memoized;
         }
 
         try {
@@ -457,33 +451,26 @@ class QueryCacheService
 
     private static function memoizeNamespaceVersion(string $key, int $version): void
     {
-        $memo = self::getRequestAttribute(self::REQUEST_NAMESPACE_MEMO_KEY, []);
-        $memo = is_array($memo) ? $memo : [];
-        $memo[$key] = $version;
-        self::setRequestAttribute(self::REQUEST_NAMESPACE_MEMO_KEY, $memo);
+        self::context()?->rememberNamespaceVersion($key, $version);
     }
 
     private static function incrementRequestStat(string $key): void
     {
-        $stats = self::requestStats();
-        $stats[$key] = (int) ($stats[$key] ?? 0) + 1;
-        self::setRequestAttribute(self::REQUEST_STATS_KEY, $stats);
+        self::context()?->incrementStat($key);
     }
 
-    private static function getRequestAttribute(string $key, mixed $default = null): mixed
+    /**
+     * The context is unavailable before the container boots (and in a few console
+     * paths). Memoization and stats are both optional accelerations, so returning
+     * null just makes every namespace read go to the cache store -- correct, only
+     * slower.
+     */
+    private static function context(): ?CacheRequestContext
     {
         try {
-            return request()->attributes->get($key, $default);
+            return app(CacheRequestContext::class);
         } catch (Throwable) {
-            return $default;
-        }
-    }
-
-    private static function setRequestAttribute(string $key, mixed $value): void
-    {
-        try {
-            request()->attributes->set($key, $value);
-        } catch (Throwable) {
+            return null;
         }
     }
 }
