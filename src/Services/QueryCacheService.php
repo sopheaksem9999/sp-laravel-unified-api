@@ -227,8 +227,17 @@ class QueryCacheService
         return 1;
     }
 
+    /**
+     * Invalidate a table function's cache.
+     *
+     * $functionName is accepted for call-site clarity and API stability but is
+     * deliberately unused: a table function's output can depend on any row in the
+     * table, so the whole table namespace is bumped rather than one function's.
+     */
     public static function invalidateTableFunctionForTenant(string $table, string $functionName, string $tenantKey): int
     {
+        unset($functionName);
+
         return self::invalidateTableForTenant($table, $tenantKey);
     }
 
