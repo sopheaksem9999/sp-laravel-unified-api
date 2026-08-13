@@ -271,7 +271,7 @@ class QueryCacheService
             return ['scope' => 'record', 'name' => $matches[1], 'record_id' => $matches[2], 'tenant' => $matches[3]];
         }
 
-        if (preg_match('/^record_(?:index|func):table:([^:]+):.*tenant:([^:]*):/', $key, $matches)) {
+        if (preg_match('/^record_(?:index|cursor|func):table:([^:]+):.*tenant:([^:]*):/', $key, $matches)) {
             return ['scope' => 'table', 'name' => $matches[1], 'tenant' => $matches[2]];
         }
 
