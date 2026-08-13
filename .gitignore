@@ -37,6 +37,7 @@ deno.lock
 build/*
 build
 .claude/
+.superpowers/
 .php-cs-fixer.cache
 /.opencode
 .opencode/
