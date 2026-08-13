@@ -330,6 +330,37 @@ class RecordCacheService
         }
     }
 
+    /**
+     * Turn a function's declared clearCacheTables into a cache dependency list.
+     *
+     * clearCacheTables already tells us which tables a function touches on write;
+     * the same list is what its cached result depends on for reads. Declaring it
+     * both ways is what makes a CRUD write to one of those tables invalidate the
+     * function's cached output.
+     *
+     * @return array<int, array<string, string|null>>
+     */
+    public function functionCacheDependencies(array|string|null $tables, mixed $tenantId, bool $tenantEnabled): array
+    {
+        if (null === $tables || [] === $tables || '' === $tables) {
+            return [];
+        }
+
+        $tableList = is_array($tables) ? $tables : array_filter(array_map(trim(...), explode(',', $tables)));
+        $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
+
+        $dependencies = [];
+        foreach ($tableList as $table) {
+            if (!is_string($table) || '' === $table) {
+                continue;
+            }
+
+            $dependencies[] = ['scope' => 'table', 'name' => $table, 'tenant' => $tenantKey];
+        }
+
+        return $dependencies;
+    }
+
     public function invalidateTableFunctionCache(string $table, string $functionName, mixed $tenantId, bool $tenantEnabled): void
     {
         $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);

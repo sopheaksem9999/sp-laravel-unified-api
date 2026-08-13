@@ -149,4 +149,53 @@ class CacheInvalidationCorrectnessTest extends TestCase
             'Tenant isolation must survive the table-version cascade'
         );
     }
+
+    public function test_a_dependent_cache_entry_is_invalidated_by_a_table_clear(): void
+    {
+        $globalKey = 'record_func_global:function:sales_report:tenant:acme:hash:abc';
+        $dependencies = [['scope' => 'table', 'name' => 'products', 'tenant' => 'acme']];
+
+        QueryCacheService::put($globalKey, ['data' => ['total' => 1], 'status' => 200], 3600, $dependencies);
+        $this->assertNotNull(QueryCacheService::get($globalKey, $dependencies));
+
+        app(RecordCacheService::class)->clearCacheForTables(['products'], 'acme');
+
+        $this->assertNull(
+            QueryCacheService::get($globalKey, $dependencies),
+            'A cache entry depending on products must die when products is cleared'
+        );
+    }
+
+    public function test_a_dependent_cache_entry_survives_an_unrelated_table_clear(): void
+    {
+        $globalKey = 'record_func_global:function:sales_report:tenant:acme:hash:abc';
+        $dependencies = [['scope' => 'table', 'name' => 'products', 'tenant' => 'acme']];
+
+        QueryCacheService::put($globalKey, ['data' => ['total' => 1], 'status' => 200], 3600, $dependencies);
+
+        QueryCacheService::invalidateTableForTenant('orders', 'acme');
+
+        $this->assertNotNull(
+            QueryCacheService::get($globalKey, $dependencies),
+            'An unrelated table clear must not invalidate the entry'
+        );
+    }
+
+    public function test_dependencies_are_order_independent(): void
+    {
+        $key = 'record_func_global:function:sales_report:tenant:acme:hash:abc';
+        $forward = [
+            ['scope' => 'table', 'name' => 'products', 'tenant' => 'acme'],
+            ['scope' => 'table', 'name' => 'orders', 'tenant' => 'acme'],
+        ];
+        $reversed = array_reverse($forward);
+
+        QueryCacheService::put($key, 'cached', 3600, $forward);
+
+        $this->assertSame(
+            'cached',
+            QueryCacheService::get($key, $reversed),
+            'Declaring the same dependencies in a different order must hit the same entry'
+        );
+    }
 }
