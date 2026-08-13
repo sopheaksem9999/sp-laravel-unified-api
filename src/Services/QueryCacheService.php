@@ -25,6 +25,17 @@ class QueryCacheService
     ];
 
     /**
+     * Ten years, in seconds.
+     *
+     * A TTL is REQUIRED here, not cosmetic: Repository::add() only delegates to
+     * the store's atomic add() when one is passed, and falls back to a plain
+     * get-then-put when it is not. Without it two concurrent first-bumps can
+     * each read null, each seed 1, and clobber one another's increment --
+     * resurrecting entries cached under the version that was overwritten.
+     */
+    private const NAMESPACE_SEED_TTL = 315360000;
+
+    /**
      * Check if caching is enabled globally
      */
     private static function isCacheEnabled(): bool
@@ -312,12 +323,14 @@ class QueryCacheService
      * add() seeds the counter at 1 so the first increment lands on 2 -- unseeded
      * namespaces already resolve to v1 via getNamespaceVersion(), so a bump has to
      * move off it. add() is a no-op once the counter exists, making this safe to
-     * call on every bump. add()+increment() is atomic on database, redis and
-     * memcached, which is what stops two concurrent writers from losing an update.
+     * call on every bump. Passing a TTL is what routes that seed through the
+     * store's atomic add() instead of Repository's plain get-then-put fallback;
+     * the increment that follows is atomic on database, redis and memcached.
+     * Together they are what stops two concurrent writers from losing an update.
      */
     private static function incrementNamespaceVersion(string $key): int
     {
-        Cache::add($key, 1);
+        Cache::add($key, 1, self::NAMESPACE_SEED_TTL);
 
         $next = Cache::increment($key);
         if (is_int($next) && $next > 0) {
