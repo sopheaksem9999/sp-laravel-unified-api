@@ -102,7 +102,10 @@ class RecordCacheService
                 continue;
             }
 
-            if ($request->query->has((string) $param)) {
+            // has() routes through all(), which is body-aware (see
+            // queryFingerprint() below) -- query->has() is not, and was
+            // silently blind to skip_query_params sent in a JSON body.
+            if ($request->has((string) $param)) {
                 return false;
             }
         }
@@ -261,7 +264,7 @@ class RecordCacheService
         return sprintf('record_show:table:%s:id:%s:tenant:%s:select:%s', $table, $id, $tenantKey, md5(serialize($keyData)));
     }
 
-    public function generateTableFunctionCacheKey(string $table, string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled): string
+    public function generateTableFunctionCacheKey(string $table, string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled, string $queryFingerprint = ''): string
     {
         $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
         $this->recursiveKsort($queryParams);
@@ -269,12 +272,13 @@ class RecordCacheService
             'function' => $functionName,
             'query' => $queryParams,
             'tenant_enabled' => $tenantEnabled,
+            'query_fingerprint' => $queryFingerprint,
         ];
 
         return sprintf('record_func:table:%s:function:%s:tenant:%s:hash:%s', $table, $functionName, $tenantKey, md5(serialize($keyData)));
     }
 
-    public function generateGlobalFunctionCacheKey(string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled): string
+    public function generateGlobalFunctionCacheKey(string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled, string $queryFingerprint = ''): string
     {
         $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
         $this->recursiveKsort($queryParams);
@@ -282,6 +286,7 @@ class RecordCacheService
             'function' => $functionName,
             'query' => $queryParams,
             'tenant_enabled' => $tenantEnabled,
+            'query_fingerprint' => $queryFingerprint,
         ];
 
         return sprintf('record_func_global:function:%s:tenant:%s:hash:%s', $functionName, $tenantKey, md5(serialize($keyData)));

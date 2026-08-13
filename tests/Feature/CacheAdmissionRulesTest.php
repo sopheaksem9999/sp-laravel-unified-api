@@ -42,6 +42,9 @@ class CacheAdmissionRulesTest extends TestCase
         Cache::flush();
     }
 
+    /**
+     * @return array<string, string[]>
+     */
     public static function dynamicQueryParamProvider(): array
     {
         return [
@@ -216,6 +219,58 @@ class CacheAdmissionRulesTest extends TestCase
         $response = $service->executeGlobalFunction($searchRequest, 'guarded_global');
         $this->assertEquals(3, $response->getData()->data->count);
         $this->assertSame(3, GlobalFunctionGuardCounter::$count);
+    }
+
+    /**
+     * generateGlobalFunctionCacheKey() (and its table-function sibling) were
+     * keyed off queryParams: $request->query() only, unlike the three other
+     * key generators which fold in RecordCacheService::queryFingerprint() --
+     * a fingerprint that also reads the JSON body. A GET with
+     * Content-Type: application/json carries its read-shaping params in the
+     * body, invisible to query(), so two requests with different bodies but
+     * an identical (empty) query string collapsed onto the same cache key
+     * and the handler ran only once.
+     */
+    public function test_global_function_requests_with_different_json_bodies_do_not_share_a_cache_entry(): void
+    {
+        Cache::flush();
+        GlobalFunctionGuardCounter::$count = 0;
+
+        Config::set('record.global_functions', [
+            'guarded_global' => [
+                'httpMethod' => ['GET'],
+                'class' => GlobalFunctionGuardCounter::class,
+                'functionName' => 'handle',
+                'disableCache' => false,
+            ],
+        ]);
+
+        $service = new RecordService();
+
+        $requestOne = Request::create(
+            '/api/v1/rpc/guarded_global',
+            'GET',
+            [],
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['month' => '01'])
+        );
+        $response = $service->executeGlobalFunction($requestOne, 'guarded_global');
+        $this->assertEquals(1, $response->getData()->data->count);
+
+        $requestTwo = Request::create(
+            '/api/v1/rpc/guarded_global',
+            'GET',
+            [],
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['month' => '02'])
+        );
+        $response = $service->executeGlobalFunction($requestTwo, 'guarded_global');
+        $this->assertEquals(2, $response->getData()->data->count);
+        $this->assertSame(2, GlobalFunctionGuardCounter::$count);
     }
 }
 
