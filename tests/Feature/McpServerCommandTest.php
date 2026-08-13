@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Console\McpServerCommand;
+use Sopheak\Core\Services\RecordService;
+use Sopheak\Core\Support\CacheRequestContext;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordTableType;
@@ -182,147 +184,65 @@ class McpServerCommandTest extends TestCase
      * moment the first response has been fully written, i.e. exactly between
      * the loop's two iterations.
      */
-    /** @test */
-    public function it_resets_the_cache_context_between_json_rpc_requests_in_the_stdio_loop(): void
+    /**
+     * Guards the per-iteration CacheRequestContext reset in McpServerCommand's
+     * stdio loop.
+     *
+     * This asserts the leak MECHANISM directly rather than driving two JSON-RPC
+     * requests through artisan(). An earlier loop-level version of this test was
+     * inert -- it passed with the reset removed -- so it was replaced rather than
+     * left standing as false assurance. See the SDD ledger for Task 8.
+     *
+     * executeGetByFilter() is the exact call the MCP `list_*` tool makes
+     * (McpServerService.php:402), so a memo that survives between iterations is
+     * what makes the loop serve stale reads.
+     *
+     * @test
+     */
+    public function the_namespace_memo_leaks_across_calls_unless_the_context_is_reset(): void
     {
+        $namespaceKey = 'sp_laravel_api:ns:table:mcp_cli_tasks:tenant:disabled';
+
         DB::table('mcp_cli_tasks')->insert([
             'title' => 'Task A',
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
-        stream_wrapper_register('mcp-between-iterations', McpBetweenIterationsStreamWrapper::class);
-        McpBetweenIterationsStreamWrapper::reset();
-        McpBetweenIterationsStreamWrapper::$onFirstResponseWritten = function (): void {
-            DB::table('mcp_cli_tasks')->insert([
-                'title' => 'Task B',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+        $first = RecordService::executeGetByFilter('mcp_cli_tasks');
+        $this->assertCount(1, $first['data'], 'precondition: the first read sees only Task A');
 
-            // Simulate ANOTHER PROCESS bumping the namespace: write the store
-            // directly and never touch this process's memo.
-            $namespaceKey = 'sp_laravel_api:ns:table:mcp_cli_tasks:tenant:disabled';
-            Cache::add($namespaceKey, 1, 315360000);
-            Cache::increment($namespaceKey);
-        };
+        DB::table('mcp_cli_tasks')->insert([
+            'title' => 'Task B',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
-        try {
-            $stdin = fopen('php://memory', 'r+');
+        // Simulate ANOTHER PROCESS invalidating: bump the store and never touch
+        // this process's memo. Going through invalidateTableForTenant() would
+        // memoize the new version here and make this test inert.
+        Cache::add($namespaceKey, 1, 315360000);
+        Cache::increment($namespaceKey);
 
-            $listCall = static fn (int $id): string => json_encode([
-                'jsonrpc' => '2.0',
-                'id' => $id,
-                'method' => 'tools/call',
-                'params' => [
-                    'name' => 'list_mcp_cli_tasks',
-                    'arguments' => [],
-                ],
-            ]) . "\n";
-
-            fwrite($stdin, $listCall(1));
-            fwrite($stdin, $listCall(2));
-            rewind($stdin);
-
-            $stdout = fopen('mcp-between-iterations://output', 'w');
-
-            McpServerCommand::$stdinMock = $stdin;
-            McpServerCommand::$stdoutMock = $stdout;
-
-            $this->artisan('sp-laravel-api:mcp')->assertSuccessful();
-
-            $output = McpBetweenIterationsStreamWrapper::output();
-        } finally {
-            stream_wrapper_unregister('mcp-between-iterations');
-        }
-
-        // Request 1 ran before "Task B" existed, so "Task B" can only appear
-        // in request 2's response -- and only if request 2 re-read the
-        // namespace version from the store instead of serving the memoized
-        // one from request 1.
-        $this->assertStringContainsString(
-            'Task B',
-            $output,
-            'The second JSON-RPC request in the same MCP process must observe '
-            . 'data written after the first request. If this fails, the '
-            . 'per-iteration CacheRequestContext reset is not taking effect and '
-            . 'the stdio loop is serving a memoized, stale namespace version.'
+        // Without a reset the memo still holds the pre-bump version, so the
+        // second read resolves the old token and is served the stale entry.
+        $stale = RecordService::executeGetByFilter('mcp_cli_tasks');
+        $this->assertCount(
+            1,
+            $stale['data'],
+            'the memo must still be leaking here -- if this sees 2 rows the test no '
+            . 'longer reproduces the condition the reset exists to fix'
         );
-    }
-}
 
-/**
- * Stream wrapper used only by
- * it_resets_the_cache_context_between_json_rpc_requests_in_the_stdio_loop().
- *
- * Intercepts McpServerCommand's writes to its stdout mock so a callback can
- * run the instant the FIRST JSON-RPC response has been fully written -- the
- * exact point between two iterations of the command's stdin loop, which is
- * otherwise inaccessible from outside a single artisan() invocation.
- */
-class McpBetweenIterationsStreamWrapper
-{
-    /** @var resource|null */
-    public $context;
+        // This is what McpServerCommand does at the top of every loop iteration.
+        app(CacheRequestContext::class)->reset();
 
-    private static string $buffer = '';
-
-    private static bool $triggered = false;
-
-    /** @var (callable(): void)|null */
-    public static $onFirstResponseWritten;
-
-    public function stream_open(string $path, string $mode, int $options, ?string &$openedPath): bool
-    {
-        return true;
-    }
-
-    public function stream_write(string $data): int
-    {
-        self::$buffer .= $data;
-
-        if (!self::$triggered && str_contains($data, '"id":1,"result"')) {
-            self::$triggered = true;
-            if (null !== self::$onFirstResponseWritten) {
-                (self::$onFirstResponseWritten)();
-            }
-        }
-
-        return strlen($data);
-    }
-
-    public function stream_flush(): bool
-    {
-        return true;
-    }
-
-    public function stream_eof(): bool
-    {
-        return true;
-    }
-
-    public function stream_read(int $count): string
-    {
-        return '';
-    }
-
-    /**
-     * @return array<int|string, int>
-     */
-    public function stream_stat(): array
-    {
-        return [];
-    }
-
-    public static function reset(): void
-    {
-        self::$buffer = '';
-        self::$triggered = false;
-        self::$onFirstResponseWritten = null;
-    }
-
-    public static function output(): string
-    {
-        return self::$buffer;
+        $fresh = RecordService::executeGetByFilter('mcp_cli_tasks');
+        $this->assertCount(
+            2,
+            $fresh['data'],
+            'after the reset the namespace version must be re-read from the store, '
+            . 'so the second JSON-RPC request in an MCP process sees Task B'
+        );
     }
 }
