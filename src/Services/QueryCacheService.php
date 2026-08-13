@@ -460,10 +460,13 @@ class QueryCacheService
     }
 
     /**
-     * The context is unavailable before the container boots (and in a few console
-     * paths). Memoization and stats are both optional accelerations, so returning
-     * null just makes every namespace read go to the cache store -- correct, only
-     * slower.
+     * app() cannot actually return null here: CacheRequestContext is concrete and
+     * dependency-free, so even an unbound make() just constructs one. The scoped
+     * binding is what makes memoization work across calls within one request/job --
+     * outside of that scope (or if resolution somehow throws) this returns either a
+     * fresh, unshared instance or null, and either way the memo never hits and stats
+     * read zero. Memoization and stats are both optional accelerations, so that just
+     * makes every namespace read go to the cache store -- correct, only slower.
      */
     private static function context(): ?CacheRequestContext
     {
