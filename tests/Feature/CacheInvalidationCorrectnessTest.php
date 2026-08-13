@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
@@ -418,6 +419,49 @@ class CacheInvalidationCorrectnessTest extends TestCase
                 && 'cache store unavailable' === $context['exception']);
 
         QueryCacheService::invalidateTableForTenant('products', 'acme');
+    }
+
+    public function test_an_http_write_still_invalidates_both_list_and_show_caches(): void
+    {
+        DB::table('products')->insert([
+            ['id' => 1, 'name' => 'Widget', 'tenant_id' => 'acme', 'created_at' => now(), 'updated_at' => now()],
+        ]);
+
+        $this->withHeaders(['X-Tenant-ID' => 'acme'])
+            ->getJson('/api/products')
+            ->assertStatus(200)
+            ->assertJsonPath('data.0.name', 'Widget');
+
+        $this->withHeaders(['X-Tenant-ID' => 'acme'])
+            ->getJson('/api/products/1')
+            ->assertStatus(200)
+            ->assertJsonPath('data.name', 'Widget');
+
+        $this->putJson('/api/products/1', ['name' => 'Updated'], ['X-Tenant-ID' => 'acme'])
+            ->assertStatus(200);
+
+        $this->withHeaders(['X-Tenant-ID' => 'acme'])
+            ->getJson('/api/products')
+            ->assertStatus(200)
+            ->assertJsonPath('data.0.name', 'Updated');
+
+        $this->withHeaders(['X-Tenant-ID' => 'acme'])
+            ->getJson('/api/products/1')
+            ->assertStatus(200)
+            ->assertJsonPath('data.name', 'Updated');
+    }
+
+    public function test_an_empty_cached_record_is_served_from_cache(): void
+    {
+        $showKey = 'record_show:table:products:id:9:tenant:acme:select:abc';
+
+        QueryCacheService::put($showKey, [], 3600);
+
+        $this->assertSame(
+            [],
+            QueryCacheService::get($showKey),
+            'An empty cached payload is a hit, not a miss'
+        );
     }
 }
 

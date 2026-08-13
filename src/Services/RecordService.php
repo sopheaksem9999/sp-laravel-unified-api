@@ -2986,7 +2986,7 @@ class RecordService
         );
         if ($this->isCacheableRequest(request: $request, table: $table)) {
             $cachedRecord = QueryCacheService::get($recordCacheKey);
-            if ($cachedRecord) {
+            if (null !== $cachedRecord) {
                 return ['data' => $cachedRecord, 'request' => $request, 'from_cache' => true];
             }
         }
