@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Sopheak\Core\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Sopheak\Core\Services\RecordCacheService;
+use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordTableType;
@@ -104,5 +106,130 @@ class CacheAdmissionRulesTest extends TestCase
         $this->assertFalse(
             $service->isCacheableGlobalRequest(Request::create('/api/rpc/report', 'POST'))
         );
+    }
+
+    /**
+     * isCacheableGlobalRequest() has no route to resolve an action from --
+     * Request::create() never sets one, so resolveCacheAction() only ever
+     * sees an action when it is provided via the record_cache_action request
+     * attribute, exactly as the existing
+     * test_cache_admission_can_limit_cache_to_specific_actions test in
+     * SchemaRegistryTest.php does for the table-scoped counterpart.
+     */
+    public function test_global_function_only_actions_admits_the_matching_action(): void
+    {
+        Config::set('record.cache.admission', [
+            'only_tables' => [],
+            'except_tables' => [],
+            'only_actions' => ['global_function'],
+            'except_actions' => [],
+            'skip_query_params' => [],
+        ]);
+
+        $service = app(RecordCacheService::class);
+        $request = Request::create('/api/rpc/report', 'GET');
+        $request->attributes->set('record_cache_action', 'global_function');
+
+        $this->assertTrue($service->isCacheableGlobalRequest($request));
+    }
+
+    public function test_global_function_only_actions_rejects_a_non_matching_action(): void
+    {
+        Config::set('record.cache.admission', [
+            'only_tables' => [],
+            'except_tables' => [],
+            'only_actions' => ['list'],
+            'except_actions' => [],
+            'skip_query_params' => [],
+        ]);
+
+        $service = app(RecordCacheService::class);
+        $request = Request::create('/api/rpc/report', 'GET');
+        $request->attributes->set('record_cache_action', 'global_function');
+
+        $this->assertFalse($service->isCacheableGlobalRequest($request));
+    }
+
+    public function test_global_function_except_actions_rejects_the_matching_action(): void
+    {
+        Config::set('record.cache.admission', [
+            'only_tables' => [],
+            'except_tables' => [],
+            'only_actions' => [],
+            'except_actions' => ['global_function'],
+            'skip_query_params' => [],
+        ]);
+
+        $service = app(RecordCacheService::class);
+        $request = Request::create('/api/rpc/report', 'GET');
+        $request->attributes->set('record_cache_action', 'global_function');
+
+        $this->assertFalse($service->isCacheableGlobalRequest($request));
+    }
+
+    /**
+     * End-to-end proof for the actual defect site: the one-line wiring change
+     * in RecordService::executeGlobalFunction(). Mirrors the
+     * CachedGlobalFunctionCounter pattern in
+     * tests/Feature/LegacyConfigTest.php (test_global_function_response_is_cached),
+     * but a plain ?foo=bar query -- as used there -- is cached identically by
+     * both the old buggy inline check and the new guard, so it cannot tell
+     * them apart. This test adds the missing case (?search=x) plus a positive
+     * control (a plain query) in the same test, so a broken cache that never
+     * caches anything cannot make it pass by accident.
+     */
+    public function test_global_function_end_to_end_search_param_bypasses_the_cache(): void
+    {
+        Cache::flush();
+        GlobalFunctionGuardCounter::$count = 0;
+
+        Config::set('record.global_functions', [
+            'guarded_global' => [
+                'httpMethod' => ['GET'],
+                'class' => GlobalFunctionGuardCounter::class,
+                'functionName' => 'handle',
+                'disableCache' => false,
+            ],
+        ]);
+
+        $service = new RecordService();
+
+        // Positive control: a plain query has neither search, filter, nor
+        // where, so it IS cacheable -- the handler must run only once across
+        // two identical calls. Without this, a cache that caches nothing
+        // would make the assertions below pass for the wrong reason.
+        $plainRequest = Request::create('/api/v1/rpc/guarded_global', 'GET', ['foo' => 'bar']);
+        $response = $service->executeGlobalFunction($plainRequest, 'guarded_global');
+        $this->assertEquals(1, $response->getData()->data->count);
+
+        $response = $service->executeGlobalFunction($plainRequest, 'guarded_global');
+        $this->assertEquals(1, $response->getData()->data->count);
+        $this->assertSame(1, GlobalFunctionGuardCounter::$count);
+
+        // The guard under test: a `search` query param must bypass the cache
+        // entirely, so the handler -- and the counter -- runs again on every
+        // call instead of being served from the first call's cached response.
+        $searchRequest = Request::create('/api/v1/rpc/guarded_global', 'GET', ['search' => 'x']);
+        $response = $service->executeGlobalFunction($searchRequest, 'guarded_global');
+        $this->assertEquals(2, $response->getData()->data->count);
+
+        $response = $service->executeGlobalFunction($searchRequest, 'guarded_global');
+        $this->assertEquals(3, $response->getData()->data->count);
+        $this->assertSame(3, GlobalFunctionGuardCounter::$count);
+    }
+}
+
+class GlobalFunctionGuardCounter
+{
+    public static int $count = 0;
+
+    public function handle(Request $request): JsonResponse
+    {
+        self::$count++;
+
+        return response()->json([
+            'success' => true,
+            'count' => self::$count,
+        ]);
     }
 }
