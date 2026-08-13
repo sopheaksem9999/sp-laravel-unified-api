@@ -338,7 +338,7 @@ class RecordCacheService
      * both ways is what makes a CRUD write to one of those tables invalidate the
      * function's cached output.
      *
-     * @return array<int, array<string, string|null>>
+     * @return array<int, array<string, string>>
      */
     public function functionCacheDependencies(array|string|null $tables, mixed $tenantId, bool $tenantEnabled): array
     {
@@ -347,15 +347,31 @@ class RecordCacheService
         }
 
         $tableList = is_array($tables) ? $tables : array_filter(array_map(trim(...), explode(',', $tables)));
-        $tenantKey = $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tenantEnabled);
 
         $dependencies = [];
         foreach ($tableList as $table) {
-            if (!is_string($table) || '' === $table) {
+            if (!is_string($table)) {
                 continue;
             }
 
-            $dependencies[] = ['scope' => 'table', 'name' => $table, 'tenant' => $tenantKey];
+            if ('' === $table) {
+                continue;
+            }
+
+            // Tenancy must be resolved per table, exactly as clearTableCache() does
+            // it on the write side. A single hoisted key would point at a namespace
+            // nothing bumps whenever a dependency table's hasTenantId differs from
+            // the declaring function's tenancy.
+            $tableSchema = SchemaRegistryUtils::getTable($table);
+            $tableTenantEnabled = $tableSchema instanceof RecordTableType
+                ? RecordUtils::shouldApplyTenantId($tableSchema)
+                : $tenantEnabled;
+
+            $dependencies[] = [
+                'scope' => 'table',
+                'name' => $table,
+                'tenant' => $this->resolveTenantCacheKey(tenantId: $tenantId, tenantEnabled: $tableTenantEnabled),
+            ];
         }
 
         return $dependencies;
