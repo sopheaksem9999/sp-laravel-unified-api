@@ -60,15 +60,20 @@ class RecordCacheService
     /**
      * Stable fingerprint of the full request query.
      *
-     * Every cache key folds this in so that any parameter which shapes the read --
-     * with_trashed, only_trashed, distinct, add_total, and anything added later --
-     * discriminates the key without having to be enumerated. Parameters are
-     * opt-out, not opt-in: forgetting to list one can only split a cache entry,
-     * never merge two that should differ.
+     * The consumers that actually shape a read -- with_trashed, only_trashed,
+     * add_total, and anything added later -- read through input()/boolean(),
+     * which sources from the parsed JSON body instead of the query string
+     * whenever Content-Type: application/json is set (see
+     * Request::getInputSource()). A fingerprint built from query() alone is
+     * blind to that path: a JSON-body request and a plain one can carry an
+     * empty query() while behaving completely differently. So this folds in
+     * the JSON body too. Parameters are opt-out, not opt-in: forgetting to
+     * list one can only split a cache entry, never merge two that should
+     * differ.
      */
     public function queryFingerprint(Request $request): string
     {
-        $query = $request->query();
+        $query = $request->json()->all() + $request->query();
         $this->recursiveKsort($query);
 
         return md5(serialize($query));
