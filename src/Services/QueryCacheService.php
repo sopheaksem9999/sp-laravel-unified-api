@@ -7,6 +7,7 @@ namespace Sopheak\Core\Services;
 use Throwable;
 use Exception;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 class QueryCacheService
 {
@@ -378,7 +379,8 @@ class QueryCacheService
             $next = self::incrementNamespaceVersion($key);
             self::memoizeNamespaceVersion($key, $next);
             self::incrementRequestStat('invalidation_bumps');
-        } catch (Exception) {
+        } catch (Throwable $throwable) {
+            self::reportInvalidationFailure($key, $throwable);
         }
     }
 
@@ -408,6 +410,24 @@ class QueryCacheService
         Cache::forever($key, $next);
 
         return $next;
+    }
+
+    /**
+     * A failed bump is a correctness event, not a cache miss.
+     *
+     * Reads are allowed to degrade silently -- a failed read just means a miss.
+     * A failed bump means the old cached value stays live, so the API keeps
+     * serving data it has already been told is wrong. That must not be silent.
+     */
+    private static function reportInvalidationFailure(string $key, Throwable $e): void
+    {
+        try {
+            Log::warning('sp-laravel-api: cache namespace bump failed, stale data may be served', [
+                'namespace_key' => $key,
+                'exception' => $e->getMessage(),
+            ]);
+        } catch (Throwable) {
+        }
     }
 
     private static function getNamespaceVersion(string $scope, string $name, ?string $tenantKey = null, ?string $recordId = null): int

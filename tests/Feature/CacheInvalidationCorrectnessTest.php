@@ -10,7 +10,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Mockery;
 use Sopheak\Core\Services\QueryCacheService;
 use Sopheak\Core\Services\RecordCacheService;
 use Sopheak\Core\Services\RecordService;
@@ -403,6 +405,21 @@ class CacheInvalidationCorrectnessTest extends TestCase
             $response->getData()->data->count,
             "A write for an unrelated tenant must not invalidate another tenant's cached global function output"
         );
+    }
+
+    public function test_a_failed_namespace_bump_is_logged(): void
+    {
+        Cache::shouldReceive('add')->andThrow(new \RuntimeException('cache store unavailable'));
+
+        Log::shouldReceive('warning')
+            ->once()
+            ->withArgs(function (string $message, array $context): bool {
+                return str_contains($message, 'cache namespace bump failed')
+                    && str_contains((string) $context['namespace_key'], 'ns:table:products')
+                    && 'cache store unavailable' === $context['exception'];
+            });
+
+        QueryCacheService::invalidateTableForTenant('products', 'acme');
     }
 }
 
