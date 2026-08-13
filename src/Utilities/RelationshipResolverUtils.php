@@ -1974,6 +1974,32 @@ class RelationshipResolverUtils
                 continue;
             }
 
+            // When the relation has nested children, the parent-side key
+            // columns those children match on must be selected too (e.g.
+            // `video(id,title,profile_image(*))` still needs
+            // `video.profile_image_id`), otherwise the child lookups find no
+            // match values and resolve to empty/null.
+            if ([] !== $children && [] !== $columns && !in_array('*', $columns, true)) {
+                $parentKeys = [];
+                foreach ($children as $childAlias => $childInclude) {
+                    $childConfig = self::resolveRelationship($config['table'], $childAlias, $childInclude['table'] ?? null);
+                    if (!$childConfig) {
+                        continue;
+                    }
+                    $childType = $childConfig['type'] ?? null;
+                    if ('belongsTo' === $childType) {
+                        $parentKeys[] = $childConfig['foreign_key'] ?? null;
+                    } elseif (in_array($childType, ['hasMany', 'morphMany'], true)) {
+                        $parentKeys[] = $childConfig['local_key'] ?? 'id';
+                    }
+                }
+                foreach (array_filter($parentKeys) as $parentKey) {
+                    if (!in_array($parentKey, $columns, true)) {
+                        $columns[] = $parentKey;
+                    }
+                }
+            }
+
             // Load related records with optimized bulk query
             $relatedGrouped = self::loadRelatedRecords($records, $config, $columns, $tenantId);
 
@@ -2402,6 +2428,17 @@ class RelationshipResolverUtils
         }
 
         $columns = $cleanColumns;
+
+        // Ensure the grouping key column is selected, otherwise related rows
+        // cannot be mapped back to their parents (e.g.
+        // `translations(locale,field,value)` would drop `target_id` and every
+        // row would fail grouping, yielding an empty relation).
+        if ([] !== $columns && !in_array('*', $columns, true)) {
+            $requiredKey = ('belongsTo' === $type) ? $ownerKey : $foreignKey;
+            if (null !== $requiredKey && !in_array($requiredKey, $columns, true)) {
+                $columns[] = $requiredKey;
+            }
+        }
 
         // Get actual table name from schema
         $actualRelatedTableName = $schema[$relatedTable]->table ?? $relatedTable;

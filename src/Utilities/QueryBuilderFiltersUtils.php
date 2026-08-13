@@ -178,7 +178,17 @@ class QueryBuilderFiltersUtils
         if ($request->has('select')) {
             $requested = self::parseSelectColumns($request->query('select'), $table, $allowedCols);
             if (!empty($requested['main'])) {
-                $builder->select($requested['main']);
+                $main = $requested['main'];
+                if (!in_array($table . '.*', $main, true)) {
+                    // The relationship resolver matches root records on their
+                    // own key columns (e.g. `video_category_id` for a belongsTo
+                    // include, `id` for hasMany). When the main select is
+                    // explicit and includes are present, those keys must be
+                    // selected too, otherwise relationships resolve to null.
+                    $main = self::augmentMainSelectWithIncludeKeys($request->query('select'), $table, $main, $allowedCols);
+                }
+
+                $builder->select($main);
             }
         }
 
@@ -1380,6 +1390,55 @@ class QueryBuilderFiltersUtils
         }
 
         return ['main' => $prefixed];
+    }
+
+    /**
+     * Append root-table key columns required by top-level relationship includes.
+     *
+     * When the main select is explicit (e.g. `id,title,video_category(...)`)
+     * and includes are resolved through the PHP-side resolver, the root
+     * records need the columns those relationships match on:
+     * - belongsTo include => root's foreign_key (e.g. `video_category_id`)
+     * - hasMany/morphMany/belongsToMany/morphToMany => root's local_key (`id`)
+     *
+     * @return string[] prefixed column list
+     */
+    private static function augmentMainSelectWithIncludeKeys(string $selectParam, string $table, array $main, array $allowedCols): array
+    {
+        $includes = RelationshipResolverUtils::parseSelectForIncludes($selectParam);
+        if ([] === $includes) {
+            return $main;
+        }
+
+        foreach ($includes as $alias => $include) {
+            $config = RelationshipResolverUtils::resolveRelationship($table, $alias, is_array($include) ? ($include['table'] ?? null) : null);
+            if (!$config) {
+                continue;
+            }
+
+            $key = 'belongsTo' === ($config['type'] ?? '')
+                ? ($config['foreign_key'] ?? null)
+                : ($config['local_key'] ?? 'id');
+
+            if (null === $key) {
+                continue;
+            }
+
+            if ('' === $key) {
+                continue;
+            }
+
+            if (!in_array($key, $allowedCols, true)) {
+                continue;
+            }
+
+            $prefixedKey = str_contains((string) $key, '.') ? $key : $table . '.' . $key;
+            if (!in_array($prefixedKey, $main, true)) {
+                $main[] = $prefixedKey;
+            }
+        }
+
+        return $main;
     }
 
     /**
