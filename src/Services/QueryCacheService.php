@@ -314,7 +314,11 @@ class QueryCacheService
 
             $scope = isset($dependency['scope']) ? (string) $dependency['scope'] : '';
             $name = isset($dependency['name']) ? (string) $dependency['name'] : '';
-            if ('' === $scope || '' === $name) {
+            if ('' === $scope) {
+                continue;
+            }
+
+            if ('' === $name) {
                 continue;
             }
 
