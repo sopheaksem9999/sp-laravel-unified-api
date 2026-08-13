@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sopheak\Core\Console;
 
 use Sopheak\Core\Services\McpServerService;
+use Sopheak\Core\Support\CacheRequestContext;
 use Illuminate\Console\Command;
 
 class McpServerCommand extends Command
@@ -59,6 +60,12 @@ class McpServerCommand extends Command
             if ($line === '') {
                 continue;
             }
+
+            // A long-running console loop gets neither RouteMatched nor the queue
+            // worker's forgetScopedInstances(), so without this the namespace memo
+            // would survive for the life of the process and keep serving reads that
+            // another process has already invalidated.
+            app(CacheRequestContext::class)->reset();
 
             $payload = json_decode($line, true);
             if (json_last_error() !== JSON_ERROR_NONE) {
