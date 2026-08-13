@@ -808,7 +808,7 @@ class RecordService
         $tenantId = $tenantEnabled ? RecordUtils::resolveTenantIdFromRequest($request) : null;
         $cacheKey = null;
 
-        if (!$disableCache && RecordConfigService::cacheEnabled() && 'GET' === $request->method() && !$request->has(['search', 'filter', 'where'])) {
+        if (!$disableCache && $this->cacheService()->isCacheableGlobalRequest($request)) {
             $cacheKey = $this->generateGlobalFunctionCacheKey(
                 functionName: $functionName,
                 queryParams: $request->query(),

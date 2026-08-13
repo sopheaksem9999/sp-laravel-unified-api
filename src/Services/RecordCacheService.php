@@ -50,11 +50,64 @@ class RecordCacheService
             return false;
         }
 
-        if ($request->has(['search', 'filter', 'where'])) {
+        // hasAny(), not has(): has() with an array is ALL-of, so it only ever
+        // rejected a request carrying all three params at once.
+        if ($request->hasAny(['search', 'filter', 'where'])) {
             return false;
         }
 
         return $this->passesAdmissionRules($request, $table, $schemaTableName);
+    }
+
+    /**
+     * Table-less counterpart of isCacheableRequest() for global functions.
+     *
+     * Global functions have no table, so only_tables/except_tables cannot apply,
+     * but the enable flag, method check, dynamic-query guard, action rules and
+     * skip_query_params all must -- RecordService used to re-implement a partial
+     * version of this inline and silently bypassed the last three.
+     */
+    public function isCacheableGlobalRequest(Request $request): bool
+    {
+        if (!RecordConfigService::cacheEnabled()) {
+            return false;
+        }
+
+        if ('GET' !== $request->method()) {
+            return false;
+        }
+
+        if ($request->hasAny(['search', 'filter', 'where'])) {
+            return false;
+        }
+
+        if (!RecordConfigService::cacheAdmissionEnabled()) {
+            return true;
+        }
+
+        $action = $this->resolveCacheAction($request);
+
+        $onlyActions = array_filter(array_map(strval(...), RecordConfigService::cacheAdmissionOnlyActions()));
+        if ([] !== $onlyActions && (null === $action || !in_array($action, $onlyActions, true))) {
+            return false;
+        }
+
+        $exceptActions = array_filter(array_map(strval(...), RecordConfigService::cacheAdmissionExceptActions()));
+        if (null !== $action && [] !== $exceptActions && in_array($action, $exceptActions, true)) {
+            return false;
+        }
+
+        foreach (RecordConfigService::cacheAdmissionSkipQueryParams() as $param) {
+            if (!is_string($param) && !is_int($param)) {
+                continue;
+            }
+
+            if ($request->query->has((string) $param)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
