@@ -85,7 +85,14 @@ class CacheRequestContextTest extends TestCase
 
         // An out-of-band write, exactly as another process would do it.
         DB::table('products')->where('id', 1)->update(['name' => 'Updated']);
-        QueryCacheService::invalidateTableForTenant('products', 'acme');
+
+        // Simulate ANOTHER PROCESS bumping the namespace: write the store directly and
+        // never touch this process's memo. Going through invalidateTableForTenant() would
+        // call memoizeNamespaceVersion() and hand this process the new version for free,
+        // which is exactly the leak this test exists to detect.
+        $namespaceKey = 'sp_laravel_api:ns:table:products:tenant:acme';
+        Cache::add($namespaceKey, 1, 315360000);
+        Cache::increment($namespaceKey);
 
         $this->withHeaders(['X-Tenant-ID' => 'acme'])
             ->getJson('/api/products')
