@@ -2141,3 +2141,50 @@ Expected: identical results to the `array` run. `Cache::add()` + `Cache::increme
 **Type consistency** — `incrementNamespaceVersion(string $key): int` introduced in Task 2, reused in Task 7. `resolveNamespaceToken(string $key, array $dependencies = [])` extended in Task 6 with the Task 3 record branch preserved verbatim. `queryFingerprint(Request $request): string` defined in Task 4 and used at five call sites in the same task. `CacheRequestContext` method names (`namespaceVersion`, `rememberNamespaceVersion`, `stats`, `incrementStat`, `reset`) are identical in the class definition (Task 8 Step 3), the provider (Step 4), `QueryCacheService` (Step 5) and the test (Step 1).
 
 **Ordering** — Task 3 rewrites the record branch of `resolveNamespaceToken()`; Task 6 rewrites the whole method and reproduces that branch in full, so Task 6 must not run before Task 3. Task 2 must precede Task 7 (which changes the catch block it introduces). Task 9 must run last, since its guard test depends on Tasks 2 and 3 for show-cache invalidation to work at all.
+
+---
+
+## Outcome
+
+Executed 2026-08-13 across 20 commits, `ef2c787` → `120f38e`. Test suite 634 → 679, all passing.
+All six correctness defects (C1–C6) and A2, A3, A6, A7, A8, A9 are fixed and regression-tested.
+
+Nine per-task reviews plus a whole-branch review ran. Five findings originated in this plan's own
+text rather than in the implementations, and were resolved by explicit ruling:
+
+1. **Task 2** — the plan's `Cache::add($key, 1)` never reaches the store's atomic `add()`;
+   `Repository::add()` only delegates when a TTL is passed. Fixed with an explicit 10-year TTL.
+2. **Task 4** — `queryFingerprint()` read `$request->query()`, blind to params arriving in a JSON
+   body on a GET, which `input()`/`boolean()` do see. Fixed with `json()->all() + query()`.
+3. **Task 6** — `functionCacheDependencies()` resolved tenancy once from the caller while
+   invalidation resolves it per table, so a dependency could name a namespace nothing bumps.
+   Fixed by resolving per table.
+4. **Task 8** — the plan covered queue and Octane but not Artisan. Fixed by resetting the context
+   per iteration in `McpServerCommand`'s stdio loop.
+5. **Final review** — the Task 4 fix had been applied to only three of five key generators; both
+   function key generators were still body-blind. Fixed in the final wave.
+
+Four separate guard tests were found to be inert (passing with the fix removed). The check that
+caught every one of them — *remove the fix, watch the test fail, restore it* — is now the required
+standard for any test claiming to guard a behaviour change here.
+
+## Carry-forward
+
+Still open, for the deferred storage-layer plan:
+
+- **A1** — orphaned versioned entries are never reclaimed on `database`/`file` stores. Laravel's
+  `DatabaseStore` only deletes an expired row when that exact key is read again, and an orphaned
+  versioned key never is. This branch increases bump frequency, so it grows faster now.
+- **A4** — namespace counters are evictable under `allkeys-lru`; an evicted counter restarts at 1
+  and can resurrect surviving entries. Interacts with the 10-year seed TTL added in Task 2.
+- **A5** — no cache-stampede protection.
+- Generic long-running Artisan loops (consumer-written `while(true)` commands doing CRUD) still
+  leak the namespace memo. `app(CacheRequestContext::class)->reset()` per iteration is the fix;
+  documented in the CHANGELOG.
+- The `reset()` call in `McpServerCommand` is guarded by a test of the leak *mechanism*, not of the
+  wiring — deleting that one line fails no test. Its placement is verified by inspection only.
+- `record_cache_action` is read by `resolveCacheAction()` but never set by production code; real
+  traffic always falls through to `route()->getActionMethod()`. A test-only seam.
+- No `phpstan.neon` exists, so `composer analyse` runs at PHPStan level 0 — not the "strict
+  larastan v3" CLAUDE.md describes. `composer quality` cannot pass; ~20 rector findings pre-date
+  this work. Worth fixing separately.
