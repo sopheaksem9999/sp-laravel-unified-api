@@ -453,15 +453,38 @@ class CacheInvalidationCorrectnessTest extends TestCase
 
     public function test_an_empty_cached_record_is_served_from_cache(): void
     {
-        $showKey = 'record_show:table:products:id:9:tenant:acme:select:abc';
+        DB::table('products')->insert([
+            'id' => 9, 'name' => 'Widget', 'tenant_id' => 'acme', 'created_at' => now(), 'updated_at' => now(),
+        ]);
 
+        // Build the show-cache key exactly the way RecordService::getRecord() builds
+        // it in production, so the seeded entry lands under the same key getRecord()
+        // will look up -- rather than a hand-picked key that happens to match by luck.
+        $request = Request::create('/api/products/9', 'GET');
+
+        $service = app(RecordService::class);
+        $tableSchema = SchemaRegistryUtils::get()['products'];
+
+        $showKey = $service->generateRecordCacheKey(
+            table: 'products',
+            id: 9,
+            tenantId: 'acme',
+            select: '',
+            tenantEnabled: $service->shouldApplyTenantId($tableSchema),
+            queryFingerprint: app(RecordCacheService::class)->queryFingerprint($request)
+        );
+
+        // Seed an empty payload -- the falsy value getRecord()'s cache check must not
+        // mistake for "no entry".
         QueryCacheService::put($showKey, [], 3600);
 
-        $this->assertSame(
-            [],
-            QueryCacheService::get($showKey),
-            'An empty cached payload is a hit, not a miss'
+        $result = $service->getRecord($request, 'products', 9, 'acme');
+
+        $this->assertTrue(
+            $result['from_cache'] ?? false,
+            'An empty cached payload must be served as a cache hit, not silently re-queried'
         );
+        $this->assertSame([], $result['data']);
     }
 }
 
