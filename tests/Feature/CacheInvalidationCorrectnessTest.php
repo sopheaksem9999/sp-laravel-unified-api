@@ -100,4 +100,53 @@ class CacheInvalidationCorrectnessTest extends TestCase
         $this->assertSame(3, $second);
         $this->assertSame(4, $third);
     }
+
+    public function test_table_clear_invalidates_single_record_show_cache(): void
+    {
+        $showKey = 'record_show:table:products:id:5:tenant:acme:select:abc';
+
+        QueryCacheService::put($showKey, ['id' => 5, 'name' => 'stale'], 3600);
+        $this->assertNotNull(QueryCacheService::get($showKey));
+
+        app(RecordCacheService::class)->clearTableCache('products', 'acme');
+
+        $this->assertNull(
+            QueryCacheService::get($showKey),
+            'clearTableCache() must reach record_show: keys for that table'
+        );
+    }
+
+    public function test_record_clear_still_only_affects_that_record(): void
+    {
+        $keyFive = 'record_show:table:products:id:5:tenant:acme:select:abc';
+        $keySeven = 'record_show:table:products:id:7:tenant:acme:select:abc';
+
+        QueryCacheService::put($keyFive, ['id' => 5], 3600);
+        QueryCacheService::put($keySeven, ['id' => 7], 3600);
+
+        QueryCacheService::invalidateRecordForTenant('products', 5, 'acme');
+
+        $this->assertNull(QueryCacheService::get($keyFive));
+        $this->assertNotNull(
+            QueryCacheService::get($keySeven),
+            'Per-record precision must survive the table-version cascade'
+        );
+    }
+
+    public function test_table_clear_for_one_tenant_leaves_another_tenants_record_cache(): void
+    {
+        $acme = 'record_show:table:products:id:5:tenant:acme:select:abc';
+        $globex = 'record_show:table:products:id:5:tenant:globex:select:abc';
+
+        QueryCacheService::put($acme, ['tenant' => 'acme'], 3600);
+        QueryCacheService::put($globex, ['tenant' => 'globex'], 3600);
+
+        app(RecordCacheService::class)->clearTableCache('products', 'acme');
+
+        $this->assertNull(QueryCacheService::get($acme));
+        $this->assertNotNull(
+            QueryCacheService::get($globex),
+            'Tenant isolation must survive the table-version cascade'
+        );
+    }
 }

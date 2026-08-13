@@ -268,7 +268,22 @@ class QueryCacheService
                 recordId: $parsed['record_id']
             );
 
-            return sprintf('v%s.%s.%s', $globalVersion, $tenantVersion, $recordVersion);
+            // A single record's cache must also die when the whole table is cleared.
+            // Without these two components, clearTableCache() busts list caches and
+            // leaves every record_show entry for the table stale until TTL.
+            $tableGlobalVersion = self::getNamespaceVersion(scope: 'table', name: $parsed['name']);
+            $tableTenantVersion = '' !== $parsed['tenant']
+                ? self::getNamespaceVersion(scope: 'table', name: $parsed['name'], tenantKey: $parsed['tenant'])
+                : 1;
+
+            return sprintf(
+                'v%s.%s.%s.t%s.%s',
+                $globalVersion,
+                $tenantVersion,
+                $recordVersion,
+                $tableGlobalVersion,
+                $tableTenantVersion
+            );
         }
 
         return sprintf('v%s.%s', $globalVersion, $tenantVersion);
