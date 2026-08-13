@@ -67,7 +67,7 @@ class QueryCacheService
     /**
      * Get cached query result or execute and cache the callback
      */
-    public static function remember(string $key, callable $callback, ?int $ttl = null): mixed
+    public static function remember(string $key, callable $callback, ?int $ttl = null, array $dependencies = []): mixed
     {
         // If caching is disabled, execute callback directly
         if (!self::isCacheEnabled()) {
@@ -75,7 +75,7 @@ class QueryCacheService
         }
 
         $ttl ??= self::getCacheTtl();
-        $cacheKey = self::getCachePrefix() . $key . ':' . self::resolveNamespaceToken($key);
+        $cacheKey = self::getCachePrefix() . $key . ':' . self::resolveNamespaceToken($key, $dependencies);
 
         try {
             return Cache::remember($cacheKey, $ttl, $callback);
@@ -87,7 +87,7 @@ class QueryCacheService
     /**
      * Cache a query result
      */
-    public static function put(string $key, mixed $value, ?int $ttl = null): bool
+    public static function put(string $key, mixed $value, ?int $ttl = null, array $dependencies = []): bool
     {
         // If caching is disabled, return true (no-op)
         if (!self::isCacheEnabled()) {
@@ -95,7 +95,7 @@ class QueryCacheService
         }
 
         $ttl ??= self::getCacheTtl();
-        $cacheKey = self::getCachePrefix() . $key . ':' . self::resolveNamespaceToken($key);
+        $cacheKey = self::getCachePrefix() . $key . ':' . self::resolveNamespaceToken($key, $dependencies);
 
         try {
             $stored = Cache::put($cacheKey, $value, $ttl);
@@ -112,14 +112,14 @@ class QueryCacheService
     /**
      * Get cached query result
      */
-    public static function get(string $key): mixed
+    public static function get(string $key, array $dependencies = []): mixed
     {
         // If caching is disabled, return null (cache miss)
         if (!self::isCacheEnabled()) {
             return null;
         }
 
-        $cacheKey = self::getCachePrefix() . $key . ':' . self::resolveNamespaceToken($key);
+        $cacheKey = self::getCachePrefix() . $key . ':' . self::resolveNamespaceToken($key, $dependencies);
 
         try {
             $value = Cache::get($cacheKey);
@@ -134,14 +134,14 @@ class QueryCacheService
     /**
      * Invalidate cache by key
      */
-    public static function forget(string $key): bool
+    public static function forget(string $key, array $dependencies = []): bool
     {
         // If caching is disabled, return true (no-op)
         if (!self::isCacheEnabled()) {
             return true;
         }
 
-        $cacheKey = self::getCachePrefix() . $key . ':' . self::resolveNamespaceToken($key);
+        $cacheKey = self::getCachePrefix() . $key . ':' . self::resolveNamespaceToken($key, $dependencies);
 
         try {
             return Cache::forget($cacheKey);
@@ -247,11 +247,13 @@ class QueryCacheService
         return 1;
     }
 
-    private static function resolveNamespaceToken(string $key): string
+    private static function resolveNamespaceToken(string $key, array $dependencies = []): string
     {
+        $dependencyToken = self::resolveDependencyToken($dependencies);
+
         $parsed = self::parseScopeFromKey($key);
         if (null === $parsed) {
-            return 'v1';
+            return 'v1' . $dependencyToken;
         }
 
         $globalVersion = self::getNamespaceVersion(scope: $parsed['scope'], name: $parsed['name']);
@@ -283,10 +285,54 @@ class QueryCacheService
                 $recordVersion,
                 $tableGlobalVersion,
                 $tableTenantVersion
-            );
+            ) . $dependencyToken;
         }
 
-        return sprintf('v%s.%s', $globalVersion, $tenantVersion);
+        return sprintf('v%s.%s', $globalVersion, $tenantVersion) . $dependencyToken;
+    }
+
+    /**
+     * Hash the versions of every namespace this entry declares a dependency on.
+     *
+     * This is what lets a cached function die when a table it reads is written to.
+     * Parts are sorted so declaration order does not change the key. An empty list
+     * yields an empty string, reproducing the pre-dependency token exactly.
+     *
+     * @param array<int, array<string, mixed>> $dependencies
+     */
+    private static function resolveDependencyToken(array $dependencies): string
+    {
+        if ([] === $dependencies) {
+            return '';
+        }
+
+        $parts = [];
+        foreach ($dependencies as $dependency) {
+            if (!is_array($dependency)) {
+                continue;
+            }
+
+            $scope = isset($dependency['scope']) ? (string) $dependency['scope'] : '';
+            $name = isset($dependency['name']) ? (string) $dependency['name'] : '';
+            if ('' === $scope || '' === $name) {
+                continue;
+            }
+
+            $tenant = isset($dependency['tenant']) && '' !== (string) $dependency['tenant']
+                ? (string) $dependency['tenant']
+                : null;
+
+            $version = self::getNamespaceVersion(scope: $scope, name: $name, tenantKey: $tenant);
+            $parts[] = sprintf('%s:%s:%s:%s', $scope, $name, $tenant ?? '-', $version);
+        }
+
+        if ([] === $parts) {
+            return '';
+        }
+
+        sort($parts);
+
+        return '.d' . substr(md5(implode('|', $parts)), 0, 12);
     }
 
     private static function parseScopeFromKey(string $key): ?array

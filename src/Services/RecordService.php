@@ -708,6 +708,19 @@ class RecordService
         $tenantId = $tenantEnabled ? $this->resolveTenantFromRequest($request, $tableSchema) : null;
         $cacheKey = null;
 
+        $clearCacheTables = null;
+        if ($functionConfig instanceof RecordFunctionType) {
+            $clearCacheTables = $functionConfig->clearCacheTables;
+        } elseif (is_array($functionConfig)) {
+            $clearCacheTables = $functionConfig['clearCacheTables'] ?? null;
+        }
+
+        if (null === $clearCacheTables || [] === $clearCacheTables || '' === $clearCacheTables) {
+            $clearCacheTables = $table;
+        }
+
+        $cacheDependencies = $this->cacheService()->functionCacheDependencies($clearCacheTables, $tenantId, $tenantEnabled);
+
         if (!$disableCache && $this->isCacheableRequest($request, $table)) {
             $cacheKey = $this->generateTableFunctionCacheKey(
                 table: $table,
@@ -716,7 +729,7 @@ class RecordService
                 tenantId: $tenantId,
                 tenantEnabled: $tenantEnabled
             );
-            $cached = QueryCacheService::get($cacheKey);
+            $cached = QueryCacheService::get($cacheKey, $cacheDependencies);
             if (is_array($cached) && isset($cached['data'], $cached['status'])) {
                 return new JsonResponse($cached['data'], $cached['status'], $cached['headers'] ?? []);
             }
@@ -733,17 +746,6 @@ class RecordService
                 tenantEnabled: $tenantEnabled
             );
 
-            $clearCacheTables = null;
-            if ($functionConfig instanceof RecordFunctionType) {
-                $clearCacheTables = $functionConfig->clearCacheTables;
-            } elseif (is_array($functionConfig)) {
-                $clearCacheTables = $functionConfig['clearCacheTables'] ?? null;
-            }
-
-            if (null === $clearCacheTables || [] === $clearCacheTables || '' === $clearCacheTables) {
-                $clearCacheTables = $table;
-            }
-
             $this->cacheService()->clearCacheForTables($clearCacheTables, $tenantId);
         }
 
@@ -757,7 +759,7 @@ class RecordService
                 'data' => $response->getData(true),
                 'status' => $response->getStatusCode(),
                 'headers' => $response->headers->all(),
-            ], $ttl);
+            ], $ttl, $cacheDependencies);
         }
 
         return $response;
@@ -808,6 +810,15 @@ class RecordService
         $tenantId = $tenantEnabled ? RecordUtils::resolveTenantIdFromRequest($request) : null;
         $cacheKey = null;
 
+        $clearCacheTables = null;
+        if ($functionConfig instanceof RecordFunctionType) {
+            $clearCacheTables = $functionConfig->clearCacheTables;
+        } elseif (is_array($functionConfig)) {
+            $clearCacheTables = $functionConfig['clearCacheTables'] ?? null;
+        }
+
+        $cacheDependencies = $this->cacheService()->functionCacheDependencies($clearCacheTables, $tenantId, $tenantEnabled);
+
         if (!$disableCache && $this->cacheService()->isCacheableGlobalRequest($request)) {
             $cacheKey = $this->generateGlobalFunctionCacheKey(
                 functionName: $functionName,
@@ -815,7 +826,7 @@ class RecordService
                 tenantId: $tenantId,
                 tenantEnabled: $tenantEnabled
             );
-            $cached = QueryCacheService::get($cacheKey);
+            $cached = QueryCacheService::get($cacheKey, $cacheDependencies);
             if (is_array($cached) && isset($cached['data'], $cached['status'])) {
                 return new JsonResponse($cached['data'], $cached['status'], $cached['headers'] ?? []);
             }
@@ -831,13 +842,6 @@ class RecordService
                 tenantEnabled: $tenantEnabled
             );
 
-            $clearCacheTables = null;
-            if ($functionConfig instanceof RecordFunctionType) {
-                $clearCacheTables = $functionConfig->clearCacheTables;
-            } elseif (is_array($functionConfig)) {
-                $clearCacheTables = $functionConfig['clearCacheTables'] ?? null;
-            }
-
             $this->cacheService()->clearCacheForTables($clearCacheTables, $tenantId);
         }
 
@@ -847,7 +851,7 @@ class RecordService
                 'data' => $response->getData(true),
                 'status' => $response->getStatusCode(),
                 'headers' => $response->headers->all(),
-            ], $ttl);
+            ], $ttl, $cacheDependencies);
         }
 
         return $response;
