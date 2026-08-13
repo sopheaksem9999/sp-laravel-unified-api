@@ -727,7 +727,8 @@ class RecordService
                 functionName: $functionName,
                 queryParams: $request->query(),
                 tenantId: $tenantId,
-                tenantEnabled: $tenantEnabled
+                tenantEnabled: $tenantEnabled,
+                queryFingerprint: $this->cacheService()->queryFingerprint($request)
             );
             $cached = QueryCacheService::get($cacheKey, $cacheDependencies);
             if (is_array($cached) && isset($cached['data'], $cached['status'])) {
@@ -824,7 +825,8 @@ class RecordService
                 functionName: $functionName,
                 queryParams: $request->query(),
                 tenantId: $tenantId,
-                tenantEnabled: $tenantEnabled
+                tenantEnabled: $tenantEnabled,
+                queryFingerprint: $this->cacheService()->queryFingerprint($request)
             );
             $cached = QueryCacheService::get($cacheKey, $cacheDependencies);
             if (is_array($cached) && isset($cached['data'], $cached['status'])) {
@@ -1338,14 +1340,14 @@ class RecordService
         return $this->cacheService()->generateRecordCacheKey($table, $id, $tenantId, $select, $tenantEnabled, $queryFingerprint);
     }
 
-    public function generateTableFunctionCacheKey(string $table, string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled): string
+    public function generateTableFunctionCacheKey(string $table, string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled, string $queryFingerprint = ''): string
     {
-        return $this->cacheService()->generateTableFunctionCacheKey($table, $functionName, $queryParams, $tenantId, $tenantEnabled);
+        return $this->cacheService()->generateTableFunctionCacheKey($table, $functionName, $queryParams, $tenantId, $tenantEnabled, $queryFingerprint);
     }
 
-    public function generateGlobalFunctionCacheKey(string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled): string
+    public function generateGlobalFunctionCacheKey(string $functionName, array $queryParams, mixed $tenantId, bool $tenantEnabled, string $queryFingerprint = ''): string
     {
-        return $this->cacheService()->generateGlobalFunctionCacheKey($functionName, $queryParams, $tenantId, $tenantEnabled);
+        return $this->cacheService()->generateGlobalFunctionCacheKey($functionName, $queryParams, $tenantId, $tenantEnabled, $queryFingerprint);
     }
 
     public function invalidateTableCache(string $table, mixed $tenantId, bool $tenantEnabled): void

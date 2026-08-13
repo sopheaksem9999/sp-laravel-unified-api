@@ -261,12 +261,6 @@ class QueryCacheService
             return 'v1' . $dependencyToken;
         }
 
-        $globalVersion = self::getNamespaceVersion(scope: $parsed['scope'], name: $parsed['name']);
-        $tenantVersion = 1;
-        if ('' !== $parsed['tenant']) {
-            $tenantVersion = self::getNamespaceVersion(scope: $parsed['scope'], name: $parsed['name'], tenantKey: $parsed['tenant']);
-        }
-
         if ('record' === $parsed['scope'] && isset($parsed['record_id'])) {
             $recordVersion = self::getNamespaceVersion(
                 scope: 'record',
@@ -283,14 +277,25 @@ class QueryCacheService
                 ? self::getNamespaceVersion(scope: 'table', name: $parsed['name'], tenantKey: $parsed['tenant'])
                 : 1;
 
+            // The ns:record:{table} and ns:record:{table}:tenant:{t} namespaces
+            // (scope 'record' without a recordId) are intentionally omitted here:
+            // bumpNamespace() is private, and the only caller that ever passes
+            // scope: 'record' is invalidateRecordForTenant(), which always supplies
+            // a recordId. No code path can bump those two namespaces, so including
+            // them would only add two constant, always-1 cache round-trips per
+            // record_show request.
             return sprintf(
-                'v%s.%s.%s.t%s.%s',
-                $globalVersion,
-                $tenantVersion,
+                'v%s.t%s.%s',
                 $recordVersion,
                 $tableGlobalVersion,
                 $tableTenantVersion
             ) . $dependencyToken;
+        }
+
+        $globalVersion = self::getNamespaceVersion(scope: $parsed['scope'], name: $parsed['name']);
+        $tenantVersion = 1;
+        if ('' !== $parsed['tenant']) {
+            $tenantVersion = self::getNamespaceVersion(scope: $parsed['scope'], name: $parsed['name'], tenantKey: $parsed['tenant']);
         }
 
         return sprintf('v%s.%s', $globalVersion, $tenantVersion) . $dependencyToken;
@@ -341,7 +346,12 @@ class QueryCacheService
 
         sort($parts);
 
-        return '.d' . substr(md5(implode('|', $parts)), 0, 12);
+        // Full digest, not a truncated prefix: a collision here would return
+        // the token to a previously-used value while an entry cached under
+        // it is still within TTL, silently serving data already known to be
+        // stale. 32 hex chars (128 bits) adds ~20 bytes per key, far inside
+        // memcached's 250-byte key limit.
+        return '.d' . md5(implode('|', $parts));
     }
 
     private static function parseScopeFromKey(string $key): ?array
