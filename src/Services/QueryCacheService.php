@@ -12,8 +12,6 @@ class QueryCacheService
 {
     private const REQUEST_NAMESPACE_MEMO_KEY = 'sp_laravel_api.cache.namespace_versions';
 
-    private const REQUEST_BUMPED_NAMESPACES_KEY = 'sp_laravel_api.cache.bumped_namespaces';
-
     private const REQUEST_STATS_KEY = 'sp_laravel_api.cache.stats';
 
     private const DEFAULT_STATS = [
@@ -298,26 +296,40 @@ class QueryCacheService
 
     private static function bumpNamespace(string $scope, string $name, ?string $tenantKey = null, ?string $recordId = null): void
     {
+        $key = self::namespaceKey(scope: $scope, name: $name, tenantKey: $tenantKey, recordId: $recordId);
+
         try {
-            $key = self::namespaceKey(scope: $scope, name: $name, tenantKey: $tenantKey, recordId: $recordId);
-            $bumped = self::getRequestAttribute(self::REQUEST_BUMPED_NAMESPACES_KEY, []);
-            $bumped = is_array($bumped) ? $bumped : [];
-            if (isset($bumped[$key])) {
-                self::incrementRequestStat('invalidation_dedupe_hits');
-
-                return;
-            }
-
-            $bumped[$key] = true;
-            self::setRequestAttribute(self::REQUEST_BUMPED_NAMESPACES_KEY, $bumped);
-
-            $current = self::getNamespaceVersion(scope: $scope, name: $name, tenantKey: $tenantKey, recordId: $recordId);
-            $next = $current + 1;
-            Cache::forever($key, $next);
+            $next = self::incrementNamespaceVersion($key);
             self::memoizeNamespaceVersion($key, $next);
             self::incrementRequestStat('invalidation_bumps');
         } catch (Exception) {
         }
+    }
+
+    /**
+     * Atomically move a namespace to its next version.
+     *
+     * add() seeds the counter at 1 so the first increment lands on 2 -- unseeded
+     * namespaces already resolve to v1 via getNamespaceVersion(), so a bump has to
+     * move off it. add() is a no-op once the counter exists, making this safe to
+     * call on every bump. add()+increment() is atomic on database, redis and
+     * memcached, which is what stops two concurrent writers from losing an update.
+     */
+    private static function incrementNamespaceVersion(string $key): int
+    {
+        Cache::add($key, 1);
+
+        $next = Cache::increment($key);
+        if (is_int($next) && $next > 0) {
+            return $next;
+        }
+
+        // Store has no usable atomic increment -- fall back to read-modify-write.
+        $current = (int) Cache::get($key, 1);
+        $next = max($current, 1) + 1;
+        Cache::forever($key, $next);
+
+        return $next;
     }
 
     private static function getNamespaceVersion(string $scope, string $name, ?string $tenantKey = null, ?string $recordId = null): int

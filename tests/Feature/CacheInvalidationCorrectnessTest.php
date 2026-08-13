@@ -67,4 +67,37 @@ class CacheInvalidationCorrectnessTest extends TestCase
             'A table-level clear must reach record_cursor: keys'
         );
     }
+
+    public function test_a_second_write_in_one_request_invalidates_a_read_cached_between_them(): void
+    {
+        $listKey = 'record_index:table:products:tenant:acme:hash:abc';
+
+        // write #1
+        QueryCacheService::invalidateTableForTenant('products', 'acme');
+        // a read caches the state as of write #1
+        QueryCacheService::put($listKey, ['data' => ['A only']], 3600);
+        // write #2 must invalidate what that read just cached
+        QueryCacheService::invalidateTableForTenant('products', 'acme');
+
+        $this->assertNull(
+            QueryCacheService::get($listKey),
+            'The second invalidation in a request must not be deduped away'
+        );
+    }
+
+    public function test_repeated_bumps_each_advance_the_namespace_version(): void
+    {
+        QueryCacheService::invalidateTableForTenant('products', 'acme');
+        $first = QueryCacheService::inspectNamespaceVersion('table', 'products', 'acme');
+
+        QueryCacheService::invalidateTableForTenant('products', 'acme');
+        $second = QueryCacheService::inspectNamespaceVersion('table', 'products', 'acme');
+
+        QueryCacheService::invalidateTableForTenant('products', 'acme');
+        $third = QueryCacheService::inspectNamespaceVersion('table', 'products', 'acme');
+
+        $this->assertSame(2, $first);
+        $this->assertSame(3, $second);
+        $this->assertSame(4, $third);
+    }
 }
