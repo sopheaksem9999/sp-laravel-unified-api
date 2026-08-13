@@ -8,7 +8,9 @@ use Sopheak\Core\CoreSpLaravelApiProvider;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\WithFaker;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Console\McpServerCommand;
 use Sopheak\Core\Tests\TestCase;
@@ -162,5 +164,165 @@ class McpServerCommandTest extends TestCase
         // It should contain the unauthenticated error from McpServerService
         $this->assertStringContainsString('Unauthenticated', $output);
         $this->assertStringContainsString('"error":{"code":-32001', $output);
+    }
+
+    /**
+     * The stdio loop is a single, long-running process: it never fires
+     * RouteMatched and is never touched by QueueServiceProvider's
+     * forgetScopedInstances(), so without a reset inside the loop itself the
+     * scoped CacheRequestContext would survive for the whole process and keep
+     * serving a namespace version another process has already moved past.
+     *
+     * This drives two JSON-RPC "list" requests through ONE artisan()
+     * invocation and, between them, bumps the cache-store namespace version
+     * DIRECTLY (never through invalidateTableForTenant(), which would call
+     * memoizeNamespaceVersion() and hand this process the new version for
+     * free -- exactly the false-pass that round 1 of this task caught). A
+     * custom stream wrapper on stdout runs that out-of-band mutation the
+     * moment the first response has been fully written, i.e. exactly between
+     * the loop's two iterations.
+     */
+    /** @test */
+    public function it_resets_the_cache_context_between_json_rpc_requests_in_the_stdio_loop(): void
+    {
+        DB::table('mcp_cli_tasks')->insert([
+            'title' => 'Task A',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        stream_wrapper_register('mcp-between-iterations', McpBetweenIterationsStreamWrapper::class);
+        McpBetweenIterationsStreamWrapper::reset();
+        McpBetweenIterationsStreamWrapper::$onFirstResponseWritten = function (): void {
+            DB::table('mcp_cli_tasks')->insert([
+                'title' => 'Task B',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            // Simulate ANOTHER PROCESS bumping the namespace: write the store
+            // directly and never touch this process's memo.
+            $namespaceKey = 'sp_laravel_api:ns:table:mcp_cli_tasks:tenant:disabled';
+            Cache::add($namespaceKey, 1, 315360000);
+            Cache::increment($namespaceKey);
+        };
+
+        try {
+            $stdin = fopen('php://memory', 'r+');
+
+            $listCall = static fn (int $id): string => json_encode([
+                'jsonrpc' => '2.0',
+                'id' => $id,
+                'method' => 'tools/call',
+                'params' => [
+                    'name' => 'list_mcp_cli_tasks',
+                    'arguments' => [],
+                ],
+            ]) . "\n";
+
+            fwrite($stdin, $listCall(1));
+            fwrite($stdin, $listCall(2));
+            rewind($stdin);
+
+            $stdout = fopen('mcp-between-iterations://output', 'w');
+
+            McpServerCommand::$stdinMock = $stdin;
+            McpServerCommand::$stdoutMock = $stdout;
+
+            $this->artisan('sp-laravel-api:mcp')->assertSuccessful();
+
+            $output = McpBetweenIterationsStreamWrapper::output();
+        } finally {
+            stream_wrapper_unregister('mcp-between-iterations');
+        }
+
+        // Request 1 ran before "Task B" existed, so "Task B" can only appear
+        // in request 2's response -- and only if request 2 re-read the
+        // namespace version from the store instead of serving the memoized
+        // one from request 1.
+        $this->assertStringContainsString(
+            'Task B',
+            $output,
+            'The second JSON-RPC request in the same MCP process must observe '
+            . 'data written after the first request. If this fails, the '
+            . 'per-iteration CacheRequestContext reset is not taking effect and '
+            . 'the stdio loop is serving a memoized, stale namespace version.'
+        );
+    }
+}
+
+/**
+ * Stream wrapper used only by
+ * it_resets_the_cache_context_between_json_rpc_requests_in_the_stdio_loop().
+ *
+ * Intercepts McpServerCommand's writes to its stdout mock so a callback can
+ * run the instant the FIRST JSON-RPC response has been fully written -- the
+ * exact point between two iterations of the command's stdin loop, which is
+ * otherwise inaccessible from outside a single artisan() invocation.
+ */
+class McpBetweenIterationsStreamWrapper
+{
+    /** @var resource|null */
+    public $context;
+
+    private static string $buffer = '';
+
+    private static bool $triggered = false;
+
+    /** @var (callable(): void)|null */
+    public static $onFirstResponseWritten;
+
+    public function stream_open(string $path, string $mode, int $options, ?string &$openedPath): bool
+    {
+        return true;
+    }
+
+    public function stream_write(string $data): int
+    {
+        self::$buffer .= $data;
+
+        if (!self::$triggered && str_contains($data, '"id":1,"result"')) {
+            self::$triggered = true;
+            if (null !== self::$onFirstResponseWritten) {
+                (self::$onFirstResponseWritten)();
+            }
+        }
+
+        return strlen($data);
+    }
+
+    public function stream_flush(): bool
+    {
+        return true;
+    }
+
+    public function stream_eof(): bool
+    {
+        return true;
+    }
+
+    public function stream_read(int $count): string
+    {
+        return '';
+    }
+
+    /**
+     * @return array<int|string, int>
+     */
+    public function stream_stat(): array
+    {
+        return [];
+    }
+
+    public static function reset(): void
+    {
+        self::$buffer = '';
+        self::$triggered = false;
+        self::$onFirstResponseWritten = null;
+    }
+
+    public static function output(): string
+    {
+        return self::$buffer;
     }
 }
