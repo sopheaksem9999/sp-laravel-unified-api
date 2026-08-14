@@ -31,7 +31,33 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
 Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'])->group(function (): void {
 
+    /*
+     * Path segments this group registers as literals, which the dynamic
+     * `{table}` routes must never swallow.
+     *
+     * Without this, a request to a real endpoint using the wrong HTTP verb --
+     * e.g. `GET /mcp/schema`, where only POST is registered -- falls through to
+     * `{table}/{id}`, and the route binding reports `Dynamic Table [mcp] not
+     * found.` That sends people looking for an unregistered route instead of a
+     * method mismatch. Excluding the segment lets Laravel answer 405 for a real
+     * path with the wrong verb, and 404 for a genuinely unknown one.
+     *
+     * The lookahead matches the segment boundary (`/` or end of path) rather
+     * than using `$`: inside the compiled route regex `$` means end of the
+     * whole URI, so `(?!mcp$)` would still admit `mcp/schema`. Anchoring on the
+     * boundary also keeps a legitimately-named table such as `mcp_logs` working.
+     */
+    $reservedSegments = array_values(array_unique(array_filter([
+        'docs',
+        'mcp',
+        RecordConfigService::rpcPrefix(),
+    ], static fn($value): bool => is_string($value) && '' !== $value)));
+
     $tableWhere = '[a-zA-Z0-9_\-]+';
+    if ([] !== $reservedSegments) {
+        $escapedReserved = array_map(static fn(string $segment): string => preg_quote($segment, '/'), $reservedSegments);
+        $tableWhere = '(?!(?:' . implode('|', $escapedReserved) . ')(?:/|$))[a-zA-Z0-9_\-]+';
+    }
 
     $globalFunctionWhere = '(?!)';
     $configuredGlobalFunctions = array_keys(RecordConfigService::globalFunctions());

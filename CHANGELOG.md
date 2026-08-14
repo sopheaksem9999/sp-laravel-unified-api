@@ -4,6 +4,9 @@ All notable changes to `sp-laravel-api` will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **A request to a real endpoint with the wrong HTTP verb was reported as a missing dynamic table, sending people to debug route registration instead of the verb**: the `{table}` route pattern was the catch-all `[a-zA-Z0-9_\-]+`, so it matched any single path segment — including segments this package itself registers as literals (`docs`, `mcp`, and the configured `rpc` prefix). Because the dynamic CRUD routes are registered after those literals, a request that matched a literal path but not its method fell through to `{table}/{id}` and the route-model binding aborted with `Dynamic Table [mcp] not found.` (`CoreSpLaravelApiProvider`). Reported by a client whose agent tooling called `GET /api/v1/mcp/schema` when only `POST mcp/schema` is registered: the 404 named a missing table, so the reporter went looking for an unregistered route across two environments before filing, when the actual problem was the verb. `{table}` now carries a negative lookahead excluding those reserved segments, so Laravel answers `405 Method Not Allowed` for a real path with the wrong verb and a plain `404` for a genuinely unknown one. The lookahead is anchored on the segment boundary (`(?:/|$)`) rather than a bare `$`, because inside the compiled route regex `$` means end of the whole URI — `(?!mcp$)` would still have admitted `mcp/schema` — and boundary-anchoring also keeps a legitimately-named table such as `mcp_logs` routing normally. The `Dynamic Table [x] not found.` diagnostic is unchanged for an actual unknown table, which is the case it was written for. See `tests/Feature/ReservedRouteSegmentTest.php`.
+
 ## [0.4.88] - 2026-08-13
 
 ### Added
