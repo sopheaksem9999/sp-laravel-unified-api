@@ -51,6 +51,7 @@ This metadata is required for consistent indexing and retrieval by AI agents.
 ## Feature Docs
 
 - [Attachment Upload](/guide/feature-attachments-upload)
+- [Attachment Read-Time Resizing](/guide/feature-attachments-read-resizing)
 - [Attachment Linking](/guide/feature-attachments-linking)
 - [Attachment Visibility and Access](/guide/feature-attachments-visibility-access)
 - [Attachment Folder Management](/guide/feature-attachments-folders)

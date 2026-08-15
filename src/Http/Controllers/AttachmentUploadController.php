@@ -17,6 +17,12 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Gd\Driver;
+use Intervention\Image\Encoders\WebpEncoder;
+use Intervention\Image\Encoders\JpegEncoder;
+use Intervention\Image\Encoders\PngEncoder;
+use Intervention\Image\Encoders\GifEncoder;
+use Intervention\Image\Interfaces\EncoderInterface;
+use Intervention\Image\Interfaces\ImageInterface;
 use Sopheak\Core\Services\AttachmentAccessService;
 use Sopheak\Core\Services\AttachmentUrlService;
 use Sopheak\Core\Services\RecordService;
@@ -902,6 +908,188 @@ class AttachmentUploadController extends Controller
         return $this->serveFile($request, $id, false);
     }
 
+    /**
+     * Resolve read-time resize params from the query string.
+     *
+     * Returns null when no transformation should happen (feature disabled,
+     * no params sent, or non-image attachment), which keeps the legacy
+     * byte-for-byte serving path untouched. Returns a JsonResponse when
+     * params fail validation.
+     *
+     * @param array<string, mixed> $attachment
+     * @return array{width: int|null, height: int|null, fit: string, format: string}|JsonResponse|null
+     */
+    private function resolveReadResize(Request $request, array $attachment): array|JsonResponse|null
+    {
+        if (!(bool) config('attachments.read_resizing', false)) {
+            return null;
+        }
+
+        $mimeType = (string) ($attachment['mime_type'] ?? '');
+        if (!str_starts_with($mimeType, 'image/')) {
+            return null;
+        }
+
+        if (!$request->hasAny(['w', 'h', 'format', 'size_name'])) {
+            return null;
+        }
+
+        $width = $request->input('w');
+        $height = $request->input('h');
+        $fit = (string) $request->input('fit', 'contain');
+        $format = (string) $request->input('format');
+        $sizeName = (string) $request->input('size_name');
+
+        if ('' !== $sizeName) {
+            $configuredSizes = config('attachments.image_sizes', []);
+            if (!is_array($configuredSizes) || !isset($configuredSizes[$sizeName])) {
+                return RecordApiResponseService::errorWrapped('Unknown size_name', Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
+            $width = $configuredSizes[$sizeName]['w'] ?? $width;
+            $height = $configuredSizes[$sizeName]['h'] ?? $height;
+            $fit = (string) ($configuredSizes[$sizeName]['fit'] ?? $fit);
+        }
+
+        if (!in_array($fit, ['contain', 'crop'], true)) {
+            return RecordApiResponseService::errorWrapped('Invalid fit value', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $min = (int) config('attachments.read_resizing_min', 32);
+        $max = (int) config('attachments.read_resizing_max', 2000);
+
+        $width = $this->validateDimension($width, $min, $max);
+        $height = $this->validateDimension($height, $min, $max);
+
+        if ($width instanceof JsonResponse || $height instanceof JsonResponse) {
+            return $width instanceof JsonResponse ? $width : $height;
+        }
+
+        if (null === $width && null === $height) {
+            return null;
+        }
+
+        if ('' === $format) {
+            $format = 'jpg';
+        }
+
+        $allowedFormats = (array) config('attachments.read_resizing_formats', ['webp', 'jpg', 'jpeg', 'png', 'gif']);
+        if (!in_array($format, $allowedFormats, true)) {
+            return RecordApiResponseService::errorWrapped('Invalid format value', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        return [
+            'width' => $width,
+            'height' => $height,
+            'fit' => $fit,
+            'format' => $format,
+        ];
+    }
+
+    private function validateDimension(mixed $value, int $min, int $max): int|null|JsonResponse
+    {
+        if (null === $value || '' === $value) {
+            return null;
+        }
+
+        if (!is_numeric($value) || (int) $value < $min || (int) $value > $max) {
+            return RecordApiResponseService::errorWrapped(
+                sprintf('Dimension must be between %d and %d', $min, $max),
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+
+        return (int) $value;
+    }
+
+    /**
+     * @param array<string, mixed> $attachment
+     * @param array{width: int|null, height: int|null, fit: string, format: string} $resize
+     */
+    private function buildResizedResponse(array $attachment, array $resize): StreamedResponse|Response
+    {
+        $disk = $this->storageDisk((string) $attachment['disk']);
+        $path = (string) $attachment['path'];
+
+        $cacheKey = null;
+        $cachePath = null;
+        if ((bool) config('attachments.read_resize_cache', false)) {
+            $cacheDisk = $this->storageDisk((string) config('attachments.read_resize_cache_disk', 'public'));
+            $cacheKey = md5(implode('|', [
+                (string) ($attachment['id'] ?? $path),
+                (string) $resize['width'],
+                (string) $resize['height'],
+                $resize['fit'],
+                $resize['format'],
+                (string) $disk->lastModified($path),
+            ]));
+            $cachePath = 'attachments/resized/' . $cacheKey . '.' . $this->normalizeFormat($resize['format']);
+
+            if ($cacheDisk->exists($cachePath)) {
+                $ttlMinutes = max(1, (int) config('attachments.read_resize_cache_ttl_minutes', 10080));
+                if (Carbon::createFromTimestamp($cacheDisk->lastModified($cachePath))->greaterThanOrEqualTo(Carbon::now()->subMinutes($ttlMinutes))) {
+                    return $this->withCacheHeaders($cacheDisk->response($cachePath));
+                }
+            }
+        }
+
+        $manager = new ImageManager(new Driver());
+        $image = $this->decodeAttachmentImage($manager, $disk, $path);
+
+        if ('crop' === $resize['fit'] && $resize['width'] && $resize['height']) {
+            $image->cover($resize['width'], $resize['height']);
+        } else {
+            $image->scale(width: $resize['width'], height: $resize['height']);
+        }
+
+        $format = $this->normalizeFormat($resize['format']);
+        $mimeType = 'jpg' === $format ? 'image/jpeg' : 'image/' . $format;
+        $encoded = $image->encode($this->encoderForFormat($format));
+
+        if (null !== $cachePath && (bool) config('attachments.read_resize_cache', false)) {
+            $this->storageDisk((string) config('attachments.read_resize_cache_disk', 'public'))->put($cachePath, (string) $encoded);
+        }
+
+        return $this->withCacheHeaders(
+            response((string) $encoded, 200, ['Content-Type' => $mimeType])
+        );
+    }
+
+    private function decodeAttachmentImage(ImageManager $manager, FilesystemAdapter $disk, string $path): ImageInterface
+    {
+        try {
+            return $manager->decodePath($disk->path($path));
+        } catch (Exception) {
+            return $manager->decode((string) $disk->get($path));
+        }
+    }
+
+    private function normalizeFormat(string $format): string
+    {
+        return 'jpeg' === $format ? 'jpg' : $format;
+    }
+
+    private function encoderForFormat(string $format): EncoderInterface
+    {
+        return match ($format) {
+            'webp' => new WebpEncoder(),
+            'jpg' => new JpegEncoder(),
+            'png' => new PngEncoder(),
+            default => new GifEncoder(),
+        };
+    }
+
+    private function withCacheHeaders(Response $response): Response
+    {
+        $maxAge = (int) config('attachments.read_resize_cache_max_age', 0);
+        if ($maxAge > 0) {
+            $response->setPublic();
+            $response->setMaxAge($maxAge);
+        }
+
+        return $response;
+    }
+
     private function serveFile(Request $request, string $id, bool $inline): StreamedResponse|JsonResponse|Response
     {
         $tenantId = $this->resolveTenantId($request);
@@ -933,6 +1121,15 @@ class AttachmentUploadController extends Controller
         }
 
         if ($inline) {
+            $resize = $this->resolveReadResize($request, $attachment);
+            if ($resize instanceof JsonResponse) {
+                return $resize;
+            }
+
+            if (is_array($resize)) {
+                return $this->buildResizedResponse($attachment, $resize);
+            }
+
             $mimeType = (string) ($attachment['mime_type'] ?? 'application/octet-stream');
             $response = $disk->response((string) $attachment['path']);
             if (method_exists($response, 'header')) {

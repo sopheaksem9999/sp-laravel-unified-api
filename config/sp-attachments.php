@@ -49,6 +49,17 @@ return [
     | - image_sizes: Define predefined image sizes that can be requested during upload.
     |   If a client requests a size that is not defined here, it will be rejected
     |   unless you allow arbitrary sizes.
+    | - read_resizing: Opt-in image resizing on the {id}/view endpoint via query
+    |   params (w, h, fit, format, size_name). Disabled by default so existing
+    |   clients get byte-for-byte identical responses.
+    | - read_resizing_min/max: Dimension bounds for read-time resizing requests.
+    | - read_resizing_formats: Allowed output formats for read-time resizing.
+    | - read_resize_cache: When enabled, derived images are written to disk on
+    |   first request and served from disk afterwards.
+    | - read_resize_cache_disk: Disk used for derived image caching.
+    | - read_resize_cache_ttl_minutes: How long cached derived files remain valid.
+    | - read_resize_cache_max_age: Cache-Control max-age in seconds for resized
+    |   responses. 0 means no cache header is sent.
     |
     */
     'enabled' => true,
@@ -72,6 +83,14 @@ return [
         // 'thumbnail' => ['w' => 150, 'h' => 150, 'fit' => 'crop'],
         // 'medium' => ['w' => 800, 'h' => null, 'fit' => 'contain'],
     ],
+    'read_resizing' => false,
+    'read_resizing_min' => 32,
+    'read_resizing_max' => 2000,
+    'read_resizing_formats' => ['webp', 'jpg', 'jpeg', 'png', 'gif'],
+    'read_resize_cache' => false,
+    'read_resize_cache_disk' => 'public',
+    'read_resize_cache_ttl_minutes' => 10080, // one week
+    'read_resize_cache_max_age' => 0,
 
     /*
     |--------------------------------------------------------------------------
