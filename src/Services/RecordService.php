@@ -2707,6 +2707,11 @@ class RecordService
                 );
             }
 
+            // List and single-record shapes share filters (e.g. id=eq.X), so
+            // the shape must be part of the key. Without it, whichever shape
+            // is cached first is served to the other and the payload breaks.
+            $cacheKey .= ':shape:' . ($isArray ? 'list' : 'single');
+
             $cached = QueryCacheService::get($cacheKey);
             if (null !== $cached) {
                 return array_merge($cached, ['from_cache' => true, 'filters' => $filters, 'request' => $request]);
@@ -2910,6 +2915,12 @@ class RecordService
             $data = RecordApiResponseService::applyAttributes($data, $table, $tableSchema->attributes, $requestedCols);
         }
 
+        $recordCount = count($data);
+
+        if ($isArray === false) {
+            $data = $data[0] ?? [];
+        }
+
         if ($isCacheable && $cacheKey) {
             $cacheData = [
                 'data' => $data,
@@ -2918,7 +2929,7 @@ class RecordService
                 'cached_at' => TimeUtils::now()->toISOString(),
                 'tenant_enabled' => $tableSchema instanceof RecordTableType && $service->shouldApplyTenantId($tableSchema),
             ];
-            $ttl = $service->calculateOptimalCacheTTL($table, count($data), $effectiveSelectParam !== '');
+            $ttl = $service->calculateOptimalCacheTTL($table, $recordCount, $effectiveSelectParam !== '');
             QueryCacheService::put($cacheKey, self::cacheSafePayload($cacheData), $ttl);
         }
 
@@ -2933,10 +2944,6 @@ class RecordService
 
         if ($explainResult !== null) {
             $meta['debug']['explain'] = $explainResult;
-        }
-
-        if ($isArray === false) {
-            $data = $data[0] ?? [];
         }
 
         return [

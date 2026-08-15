@@ -89,8 +89,19 @@ The audit log automatically tracks request context by populating dedicated colum
 - `ip_address`: The IP address of the requester.
 - `user_agent`: The User-Agent string of the requester.
 - `request_id`: Extracted from the `X-Request-ID` header (if present) for request tracing across services.
+- `user_id`: The authenticated user at the time of the event.
+
+### Userstamps vs Audit Logs
+
+Audit logs are event history. Separately, business tables can carry
+**userstamp columns** (`created_by`, `created_by_id`, `updated_by`,
+`last_updated_by`, `last_updated_by_id`) that the package auto-fills with the
+authenticated user's ID on every create/update — answering "who owns this row?"
+on the row itself. The two are independent and both optional; see
+[Userstamps](/guide/feature-userstamps).
 
 ## Related Feature Docs
 
 - [Audit in Controller Flow](/guide/feature-audit-manual-controller)
 - [Audit in Dynamic Record API](/guide/feature-audit-record-hooks)
+- [Userstamps](/guide/feature-userstamps)

@@ -2,7 +2,15 @@
 
 All notable changes to `sp-laravel-api` will be documented in this file.
 
-## [Unreleased]
+## [0.4.90] - 2026-08-15
+
+### Added
+- **Opt-in read-time image resizing on the attachment view endpoint**: `GET /{api_prefix}/{attachment_prefix}/{id}/view` now accepts `w`, `h`, `fit`, `format`, and `size_name` query params to resize and re-encode images on the fly, gated behind `attachments.read_resizing` (default `false`, so existing clients get byte-for-byte identical responses). Dimensions are bounded by `attachments.read_resizing_min`/`_max` (defaults 32–2000; out-of-range values return 422), `format` is validated against `attachments.read_resizing_formats`, and `size_name` reuses the existing `attachments.image_sizes` map. Non-image attachments are always served untouched. Optional caching layers: `attachments.read_resize_cache_max_age` (> 0 adds `Cache-Control: public, max-age=N`) and `attachments.read_resize_cache` (write-back caching of derived files on `attachments.read_resize_cache_disk` with `read_resize_cache_ttl_minutes`). Uses the package's existing intervention/image dependency, so it works on Laravel 12 and 13 alike. See `docs/guide/features/feature-attachments-read-resizing.md`.
+- **New docs**: own-records scoping section in the permission guide, a userstamps reference page (`feature-userstamps.md`) covering `created_by`/`created_by_id`/`updated_by`/`last_updated_by`/`last_updated_by_id`, and audit/userstamps cross-links. The Laravel Boost skill (`sp-laravel-api-development`) now instructs agents to read the shipped docs guide before source code.
+
+### Fixed
+- **`viewOwn` own-record scoping hardcoded `created_by` and threw 500 for tables using `created_by_id`**: the own-records permission pass in `QueryBuilderFiltersUtils::apply()` always added `WHERE {table}.created_by = {user}` even though the package's own userstamp write path auto-fills `created_by_id` when a table declares it (and the docs list it among the detected audit columns). A table declaring only `created_by_id` therefore got its rows stamped correctly on write, then blew up with `SQLSTATE[42703]: Undefined column` on every list request by a `viewOwn:*` holder. The scoping pass now resolves the owner column from the table's declared schema — `created_by_id` when present, `created_by` as the legacy fallback — and skips scoping entirely when neither exists instead of erroring. See `tests/Feature/OwnRecordsScopingTest.php`.
+- **Single-record reads cached the wrong shape and broke cache-hit serving**: `RecordService::applyRequestFilters()` stored `data` in the query cache *before* applying the `$isArray=false` narrowing, so the first request (a list) poisoned the cache and later single-record reads (e.g. `AttachmentUploadController::serveFile`) received a one-element list instead of the record itself, producing "Undefined array key" errors on cache hits while cache misses worked. The narrowing now happens before the cache write, and the cache key carries a `:shape:list|single` discriminator so the two response shapes can never share an entry. Stale list/single entries from previous versions expire naturally via TTL; `php artisan cache:clear` removes them immediately.
 
 ## [0.4.89] - 2026-08-14
 

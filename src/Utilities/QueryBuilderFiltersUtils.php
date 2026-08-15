@@ -223,7 +223,13 @@ class QueryBuilderFiltersUtils
             }
 
             if ($shouldRestrictToOwn) {
-                $builder->where($table . '.created_by', Auth::user()->id);
+                $ownerColumn = in_array('created_by_id', $allowedCols, true)
+                    ? 'created_by_id'
+                    : (in_array('created_by', $allowedCols, true) ? 'created_by' : null);
+
+                if (null !== $ownerColumn) {
+                    $builder->where($table . '.' . $ownerColumn, Auth::user()->id);
+                }
             }
         }
 

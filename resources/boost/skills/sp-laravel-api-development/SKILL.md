@@ -16,6 +16,36 @@ Use this skill when you are adding or modifying:
 - Triggers, validators, audit logging
 - Query caching and invalidation
 
+## Read the docs FIRST — before reading source
+
+The package ships a docs guide under `vendor/sopheak/sp-laravel-api/docs/`.
+It documents features, config keys, auth flows, and gotchas that reading source
+alone can miss (or misread). **Always check the matching doc page before
+opening `src/` to debug or implement.**
+
+Routing map (task → doc to read first):
+
+| Task | Doc |
+|---|---|
+| Any attachment work (upload, view, download, folders, visibility, temp) | `docs/features/attachments.md` + `docs/guide/features/feature-attachments-*.md` |
+| Permissions / roles / auth flags / own-records scoping | `docs/guide/features/feature-permission.md` |
+| `created_by` / `updated_by` / userstamps | `docs/guide/features/feature-userstamps.md` |
+| Audit logging | `docs/features/audit-logging.md` + `docs/guide/features/feature-audit-*.md` |
+| Table/type config reference (`RecordTableType`, relationships) | `docs/guide/api/api-type-reference-and-examples.md` |
+| CRUD / filter / select / pagination behavior | `docs/guide/api/api-crud-operations.md` + `docs/guide/api/api-index.md` |
+| Tenancy | `docs/guide/records/record-tenancy.md` (if present) or grep docs for tenant |
+| Caching / invalidation | `docs/guide/records/record-cache.md` |
+| Triggers / hooks / validators | `docs/guide/records/record-hooks.md` + `docs/guide/api/api-config-validation-triggers.md` |
+| Response envelope / errors / rate limits | `docs/guide/api/api-errors-rate-security.md` |
+
+Rules:
+
+- If the doc exists for the task, read it before `src/` — it is the faster,
+  authoritative answer. Go to source only for what the doc doesn't cover.
+- If the doc and source disagree, **flag it** — docs should match the code.
+- When your change alters behavior, config keys, or endpoints, update the doc
+  in the same change (frontmatter + per `docs/docs-authoring-guide.md`).
+
 ## Key rules
 
 - Do not create standard CRUD routes or controllers. Configure tables/functions via `RecordTableType`.
@@ -77,15 +107,17 @@ Prefer the `sp-laravel-api` MCP tools over guessing at schema/endpoints:
 
 ## Debug a failing record request
 
-Follow this loop in order:
+Follow this loop in order — **docs before source**:
 
 1. **Reproduce the exact request** — method, path, query params, tenant headers (`X-Tenant-ID`), payload.
-2. Run `php artisan sp-laravel-api:validate` and fix any reported config issues.
-3. Confirm the table is registered — `php artisan sp-laravel-api:list-tables` (or `cache-status` if present); stale schema registry caches are a common cause.
-4. Inspect the endpoint's live schema via `sp_api_get_endpoint` (columns, relationship aliases, `isAuthRead`/`isAuthWrite`, `can*` flags).
-5. Replay via the exported collection (`sp-laravel-api:export-bruno` / `:export-postman`).
-6. Check the response against the `RecordApiResponseService` contract (`success`, `error_code`, `data`, `meta`).
-7. For auth/tenant 403s: walk the permission flow (`HasControllerHelpers::authorizeAction()` order), check `sp_api_list_permissions`, verify tenant resolution precedence (request attr → `record_context.tenant_id` → `X-Tenant-ID` header).
+2. **Read the doc for the failing area first** (see the routing map above). The doc usually names the config key, auth order, or gotcha directly; source diving without it wastes cycles and can mislead.
+3. Run `php artisan sp-laravel-api:validate` and fix any reported config issues.
+4. Confirm the table is registered — `php artisan sp-laravel-api:list-tables` (or `cache-status` if present); stale schema registry caches are a common cause.
+5. Inspect the endpoint's live schema via `sp_api_get_endpoint` (columns, relationship aliases, `isAuthRead`/`isAuthWrite`, `can*` flags).
+6. Replay via the exported collection (`sp-laravel-api:export-bruno` / `:export-postman`).
+7. Check the response against the `RecordApiResponseService` contract (`success`, `error_code`, `data`, `meta`).
+8. For auth/tenant 403s: walk the permission flow (`HasControllerHelpers::authorizeAction()` order), check `sp_api_list_permissions`, verify tenant resolution precedence (request attr → `record_context.tenant_id` → `X-Tenant-ID` header).
+9. **Only now read `src/`** — for whatever the doc + schema inspection didn't answer.
 
 ## Quality gates before done
 
@@ -98,6 +130,10 @@ composer test           # phpunit
 ```
 
 Fix any failures, then add/adjust tests and re-run until green.
+
+If behavior, config keys, or endpoints changed, update the matching docs page
+in the same change and run `composer docs:validate` — see the routing map
+above and `docs/docs-authoring-guide.md`.
 
 ## Caching mental model
 

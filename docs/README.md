@@ -51,6 +51,7 @@ This metadata is required for consistent indexing and retrieval by AI agents.
 ## Feature Docs
 
 - [Attachment Upload](/guide/feature-attachments-upload)
+- [Attachment Read-Time Resizing](/guide/feature-attachments-read-resizing)
 - [Attachment Linking](/guide/feature-attachments-linking)
 - [Attachment Visibility and Access](/guide/feature-attachments-visibility-access)
 - [Attachment Folder Management](/guide/feature-attachments-folders)
@@ -59,6 +60,7 @@ This metadata is required for consistent indexing and retrieval by AI agents.
 - [Audit in Dynamic Record API](/guide/feature-audit-record-hooks)
 - [Pagination (Page/Per Page)](/guide/feature-pagination-page-per-page)
 - [Record Data Types](/guide/feature-record-data-types)
+- [Userstamps (created_by / updated_by)](/guide/feature-userstamps)
 - [Record Trigger Functions](/guide/feature-record-trigger-functions)
 - [Record Type Config Examples](/guide/feature-record-types-config-examples)
 - [Record Hooks](/guide/record-hooks)
