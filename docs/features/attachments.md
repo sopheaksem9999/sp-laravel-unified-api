@@ -35,6 +35,7 @@ The attachment module provides dynamic endpoints for file management using `Reco
 
 - `POST /{api_prefix}/{attachment_prefix}/upload`
 - `POST /{api_prefix}/{attachment_prefix}/clone-temp`
+- `GET /{api_prefix}/{attachment_prefix}/{id}/view` (optional read-time resizing)
 - `GET /{api_prefix}/{attachment_prefix}/{id}/download`
 - `GET|POST /{api_prefix}/{attachment_prefix}/record/{table}/{record_id}`
 - `DELETE /{api_prefix}/{attachment_prefix}/record/{table}/{record_id}/{attachment_id}`
@@ -44,6 +45,7 @@ The attachment module provides dynamic endpoints for file management using `Reco
 ## Related Feature Docs
 
 - [Attachment Upload](/guide/feature-attachments-upload)
+- [Attachment Read-Time Resizing](/guide/feature-attachments-read-resizing)
 - [Attachment Linking](/guide/feature-attachments-linking)
 - [Attachment Visibility and Access](/guide/feature-attachments-visibility-access)
 - [Attachment Folder Management](/guide/feature-attachments-folders)

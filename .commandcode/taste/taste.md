@@ -1,0 +1,5 @@
+- Prefers concrete, opinionated recommendations (a single suggested approach) over open-ended or balanced pros/cons analysis. Confidence: 0.8
+- Prioritizes backward compatibility: wants changes that don't break existing clients (opt-in flags, additive params, byte-for-byte identical default behavior). Confidence: 0.9
+- Prefers to have the implementation approach written out as a plan (plan mode / plan file) and reviewed before code changes are made. Confidence: 0.7
+- Communicates in short, terse directives (e.g., "resume", "write all in plan", "what is your suggestion?"); expects the agent to infer intent and act without requiring verbose clarification. Confidence: 0.6
+- Keeps documentation and CHANGELOG in sync with code: expects feature work to ship with updated docs (new feature pages, overview/README link updates, CHANGELOG entries), authored per the project's docs-authoring guide and validated with the docs validator. Confidence: 0.7
