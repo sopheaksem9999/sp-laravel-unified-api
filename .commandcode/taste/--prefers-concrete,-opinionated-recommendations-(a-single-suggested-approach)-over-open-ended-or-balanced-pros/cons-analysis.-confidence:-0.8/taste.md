@@ -1,3 +1,4 @@
+# - Prefers concrete, opinionated recommendations (a single suggested approach) over open-ended or balanced pros/cons analysis. Confidence: 0.8
 - Prefers concrete, opinionated recommendations (a single suggested approach) over open-ended or balanced pros/cons analysis. Confidence: 0.8
 - Prioritizes backward compatibility: wants changes that don't break existing clients (opt-in flags, additive params, byte-for-byte identical default behavior). Confidence: 0.9
 - Prefers to have the implementation approach written out as a plan (plan mode / plan file) and reviewed before code changes are made. Confidence: 0.7
