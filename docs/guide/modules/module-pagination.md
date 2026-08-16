@@ -48,16 +48,30 @@ X-Total-Pages: 50
 
 Cursor (keyset) pagination provides **O(1) performance** per page regardless of how many total rows exist. Default sort: `created_at DESC` (same as offset pagination).
 
+**The cursor always pages on the column the list is sorted by.** `sortby` therefore
+drives the cursor, and `meta.cursor_column` reports the column in use:
+
 ```bash
 # First page — send empty cursor
 GET /api/v1/invoices?cursor=&direction=next&per_page=25
 
-# Subsequent pages — use the cursor value from the previous response
-GET /api/v1/invoices?cursor=1025&direction=next&per_page=25
+# Subsequent pages — pass back the cursor from the previous response
+GET /api/v1/invoices?cursor=<meta.cursor>&direction=next&per_page=25
 
-# Override cursor column
-GET /api/v1/invoices?cursor=1025&direction=next&cursor_column=id
+# sortby drives the cursor: this pages on total, not on the primary key
+GET /api/v1/invoices?sortby=total&order=desc&per_page=25
+
+# Override the paging column explicitly
+GET /api/v1/invoices?cursor=<meta.cursor>&direction=next&cursor_column=id
 ```
+
+::: warning Treat `meta.cursor` as an opaque token
+When the paging column is not the primary key, the cursor encodes **both** the
+sort value and a tie-breaking key, so it is a token (`c1.…`) rather than a
+readable value. Pass it back verbatim; do not parse it, and do not construct one
+by hand. Paging on the primary key still returns the plain key value, and a bare
+scalar cursor from an older release is still accepted.
+:::
 
 ### Sort vs Operator
 
@@ -73,7 +87,7 @@ GET /api/v1/invoices?cursor=1025&direction=next&cursor_column=id
 ```json
 {
   "meta": {
-    "cursor": "2026-05-15 10:30:00",
+    "cursor": "c1.eyJ2IjoiMjAyNi0wNS0xNSAxMDozMDowMCIsImsiOjEwMjV9",
     "direction": "next",
     "cursor_column": "created_at",
     "total": 1240,
@@ -83,6 +97,7 @@ GET /api/v1/invoices?cursor=1025&direction=next&cursor_column=id
 }
 ```
 
+- `cursor` — pass back verbatim. A token when paging on a non-key column, the plain key value when paging on the primary key
 - `first_cursor` — `null`; send `cursor=` for the first page
 - `last_cursor` — computed via O(per_page) query; sends you to the final page. Omitted when `total=false`, `skip_total=true`, or `boundary_cursors=false`
 - `total` — full matching count. Omitted with `total=false` or `skip_total=true`
@@ -103,14 +118,37 @@ X-Cursor: 1025
 
 | Parameter | Default | Description |
 |---|---|---|
-| `cursor` | — | The cursor value (typically the last record's primary key from the previous page) |
+| `cursor` | — | The opaque cursor token returned as `meta.cursor` by the previous page |
 | `direction` | `next` | `next` or `prev` |
-| `cursor_column` | `id` | Column to cursor on. Automatically uses composite cursors when column differs from primary key |
+| `cursor_column` | the sorted column | Column to cursor on. Defaults to whatever `sortby` resolved to — `created_at` when the table has one, otherwise the primary key. Automatically uses composite cursors when the column differs from the primary key |
 | `per_page` | 25 | Page size (capped at `per_page_max`) |
 
 ### Composite Cursors
 
-When `cursor_column` differs from the primary key (e.g., sorting by `created_at`), the query builder automatically generates a composite cursor using `WHERE (cursor_col, id) > (?, ?)` to ensure stable ordering across non-unique sort values.
+When the paging column differs from the primary key (e.g. sorting by
+`created_at`), rows can share a cursor value, so the key is added as a
+tie-break and the comparison becomes:
+
+```sql
+WHERE created_at < :cursor_created_at
+   OR (created_at = :cursor_created_at AND id < :cursor_id)
+```
+
+Both operands come from the cursor token, and both comparisons are strict — an
+inclusive tie-break would re-serve the row that ended the previous page. The
+ordering is `ORDER BY created_at, id` on every page, including the first, since
+keyset paging needs a total order for rows tied on the sort column.
+
+This is why the cursor is a token: it has to carry `created_at` *and* `id`. Turn
+it off with `pagination.cursor.composite_enabled => false` if you need plain
+scalar cursors, at the cost of rows tied on the sort column being unstable
+across page boundaries.
+
+::: tip Declare the column you page on
+`cursor_column` and `sortby` are both validated against the table config's
+`columns`. A column missing there cannot be paged on — see
+[CRUD Operations](/guide/api/api-crud-operations) for the sorting rules.
+:::
 
 ## Total Count Control (`?total=true|false`)
 

@@ -1457,9 +1457,19 @@ class QueryBuilderFiltersUtils
     }
 
     /**
-     * Apply sorting to the query builder.
+     * Resolve the column and direction a list request will actually be ordered by.
+     *
+     * Split out of {@see self::applySort()} so that anything which has to agree
+     * with the applied ordering can ask for it instead of re-deriving it.
+     * Cursor pagination in particular *must* page on the column the rows are
+     * ordered by; when it computed its own column independently the two
+     * disagreed and page 2 was neither a continuation nor an error (reported
+     * 2026-08-16: `?sortby=created_at` ordered page 1 by `created_at` while the
+     * returned cursor was the last row's `id`).
+     *
+     * @return array{column: string, direction: string}
      */
-    public static function applySort(Builder $builder, Request $request, string $table, string $defaultOrderBy = 'id'): void
+    public static function resolveSort(Request $request, string $table, string $defaultOrderBy = 'id'): array
     {
         $allowedCols = self::getAllowedColumns($table);
 
@@ -1470,11 +1480,11 @@ class QueryBuilderFiltersUtils
             $sortByParam = in_array('created_at', $allowedCols, true) ? 'created_at' : $defaultOrderBy;
         }
 
-        $sortOrder = strtolower($request->query('order', 'desc'));
-        $sortOrder = in_array($sortOrder, ['asc', 'desc']) ? $sortOrder : 'desc';
+        $sortOrder = strtolower((string) $request->query('order', 'desc'));
+        $sortOrder = in_array($sortOrder, ['asc', 'desc'], true) ? $sortOrder : 'desc';
 
         // support table-qualified input like table.column
-        $requestedCol = $sortByParam;
+        $requestedCol = (string) $sortByParam;
         if (str_contains($requestedCol, '.')) {
             $parts = explode('.', $requestedCol);
             $requestedCol = end($parts);
@@ -1488,7 +1498,17 @@ class QueryBuilderFiltersUtils
             }
         }
 
-        $builder->orderBy($table . '.' . $requestedCol, $sortOrder);
+        return ['column' => $requestedCol, 'direction' => $sortOrder];
+    }
+
+    /**
+     * Apply sorting to the query builder.
+     */
+    public static function applySort(Builder $builder, Request $request, string $table, string $defaultOrderBy = 'id'): void
+    {
+        $sort = self::resolveSort($request, $table, $defaultOrderBy);
+
+        $builder->orderBy($table . '.' . $sort['column'], $sort['direction']);
     }
 
     /**

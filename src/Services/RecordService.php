@@ -1815,10 +1815,21 @@ class RecordService
         $maxPerPage = RecordConfigService::perPageMax();
         $perPage = max(1, min((int) $request->input('per_page', RecordConfigService::limitMax()), $maxPerPage));
 
-        $cursor = $request->input('cursor');
         $direction = $request->input('direction', 'next');
-        $cursorColumn = $request->input('cursor_column', RecordConfigService::cursorDefaultColumn());
+
+        $sortColumn = $this->resolveSortColumnForCursor($builder, $request);
+        $cursorColumn = $this->resolveCursorColumn($request, $sortColumn);
         $isUuidColumn = $this->detectUuidCursorColumn($builder, $cursorColumn);
+
+        // A composite cursor only means anything when the paging column is not
+        // already unique — on the primary key the simple comparison is exact.
+        $useComposite = RecordConfigService::cursorCompositeEnabled() && $cursorColumn !== $primaryKey;
+
+        // A cursor issued for a composite page carries both components; a plain
+        // scalar (a legacy token, or one of the boundary cursors below) yields a
+        // null key and falls back to the simple comparison.
+        [$cursor, $cursorKey] = $this->decodeCursor($request->input('cursor'));
+
         // First page has no cursor filter — use null so frontend sends cursor=
         $firstCursorDefault = null;
 
@@ -1861,15 +1872,23 @@ class RecordService
         if ($isUuidColumn && $hasCursor && (!is_string($cursor) || !preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $cursor))) {
             $hasCursor = false;
             $cursor = null;
+            $cursorKey = null;
+        }
+
+        // Default sort: created_at DESC (matches applySort behavior)
+        $sortOrder = $request->input('order', 'desc');
+        $sortOrder = in_array(strtolower((string) $sortOrder), ['asc', 'desc'], true) ? strtolower((string) $sortOrder) : 'desc';
+
+        // Whatever decides the paging column also has to decide the order, or
+        // page 1 is sorted one way and continued another. applySort() has
+        // already ordered by $sortColumn, so the ordering only needs rebuilding
+        // when the cursor pages on something else, or when a cursor filter is
+        // being applied on top of it.
+        if ($hasCursor || $cursorColumn !== $sortColumn) {
+            $builder->reorder()->orderBy($cursorColumn, $sortOrder);
         }
 
         if ($hasCursor) {
-            $builder->reorder();
-
-            // Default sort: created_at DESC (matches applySort behavior)
-            $sortOrder = $request->input('order', 'desc');
-            $sortOrder = in_array(strtolower((string) $sortOrder), ['asc', 'desc'], true) ? strtolower((string) $sortOrder) : 'desc';
-
             // Cursor operator depends on sort direction:
             // ASC + next → >  |  ASC + prev → <
             // DESC + next → <  |  DESC + prev → >
@@ -1881,20 +1900,27 @@ class RecordService
                 default => '>',
             };
 
-            if (RecordConfigService::cursorCompositeEnabled() && $cursorColumn !== $primaryKey) {
-                $builder->where(function ($q) use ($cursorColumn, $primaryKey, $cursor, $cursorOperator): void {
+            if ($useComposite && null !== $cursorKey) {
+                // The tie-break compares the key against the *key* component of
+                // the cursor, and does so strictly: an inclusive >=/<= re-serves
+                // the row that ended the previous page.
+                $builder->where(function ($q) use ($cursorColumn, $primaryKey, $cursor, $cursorKey, $cursorOperator): void {
                     $q->where($cursorColumn, $cursorOperator, $cursor)
-                        ->orWhere(function ($q2) use ($cursorColumn, $primaryKey, $cursor, $cursorOperator): void {
+                        ->orWhere(function ($q2) use ($cursorColumn, $primaryKey, $cursor, $cursorKey, $cursorOperator): void {
                             $q2->where($cursorColumn, '=', $cursor)
-                                ->where($primaryKey, $cursorOperator === '>' ? '>=' : '<=', $cursor);
+                                ->where($primaryKey, $cursorOperator, $cursorKey);
                         });
                 });
-                $builder->orderBy($cursorColumn, $sortOrder)
-                    ->orderBy($primaryKey, $sortOrder);
             } else {
-                $builder->where($cursorColumn, $cursorOperator, $cursor)
-                    ->orderBy($cursorColumn, $sortOrder);
+                $builder->where($cursorColumn, $cursorOperator, $cursor);
             }
+        }
+
+        // Keyset paging needs a total order. Without the key as a tie-break,
+        // rows sharing a cursor value are ordered arbitrarily by the database
+        // and can be skipped or repeated across pages.
+        if ($useComposite) {
+            $builder->orderBy($primaryKey, $sortOrder);
         }
 
         $data = $builder->limit($perPage)->get()->all();
@@ -1902,7 +1928,12 @@ class RecordService
         $nextCursor = null;
         if (count($data) > 0) {
             $lastRow = $data[count($data) - 1];
-            $nextCursor = $lastRow->{$cursorColumn} ?? null;
+            $cursorValue = $lastRow->{$cursorColumn} ?? null;
+            $keyValue = $lastRow->{$primaryKey} ?? null;
+
+            $nextCursor = $useComposite && null !== $cursorValue && null !== $keyValue
+                ? $this->encodeCursor($cursorValue, $keyValue)
+                : $cursorValue;
         }
 
         $headers['X-Cursor'] = (string) ($nextCursor ?? '');
@@ -1916,6 +1947,110 @@ class RecordService
         ];
 
         return [$data, $meta, $headers, $total];
+    }
+
+    /**
+     * The column {@see QueryBuilderFiltersUtils::applySort()} has ordered this
+     * query by, so the cursor can page on the same column instead of guessing.
+     */
+    private function resolveSortColumnForCursor(Builder $builder, Request $request): string
+    {
+        $table = is_string($builder->from) ? $builder->from : '';
+        if ('' === $table) {
+            return RecordConfigService::cursorDefaultColumn();
+        }
+
+        return QueryBuilderFiltersUtils::resolveSort(
+            $request,
+            $table,
+            RecordConfigService::cursorDefaultColumn()
+        )['column'];
+    }
+
+    /**
+     * Decide which column the cursor pages on.
+     *
+     * In precedence order:
+     *  1. an explicit `cursor_column` on the request;
+     *  2. an explicitly configured `pagination.cursor.default_column`, when it
+     *     is something other than the shipped `id` default;
+     *  3. the column the results are actually sorted by.
+     *
+     * Rule 3 is the fix for the reported bug: the cursor used to default to the
+     * primary key regardless of `sortby`, so a list sorted by `created_at` was
+     * continued from an `id`. It also makes `created_at` the effective default
+     * paging column for any table that has one — resolveSort() already prefers
+     * it — while tables without timestamps still fall back to the primary key,
+     * which a flat config default could not do.
+     */
+    private function resolveCursorColumn(Request $request, string $sortColumn): string
+    {
+        $requested = $request->input('cursor_column');
+        if (is_string($requested) && '' !== trim($requested)) {
+            return trim($requested);
+        }
+
+        $configured = config('record.pagination.cursor.default_column');
+        if (is_string($configured) && '' !== trim($configured) && 'id' !== trim($configured)) {
+            return trim($configured);
+        }
+
+        return $sortColumn;
+    }
+
+    /**
+     * Marks a cursor that carries both a sort value and a tie-breaking key.
+     *
+     * Versioned so the encoding can change without silently misreading tokens
+     * already held by clients.
+     */
+    private const CURSOR_COMPOUND_PREFIX = 'c1.';
+
+    /**
+     * Encode a cursor value together with its tie-breaking key.
+     *
+     * A composite cursor needs both components, and the single scalar the API
+     * used to return could not carry them — which is why the tie-break ended up
+     * comparing the primary key against a timestamp.
+     */
+    private function encodeCursor(mixed $cursorValue, mixed $keyValue): string
+    {
+        $json = json_encode(['v' => $cursorValue, 'k' => $keyValue]);
+        if (!is_string($json)) {
+            return (string) $cursorValue;
+        }
+
+        return self::CURSOR_COMPOUND_PREFIX . rtrim(strtr(base64_encode($json), '+/', '-_'), '=');
+    }
+
+    /**
+     * Split a cursor into its value and key components.
+     *
+     * Anything that is not a compound token — a cursor issued by an older
+     * version, a boundary cursor, or a hand-written one — comes back with a null
+     * key, which routes the caller to the simple exclusive comparison rather
+     * than the composite branch.
+     *
+     * @return array{0: mixed, 1: mixed}
+     */
+    private function decodeCursor(mixed $cursor): array
+    {
+        if (!is_string($cursor) || !str_starts_with($cursor, self::CURSOR_COMPOUND_PREFIX)) {
+            return [$cursor, null];
+        }
+
+        $encoded = substr($cursor, strlen(self::CURSOR_COMPOUND_PREFIX));
+        $binary = base64_decode(strtr($encoded, '-_', '+/'), true);
+        if (false === $binary) {
+            return [$cursor, null];
+        }
+
+        $decoded = json_decode($binary, true);
+        if (!is_array($decoded) || !array_key_exists('v', $decoded) || !array_key_exists('k', $decoded)) {
+            return [$cursor, null];
+        }
+
+        return [$decoded['v'], $decoded['k']];
     }
 
     /**
