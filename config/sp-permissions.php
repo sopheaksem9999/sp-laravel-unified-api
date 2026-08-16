@@ -150,6 +150,10 @@ return [
                 'group' => ['type' => 'string', 'nullable' => true],
                 'guard_name' => ['type' => 'string', 'nullable' => false],
                 'description' => ['type' => 'text', 'nullable' => true],
+                // Created by $table->timestamps() in the migration; declaring
+                // them is what makes them sortable and filterable.
+                'created_at' => ['type' => 'datetime', 'nullable' => true],
+                'updated_at' => ['type' => 'datetime', 'nullable' => true],
             ],
             relationships: [
                 'roles' => new RecordMetaBelongsToManyType(
@@ -186,6 +190,8 @@ return [
                     'is_system' => ['type' => 'boolean', 'nullable' => false, 'default' => false],
                     'is_master' => ['type' => 'boolean', 'nullable' => false, 'default' => false],
                     'is_default' => ['type' => 'boolean', 'nullable' => false, 'default' => false],
+                    'created_at' => ['type' => 'datetime', 'nullable' => true],
+                    'updated_at' => ['type' => 'datetime', 'nullable' => true],
                 ],
                 config('record.enable_tenant_id', false)
                     ? [config('record.tenant_column', 'tenant_id') => ['type' => 'string', 'nullable' => true]]

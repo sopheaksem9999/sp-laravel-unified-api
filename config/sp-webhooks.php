@@ -51,6 +51,10 @@ return [
                 'url' => ['type' => 'string', 'nullable' => false],
                 'secret' => ['type' => 'string', 'nullable' => false],
                 'is_active' => ['type' => 'boolean', 'nullable' => false],
+                // Created by $table->timestamps() in the migration; declaring
+                // them is what makes them sortable and filterable.
+                'created_at' => ['type' => 'datetime', 'nullable' => true],
+                'updated_at' => ['type' => 'datetime', 'nullable' => true],
             ],
         ),
         'sp_webhook_subscriptions' => new RecordTableType(
@@ -66,6 +70,8 @@ return [
                 'endpoint_id' => ['type' => 'string', 'nullable' => false],
                 'table_name' => ['type' => 'string', 'nullable' => false],
                 'event' => ['type' => 'string', 'nullable' => false],
+                'created_at' => ['type' => 'datetime', 'nullable' => true],
+                'updated_at' => ['type' => 'datetime', 'nullable' => true],
             ],
         ),
         'sp_webhook_deliveries' => new RecordTableType(
@@ -84,6 +90,8 @@ return [
                 'response_status' => ['type' => 'integer', 'nullable' => true],
                 'response_body' => ['type' => 'string', 'nullable' => true],
                 'status' => ['type' => 'string', 'nullable' => false],
+                'created_at' => ['type' => 'datetime', 'nullable' => true],
+                'updated_at' => ['type' => 'datetime', 'nullable' => true],
             ],
         ),
     ],

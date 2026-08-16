@@ -368,8 +368,9 @@ Full relationship examples and payload guides: https://sp-laravel-api-docs.verce
 ### Pagination
 - **Traditional**: `page=1&per_page=25` (offset-based for small datasets)
 - **Cursor-Based**: `cursor=12345&direction=next` (high-performance for large datasets — use when cursor parameter present, or when `pagination.default_mode=cursor`)
-- **Custom Cursor**: `cursor_column=created_at` (use different cursor column; configurable default via `pagination.cursor.default_column`)
-- **Composite**: `composite_cursor=true&sortby=created_at` (multi-column cursors; configurable via `pagination.cursor.composite_enabled`)
+- **Cursor follows the sort**: the cursor pages on whatever column the list is sorted by, so `sortby=created_at` pages on `created_at`. `meta.cursor_column` reports it. Pass `meta.cursor` back **verbatim** — when paging on a non-key column it is an opaque token (`c1.…`) carrying both the sort value and a tie-breaking key, not a readable value.
+- **Custom Cursor**: `cursor_column=created_at` (override the paging column; configurable default via `pagination.cursor.default_column`)
+- **Composite**: multi-column cursors are applied automatically when the paging column is not the primary key, so rows sharing a sort value are neither repeated nor skipped (toggle via `pagination.cursor.composite_enabled`)
 - **Total Control**: `total=false` omits the total count query for performance; `total=true` includes totals even when `pagination.skip_total_default=true`. Legacy `skip_total=true` remains supported.
 - **Limits**: `per_page` max ' . $maxPerPage . ', default 25
 - **Configured defaults**: `record.pagination.default_mode` = `' . $defaultPaginationMode . '` (cursor default column: `' . $defaultCursorColumn . '`, composite cursors: ' . ($compositeCursorsEnabled ? 'enabled' : 'disabled') . ', `record.pagination.skip_total_default` = ' . ($skipTotalDefault ? 'true' : 'false') . ')
@@ -1125,8 +1126,8 @@ Accepts an array of IDs or an array of objects with the primary key.
                     'name' => 'cursor_column',
                     'in' => 'query',
                     'required' => false,
-                    'description' => sprintf('Column to use for cursor pagination (default: `%s`). Only used with `cursor`.', $defaultCursorColumn),
-                    'schema' => ['type' => 'string', 'default' => $defaultCursorColumn],
+                    'description' => sprintf('Column to use for cursor pagination. Defaults to the column the list is sorted by (whatever `sortby` resolves to — `created_at` when the table has one, otherwise the primary key), so the cursor always continues the applied ordering. Falls back to the configured `%s` when neither applies.', $defaultCursorColumn),
+                    'schema' => ['type' => 'string'],
                 ],
                 [
                     'name' => 'total',

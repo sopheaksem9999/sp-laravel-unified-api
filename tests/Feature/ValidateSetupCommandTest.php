@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Tests\Feature;
 
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Tests\TestCase;
+use Sopheak\Core\Types\RecordTableType;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
 class ValidateSetupCommandTest extends TestCase
 {
@@ -158,5 +162,66 @@ class ValidateSetupCommandTest extends TestCase
         $this->artisan('sp-laravel-api:validate', ['--verbose' => true])
             ->expectsOutputToContain('Validating SP Laravel API Setup...')
             ->assertExitCode(1);
+    }
+
+    /**
+     * A config that declares fewer columns than its table has must be reported.
+     *
+     * The 2026-08-16 report was exactly this drift, and the only symptom was a
+     * list coming back in the wrong order — nothing anywhere said the sort had
+     * been discarded. This check is what makes the condition findable.
+     */
+    public function test_it_reports_a_column_declared_in_the_database_but_not_in_the_config(): void
+    {
+        $this->makeDriftTable(declareStatus: false);
+
+        $this->artisan('sp-laravel-api:validate')
+            ->expectsOutputToContain("Table 'validate_drift_notes' has columns not declared in its config: status")
+            ->run();
+    }
+
+    /** The same table validates clean once the config declares every column. */
+    public function test_it_reports_no_drift_when_the_config_declares_every_column(): void
+    {
+        $this->makeDriftTable(declareStatus: true);
+
+        $this->artisan('sp-laravel-api:validate')
+            ->doesntExpectOutputToContain("Table 'validate_drift_notes' has columns not declared")
+            ->run();
+    }
+
+    /**
+     * Register `validate_drift_notes` with a `status` column that exists in the
+     * database and is either declared in the config or deliberately left out.
+     */
+    private function makeDriftTable(bool $declareStatus): void
+    {
+        Schema::create('validate_drift_notes', function (Blueprint $table): void {
+            $table->id();
+            $table->string('body')->nullable();
+            $table->string('status')->nullable();
+        });
+
+        $columns = [
+            'id' => ['type' => 'integer', 'nullable' => false],
+            'body' => ['type' => 'string', 'nullable' => true],
+        ];
+
+        if ($declareStatus) {
+            $columns['status'] = ['type' => 'string', 'nullable' => true];
+        }
+
+        config()->set('record.tables', [
+            'validate_drift_notes' => new RecordTableType(
+                table: 'validate_drift_notes',
+                pmsName: 'validate_drift_notes',
+                hasTenantId: false,
+                softDeletes: false,
+                columns: $columns,
+                relationships: [],
+            ),
+        ]);
+
+        SchemaRegistryUtils::refresh();
     }
 }

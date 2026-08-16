@@ -41,6 +41,34 @@ Retrieve a paginated list of records with filtering, sorting, and relationship l
 - `sortby` (string) - Field to sort by
 - `order` (string: `asc`|`desc`) - Sort direction
 
+::: warning `sortby` only accepts columns declared in the table config
+Sorting, filtering, `select` and `group_by` all validate column names against
+the `columns` array of that table's `RecordTableType` — not against the database.
+A column that exists in the table but is missing from `columns` is **silently
+ignored**: the request still returns `200`, and the sort falls back to
+`created_at` (if declared) or the primary key. No error identifies the dropped
+parameter.
+
+So declare every column you want queryable, timestamps included:
+
+```php
+columns: [
+    'id' => ['type' => 'uuid', 'nullable' => false],
+    'title' => ['type' => 'string', 'nullable' => false],
+    'created_at' => ['type' => 'datetime', 'nullable' => true],
+    'updated_at' => ['type' => 'datetime', 'nullable' => true],
+],
+```
+
+Declaring the timestamps affects reads only — they stay server-managed and are
+still ignored in write payloads unless the table sets `overrideTimestamps: true`.
+As a safety net, `created_at`/`updated_at` are recovered automatically when the
+physical table has them but the config does not; **no other column is**, because
+omitting a column from `columns` is also how you deliberately keep it off the
+query surface. Run `php artisan sp-laravel-api:validate` to list any table whose
+config has drifted from its migration.
+:::
+
 **Limiting**
 
 - `limit` (integer, max: 1000) - Limit results (only applied when `per_page` is not provided)

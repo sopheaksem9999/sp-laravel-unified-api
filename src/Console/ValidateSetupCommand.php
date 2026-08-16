@@ -51,6 +51,7 @@ class ValidateSetupCommand extends Command
         $this->validateEnvironmentVariables();
         $this->validatePermissions();
         $this->validateSchemaRegistryUtils();
+        $this->validateColumnDrift();
         $this->validateRoutes();
         $this->validatePackageLimits();
         $this->validateRateLimiters();
@@ -271,6 +272,80 @@ class ValidateSetupCommand extends Command
             }
         } catch (Exception $exception) {
             $this->addResult('❌', 'Database compatibility check failed: ' . $exception->getMessage(), 'error');
+        }
+    }
+
+    /**
+     * Report table configs that declare fewer columns than the table actually has.
+     *
+     * A column missing from `columns` is not an error — it is how you keep a
+     * column out of the query surface on purpose. It is worth surfacing because
+     * the failure mode when it is *accidental* is silent: `columns` is the
+     * allow-list for sorting, filtering, `select` and `group_by`, so a
+     * `?sortby=<undeclared>` is discarded with no error and the query falls back
+     * to the default order. That is how the 2026-08-16 report reached a client —
+     * the shipped attachment configs had drifted from their own migrations and
+     * lists came back in primary-key order.
+     *
+     * `created_at`/`updated_at` are recovered automatically at query time (see
+     * QueryBuilderFiltersUtils::withRecoverableSystemColumns()), so they are
+     * reported here only as a nudge to make the config honest. Every other
+     * column is listed because nothing recovers it.
+     */
+    private function validateColumnDrift(): void
+    {
+        $this->info('🧭 Checking Config/Database Column Drift...');
+
+        try {
+            $tenantColumn = RecordConfigService::tenantColumn();
+            $checked = 0;
+            $drifted = 0;
+
+            foreach (SchemaRegistryUtils::get() as $table => $config) {
+                $tableName = (string) $table;
+                $declared = array_keys($config->columns ?? []);
+
+                if ([] === $declared) {
+                    continue;
+                }
+
+                $physical = array_keys(SchemaRegistryUtils::getTableColumns($tableName));
+                if ([] === $physical) {
+                    continue;
+                }
+
+                ++$checked;
+
+                // The tenant column is resolved server-side and is deliberately
+                // never part of the client-facing query surface.
+                $missing = array_values(array_diff($physical, $declared, [$tenantColumn]));
+                if ([] === $missing) {
+                    continue;
+                }
+
+                ++$drifted;
+                $this->addResult('⚠️', sprintf(
+                    "Table '%s' has columns not declared in its config: %s — these cannot be sorted or filtered on",
+                    $tableName,
+                    implode(', ', $missing)
+                ), 'warning');
+            }
+
+            if (0 === $checked) {
+                $this->addResult('ℹ️', 'No configured tables found in the database to compare', 'info');
+
+                return;
+            }
+
+            if (0 === $drifted) {
+                $this->addResult('✅', sprintf('All %d configured table(s) declare every column their table has', $checked), 'success');
+
+                return;
+            }
+
+            $this->addResult('ℹ️', 'Declare the columns you want queryable, or run: php artisan sp-laravel-api:sync-record-columns', 'info');
+        } catch (Exception $exception) {
+            $this->addResult('⚠️', 'Column drift check failed: ' . $exception->getMessage(), 'warning');
         }
     }
 
