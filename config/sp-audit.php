@@ -256,6 +256,11 @@ return [
                 'ip_address' => ['type' => 'string', 'nullable' => true],
                 'user_agent' => ['type' => 'string', 'nullable' => true],
                 'request_id' => ['type' => 'string', 'nullable' => true],
+                // Created by $table->timestamps() in the migration. Audit logs
+                // are read in time order, so an undeclared created_at made the
+                // default sort silently fall back to the primary key.
+                'created_at' => ['type' => 'datetime', 'nullable' => true],
+                'updated_at' => ['type' => 'datetime', 'nullable' => true],
             ],
             relationships: [
                 'user' => new \Sopheak\Core\Types\RecordBelongsToType(
