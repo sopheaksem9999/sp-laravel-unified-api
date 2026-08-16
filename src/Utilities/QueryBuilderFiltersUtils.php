@@ -43,6 +43,15 @@ class QueryBuilderFiltersUtils
         '<=' => 'lte',
     ];
 
+    /**
+     * Columns recovered from the physical table when a table config omits them.
+     * See {@see self::withRecoverableSystemColumns()} for why this list is
+     * deliberately this short.
+     *
+     * @var array<int, string>
+     */
+    private const RECOVERABLE_SYSTEM_COLUMNS = ['created_at', 'updated_at'];
+
     private static array $columnCache = [];
 
     private static array $operatorCache = [];
@@ -1490,7 +1499,10 @@ class QueryBuilderFiltersUtils
         // Cache allowed columns to avoid repeated schema lookups
         if (!isset(self::$columnCache[$table])) {
             $schema = SchemaRegistryUtils::get();
-            self::$columnCache[$table] = array_keys($schema[$table]->columns ?? []);
+            self::$columnCache[$table] = self::withRecoverableSystemColumns(
+                $table,
+                array_keys($schema[$table]->columns ?? [])
+            );
         }
 
         // If cache is set but empty, try fetching again if schema has columns
@@ -1498,11 +1510,67 @@ class QueryBuilderFiltersUtils
         if (empty(self::$columnCache[$table])) {
             $schema = SchemaRegistryUtils::get();
             if (isset($schema[$table]) && !empty($schema[$table]->columns)) {
-                self::$columnCache[$table] = array_keys($schema[$table]->columns);
+                self::$columnCache[$table] = self::withRecoverableSystemColumns(
+                    $table,
+                    array_keys($schema[$table]->columns)
+                );
             }
         }
 
         return self::$columnCache[$table];
+    }
+
+    /**
+     * Re-admit `created_at` / `updated_at` when a table config omits them but
+     * the physical table has them.
+     *
+     * A config that lags its migration used to degrade to *silent misordering*:
+     * this method's caller is the allow-list for sorting, filtering, `select`
+     * and `group_by`, so an undeclared `created_at` made both an explicit
+     * `?sortby=created_at` and applySort()'s own "prefer created_at" fallback
+     * miss, and the query quietly sorted by the primary key instead. On uuid
+     * keys that reads as unsorted. Reported 2026-08-16 against the shipped
+     * attachment configs, which declared no timestamps at all.
+     *
+     * Only these two columns are recovered, NOT every column present in the
+     * database. The config list is a deliberate allow-list: a table that omits
+     * `password_hash` or `api_secret` is relying on it to keep that column
+     * un-filterable, and a blanket schema fallback would turn every such column
+     * into a blind enumeration oracle via `?password_hash=starts_with.a`.
+     * Timestamps carry no equivalent risk — they are already returned in
+     * responses, already stripped from write payloads by
+     * RecordService::sanitizePayload(), already skipped by
+     * DefaultValidationUtils, and already excluded from the generated OpenAPI
+     * read and write schemas. Recovering them widens nothing that was not
+     * already public.
+     *
+     * The physical lookup runs only when a column is actually missing, so a
+     * correctly-declared table costs no extra query.
+     *
+     * @param  array<int, string> $declared
+     * @return array<int, string>
+     */
+    private static function withRecoverableSystemColumns(string $table, array $declared): array
+    {
+        if ([] === $declared) {
+            return $declared;
+        }
+
+        $missing = array_values(array_diff(self::RECOVERABLE_SYSTEM_COLUMNS, $declared));
+        if ([] === $missing) {
+            return $declared;
+        }
+
+        // Fails soft to [] on an unknown table or a broken connection, which
+        // just means nothing is recovered.
+        $physical = SchemaRegistryUtils::getTableColumns($table);
+        foreach ($missing as $column) {
+            if (array_key_exists($column, $physical)) {
+                $declared[] = $column;
+            }
+        }
+
+        return $declared;
     }
 
     public static function applyAggregateAndGroupBy(Builder $builder, Request $request, string $table): ?array

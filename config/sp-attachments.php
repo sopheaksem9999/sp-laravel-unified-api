@@ -129,6 +129,12 @@ return [
                 'size' => ['type' => 'integer', 'nullable' => false],
                 'visibility' => ['type' => 'string', 'nullable' => false],
                 'temp_timeout' => ['type' => 'datetime', 'nullable' => true],
+                // Created by $table->timestamps() in the migration. Declaring
+                // them is what makes ?sortby=created_at and created_at=gte.…
+                // work; they stay server-managed either way (overrideTimestamps
+                // is false, so write payloads are stripped of them).
+                'created_at' => ['type' => 'datetime', 'nullable' => true],
+                'updated_at' => ['type' => 'datetime', 'nullable' => true],
             ],
             functions: [
                 'upload' => new RecordFunctionType(
@@ -327,6 +333,8 @@ return [
                 'owner_type' => ['type' => 'string', 'nullable' => true],
                 'owner_id' => ['type' => 'string', 'nullable' => true],
                 'metadata' => ['type' => 'json', 'nullable' => true],
+                'created_at' => ['type' => 'datetime', 'nullable' => true],
+                'updated_at' => ['type' => 'datetime', 'nullable' => true],
             ],
         ),
         'sp_attachment_links' => new RecordTableType(
@@ -343,6 +351,8 @@ return [
                 'record_id' => ['type' => 'string', 'nullable' => false],
                 'record_type' => ['type' => 'string', 'nullable' => false],
                 'collection_name' => ['type' => 'string', 'nullable' => true],
+                'created_at' => ['type' => 'datetime', 'nullable' => true],
+                'updated_at' => ['type' => 'datetime', 'nullable' => true],
             ],
         ),
     ],
