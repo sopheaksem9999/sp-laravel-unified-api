@@ -2,6 +2,18 @@
 
 All notable changes to `sp-laravel-api` will be documented in this file.
 
+## [0.5.0] - 2026-08-17
+
+### Added
+- **Direct upload for attachments (opt-in)**: `create-upload-url` and `complete-upload` serverless-style functions on `sp_attachments`, gated behind `attachments.direct_upload.enabled` (default `false`, so existing clients are byte-for-byte unchanged). On S3/R2 disks `create-upload-url` returns a presigned PUT URL; on `local`/`public` disks it returns the existing server-side `complete-upload` multipart POST fallback. Issued uploads are bound to their completion by a stateless HMAC upload token (`upload_token` + `expires_at`) verified *before* any folder/record lookup, and completion keys must match the issued `{prefix}/{public|private}/YYYY/MM/DD/{uuid}.{ext}` pattern, so callers cannot claim arbitrary existing objects. Presigned-PUT objects over `attachments.max_upload_size` are rejected at completion (422, object deleted). Disk selection stays visibility-based via the new `AttachmentStorageService` (extracted verbatim from the controller): `disk_public` (e.g. `karunafilm-public`) / `disk_private` (e.g. `karunafilm-private`).
+- **S3/R2 multipart upload lifecycle (opt-in)**: `create-multipart-upload`, `sign-multipart-part`, `complete-multipart-upload`, and `abort-multipart-upload` for large files above `attachments.direct_upload.min_multipart_size_bytes` (default 100 MiB, configurable), isolated behind an `AttachmentMultipartDriver` contract with one `S3MultipartDriver` implementation (requires `aws/aws-sdk-php`, listed in `suggest`). Multipart completion takes the `upload_id` plus part ETags; object metadata (content type, size, ETag) is authoritative from `headObject` and the ETag is never persisted or returned. S3 errors surface as 422s, never raw 500s. The four functions disappear from routes/OpenAPI/exporters when direct upload is disabled.
+- **Signed private preview URLs (opt-in)**: `attachments.preview_url_enabled` (default `false`) adds a `preview_url` to private attachment responses — a short-lived (default 300 s, `attachments.preview_url_ttl_seconds`) HMAC-signed `/{api_prefix}/{attachment_prefix}/{id}/preview` URL that renders in `<img>`/`<video>` tags without Bearer headers. The signature is verified *before* any database lookup and excludes the path, so the endpoint is not an attachment-existence oracle (bad signature → 410, even for unknown ids).
+- **Docs**: S3/R2 two-bucket and single-bucket `root` disk configuration, bucket CORS policy, and the direct-upload/preview feature flags documented in `docs/guide/features/feature-attachments-visibility-access.md`.
+
+### Notes
+- Flysystem v3 `AwsS3V3Adapter` never wires `temporaryUploadUrl` for S3, so presigned PUTs are produced via the raw S3 client (`PutObject`), mirroring the multipart driver.
+- Known pre-existing gap: with `rpc_prefix=''` the package registers no route that can dispatch `{id}`-pattern functions (`{table}/{id}/preview` → 404); the existing `download`/`view` share this trait. Use the default `rpc_prefix='rpc'` for id-bearing attachment functions.
+
 ## [0.4.92] - 2026-08-16
 
 ### Fixed

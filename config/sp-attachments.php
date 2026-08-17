@@ -92,6 +92,15 @@ return [
     'read_resize_cache_ttl_minutes' => 10080, // one week
     'read_resize_cache_max_age' => 0,
 
+    'direct_upload' => [
+        'enabled' => false,
+        'presign_ttl_seconds' => 1800,
+        'min_multipart_size_bytes' => 104857600,
+        'storage_prefix' => 'attachments',
+    ],
+    'preview_url_enabled' => false,
+    'preview_url_ttl_seconds' => 300,
+
     /*
     |--------------------------------------------------------------------------
     | Attachment Tables Configuration
@@ -200,11 +209,141 @@ return [
                         ],
                     ]
                 ),
+                'create-upload-url' => new RecordFunctionType(
+                    httpMethod: [RecordFunctionMethodEnum::POST->value],
+                    class: AttachmentUploadController::class,
+                    functionName: 'createUploadUrl',
+                    description: 'Request a presigned upload URL for a direct browser upload',
+                    payloadSchema: [
+                        'type' => 'object',
+                        'properties' => [
+                            'filename' => ['type' => 'string'],
+                            'content_type' => ['type' => 'string'],
+                            'visibility' => ['type' => 'string'],
+                            'folder_id' => ['type' => 'string'],
+                        ],
+                        'required' => ['filename'],
+                    ]
+                ),
+                'complete-upload' => new RecordFunctionType(
+                    httpMethod: [RecordFunctionMethodEnum::POST->value],
+                    class: AttachmentUploadController::class,
+                    functionName: 'completeUpload',
+                    description: 'Persist an attachment after a direct upload',
+                    payloadSchema: [
+                        'type' => 'object',
+                        'properties' => [
+                            'key' => ['type' => 'string'],
+                            'upload_token' => ['type' => 'string'],
+                            'expires_at' => ['type' => 'integer'],
+                            'filename' => ['type' => 'string'],
+                            'content_type' => ['type' => 'string'],
+                            'visibility' => ['type' => 'string'],
+                            'file' => ['type' => 'string', 'format' => 'binary'],
+                        ],
+                        'required' => ['key', 'upload_token', 'expires_at'],
+                    ]
+                ),
+                'create-multipart-upload' => new RecordFunctionType(
+                    httpMethod: [RecordFunctionMethodEnum::POST->value],
+                    class: AttachmentUploadController::class,
+                    functionName: 'createMultipartUpload',
+                    description: 'Start an S3 multipart upload',
+                    disableCache: true,
+                    payloadSchema: [
+                        'type' => 'object',
+                        'properties' => [
+                            'filename' => ['type' => 'string'],
+                            'content_type' => ['type' => 'string'],
+                            'visibility' => ['type' => 'string'],
+                            'folder_id' => ['type' => 'string'],
+                        ],
+                        'required' => ['filename'],
+                    ]
+                ),
+                'sign-multipart-part' => new RecordFunctionType(
+                    httpMethod: [RecordFunctionMethodEnum::POST->value],
+                    class: AttachmentUploadController::class,
+                    functionName: 'signMultipartPart',
+                    description: 'Sign an S3 multipart part',
+                    disableCache: true,
+                    payloadSchema: [
+                        'type' => 'object',
+                        'properties' => [
+                            'key' => ['type' => 'string'],
+                            'upload_id' => ['type' => 'string'],
+                            'upload_token' => ['type' => 'string'],
+                            'expires_at' => ['type' => 'integer'],
+                            'part_number' => ['type' => 'integer'],
+                            'visibility' => ['type' => 'string'],
+                        ],
+                        'required' => ['key', 'upload_id', 'upload_token', 'expires_at', 'part_number'],
+                    ]
+                ),
+                'complete-multipart-upload' => new RecordFunctionType(
+                    httpMethod: [RecordFunctionMethodEnum::POST->value],
+                    class: AttachmentUploadController::class,
+                    functionName: 'completeMultipartUpload',
+                    description: 'Complete an S3 multipart upload',
+                    disableCache: true,
+                    payloadSchema: [
+                        'type' => 'object',
+                        'properties' => [
+                            'key' => ['type' => 'string'],
+                            'upload_id' => ['type' => 'string'],
+                            'upload_token' => ['type' => 'string'],
+                            'expires_at' => ['type' => 'integer'],
+                            'parts' => [
+                                'type' => 'array',
+                                'items' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'part_number' => ['type' => 'integer'],
+                                        'etag' => ['type' => 'string'],
+                                    ],
+                                ],
+                            ],
+                            'visibility' => ['type' => 'string'],
+                            'folder_id' => ['type' => 'string'],
+                            'filename' => ['type' => 'string'],
+                        ],
+                        'required' => ['key', 'upload_id', 'upload_token', 'expires_at', 'parts'],
+                    ]
+                ),
+                'abort-multipart-upload' => new RecordFunctionType(
+                    httpMethod: [RecordFunctionMethodEnum::POST->value],
+                    class: AttachmentUploadController::class,
+                    functionName: 'abortMultipartUpload',
+                    description: 'Abort an S3 multipart upload',
+                    disableCache: true,
+                    payloadSchema: [
+                        'type' => 'object',
+                        'properties' => [
+                            'key' => ['type' => 'string'],
+                            'upload_id' => ['type' => 'string'],
+                            'upload_token' => ['type' => 'string'],
+                            'expires_at' => ['type' => 'integer'],
+                            'visibility' => ['type' => 'string'],
+                        ],
+                        'required' => ['key', 'upload_id', 'upload_token', 'expires_at', 'visibility'],
+                    ]
+                ),
                 '{id}/download' => new RecordFunctionType(
                     httpMethod: [RecordFunctionMethodEnum::GET->value],
                     class: AttachmentUploadController::class,
                     functionName: 'download',
                     description: 'Download an attachment',
+                    responseSchema: [
+                        'type' => 'string',
+                        'format' => 'binary',
+                    ]
+                ),
+                '{id}/preview' => new RecordFunctionType(
+                    httpMethod: [RecordFunctionMethodEnum::GET->value],
+                    class: AttachmentUploadController::class,
+                    functionName: 'preview',
+                    isPublic: true,
+                    description: 'Serve an attachment inline using a signed preview URL',
                     responseSchema: [
                         'type' => 'string',
                         'format' => 'binary',

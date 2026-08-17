@@ -37,6 +37,80 @@ If a `private` attachment can be opened by concatenating `APP_URL` + `path`, it 
 
 For S3 (or any cloud disk), `public` attachments will typically return a bucket/CDN URL (via `disk->url()`), while `private` attachments should still return API-proxied URLs (`/view` and `/download`) so authentication + tenant scope + expiry checks are enforced.
 
+## R2 Configuration
+
+Cloudflare R2 uses Laravel's standard `s3` filesystem driver. Configure separate disks
+when public and private attachments use separate buckets:
+
+```php
+// config/filesystems.php
+'r2-public' => [
+    'driver' => 's3',
+    'key' => env('R2_PUBLIC_ACCESS_KEY'),
+    'secret' => env('R2_PUBLIC_SECRET'),
+    'region' => 'auto',
+    'bucket' => env('R2_PUBLIC_BUCKET', 'karunafilm-public'),
+    'endpoint' => env('R2_PUBLIC_ENDPOINT'),
+    'url' => env('R2_PUBLIC_URL'),
+    'use_path_style_endpoint' => true,
+],
+'r2-private' => [
+    'driver' => 's3',
+    'key' => env('R2_PRIVATE_ACCESS_KEY'),
+    'secret' => env('R2_PRIVATE_SECRET'),
+    'region' => 'auto',
+    'bucket' => env('R2_PRIVATE_BUCKET', 'karunafilm-private'),
+    'endpoint' => env('R2_PRIVATE_ENDPOINT'),
+    'use_path_style_endpoint' => true,
+],
+```
+
+```php
+// config/sp-attachments.php
+'disk_public' => 'r2-public',
+'disk_private' => 'r2-private',
+'direct_upload' => [
+    'enabled' => false,
+    'presign_ttl_seconds' => 1800,
+    'min_multipart_size_bytes' => 104857600, // 100 MiB
+],
+'preview_url_enabled' => false,
+'preview_url_ttl_seconds' => 300,
+```
+
+Bucket selection is based on visibility, not file type. Images and videos may use either
+bucket. The public and private buckets must be provisioned before integration testing.
+
+Apply this CORS policy to both buckets, replacing the origins with the approved dashboard
+and development origins:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://admin.karunafilm.example", "http://localhost:3000"],
+    "AllowedMethods": ["GET", "HEAD", "PUT", "POST"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag", "Content-Length", "Content-Type"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+CORS does not make the private bucket public. Private object access remains restricted to
+presigned requests or the package's signed preview/API endpoints.
+
+**Direct upload size limit:** S3 presigned `PUT` URLs cannot carry a `content-length-range`,
+so the object is uploaded to the bucket first and `max_upload_size` is enforced at
+`complete-upload` time: oversized objects are deleted and the attachment row is refused
+(422). Server-side `POST` fallback uploads are limited by the same `max_upload_size`
+validation rule on the file input. Multipart uploads (>= `min_multipart_size_bytes`) are
+bounded only by the bucket configuration, as agreed in the client contract.
+
+**Signed preview URL shape:** `{id}`-pattern functions are dispatched with the id inside
+the function name, e.g. `{api_prefix}/{route_prefix}/rpc/{id}/preview` under the default
+`rpc_prefix='rpc'`. A non-empty `rpc_prefix` is required for id-bearing attachment
+functions (`preview`, `download`, `view`).
+
 ## URL Strategy
 
 Use `attachments.url_strategy` to choose how the `url` field is generated:
