@@ -25,6 +25,7 @@ Homestead.yaml
 Homestead.json
 /.vagrant
 .phpunit.result.cache
+bootstrap/cache/
 comsp
 
 /caddy
@@ -42,3 +43,5 @@ build
 /.opencode
 .opencode/
 graphify-out/
+/Docs/bug-reports/
+/.commandcode

@@ -1,8 +1,10 @@
 ---
 title: "Architecture"
-description: "Architecture overview covering MCP endpoints, schema tools, and API client exporters."
+description: "Architecture overview: config-driven dynamic CRUD, MCP endpoints, and API client exporters."
 keywords:
   - architecture
+  - crud
+  - record-table-type
   - mcp
   - exporters
   - bruno
@@ -10,6 +12,39 @@ keywords:
 ---
 
 # Architecture
+
+## Core: Config-Driven Dynamic CRUD
+
+The package turns declarative table schemas into full CRUD APIs at runtime.
+
+- **Table schemas** are `RecordTableType` objects defined in `config/records/tables/*.php`
+- **Behaviour** is controlled by `config/record.php` (API prefix, auth, tenant, permissions, MCP)
+- **Orchestration**: `RecordService` performs the CRUD operations
+- **Response contract**: `RecordApiResponseService` normalizes every response to a single JSON shape
+- **Wiring**: `HasControllerHelpers` handles auth/tenant/validation resolution for controllers
+- **Registry**: `SchemaRegistryUtils` caches the table registry for fast lookup
+
+### Key classes
+- `RecordService` — CRUD orchestration (list/read/create/update/delete/upsert)
+- `RecordApiResponseService` — standardized response contract
+- `HasControllerHelpers` — auth/tenant/validation wiring for controllers
+- `SchemaRegistryUtils` — cached table registry
+- `RecordConfigService` — config reader
+- `PermissionUtils` — permission resolution
+
+### Auth & Permission flow
+`HasControllerHelpers::authorizeAction()` order:
+1. Table auth check (`isAuthRead` / `isAuthWrite`)
+2. User resolution
+3. Per-table permission map
+4. Custom authorizer
+5. `Gate::forUser()->allows()`
+
+### Tenant resolution
+Request attr `resolved_tenant_id` → `record_context.tenant_id` → `X-Tenant-ID` header.
+
+### Database support
+MySQL, PostgreSQL, SQLite — always write DB-agnostic SQL; never use DB-specific functions unless wrapped.
 
 ## MCP (Model Context Protocol)
 
