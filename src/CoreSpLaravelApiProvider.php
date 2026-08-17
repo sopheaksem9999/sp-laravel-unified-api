@@ -42,6 +42,8 @@ use Sopheak\Core\Events\RecordCreated;
 use Sopheak\Core\Events\RecordDeleted;
 use Sopheak\Core\Events\RecordUpdated;
 use Sopheak\Core\Authorization\PermissionRegistrar;
+use Sopheak\Core\Contracts\Attachment\AttachmentMultipartDriver;
+use Sopheak\Core\Services\AttachmentMultipart\S3MultipartDriver;
 use Sopheak\Core\Listeners\InvalidateRecordCacheListener;
 use Sopheak\Core\Listeners\LogRecordAuditListener;
 
@@ -66,6 +68,13 @@ class CoreSpLaravelApiProvider extends ServiceProvider
         $this->app->singleton(AuditLogService::class);
         $this->app->singleton(QueryCacheService::class);
         $this->app->scoped(CacheRequestContext::class);
+
+        // Multipart direct uploads need the raw S3 client, which only exists
+        // when the host app has the s3 driver installed. Bind the driver only
+        // when the SDK is present; without it multipart endpoints report 422.
+        if (class_exists(S3MultipartDriver::class)) {
+            $this->app->bind(AttachmentMultipartDriver::class, S3MultipartDriver::class);
+        }
     }
 
     public function boot(): void

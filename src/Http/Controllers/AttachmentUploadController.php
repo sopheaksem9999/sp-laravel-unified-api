@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace Sopheak\Core\Http\Controllers;
 
 use Exception;
+use RuntimeException;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
 use Illuminate\Support\Carbon;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -24,6 +24,9 @@ use Intervention\Image\Encoders\GifEncoder;
 use Intervention\Image\Interfaces\EncoderInterface;
 use Intervention\Image\Interfaces\ImageInterface;
 use Sopheak\Core\Services\AttachmentAccessService;
+use Sopheak\Core\Services\AttachmentStorageService;
+use Sopheak\Core\Services\AttachmentPresignService;
+use Sopheak\Core\Services\AttachmentPreviewUrlService;
 use Sopheak\Core\Services\AttachmentUrlService;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Services\RecordConfigService;
@@ -132,6 +135,26 @@ class AttachmentUploadController extends Controller
         return app(AttachmentAccessService::class);
     }
 
+    private function storageService(): AttachmentStorageService
+    {
+        return app(AttachmentStorageService::class);
+    }
+
+    private function presignService(): AttachmentPresignService
+    {
+        return app(AttachmentPresignService::class);
+    }
+
+    private function previewUrlService(): AttachmentPreviewUrlService
+    {
+        return app(AttachmentPreviewUrlService::class);
+    }
+
+    private function directUploadEnabled(): bool
+    {
+        return (bool) config('attachments.direct_upload.enabled', false);
+    }
+
     private function storageDisk(string $disk): FilesystemAdapter
     {
         return Storage::disk($disk);
@@ -237,7 +260,7 @@ class AttachmentUploadController extends Controller
 
     private function resolveDiskFromVisibility(string $visibility): string
     {
-        return in_array($visibility, ['public', 'temp_public'], true) ? (string) config('attachments.disk_public', 'public') : (string) config('attachments.disk_private', 'local');
+        return $this->storageService()->resolveDiskFromVisibility($visibility);
     }
 
     private function resolveTempTimeout(Request $request, string $visibility): ?string
@@ -299,14 +322,7 @@ class AttachmentUploadController extends Controller
 
     private function generateAttachmentStoragePath(string $visibility, ?string $extension = null): string
     {
-        $filename = Str::uuid()->toString();
-        if (is_string($extension) && '' !== trim($extension)) {
-            $filename .= '.' . ltrim($extension, '.');
-        }
-
-        $baseDir = in_array($visibility, ['public', 'temp_public'], true) ? 'attachments/public' : 'attachments/private';
-
-        return $baseDir . '/' . date('Y/m/d') . '/' . $filename;
+        return $this->storageService()->generateStoragePath($visibility, $extension);
     }
 
     /**
@@ -898,6 +914,416 @@ class AttachmentUploadController extends Controller
         return RecordApiResponseService::success($attachment);
     }
 
+    public function createUploadUrl(Request $request): JsonResponse
+    {
+        if (!$this->directUploadEnabled()) {
+            return RecordApiResponseService::errorWrapped('Direct upload is disabled', Response::HTTP_NOT_FOUND);
+        }
+
+        $request->validate([
+            'filename' => 'required|string|max:255',
+            'content_type' => 'nullable|string|max:255',
+            'visibility' => 'nullable|in:private,public,temp_private,temp_public',
+            'folder_id' => 'nullable|string',
+        ]);
+
+        $tenantId = $this->resolveTenantId($request);
+        if (!$this->accessService()->folderExists($request->input('folder_id'), $tenantId)) {
+            return RecordApiResponseService::errorWrapped('Folder not found', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $visibility = $this->resolveVisibility($request);
+        $disk = $this->resolveDiskFromVisibility($visibility);
+        $extension = pathinfo((string) $request->input('filename'), PATHINFO_EXTENSION);
+        $path = $this->generateAttachmentStoragePath($visibility, '' === $extension ? null : $extension);
+        $expiresAt = Carbon::now()->addSeconds(max(1, (int) config('attachments.direct_upload.presign_ttl_seconds', 1800)));
+        $expires = $expiresAt->getTimestamp();
+        $uploadToken = $this->presignService()->issueUploadToken($path, $disk, (string) $tenantId, '', $expires);
+
+        if ($this->presignService()->supportsPresignedUploads($disk)) {
+            $presigned = $this->presignService()->presignedUploadUrl($disk, $path, $request->input('content_type'), $expiresAt);
+
+            return RecordApiResponseService::success([
+                'key' => $path,
+                'upload_url' => $presigned['url'],
+                'headers' => $presigned['headers'] ?? [],
+                'method' => 'PUT',
+                'disk' => $disk,
+                'upload_token' => $uploadToken,
+                'expires_at' => $expires,
+            ]);
+        }
+
+        return RecordApiResponseService::success([
+            'key' => $path,
+            'upload_url' => null,
+            'method' => 'POST',
+            'disk' => $disk,
+            'upload_token' => $uploadToken,
+            'expires_at' => $expires,
+            'complete_endpoint' => url(RecordConfigService::apiPrefix() . '/' . config('attachments.route_prefix', 'attachments') . '/' . ('' === RecordConfigService::rpcPrefix() ? '' : RecordConfigService::rpcPrefix() . '/') . 'complete-upload'),
+        ]);
+    }
+
+    public function completeUpload(Request $request): JsonResponse
+    {
+        if (!$this->directUploadEnabled()) {
+            return RecordApiResponseService::errorWrapped('Direct upload is disabled', Response::HTTP_NOT_FOUND);
+        }
+
+        $maxSize = config('attachments.max_upload_size', 10240);
+        $maxTempTimeoutMinutes = (int) config('attachments.max_temp_timeout_minutes', 43200);
+        $this->normalizeBooleanInputs($request, ['replace_old', 'as_temp']);
+        $request->validate([
+            'key' => 'required|string',
+            'upload_token' => 'required|string',
+            'expires_at' => 'required|integer',
+            'filename' => 'nullable|string|max:255',
+            'content_type' => 'nullable|string|max:255',
+            'visibility' => 'nullable|in:private,public,temp_private,temp_public',
+            'file' => 'nullable|file|max:' . $maxSize,
+            'folder_id' => 'nullable|string',
+            'title' => 'nullable|string|max:255',
+            'caption' => 'nullable|string',
+            'record_id' => 'nullable|string',
+            'record_type' => 'nullable|string',
+            'collection_name' => 'nullable|string',
+            'replace_old' => 'nullable|boolean',
+            'as_temp' => 'nullable|boolean',
+            'temp_timeout_minutes' => 'nullable|integer|min:1|max:' . $maxTempTimeoutMinutes,
+            'temp_timeout_at' => 'nullable|date',
+        ]);
+
+        if ($this->tempTimeoutAtExceedsMaximum($request)) {
+            return RecordApiResponseService::errorWrapped('Temporary timeout exceeds maximum allowed minutes', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $tenantId = $this->resolveTenantId($request);
+
+        $visibility = $this->resolveVisibility($request);
+        $disk = $this->resolveDiskFromVisibility($visibility);
+        $path = ltrim((string) $request->input('key'), '/');
+
+        // Verify the stateless upload token before touching the database so a
+        // caller without a valid token cannot probe folder/record existence.
+        if (!$this->storageService()->isValidStoragePath($path)) {
+            return RecordApiResponseService::errorWrapped('Invalid upload key', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        if (!$this->presignService()->verifyUploadToken(
+            $path,
+            $disk,
+            (string) $tenantId,
+            '',
+            (int) $request->input('expires_at'),
+            (string) $request->input('upload_token')
+        )) {
+            return RecordApiResponseService::errorWrapped('Invalid or expired upload token', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        if (!$this->accessService()->folderExists($request->input('folder_id'), $tenantId)) {
+            return RecordApiResponseService::errorWrapped('Folder not found', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $recordLinkError = $this->validateRequestedRecordLink($request, $tenantId);
+        if ($recordLinkError instanceof JsonResponse) {
+            return $recordLinkError;
+        }
+
+        $file = $request->file('file');
+        if (null !== $file) {
+            // local/public fallback: the client posts the file server-side.
+            if (Storage::disk($disk)->exists($path)) {
+                return RecordApiResponseService::errorWrapped('File already exists at key', Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
+            Storage::disk($disk)->putFileAs(dirname($path), $file, basename($path));
+            $mimeType = (string) $file->getMimeType();
+            $size = (int) $file->getSize();
+        } else {
+            if (!$this->presignService()->exists($disk, $path)) {
+                return response()->json(['message' => 'File not found on disk'], 404);
+            }
+
+            $metadata = $this->presignService()->headMetadata($disk, $path);
+            $mimeType = $metadata['content_type'];
+            $size = $metadata['content_length'];
+
+            // A presigned PUT cannot carry a content-length-range, so enforce
+            // the configured maximum at completion: refuse the attachment row
+            // (and clean up the oversized object) instead of persisting it.
+            if ($size > $maxSize * 1024) {
+                Storage::disk($disk)->delete($path);
+
+                return RecordApiResponseService::errorWrapped('File exceeds the maximum allowed size', Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+        }
+
+        $tenantColumn = RecordConfigService::tenantColumn();
+        $attachmentPayload = [
+            'folder_id' => $request->input('folder_id'),
+            'title' => $request->input('title'),
+            'caption' => $request->input('caption'),
+            'disk' => $disk,
+            'path' => $path,
+            'filename' => basename((string) $request->input('filename', basename($path))),
+            'mime_type' => $mimeType,
+            'size' => $size,
+            'visibility' => $visibility,
+            'temp_timeout' => $this->resolveTempTimeout($request, $visibility),
+        ];
+        if (RecordConfigService::enableTenantId() && null !== $tenantId && '' !== $tenantId) {
+            $attachmentPayload[$tenantColumn] = $tenantId;
+        }
+
+        $attachment = $this->extractRecordPayload(RecordService::executeCreate('sp_attachments', $attachmentPayload, [], $tenantId));
+        $attachment = $this->appendUrlToAttachment($attachment);
+        try {
+            $this->linkAttachmentIfRequested($request, (string) $attachment['id'], $tenantId);
+        } catch (Exception $exception) {
+            return response()->json(['message' => $exception->getMessage()], $exception->getCode() > 0 ? $exception->getCode() : 404);
+        }
+
+        return RecordApiResponseService::success($attachment);
+    }
+
+    public function createMultipartUpload(Request $request): JsonResponse
+    {
+        if (!$this->directUploadEnabled()) {
+            return RecordApiResponseService::errorWrapped('Direct upload is disabled', 404);
+        }
+
+        $request->validate([
+            'filename' => 'required|string|max:255',
+            'content_type' => 'nullable|string|max:255',
+            'visibility' => 'nullable|in:private,public,temp_private,temp_public',
+            'folder_id' => 'nullable|string',
+        ]);
+
+        $tenantId = $this->resolveTenantId($request);
+        if (!$this->accessService()->folderExists($request->input('folder_id'), $tenantId)) {
+            return RecordApiResponseService::errorWrapped('Folder not found', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $visibility = $this->resolveVisibility($request);
+        $disk = $this->resolveDiskFromVisibility($visibility);
+        $extension = pathinfo((string) $request->input('filename'), PATHINFO_EXTENSION);
+        $path = $this->generateAttachmentStoragePath($visibility, '' === $extension ? null : $extension);
+
+        try {
+            $upload = $this->presignService()->createMultipart($disk, $path, $request->input('content_type'));
+        } catch (RuntimeException $runtimeException) {
+            return RecordApiResponseService::errorWrapped($runtimeException->getMessage(), $runtimeException->getCode() > 0 ? $runtimeException->getCode() : 422);
+        }
+
+        if (null === $upload) {
+            return RecordApiResponseService::errorWrapped('Multipart upload is not supported for this disk', 422);
+        }
+
+        $expires = Carbon::now()->addSeconds(max(1, (int) config('attachments.direct_upload.presign_ttl_seconds', 1800)))->getTimestamp();
+        $uploadToken = $this->presignService()->issueUploadToken($path, $disk, (string) $tenantId, (string) $upload['upload_id'], $expires);
+
+        return RecordApiResponseService::success([
+            'key' => $path,
+            'upload_id' => $upload['upload_id'],
+            'disk' => $disk,
+            'part_size' => (int) config('attachments.direct_upload.min_multipart_size_bytes', 104857600),
+            'upload_token' => $uploadToken,
+            'expires_at' => $expires,
+        ]);
+    }
+
+    public function signMultipartPart(Request $request): JsonResponse
+    {
+        if (!$this->directUploadEnabled()) {
+            return RecordApiResponseService::errorWrapped('Direct upload is disabled', 404);
+        }
+
+        $request->validate([
+            'key' => 'required|string',
+            'upload_id' => 'required|string',
+            'upload_token' => 'required|string',
+            'expires_at' => 'required|integer',
+            'part_number' => 'required|integer|min:1',
+            'visibility' => 'nullable|in:private,public,temp_private,temp_public',
+        ]);
+
+        $tenantId = $this->resolveTenantId($request);
+        $visibility = $this->resolveVisibility($request);
+        $disk = $this->resolveDiskFromVisibility($visibility);
+        $path = ltrim((string) $request->input('key'), '/');
+
+        if (!$this->storageService()->isValidStoragePath($path)
+            || !$this->presignService()->verifyUploadToken(
+                $path,
+                $disk,
+                (string) $tenantId,
+                (string) $request->input('upload_id'),
+                (int) $request->input('expires_at'),
+                (string) $request->input('upload_token')
+            )) {
+            return RecordApiResponseService::errorWrapped('Invalid or expired upload token', 422);
+        }
+
+        $expiresAt = Carbon::now()->addSeconds(max(1, (int) config('attachments.direct_upload.presign_ttl_seconds', 1800)));
+
+        try {
+            $signed = $this->presignService()->signMultipartPart($disk, $path, (string) $request->input('upload_id'), (int) $request->input('part_number'), $expiresAt);
+        } catch (RuntimeException $runtimeException) {
+            return RecordApiResponseService::errorWrapped($runtimeException->getMessage(), $runtimeException->getCode() > 0 ? $runtimeException->getCode() : 422);
+        }
+
+        if (null === $signed) {
+            return RecordApiResponseService::errorWrapped('Multipart upload is not supported for this disk', 422);
+        }
+
+        return RecordApiResponseService::success([
+            'url' => $signed['url'],
+            'headers' => $signed['headers'],
+            'part_number' => (int) $request->input('part_number'),
+            'expires_at' => $expiresAt->getTimestamp(),
+        ]);
+    }
+
+    public function abortMultipartUpload(Request $request): JsonResponse
+    {
+        if (!$this->directUploadEnabled()) {
+            return RecordApiResponseService::errorWrapped('Direct upload is disabled', 404);
+        }
+
+        $request->validate([
+            'key' => 'required|string',
+            'upload_id' => 'required|string',
+            'upload_token' => 'required|string',
+            'expires_at' => 'required|integer',
+            'visibility' => 'required|in:private,public,temp_private,temp_public',
+        ]);
+
+        $tenantId = $this->resolveTenantId($request);
+        $disk = $this->resolveDiskFromVisibility((string) $request->input('visibility'));
+        $path = ltrim((string) $request->input('key'), '/');
+
+        if (!$this->storageService()->isValidStoragePath($path)
+            || !$this->presignService()->verifyUploadToken(
+                $path,
+                $disk,
+                (string) $tenantId,
+                (string) $request->input('upload_id'),
+                (int) $request->input('expires_at'),
+                (string) $request->input('upload_token')
+            )) {
+            return RecordApiResponseService::errorWrapped('Invalid or expired upload token', 422);
+        }
+
+        try {
+            $aborted = $this->presignService()->abortMultipart($disk, $path, (string) $request->input('upload_id'));
+        } catch (RuntimeException $runtimeException) {
+            return RecordApiResponseService::errorWrapped($runtimeException->getMessage(), $runtimeException->getCode() > 0 ? $runtimeException->getCode() : 422);
+        }
+
+        if (!$aborted) {
+            return RecordApiResponseService::errorWrapped('Multipart upload is not supported for this disk', 422);
+        }
+
+        return RecordApiResponseService::success();
+    }
+
+    public function completeMultipartUpload(Request $request): JsonResponse
+    {
+        if (!$this->directUploadEnabled()) {
+            return RecordApiResponseService::errorWrapped('Direct upload is disabled', 404);
+        }
+
+        $maxTempTimeoutMinutes = (int) config('attachments.max_temp_timeout_minutes', 43200);
+        $this->normalizeBooleanInputs($request, ['replace_old', 'as_temp']);
+        $request->validate([
+            'key' => 'required|string',
+            'upload_id' => 'required|string',
+            'upload_token' => 'required|string',
+            'expires_at' => 'required|integer',
+            'parts' => 'required|array|min:1',
+            'parts.*.part_number' => 'required|integer|min:1',
+            'parts.*.etag' => 'required|string',
+            'filename' => 'nullable|string|max:255',
+            'visibility' => 'nullable|in:private,public,temp_private,temp_public',
+            'folder_id' => 'nullable|string',
+            'title' => 'nullable|string|max:255',
+            'caption' => 'nullable|string',
+            'record_id' => 'nullable|string',
+            'record_type' => 'nullable|string',
+            'collection_name' => 'nullable|string',
+            'replace_old' => 'nullable|boolean',
+            'as_temp' => 'nullable|boolean',
+            'temp_timeout_minutes' => 'nullable|integer|min:1|max:' . $maxTempTimeoutMinutes,
+            'temp_timeout_at' => 'nullable|date',
+        ]);
+
+        $tenantId = $this->resolveTenantId($request);
+
+        $visibility = $this->resolveVisibility($request);
+        $disk = $this->resolveDiskFromVisibility($visibility);
+        $path = ltrim((string) $request->input('key'), '/');
+
+        // Verify the stateless upload token before touching the database so a
+        // caller without a valid token cannot probe folder/record existence.
+        if (!$this->storageService()->isValidStoragePath($path)
+            || !$this->presignService()->verifyUploadToken(
+                $path,
+                $disk,
+                (string) $tenantId,
+                (string) $request->input('upload_id'),
+                (int) $request->input('expires_at'),
+                (string) $request->input('upload_token')
+            )) {
+            return RecordApiResponseService::errorWrapped('Invalid or expired upload token', 422);
+        }
+
+        if (!$this->accessService()->folderExists($request->input('folder_id'), $tenantId)) {
+            return RecordApiResponseService::errorWrapped('Folder not found', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $recordLinkError = $this->validateRequestedRecordLink($request, $tenantId);
+        if ($recordLinkError instanceof JsonResponse) {
+            return $recordLinkError;
+        }
+
+        try {
+            $metadata = $this->presignService()->completeMultipart($disk, $path, (string) $request->input('upload_id'), $request->input('parts'));
+        } catch (RuntimeException $runtimeException) {
+            return RecordApiResponseService::errorWrapped($runtimeException->getMessage(), $runtimeException->getCode() > 0 ? $runtimeException->getCode() : 422);
+        }
+
+        if (null === $metadata) {
+            return RecordApiResponseService::errorWrapped('Multipart upload is not supported for this disk', 422);
+        }
+
+        $tenantColumn = RecordConfigService::tenantColumn();
+        $payload = [
+            'folder_id' => $request->input('folder_id'),
+            'title' => $request->input('title'),
+            'caption' => $request->input('caption'),
+            'disk' => $disk,
+            'path' => $path,
+            'filename' => basename((string) $request->input('filename', basename($path))),
+            'mime_type' => $metadata['content_type'],
+            'size' => $metadata['content_length'],
+            'visibility' => $visibility,
+            'temp_timeout' => $this->resolveTempTimeout($request, $visibility),
+        ];
+        if (RecordConfigService::enableTenantId() && null !== $tenantId && '' !== $tenantId) {
+            $payload[$tenantColumn] = $tenantId;
+        }
+
+        $attachment = $this->appendUrlToAttachment($this->extractRecordPayload(RecordService::executeCreate('sp_attachments', $payload, [], $tenantId)));
+        try {
+            $this->linkAttachmentIfRequested($request, (string) $attachment['id'], $tenantId);
+        } catch (Exception $exception) {
+            return response()->json(['message' => $exception->getMessage()], $exception->getCode() > 0 ? $exception->getCode() : 404);
+        }
+
+        return RecordApiResponseService::success($attachment);
+    }
+
     public function view(Request $request, string $id): StreamedResponse|JsonResponse|Response
     {
         return $this->serveFile($request, $id, true);
@@ -906,6 +1332,35 @@ class AttachmentUploadController extends Controller
     public function download(Request $request, string $id): StreamedResponse|JsonResponse|Response
     {
         return $this->serveFile($request, $id, false);
+    }
+
+    public function preview(Request $request, string $id): StreamedResponse|JsonResponse|Response
+    {
+        $tenantId = (string) $request->query('tenant', '');
+        $expires = (int) $request->query('expires', 0);
+        $signature = (string) $request->query('signature', '');
+
+        // Verify the signature BEFORE any lookup so the endpoint does not leak
+        // attachment existence to callers without a valid signature.
+        if (!$this->previewUrlService()->verify($id, $tenantId, $expires, $signature)) {
+            return RecordApiResponseService::errorWrapped('Invalid or expired preview URL', Response::HTTP_GONE);
+        }
+
+        try {
+            $attachment = $this->extractRecordPayload(RecordService::executeGetById('sp_attachments', $id, [], '' !== $tenantId ? $tenantId : null));
+        } catch (Exception) {
+            return response()->json(['message' => 'Attachment not found'], 404);
+        }
+
+        if ([] === $attachment) {
+            return response()->json(['message' => 'Attachment not found'], 404);
+        }
+
+        if ('' !== $tenantId) {
+            $request->attributes->set('resolved_tenant_id', $tenantId);
+        }
+
+        return $this->serveFile($request, $id, true);
     }
 
     /**
@@ -986,7 +1441,7 @@ class AttachmentUploadController extends Controller
         ];
     }
 
-    private function validateDimension(mixed $value, int $min, int $max): int|null|JsonResponse
+    private function validateDimension(mixed $value, int $min, int $max): int|JsonResponse|null
     {
         if (null === $value || '' === $value) {
             return null;

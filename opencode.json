@@ -3,11 +3,10 @@
   "model": "opencode-go/deepseek-v4-pro",
   "instructions": [
     "AGENTS.md",
-    "docs/ai/coding-standards.md",
-    "docs/ai/architecture.md",
-    "docs/ai/project-context.md",
-    "docs/ai/commands.md",
-    ".trae/rules/project_rules.md"
+    ".agents/rules/project-context.md",
+    ".agents/rules/architecture.md",
+    ".agents/rules/commands.md",
+    ".agents/rules/coding-standards.md"
   ],
   "command": {
     "/test": {

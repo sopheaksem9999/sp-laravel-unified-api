@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Services;
 
+use Sopheak\Core\Types\RecordTableType;
 use InvalidArgumentException;
 use Throwable;
 use Sopheak\Core\Jobs\AuditLogJob;
@@ -11,6 +12,17 @@ use Sopheak\Core\Support\RecordConfigLoader;
 
 class RecordConfigService
 {
+    private const DIRECT_UPLOAD_FUNCTION_KEYS = [
+        'create-upload-url',
+        'complete-upload',
+        'create-multipart-upload',
+        'sign-multipart-part',
+        'complete-multipart-upload',
+        'abort-multipart-upload',
+    ];
+
+    private const PREVIEW_FUNCTION_KEY = '{id}/preview';
+
     public static function enableTenantId(): bool
     {
         return (bool) config('record.enable_tenant_id', false);
@@ -317,10 +329,42 @@ class RecordConfigService
         $permissionTables = (array) config('permissions.tables', []);
 
         $tables = array_merge($webhookTables, $attachmentTables, $auditTables, $permissionTables, $recordTables);
+        $tables = self::applyAttachmentFeatureGating($tables);
 
         if ($table !== null) {
             return $tables[$table] ?? null;
         }
+
+        return $tables;
+    }
+
+    /**
+     * @param array<string, mixed> $tables
+     * @return array<string, mixed>
+     */
+    private static function applyAttachmentFeatureGating(array $tables): array
+    {
+        $attachment = $tables['sp_attachments'] ?? null;
+        if (!$attachment instanceof RecordTableType) {
+            return $tables;
+        }
+
+        $remove = [];
+        if (!(bool) config('attachments.direct_upload.enabled', false)) {
+            $remove = self::DIRECT_UPLOAD_FUNCTION_KEYS;
+        }
+
+        if (!(bool) config('attachments.preview_url_enabled', false)) {
+            $remove[] = self::PREVIEW_FUNCTION_KEY;
+        }
+
+        if ([] === $remove) {
+            return $tables;
+        }
+
+        $clone = clone $attachment;
+        $clone->functions = array_diff_key((array) $attachment->functions, array_flip($remove));
+        $tables['sp_attachments'] = $clone;
 
         return $tables;
     }
