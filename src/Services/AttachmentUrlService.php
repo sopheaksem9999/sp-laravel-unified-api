@@ -22,6 +22,13 @@ class AttachmentUrlService
         $attachment['download_url'] = $baseApiUrl . '/download';
         $attachment['url'] = $this->resolveUrl($attachment, $baseApiUrl);
 
+        if ((bool) config('attachments.preview_url_enabled', false)
+            && 'public' !== (string) ($attachment['visibility'] ?? 'private')
+            && ('temp_public' !== (string) ($attachment['visibility'] ?? 'private')
+                || (bool) config('attachments.protect_temp_public_via_download', false))) {
+            $attachment['preview_url'] = app(AttachmentPreviewUrlService::class)->signedUrl($attachment);
+        }
+
         return $attachment;
     }
 
