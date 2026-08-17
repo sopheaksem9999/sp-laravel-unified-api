@@ -2,7 +2,7 @@
 
 All notable changes to `sp-laravel-api` will be documented in this file.
 
-## [0.5.0] - 2026-08-17
+## [0.4.93] - 2026-08-17
 
 ### Added
 - **Direct upload for attachments (opt-in)**: `create-upload-url` and `complete-upload` serverless-style functions on `sp_attachments`, gated behind `attachments.direct_upload.enabled` (default `false`, so existing clients are byte-for-byte unchanged). On S3/R2 disks `create-upload-url` returns a presigned PUT URL; on `local`/`public` disks it returns the existing server-side `complete-upload` multipart POST fallback. Issued uploads are bound to their completion by a stateless HMAC upload token (`upload_token` + `expires_at`) verified *before* any folder/record lookup, and completion keys must match the issued `{prefix}/{public|private}/YYYY/MM/DD/{uuid}.{ext}` pattern, so callers cannot claim arbitrary existing objects. Presigned-PUT objects over `attachments.max_upload_size` are rejected at completion (422, object deleted). Disk selection stays visibility-based via the new `AttachmentStorageService` (extracted verbatim from the controller): `disk_public` (e.g. `karunafilm-public`) / `disk_private` (e.g. `karunafilm-private`).

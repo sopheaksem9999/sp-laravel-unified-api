@@ -1872,13 +1872,13 @@ Expected: format-check, phpstan (strict), and phpunit all pass. The full suite s
 
 - [ ] **Step 2: Bump the version and changelog**
 
-In `composer.json`, bump `"version"` to the next feature release (e.g. `0.5.0`). Add a `## [0.5.0]` entry to `CHANGELOG.md` summarizing: direct upload (`create-upload-url`/`complete-upload`), signed preview URLs, S3/R2 bucket docs, and multipart scaffolding.
+In `composer.json`, bump `"version"` to the next feature release (e.g. `0.4.93`). Add a `## [0.4.93]` entry to `CHANGELOG.md` summarizing: direct upload (`create-upload-url`/`complete-upload`), signed preview URLs, S3/R2 bucket docs, and multipart scaffolding.
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add composer.json CHANGELOG.md
-git commit -m "chore(release): 0.5.0"
+git commit -m "chore(release): 0.4.93"
 ```
 
 ---
@@ -1895,7 +1895,7 @@ git commit -m "chore(release): 0.5.0"
 
 ## Implementation Status (2026-08-17)
 
-**Done:** Tasks 1–21 implemented, tested, and verified against local MinIO (`http://localhost:9001`, buckets `develop-private`/`develop-publish`). **Task 22 done** — QA passed, version bumped to 0.5.0, CHANGELOG updated.
+**Done:** Tasks 1–21 implemented, tested, and verified against local MinIO (`http://localhost:9001`, buckets `develop-private`/`develop-publish`). **Task 22 done** — QA passed, version bumped to 0.4.93, CHANGELOG updated.
 
 **QA (2026-08-17): PASS.** The `qa` agent independently verified all 12 acceptance criteria plus the contract decisions: full suite 748 tests / 2262 assertions, PHPStan clean, MinIO integration 4/4 ran (not skipped), and 15 out-of-repo probes confirmed token-before-lookup ordering, preview non-oracle behaviour, oversize rejection + object deletion, gating strip/restore, URL shapes, ETag omission, and OpenAPI hiding. Two LOW findings (both cleaned up post-QA, see 13 and 14): a duplicated token-verification block and a dead config key.
 
