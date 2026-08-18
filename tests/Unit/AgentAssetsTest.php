@@ -8,11 +8,11 @@ use Illuminate\Support\Facades\File;
 use Sopheak\Core\Tests\TestCase;
 use Symfony\Component\Yaml\Yaml;
 
-class BoostAssetsTest extends TestCase
+class AgentAssetsTest extends TestCase
 {
-    public function test_boost_guidelines_exist_and_cover_core_conventions(): void
+    public function test_agent_guidelines_exist_and_cover_core_conventions(): void
     {
-        $path = __DIR__.'/../../resources/boost/guidelines/core.blade.php';
+        $path = __DIR__.'/../../resources/agent/guidelines/core.blade.php';
 
         $this->assertFileExists($path);
 
@@ -23,9 +23,9 @@ class BoostAssetsTest extends TestCase
         }
     }
 
-    public function test_boost_skill_exists_with_valid_frontmatter_and_debug_workflow(): void
+    public function test_agent_skill_exists_with_valid_frontmatter_and_debug_workflow(): void
     {
-        $path = __DIR__.'/../../resources/boost/skills/sp-laravel-api-development/SKILL.md';
+        $path = __DIR__.'/../../resources/agent/skills/sp-laravel-api-development/SKILL.md';
 
         $this->assertFileExists($path);
 

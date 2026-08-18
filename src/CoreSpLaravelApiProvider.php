@@ -34,6 +34,7 @@ use Sopheak\Core\Support\CacheRequestContext;
 use Sopheak\Core\Console\McpServerCommand;
 use Sopheak\Core\Console\EnablePgsqlRlsCommand;
 use Sopheak\Core\Console\BoostInstallCommand;
+use Sopheak\Core\Console\AgentSetupCommand;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
@@ -100,6 +101,11 @@ class CoreSpLaravelApiProvider extends ServiceProvider
             __DIR__ . '/../database/migrations/' => database_path('migrations'),
         ], 'sp-laravel-api-migrations');
 
+        $this->publishes([
+            __DIR__ . '/../resources/agent/skills/' => base_path('.agents/skills'),
+            __DIR__ . '/../resources/agent/guidelines/' => base_path('.agents/rules'),
+        ], 'sp-laravel-api-agent');
+
         // Automatically load migrations from the package
         $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
 
@@ -129,6 +135,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
                 CleanTempAttachmentsCommand::class,
                 EnablePgsqlRlsCommand::class,
                 BoostInstallCommand::class,
+                AgentSetupCommand::class,
             ];
 
             $commands = array_values(array_filter($commands, class_exists(...)));

@@ -10,6 +10,9 @@ keywords:
   - query syntax
 ---
 
+# Frontend Setup Prompt
+
+```markdown
 You are initializing a LOCAL agentic setup in an EXISTING client project
 (frontend, mobile, or any HTTP consumer) that talks to a backend built on
 `sopheak/sp-laravel-api`. The project already has its own structure, rules, and
@@ -190,3 +193,4 @@ Return: (1) the files you ADDED or UPDATED (a diff-style summary of what changed
 not a full rebuild), (2) the API-contract rules you encoded in
 `.agents/context/backend-boundaries.md`, and (3) the list of endpoints/fields
 you confirmed via the schema MCP.
+```
