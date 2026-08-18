@@ -15,9 +15,10 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  * dynamically registered and executed within the ERP system.
  *
  * @property array|string|null $pmsName        The PMS name identifier(s) for this function (optional, null for public)
- * @property array|string       $httpMethod      Allowed HTTP methods (GET, POST, PUT, DELETE, etc.)
+ * @property array|string|RecordFunctionMethodEnum $httpMethod Allowed HTTP method(s) — must come from RecordFunctionMethodEnum
  * @property string             $class           Class name for class-based functions (required)
  * @property string             $functionName Method name for class-based functions (required)
+ * @property bool               $disableCache    Whether query caching is disabled for this function (default: true — opt-in)
  * @property null|string        $name            Display name for OpenAPI summary generation (optional; falls back to $description, then a humanized function key, when empty)
  * @property null|string        $description     Function description for documentation purposes
  *
@@ -33,7 +34,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  *     httpMethod: RecordFunctionMethodEnum::POST->value,
  *     class: 'App\\Services\\AuthService',
  *     functionName: 'login',
- *     disableCache: false,
+ *     disableCache: true,
  *     description: 'User login'
  * );
  *
@@ -43,7 +44,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  *     httpMethod: [RecordFunctionMethodEnum::POST->value],
  *     class: 'App\\Services\\CalculationService',
  *     functionName: 'calculateTotal',
- *     disableCache: false,
+ *     disableCache: true,
  *     description: 'Calculate total for given items'
  * );
  *
@@ -53,7 +54,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  *     httpMethod: RecordFunctionMethodEnum::GET->value,
  *     class: 'App\\Services\\StatusService',
  *     functionName: 'getStatus',
- *     disableCache: false,
+ *     disableCache: true,
  *     description: 'Get system status information'
  * );
  *
@@ -68,7 +69,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  *     ],
  *     class: 'App\\Services\\RecordManagementService',
  *     functionName: 'handleRequest',
- *     disableCache: false,
+ *     disableCache: true,
  *     description: 'Full CRUD operations for records'
  * );
  *
@@ -78,7 +79,7 @@ use Sopheak\Core\Enums\RecordFunctionMethodEnum;
  *     httpMethod: [RecordFunctionMethodEnum::POST->value],
  *     class: 'App\\Http\\Controllers\\EmployeeRosterController',
  *     functionName: 'upsertEmployeeRosters',
- *     disableCache: false,
+ *     disableCache: true,
  *     description: 'Create or update employee rosters'
  * );
  * ```
@@ -88,21 +89,25 @@ class RecordFunctionType
     /**
      * Create a new RecordFunctionType instance.
      *
-     * @param array|string|RecordFunctionMethodEnum $httpMethod      Allowed HTTP methods (e.g., 'GET', ['GET', 'POST'])
+     * @param array|string|RecordFunctionMethodEnum $httpMethod      Allowed HTTP method(s). Must be a `RecordFunctionMethodEnum`
+     *                                                                value (e.g. `RecordFunctionMethodEnum::GET->value`), an array of
+     *                                                                them, or the enum instance itself. Any other string throws
+     *                                                                an InvalidArgumentException.
      * @param string       $class           Class name for class-based functions (required)
      * @param string       $functionName Method name for class-based functions (required)
+     * @param bool         $isPublic        Whether the function is public (default: false)
+     * @param array|string|null $pmsName   The PMS name identifier(s) for this function (optional, null for public)
+     * @param bool         $disableCache    Whether query caching is disabled for this function (default: true — caching is opt-in per function)
+     * @param int|null     $cacheTTL        Cache TTL in seconds (default: null)
      * @param null|string  $name            Display name for OpenAPI summary generation (optional; falls back to $description, then a humanized function key, when empty)
      * @param null|string  $description     Function description for documentation purposes
-     * @param array|string|null $pmsName   The PMS name identifier(s) for this function (optional, null for public)
-     * @param bool $isPublic Whether the function is public (default: false)
-     * @param int|null $cacheTTL Cache TTL in seconds (default: null)
-     * @param array|string|null $clearCacheTables Tables to clear cache (default: null)
-     * @param array|string|null $middleware Middleware to apply (default: null)
-     * @param array|null $querySchema OpenAPI schema array for query parameters (e.g. ['type' => 'object', 'properties' => [...]])
-     * @param array|null $payloadSchema OpenAPI schema array for request payload (e.g. ['type' => 'object', 'properties' => [...]])
-     * @param array|null $responseSchema OpenAPI schema array for response body (e.g. ['type' => 'object', 'properties' => [...]])
+     * @param array|null   $querySchema     OpenAPI schema array for query parameters (e.g. ['type' => 'object', 'properties' => [...]])
+     * @param array|null   $payloadSchema   OpenAPI schema array for request payload (e.g. ['type' => 'object', 'properties' => [...]])
+     * @param array|null   $responseSchema  OpenAPI schema array for response body (e.g. ['type' => 'object', 'properties' => [...]])
+     * @param array|string|null $clearCacheTables Tables whose cache is invalidated on write (default: null)
+     * @param array|string|null $middleware      Middleware to apply (default: null)
      *
-     * @throws InvalidArgumentException When class or functionName is empty
+     * @throws InvalidArgumentException When class or functionName is empty, or httpMethod is not a RecordFunctionMethodEnum value
      */
     public function __construct(
         public array|string|RecordFunctionMethodEnum $httpMethod,
@@ -110,7 +115,7 @@ class RecordFunctionType
         public string $functionName,
         public bool $isPublic = false,
         public array|string|null $pmsName = null,
-        public bool $disableCache = false,
+        public bool $disableCache = true,
         public ?int $cacheTTL = null,
         public ?string $name = null,
         public ?string $description = null,
@@ -120,6 +125,8 @@ class RecordFunctionType
         public array|string|null $clearCacheTables = null,
         public array|string|null $middleware = null,
     ) {
+        $this->assertValidHttpMethod($httpMethod);
+
         if (null !== $pmsName && (empty($pmsName) || (is_array($pmsName) && [] === $pmsName))) {
             throw new InvalidArgumentException('pmsName cannot be empty if provided');
         }
@@ -134,6 +141,34 @@ class RecordFunctionType
 
         if (null !== $cacheTTL && $cacheTTL <= 0) {
             throw new InvalidArgumentException('cacheTTL must be greater than 0');
+        }
+    }
+
+    /**
+     * Ensure every HTTP method comes from RecordFunctionMethodEnum.
+     */
+    private function assertValidHttpMethod(array|string|RecordFunctionMethodEnum $httpMethod): void
+    {
+        $methods = is_array($httpMethod) ? $httpMethod : [$httpMethod];
+
+        if ([] === $methods) {
+            throw new InvalidArgumentException('httpMethod cannot be empty');
+        }
+
+        $validValues = array_map(static fn (RecordFunctionMethodEnum $case): string => $case->value, RecordFunctionMethodEnum::cases());
+
+        foreach ($methods as $method) {
+            if ($method instanceof RecordFunctionMethodEnum) {
+                continue;
+            }
+
+            if (!is_string($method) || !in_array($method, $validValues, true)) {
+                throw new InvalidArgumentException(sprintf(
+                    'httpMethod must be a RecordFunctionMethodEnum or one of its values [%s]; got: %s',
+                    implode(', ', $validValues),
+                    is_string($method) ? $method : get_debug_type($method)
+                ));
+            }
         }
     }
 
@@ -157,7 +192,7 @@ class RecordFunctionType
             functionName: $properties['functionName'] ?? throw new InvalidArgumentException('functionName is required'),
             isPublic: $properties['isPublic'] ?? false,
             pmsName: $properties['pmsName'] ?? null,
-            disableCache: $properties['disableCache'] ?? false,
+            disableCache: $properties['disableCache'] ?? true,
             cacheTTL: $properties['cacheTTL'] ?? null,
             name: $properties['name'] ?? null,
             description: $properties['description'] ?? null,
@@ -244,7 +279,7 @@ class RecordFunctionType
             functionName: $config['functionName'] ?? throw new InvalidArgumentException('functionName is required in config array'),
             isPublic: $config['isPublic'] ?? false,
             pmsName: $config['pmsName'] ?? null,
-            disableCache: $config['disableCache'] ?? false,
+            disableCache: $config['disableCache'] ?? true,
             cacheTTL: $config['cacheTTL'] ?? null,
             name: $config['name'] ?? null,
             description: $config['description'] ?? null,

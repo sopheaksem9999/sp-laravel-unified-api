@@ -149,7 +149,7 @@ final class UserHooks
     public static function beforeCreate(Request $request, string $table, array $context): array
     {
         // Return array to merge into payload.
-        return ['created_by' => auth()->id()];
+        return ['created_by_id' => auth()->id()];
     }
 
     public static function afterCreate(Request $request, string $table, array $context): void
@@ -340,12 +340,12 @@ final class InvoiceHooks
 
         if (Gate::allows('viewTeam_invoice')) {
             $teamUserIds = self::resolveTeamUserIds((int) $user->id);
-            $request->query->set('created_by', 'in.(' . implode(',', $teamUserIds) . ')');
+            $request->query->set('created_by_id', 'in.(' . implode(',', $teamUserIds) . ')');
             return;
         }
 
         if (Gate::allows('viewOnlyCreateBy_invoice')) {
-            $request->query->set('created_by', 'eq.' . (int) $user->id);
+            $request->query->set('created_by_id', 'eq.' . (int) $user->id);
         }
     }
 
@@ -455,5 +455,6 @@ GET /api/v2/invoices?per_page=50&sortby=invoice_date&order=asc
 
 ## Related Docs
 
-- [Configuration, Validation, and Triggers](/guide/api-config-validation-triggers)
-- [Record Type Config Examples](/guide/feature-record-types-config-examples)
+- [Configuration and Middleware](/guide/api-config-and-middleware)
+- [Validation](/guide/api-validation)
+- [Record Type Reference](/guide/api-type-reference-and-examples)

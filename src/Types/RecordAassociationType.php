@@ -7,6 +7,28 @@ namespace Sopheak\Core\Types;
 use InvalidArgumentException;
 use Sopheak\Core\Enums\RecordRelationshipsEnum;
 
+/**
+ * Class RecordAassociationType.
+ *
+ * Represents an association relationship that resolves through a generic meta
+ * table using object-type discriminators:
+ * - fromObjectType: the owning table discriminator (e.g. 'package')
+ * - fromObjectId:   the owning record FK column (default: 'owner_id')
+ * - toObjectType:   the target table discriminator (e.g. 'module')
+ * - toObjectId:     the target record FK column (default: 'target_id')
+ *
+ * Only supports RecordRelationshipsEnum::HAS_MANY_THROUGH.
+ *
+ * @property string                  $related        The related target table name (required)
+ * @property RecordRelationshipsEnum $type           The relationship type (always HAS_MANY_THROUGH)
+ * @property string                  $fromObjectType The owning table discriminator (required)
+ * @property string                  $fromObjectId   The owning record FK column (default: 'owner_id')
+ * @property string                  $toObjectType   The target table discriminator (required)
+ * @property string                  $toObjectId     The target record FK column (default: 'target_id')
+ * @property bool                    $allowCreate    Whether nested creates are allowed through this relationship
+ * @property bool                    $allowUpdate    Whether nested updates are allowed through this relationship
+ * @property bool                    $allowDelete    Whether nested deletes are allowed through this relationship
+ */
 class RecordAassociationType
 {
     public function __construct(

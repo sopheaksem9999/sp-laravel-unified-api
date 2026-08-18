@@ -150,6 +150,16 @@ across page boundaries.
 [CRUD Operations](/guide/api/api-crud-operations) for the sorting rules.
 :::
 
+### Navigation
+
+| User action | API call |
+|---|---|
+| Load page 1 | `?cursor=&direction=next` |
+| Click Next | `?cursor={meta.cursor}&direction=next` |
+| Click Prev | `?cursor={meta.cursor}&direction=prev` |
+| Click First | `?cursor=&direction=next` |
+| Click Last | `?cursor={meta.last_cursor}&direction=next` |
+
 ## Total Count Control (`?total=true|false`)
 
 Avoid the expensive `COUNT(*)` query on large filtered datasets:
@@ -165,6 +175,19 @@ SP_PAGINATION_SKIP_TOTAL=true
 ```
 
 Clients can force totals back on with `total=true`.
+
+## Limit-Only Mode (`limit`)
+
+`limit` is a bounded, non-paginated subset — it is not pagination. It only
+applies when `per_page` (and `page`) are absent:
+
+```bash
+GET /api/v1/invoices?limit=50                      # no total
+GET /api/v1/invoices?limit=50&total=true           # includes total
+```
+
+By default `limit` mode omits the count; pass `total=true` (legacy
+`add_total=true`) to include it. Never mix `limit` and `per_page` on one request.
 
 ## Config Reference
 
@@ -182,5 +205,5 @@ Clients can force totals back on with `total=true`.
 
 ## Related Feature Docs
 
-- [Pagination (Page/Per Page)](/guide/feature-pagination-page-per-page)
 - [Performance Guide](/advanced/performance)
+- [Standard CRUD Operations](/guide/api-crud-operations)

@@ -6,10 +6,30 @@ namespace Sopheak\Core\Types;
 
 use Sopheak\Core\Enums\RecordRelationshipsEnum;
 
+/**
+ * Class RecordMorphToManyType.
+ *
+ * Represents a polymorphic many-to-many relationship configuration between models.
+ * Based on Laravel's MorphToMany relationship pattern with support for pivot
+ * tables, morph relation names, and additional pivot columns.
+ *
+ * @property string                  $related         The related model class name or table name
+ * @property string                  $relation        The morph relation name (e.g. 'model')
+ * @property RecordRelationshipsEnum $type            The relationship type, defaults to MORPH_TO_MANY
+ * @property null|string             $table           The intermediate pivot table name
+ * @property null|string             $foreignPivotKey Foreign key on the pivot table for the parent model
+ * @property null|string             $relatedPivotKey Foreign key on the pivot table for the related model
+ * @property null|string             $parentKey       Parent model's key (defaults to primary key)
+ * @property null|string             $relatedKey      Related model's key (defaults to primary key)
+ * @property array                   $withPivot       Additional pivot columns to include
+ * @property array                   $wherePivot      Pivot constraints as key-value pairs
+ * @property bool                    $withTimestamps  Whether to include timestamps on pivot table
+ * @property array                   $select          Specific columns to select from the related table
+ * @property bool                    $teamsEnabled    Whether teams functionality is enabled
+ * @property null|string             $teamsKey        The teams key column name
+ */
 class RecordMorphToManyType
 {
-    public $recordRelationshipsEnum;
-
     public function __construct(
         public string $related,
         public string $relation,
@@ -59,7 +79,7 @@ class RecordMorphToManyType
         $config = [
             'related' => $this->related,
             'relation' => $this->relation,
-            'type' => $this->recordRelationshipsEnum,
+            'type' => $this->type,
         ];
 
         if (null !== $this->table) {

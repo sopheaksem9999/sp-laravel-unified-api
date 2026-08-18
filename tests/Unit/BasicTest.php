@@ -72,7 +72,7 @@ class BasicTest extends TestCase
     }
 
     /** @test */
-    public function it_enables_function_cache_by_default(): void
+    public function it_disables_function_cache_by_default(): void
     {
         $function = new RecordFunctionType(
             httpMethod: 'GET',
@@ -80,7 +80,7 @@ class BasicTest extends TestCase
             functionName: 'handle'
         );
 
-        $this->assertFalse($function->disableCache);
+        $this->assertTrue($function->disableCache);
 
         $fromArray = RecordFunctionType::fromArray([
             'httpMethod' => 'GET',
@@ -88,7 +88,7 @@ class BasicTest extends TestCase
             'functionName' => 'handle',
         ]);
 
-        $this->assertFalse($fromArray->disableCache);
+        $this->assertTrue($fromArray->disableCache);
     }
 
     /** @test */

@@ -33,6 +33,7 @@ class CacheAdmissionRulesTest extends TestCase
                 pmsName: 'products',
                 hasTenantId: false,
                 softDeletes: false,
+                disableCache: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
             ),

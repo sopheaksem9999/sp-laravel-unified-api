@@ -23,8 +23,28 @@ Retrieve a paginated list of records with filtering, sorting, and relationship l
 
 **Pagination**
 
-- `per_page` (integer, max: 100) - Items per page
-- `page` (integer) - Page number (offset pagination)
+- `page` (integer) - Page number for offset pagination (starts at 1).
+- `per_page` (integer, max: `per_page_max` = 10000) - Items per page for offset and cursor pagination.
+
+**Cursor Pagination**
+
+Pass `cursor=` to switch to cursor (keyset) pagination — O(1) per page regardless of dataset size. See [Pagination Module](/guide/module-pagination) for full details.
+
+- `cursor` (string) - Opaque cursor token from the previous response's `meta.cursor`. Send empty (`cursor=`) for the first page.
+- `direction` (string: `next`|`prev`, default: `next`) - Paging direction.
+- `cursor_column` (string) - Column to page on. Defaults to the column the results are sorted by (`created_at` when available, otherwise the primary key).
+
+```bash
+GET /{api_prefix}/{table}?cursor=&direction=next&per_page=25
+```
+
+Cursor responses replace `meta.page`/`meta.per_page` with `meta.cursor`, `meta.direction`, `meta.cursor_column`, `meta.first_cursor`, `meta.last_cursor`, and `meta.total`.
+
+**Total Count Control**
+
+- `total` (boolean) - Force include (`total=true`) or omit (`total=false`) the `meta.total`/`X-Total-Count` count, avoiding the `COUNT(*)` query on large datasets.
+- `skip_total` (boolean, default: `pagination.skip_total_default`) - Legacy alias for `total=false`.
+- `add_total` (boolean) - Legacy alias for `total=true` in limit-only mode.
 
 **Search**
 
@@ -35,6 +55,7 @@ Retrieve a paginated list of records with filtering, sorting, and relationship l
 
 - `select` (string) - Select main columns and include relationships using parentheses syntax.
   - Example: `?select=*,customer(*),items(*,product(*))`
+- `with` (string) - Alias/extension of `select`; combined with `select` when both are provided. Uses the same parentheses syntax.
 
 **Sorting**
 
@@ -71,7 +92,7 @@ config has drifted from its migration.
 
 **Limiting**
 
-- `limit` (integer, max: 1000) - Limit results (only applied when `per_page` is not provided)
+- `limit` (integer, max: `limit_max` = 10000) - Limit results (only applied when `per_page` is not provided). In limit-only mode `total` is not included by default; pass `total=true` (or legacy `add_total=true`) to include it.
 
 **Result Shape & Aggregation**
 
@@ -96,98 +117,15 @@ config has drifted from its migration.
     - `pending_operations`
     - `cache_hits`
     - `cache_efficiency`
+  - `meta.debug.cache_stats` with `QueryCacheService::requestStats()`.
   - on error responses, `meta.debug` may include exception context (`exception`, `exception_message`, `file`, `line`).
+- `explain` (query param, boolean) - When `record.profiling.enabled` is true, adds the database query plan under `meta.debug.explain`.
 - `record.debug` (config, boolean, default: `false`) also enables error debug details globally without needing `X-Debug`.
 - When debug mode is enabled (via config or header), error responses are also written to Laravel log (`Log::error`) with request context and error metadata.
 
-**Filter Operators**
-Filters are usually passed as `{column}={operator}.{value}` (operators validated against the table schema). Some operators support a value-less shorthand form for `null`:
+**Filter Operators & Grouped Logic**
 
-- `is.null`, `is_not.null` or simply `is`, `is_not` (equivalent to `IS NULL` / `IS NOT NULL`)
-- `eq.{value}`, `neq.{value}`, `in.{a,b,c}`, `not_in.{a,b,c}`
-- `like.{value}`, `contains.{value}`, `not_like.{value}`, `starts_with.{value}`, `ends_with.{value}`, `regex.{pattern}`
-- `ilike.{value}`, `match.{pattern}`, `imatch.{pattern}`
-- `gt.{value}`, `gte.{value}`, `lt.{value}`, `lte.{value}`
-- `between.{start,end}`, `not_between.{start,end}`
-- `date_eq.{YYYY-MM-DD}`, `date_gt.{YYYY-MM-DD}`, `date_gte.{YYYY-MM-DD}`, `date_lt.{YYYY-MM-DD}`, `date_lte.{YYYY-MM-DD}`
-- Full-text operators: `fts.{query}`, `plfts.{query}`, `phfts.{query}`, `wfts.{query}`
-- Native Postgres operators: `cs.{value}`, `cd.{value}`, `ov.{value}`, `sl.{value}`, `sr.{value}`, `nxl.{value}`, `nxr.{value}`, `adj.{value}`
-- `empty.null`, `not_empty.null` or simply `empty`, `not_empty`:
-  - On text columns, `empty` ⇔ `IS NULL OR = ''`, `not_empty` ⇔ `IS NOT NULL AND != ''`.
-  - On non-text columns (e.g. integers), `empty` ⇔ `IS NULL`, `not_empty` ⇔ `IS NOT NULL`.
-- Negated style is also supported using expression syntax:
-  - `not.eq.5`, `not.in.(1,2,3)`, `not.like.ACME`, `not.fts.invoice`
-- `any` / `all` modifiers are supported in expression syntax:
-  - `name=like(any).{ACME,SHOP}`
-  - `name=ilike(all).{spx,admin}`
-
-**Grouped Logic**
-
-- Top-level query params continue to behave as `AND`.
-- You can add grouped logic params:
-  - `or=(...)`
-  - `and=(...)`
-- Inside grouped logic, each condition uses expression syntax:
-  - `{column}.{operator}.{value}`
-  - Example: `id.eq.5`, `balance_due.gt.0`, `id.in.(5,6,9)`
-
-Examples:
-
-- `vendor_id=eq.27&or=(balance_due.gt.0,id.eq.5)`
-  - Interpreted as: `vendor_id = 27 AND (balance_due > 0 OR id = 5)`
-- `vendor_id=eq.27&and=(or(balance_due.gt.0,id.eq.5),id.neq.2)`
-  - Interpreted as: `vendor_id = 27 AND ((balance_due > 0 OR id = 5) AND id != 2)`
-- `id=in.(5,6,9)` and `id=not_in.(5,6,9)` are supported in addition to legacy list style (`id=in.5,6,9`).
-- `status=eq.open&and=(or(total_amount.gte.1000,total_amount.is.null),or(currency.eq.USD,currency.eq.KHR),issued_at.date_gte.2026-01-01,issued_at.date_lte.2026-12-31)`
-  - Interpreted as: `status = 'open' AND ((total_amount >= 1000 OR total_amount IS NULL) AND (currency = 'USD' OR currency = 'KHR') AND issued_at >= '2026-01-01' AND issued_at <= '2026-12-31')`
-- `customer_id=eq.18&or=(and(balance_due.gt.0,due_date.lt.2026-03-31),and(id.in.(5,6,9),ref_number.like.BILL-2026))`
-  - Interpreted as: `customer_id = 18 AND ((balance_due > 0 AND due_date < '2026-03-31') OR (id IN (5,6,9) AND ref_number LIKE '%BILL-2026%'))`
-- `vendor_id=eq.27&or=(vendor.display_name.like.Acme,items.account_code.in.(4000,4010),items.amount.gt.0)`
-  - Example of grouped logic including relationship filters (`vendor.*`, `items.*`) in the same OR expression.
-
-Notes:
-
-- For grouped logic, use comma-separated expressions inside the group.
-- Do not use `=` or `&` inside `or=(...)` / `and=(...)`.
-- For URL safety, grouped logic can also be sent in decoded form:
-  - `or=(balance_due.gt.0,id.in.(5,6,9))`
-- Complex grouped examples are best URL-encoded when sent from frontend clients.
-- If an operator is not supported by the current database driver, API returns validation error with an explicit message.
-- **Common mistake**: do not send bracket-nested filters such as `filter[column]=value` or `filter[column][operator]=value` — filters are top-level query parameters (`{column}={operator}.{value}`), not wrapped in a `filter[...]` key. A single-level bracket value (e.g. `filter[status]=eq.open`) is silently ignored (no error, no filtering applied); a doubly-nested one (e.g. `filter[created_at][gte]=2026-08-01`) returns a `422` naming the exact query parameter that needs fixing and a corrected example.
-
-#### Config-Driven `search`
-
-Use `searchable` on the table config when you want a stable `?search=` parameter for clients instead of requiring them to build `or=(...)` expressions manually.
-
-```php
-'invoices' => new RecordTableType(
-    table: 'invoices',
-    searchable: [
-        'ref_number',
-        'customer.display_name',
-        'items.name',
-        'items.description',
-    ],
-),
-```
-
-Client request:
-
-```http
-GET /api/v1/invoices?select=*,customer(*),items(*)&search=INV-001
-```
-
-This behaves like:
-
-```http
-GET /api/v1/invoices?select=*,customer(*),items(*)&or=(ref_number.ilike.INV-001,customer.display_name.ilike.INV-001,items.name.ilike.INV-001,items.description.ilike.INV-001)
-```
-
-Notes:
-
-- `search` is additive with normal top-level filters, so `status=eq.open&search=INV-001` becomes `status = open AND (...)`.
-- Relationship fields in `searchable` use the same one-level dot notation supported by grouped relationship filters.
-- `search` uses `ilike` on PostgreSQL and `like` on other drivers.
+See [Filter Operators Reference](/guide/api-filter-operators) for the full operator list, grouped-logic (`or=`/`and=`) syntax, and the config-driven `?search=` param.
 
 When `aggregate` is present and valid, the list endpoint returns aggregated rows instead of paginated records. The response still follows the standard shape, with:
 
@@ -245,8 +183,21 @@ Authorization: Bearer {access_token}
 - `200` - Success
 - `401` - Unauthorized
 - `403` - Forbidden
-- `404` - Resource not available (table not configured or disabled)
+- `404` - Not found (table not configured/disabled or record not found)
 - `500` - Server error
+
+---
+
+#### Related Docs
+
+- [Nested Relationship Writes and Bulk Operations](/guide/api-nested-and-bulk-operations) — nested create/update/delete in payloads and bulk create/update/delete/upsert.
+- [Pagination Module](/guide/module-pagination) — offset, cursor, and limit-only pagination details.
+- [Relationships](/core-concepts/relationships) — relationship selection, filtering, and the write payload guide.
+- [Validation](/guide/api-validation) — table validators used by write endpoints.
+- [Record Hooks](/guide/record-hooks) — global and table trigger hooks.
+- [Error Responses, Rate Limiting, and Security](/guide/api-errors-rate-security) — error envelope and per-table rate limits.
+- [Internal API Methods](/guide/api-internal-methods-core) — run the same CRUD logic from business code.
+- [QueryHelpers Trait](/guide/api-queryhelpers-trait) — Eloquent-based filtering for custom endpoints.
 
 #### Get Single Record
 
@@ -260,6 +211,7 @@ Retrieve a single record by its primary key.
 
 - `select` (string) - Select main columns and include relationships using parentheses syntax
   - Example: `?select=*,customer(*),items(*,product(*))`
+- `with` (string) - Alias/extension of `select`; combined with `select` when both are provided.
 - `with_trashed` (boolean) - For soft-deleted tables, fetch the record even if it has been soft-deleted.
 
 #### Example Request

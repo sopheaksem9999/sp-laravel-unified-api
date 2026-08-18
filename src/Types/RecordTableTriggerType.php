@@ -6,6 +6,16 @@ namespace Sopheak\Core\Types;
 
 use InvalidArgumentException;
 
+/**
+ * Class RecordTableTriggerType.
+ *
+ * Represents a trigger function configuration for a record table lifecycle hook
+ * (beforeRead, afterCreate, etc.).
+ *
+ * @property string      $class        The class name implementing the trigger (required)
+ * @property string      $functionName The static method name to call on the class (required)
+ * @property null|string $description  Optional human-readable description of the trigger
+ */
 class RecordTableTriggerType
 {
     public function __construct(

@@ -209,6 +209,13 @@ The component schemas mirror the runtime behavior of the table config:
 
 ### PHP 8.3 Attribute-Based Config
 
+> **Legacy — only for old client projects using Laravel ORM.**
+> The recommended way to configure tables in this package is file-based record
+> config (`config/records/tables/*.php` with `RecordTableType`), as described
+> throughout this guide. The `#[RecordTable]` attribute approach below is kept
+> for backward compatibility with existing client projects that use Laravel ORM
+> (Eloquent models) and is **not** the recommended path for new tables.
+
 As an alternative to file-based `RecordTableType` configuration, you can annotate Eloquent models directly with PHP 8 attributes. This keeps table configuration co-located with the model class.
 
 #### Enabling Discovery

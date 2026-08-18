@@ -23,7 +23,9 @@ use Closure;
  * @property bool              $disableCache    Whether query caching is disabled for this table
  * @property bool              $isAuthRead      Whether read endpoints require authentication
  * @property bool              $isAuthWrite     Whether write endpoints require authentication
- * @property RecordTablePublic|bool $public      Legacy public configuration (derived from auth flags)
+ * @property RecordTablePublic|bool $public      Legacy public configuration — DEPRECATED. Derived automatically from
+ *                                               `isAuthRead`/`isAuthWrite` (public read = !isAuthRead, public write = !isAuthWrite).
+ *                                               Only used as a legacy override when both auth flags are left at their defaults.
  * @property null|array        $relationships    Array of relationships with other tables
  * @property null|array        $functions        Array of function configurations
  * @property null|string       $primaryKey      The primary key column name (defaults to 'id')
@@ -42,7 +44,7 @@ use Closure;
  *     hasTenantId: false,
  *     softDeletes: true,
  *     disableAuditLog: false,
- *     disableCache: false,
+ *     disableCache: true,
  *     canRead: true,
  *     canCreate: true,
  *     canUpdate: true,
@@ -94,6 +96,9 @@ use Closure;
  *     ],
  * );
  * ```
+ *
+ * > **Note:** `public` is deprecated and derived from `isAuthRead`/`isAuthWrite` —
+ * > do not set it directly. Set the auth flags instead.
  */
 class RecordTableType
 {
@@ -103,7 +108,7 @@ class RecordTableType
         public bool $hasTenantId = false,
         public bool $softDeletes = false,
         public bool $disableAuditLog = false,
-        public bool $disableCache = false,
+        public bool $disableCache = true,
         public bool $disableBroadcast = false,
         public bool $canRead = true,
         public bool $canCreate = true,
@@ -260,7 +265,7 @@ class RecordTableType
             hasTenantId: $properties['hasTenantId'] ?? false,
             softDeletes: $properties['softDeletes'] ?? false,
             disableAuditLog: $properties['disableAuditLog'] ?? false,
-            disableCache: $properties['disableCache'] ?? false,
+            disableCache: $properties['disableCache'] ?? true,
             disableBroadcast: $properties['disableBroadcast'] ?? false,
             canRead: $properties['canRead'] ?? ($legacyCanRead ?? true),
             canCreate: $properties['canCreate'] ?? ($legacyCanWrite ?? true),

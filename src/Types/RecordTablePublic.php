@@ -8,7 +8,11 @@ namespace Sopheak\Core\Types;
  * Class RecordTablePublic.
  *
  * Represents the public access configuration for a table.
- * This class is used to define whether a table is publicly accessible for read and write operations.
+ *
+ * @deprecated Use `isAuthRead` / `isAuthWrite` on RecordTableType instead.
+ *             `public` is derived automatically: public read = !isAuthRead,
+ *             public write = !isAuthWrite. This class is only kept for legacy
+ *             configs that still set it explicitly.
  *
  * @property bool $read  Indicates if the table is publicly accessible for read operations
  * @property bool $write Indicates if the table is publicly accessible for write operations

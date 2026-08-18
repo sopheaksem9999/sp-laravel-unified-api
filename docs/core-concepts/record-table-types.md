@@ -24,7 +24,7 @@ This module documents how to configure dynamic CRUD behavior using `RecordTableT
 ## Feature Docs
 
 - [Record Data Types](/guide/feature-record-data-types)
-- [Record Type Config Examples](/guide/feature-record-types-config-examples)
+- [Record Type Reference](/guide/api-type-reference-and-examples)
 - [Record Hooks](/guide/record-hooks)
 - [Record Middleware Map](/guide/record-middleware-map)
 - [Record Cache](/guide/record-cache)

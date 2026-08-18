@@ -6,6 +6,15 @@ namespace Sopheak\Core\Types;
 
 use InvalidArgumentException;
 
+/**
+ * Class RecordValidationType.
+ *
+ * Represents a validation handler configuration for a record table write
+ * operation (create, update, or delete).
+ *
+ * @property string $class        The class name implementing the validator (required)
+ * @property string $functionName The static method name to call on the class (required)
+ */
 class RecordValidationType
 {
     public function __construct(
