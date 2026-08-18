@@ -7,8 +7,23 @@ namespace Sopheak\Core\Types;
 use Sopheak\Core\Enums\RecordRelationshipsEnum;
 
 /**
- * This class represents a has-many-through relationship configuration between database models.
- * It is used to define relationships where a model is related to another model through an intermediate table.
+ * Class RecordHasManyThroughType.
+ *
+ * Represents a has-many-through relationship configuration between models.
+ * It is used to define relationships where a model is related to another model
+ * through an intermediate table.
+ *
+ * @property string                  $table          The target table name (e.g. 'payments')
+ * @property RecordRelationshipsEnum $type           The relationship type (always HAS_MANY_THROUGH)
+ * @property string                  $through        The intermediate/pivot table name (e.g. 'invoice_payments')
+ * @property string                  $firstKey       The foreign key on intermediate table referencing source model (e.g. 'invoice_id')
+ * @property string                  $secondKey      The primary key on target table being referenced (default: 'id')
+ * @property string                  $localKey       The primary key on source model being referenced (default: 'id')
+ * @property string                  $secondLocalKey The foreign key on intermediate table referencing target model (e.g. 'payment_id')
+ * @property array                   $orderBy        Optional sorting configuration (default: ['created_at' => 'desc'])
+ * @property bool                    $allowCreate    Whether nested creates are allowed through this relationship
+ * @property bool                    $allowUpdate    Whether nested updates are allowed through this relationship
+ * @property bool                    $allowDelete    Whether nested deletes are allowed through this relationship
  *
  * Example usage:
  * ```
@@ -26,20 +41,6 @@ use Sopheak\Core\Enums\RecordRelationshipsEnum;
  * - invoices (id, ...)
  * - payments (id, payment_date, amount, ...)
  * - invoice_payments (invoice_id, payment_id, ...)
- */
-/**
- * Class RecordHasManyThroughType.
- *
- * Represents a has-many-through relationship configuration between models.
- *
- * @property string                  $table          The target table name (e.g. 'payments')
- * @property RecordRelationshipsEnum $type           The relationship type (always HAS_MANY_THROUGH)
- * @property string                  $through        The intermediate/pivot table name (e.g. 'invoice_payments')
- * @property string                  $firstKey       The foreign key on intermediate table referencing source model (e.g. 'invoice_id')
- * @property string                  $secondKey      The primary key on target table being referenced (default: 'id')
- * @property string                  $localKey       The primary key on source model being referenced (default: 'id')
- * @property string                  $secondLocalKey The foreign key on intermediate table referencing target model (e.g. 'payment_id')
- * @property array                   $orderBy        Optional sorting configuration (default: ['date' => 'desc'])
  */
 class RecordHasManyThroughType
 {

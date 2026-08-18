@@ -69,7 +69,7 @@ class RecordMetaBelongsToManyType
      * Create a new RecordMetaBelongsToManyType instance.
      *
      * @param string                  $related         The related model class name or table name (required)
-     * @param RecordRelationshipsEnum $recordRelationshipsEnum The relationship type
+     * @param RecordRelationshipsEnum $type            The relationship type (defaults to BELONGS_TO_MANY)
      * @param null|string             $table           The intermediate pivot table name
      * @param null|string             $foreignPivotKey Foreign key on pivot table for parent model
      * @param null|string             $relatedPivotKey Foreign key on pivot table for related model
@@ -81,6 +81,9 @@ class RecordMetaBelongsToManyType
      * @param bool                    $withTimestamps  Whether to include timestamps on pivot table
      * @param array                   $select          Specific columns to select from the related table
      * @param array                   $pivotWhere      Legacy pivot where conditions (deprecated, use wherePivot)
+     * @param bool                    $allowCreate     Whether nested creates are allowed through this relationship
+     * @param bool                    $allowUpdate     Whether nested updates are allowed through this relationship
+     * @param bool                    $allowDelete     Whether nested deletes are allowed through this relationship
      *
      * @throws InvalidArgumentException When related model/table name is empty or invalid
      */

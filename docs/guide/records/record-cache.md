@@ -39,9 +39,17 @@ Main config is in `config/record.php`:
 A request is cacheable only when all conditions are true:
 
 - `record.cache.enabled = true`
+- The table/function opts in — `disableCache` defaults to `true`, so caching
+  must be enabled explicitly per table (`RecordTableType(disableCache: false)`)
+  and/or per function (`RecordFunctionType(disableCache: false)`)
 - HTTP method is `GET`
 - Request does not include `search`, `filter`, or `where`
 - Table/function cache is not disabled by config flags
+
+> **Why opt-in?** With caching enabled globally, every endpoint used to be
+> cached by default, which broke client business logic that reads fresh data.
+> Cache is now opt-in per table/function: enable it only where a cached read is
+> safe (low-volatility data, no side effects on read).
 
 ## Cache Control Levels
 
@@ -52,13 +60,15 @@ A request is cacheable only when all conditions are true:
 
 ### Table level
 
+- **Opt in** per table with `RecordTableType(disableCache: false)` — the
+  default `true` keeps the table uncached.
 - Disable by table in `record.cache.per_table['table'] = false`.
-- Disable in table config with `RecordTableType(disableCache: true)`.
 - Override table TTL in `record.cache.per_table_ttl['table']`.
 
 ### Function level
 
-- Disable per function with `RecordFunctionType(disableCache: true)`.
+- **Opt in** per function with `RecordFunctionType(disableCache: false)` — the
+  default `true` keeps the function uncached.
 - Override function TTL with `RecordFunctionType(cacheTTL: 300)`.
 - Clear related table caches on write with `RecordFunctionType(clearCacheTables: [...])`.
 
@@ -101,6 +111,7 @@ $cache->clearCacheForTables(['settings', 'users'], $tenantId);
 ## Practical Setup
 
 1. Start with `record.cache.enabled=true` in production.
-2. Disable cache only for high-volatility tables.
+2. Opt in per table (`disableCache: false`) only for low-volatility data where
+   stale reads are safe; leave everything else at the default (uncached).
 3. Set shorter `per_table_ttl` for near-real-time tables.
 4. Add `clearCacheTables` on write functions that mutate related tables.

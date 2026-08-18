@@ -2,6 +2,22 @@
 
 All notable changes to `sp-laravel-api` will be documented in this file.
 
+## [0.4.94] - 2026-08-18
+
+### Changed
+- **Caching is now opt-in per table/function**: `disableCache` on `RecordTableType`, `RecordFunctionType`, and the `#[RecordTable]`/`#[RecordFunction]`/`#[RecordGlobalFunction]` attributes now defaults to `true`, so endpoints are **not** cached unless explicitly enabled with `disableCache: false` (global `record.cache.enabled` must still be `true`). Previously every GET was cached by default once the global flag was on, which broke client business logic that reads fresh data. Array (legacy) configs are normalized through the same `?? true` fallbacks, so old array configs also default to uncached. Tests updated to opt in explicitly.
+- **`RecordFunctionType::$httpMethod` is validated against `RecordFunctionMethodEnum`**: a string or array containing anything other than `GET`/`POST`/`PUT`/`DELETE`/`PATCH`/`OPTIONS`/`HEAD` (or the enum instance itself) now throws `InvalidArgumentException`. Enum values remain accepted as strings, so existing valid configs keep working.
+- **`RecordTableType::$public` is deprecated**: it is now derived automatically from `isAuthRead`/`isAuthWrite` (public read = `!isAuthRead`, public write = `!isAuthWrite`) and only honored as a legacy override when both auth flags are left at their defaults. `RecordTablePublic` is also tagged deprecated.
+
+### Fixed
+- `RecordMorphToManyType::toArray()` and `RecordSpatiePermissionType::toArray()` emitted `'type' => null` (a stray never-assigned `$recordRelationshipsEnum` property) — both now emit the real relationship type.
+- `RecordMetaHasManyThroughType::toArray()` wrote the `orderBy` key twice — deduplicated.
+
+### Docs
+- Restructured: merged pagination pages into `module-pagination.md`, split permission/relationships/config docs into focused pages, added `docs/agents_init/` setup prompts, reworked `api-type-reference-and-examples.md` (httpMethod enum requirement, `disableCache` default `true`, `public` deprecation).
+- New userstamps convention: raw audit columns `created_by_id` / `last_updated_by_id`; `created_by` / `last_updated_by` reserved as `belongsTo` relationship aliases.
+- PHP attribute-based config framed as legacy (record config is the recommended path); cache pages updated to opt-in semantics.
+
 ## [0.4.93] - 2026-08-17
 
 ### Added

@@ -58,6 +58,7 @@ class RecordListCacheSerializationTest extends TestCase
             'video_categories' => new RecordTableType(
                 table: 'video_categories',
                 pmsName: 'video_categories',
+                disableCache: false,
                 public: new RecordTablePublic(read: true, write: true),
             ),
         ]);

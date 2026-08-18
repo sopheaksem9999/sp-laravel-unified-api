@@ -168,7 +168,8 @@ For a focused cache guide (config, TTL, invalidation), see [Record Cache](/guide
 
 **Table functions**
 
-- Caching is enabled by default (`disableCache: false`).
+- Caching is disabled by default (`disableCache: true`) — opt in per function
+  with `RecordFunctionType(disableCache: false)`.
 - Table cache can be disabled globally for a table using `record.cache.per_table[table] = false`.
 - Default TTL uses `record.cache.per_table_ttl[table]` when set; otherwise `record.cache.ttl`.
 - Set `cacheTTL` in the function config to override the computed TTL for this function.
@@ -177,7 +178,8 @@ For a focused cache guide (config, TTL, invalidation), see [Record Cache](/guide
 
 **Global functions**
 
-- Caching is enabled by default (`disableCache: false`).
+- Caching is disabled by default (`disableCache: true`) — opt in per function
+  with `RecordFunctionType(disableCache: false)`.
 - Default TTL uses `record.cache.ttl`.
 - Set `cacheTTL` in the function config to override the default TTL for this function.
 - For write methods (`POST`, `PUT`, `PATCH`, `DELETE`), global function cache for the executed function is invalidated automatically.

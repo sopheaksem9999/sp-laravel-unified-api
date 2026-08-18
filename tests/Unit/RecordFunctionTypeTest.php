@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Tests\Unit;
 
+use InvalidArgumentException;
 use Sopheak\Core\Enums\RecordFunctionMethodEnum;
 use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Tests\TestCase;
@@ -52,6 +53,44 @@ class RecordFunctionTypeTest extends TestCase
         $array = $type->toArray();
 
         $this->assertSame(['GET'], $array['httpMethod']);
+    }
+
+    /** @test */
+    public function it_rejects_http_methods_not_from_the_enum(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('httpMethod must be a RecordFunctionMethodEnum');
+
+        new RecordFunctionType(
+            httpMethod: 'FETCH',
+            class: 'App\\Services\\DummyService',
+            functionName: 'handle',
+        );
+    }
+
+    /** @test */
+    public function it_rejects_http_method_arrays_containing_non_enum_values(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        new RecordFunctionType(
+            httpMethod: ['GET', 'TRACE'],
+            class: 'App\\Services\\DummyService',
+            functionName: 'handle',
+        );
+    }
+
+    /** @test */
+    public function it_rejects_empty_http_method_arrays(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('httpMethod cannot be empty');
+
+        new RecordFunctionType(
+            httpMethod: [],
+            class: 'App\\Services\\DummyService',
+            functionName: 'handle',
+        );
     }
 
     /** @test */

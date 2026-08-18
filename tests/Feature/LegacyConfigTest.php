@@ -127,6 +127,7 @@ class LegacyConfigTest extends TestCase
                 'table' => 'legacy_items',
                 'softDeletes' => false,
                 'public' => ['read' => true, 'write' => true],
+                'disableCache' => false,
                 'functions' => [
                     'cached_func' => [
                         'httpMethod' => ['GET'],
@@ -163,6 +164,7 @@ class LegacyConfigTest extends TestCase
                 'table' => 'legacy_items',
                 'softDeletes' => false,
                 'public' => ['read' => true, 'write' => true],
+                'disableCache' => false,
                 'functions' => [
                     'cached_func' => [
                         'httpMethod' => ['GET'],
@@ -238,6 +240,7 @@ class LegacyConfigTest extends TestCase
                 'table' => 'legacy_items',
                 'softDeletes' => false,
                 'public' => ['read' => true, 'write' => true],
+                'disableCache' => false,
                 'functions' => [
                     'cached_func' => [
                         'httpMethod' => ['GET'],

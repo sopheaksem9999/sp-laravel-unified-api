@@ -37,9 +37,9 @@ class RecordCacheService
 
         $disableCache = false;
         if (is_object($tableSchema)) {
-            $disableCache = (bool) ($tableSchema->disableCache ?? false);
+            $disableCache = (bool) ($tableSchema->disableCache ?? true);
         } elseif (is_array($tableSchema)) {
-            $disableCache = (bool) ($tableSchema['disableCache'] ?? false);
+            $disableCache = (bool) ($tableSchema['disableCache'] ?? true);
         }
 
         if ($disableCache) {

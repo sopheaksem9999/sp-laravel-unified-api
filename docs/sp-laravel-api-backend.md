@@ -13,11 +13,14 @@ keywords:
 
 # Backend Agent Guide
 
+For bootstrapping a new Laravel backend project that configures the package, use
+the copy-paste [Backend Setup Prompt](/agents_init/backend-setup-prompt).
+
 ## Where to Start
 
 - Core behavior is config-driven via `RecordTableType` in `config/record.php` and related config files.
-- CRUD orchestration lives in `Sopheak\\Core\\Services\\RecordService`.
-- Response envelope and error contract lives in `Sopheak\\Core\\Services\\RecordApiResponseService`.
+- CRUD orchestration lives in `Sopheak\Core\Services\RecordService`.
+- Response envelope and error contract lives in `Sopheak\Core\Services\RecordApiResponseService`.
 
 ## Docs Entry Points
 

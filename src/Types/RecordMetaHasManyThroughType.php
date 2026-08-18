@@ -24,6 +24,20 @@ use Sopheak\Core\Enums\RecordRelationshipsEnum;
  * - $secondKey: related primary key (default: 'id')
  * - $localKey: parent primary key (defaults to 'id')
  * - $secondLocalKey: pivot column pointing to related (default: 'target_id')
+ *
+ * @param string                  $table          The target table/model name (required)
+ * @param string                  $through        The meta/pivot table name (default: 'meta')
+ * @param string                  $firstKey       Pivot column pointing to parent (default: 'owner_id')
+ * @param string                  $secondKey      Related primary key (default: 'id')
+ * @param string                  $localKey       Parent primary key (default: 'id')
+ * @param string                  $secondLocalKey Pivot column pointing to related (default: 'target_id')
+ * @param array                   $orderBy        Optional sorting configuration (default: ['created_at' => 'desc'])
+ * @param RecordRelationshipsEnum $type           The relationship type (defaults to HAS_MANY_THROUGH)
+ * @param null|string             $ownerColumn    Discriminator column in the meta table (default: 'owner')
+ * @param null|string             $owner          Discriminator value for the owning table (e.g. 'package')
+ * @param bool                    $allowCreate    Whether nested creates are allowed through this relationship
+ * @param bool                    $allowUpdate    Whether nested updates are allowed through this relationship
+ * @param bool                    $allowDelete    Whether nested deletes are allowed through this relationship
  */
 class RecordMetaHasManyThroughType
 {
@@ -95,10 +109,6 @@ class RecordMetaHasManyThroughType
 
         if (null !== $this->ownerColumn) {
             $config['ownerColumn'] = $this->ownerColumn;
-        }
-
-        if (!empty($this->orderBy)) {
-            $config['orderBy'] = $this->orderBy;
         }
 
         return $config;

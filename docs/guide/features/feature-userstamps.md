@@ -1,13 +1,12 @@
 ---
-title: "Userstamps (created_by / updated_by)"
-description: "How the package auto-populates created_by, created_by_id, updated_by, last_updated_by, and last_updated_by_id columns from the authenticated user, the overrideUserstamps escape hatch, and the audit-log relationship."
+title: "Userstamps (created_by_id / last_updated_by_id)"
+description: "Recommended audit/userstamp convention: use created_by_id and last_updated_by_id as the raw user-id columns, and reserve created_by / last_updated_by as belongsTo relationship aliases. Covers auto-population, overrideUserstamps, and the audit-log relationship."
 keywords:
   - userstamps
-  - created_by
   - created_by_id
-  - updated_by
-  - last_updated_by
   - last_updated_by_id
+  - created_by
+  - last_updated_by
   - overrideUserstamps
   - audit user tracking
 ---
@@ -18,18 +17,35 @@ The package auto-populates audit-style user columns on create/update when the
 table schema declares them. This is the data source behind own-records scoping
 (see [Own-Records Scoping](/guide/features/feature-permission)).
 
+## Recommended Convention
+
+Use the `_id`-suffixed names as the raw userstamp columns, and reserve the
+non-`_id` names as the `belongsTo` relationship aliases to the users table:
+
+| Name | Role |
+|---|---|
+| `created_by_id` | **Userstamp column** — id of the user who created the row |
+| `last_updated_by_id` | **Userstamp column** — id of the last user who wrote the row |
+| `created_by` | **Relationship alias** — `belongsTo` to the users table |
+| `last_updated_by` | **Relationship alias** — `belongsTo` to the users table |
+
+Do **not** use `created_by` / `last_updated_by` as the raw audit columns — those
+names are meant for the relationship key. Declare `created_by_id` /
+`last_updated_by_id` in `columns` (and write-disable them), then expose the
+`created_by` / `last_updated_by` relationships separately.
+
 ## Supported Column Names
 
-| Column | Filled on | Description |
-|---|---|---|
-| `created_by` | create | ID of the user who created the row |
-| `created_by_id` | create | Alias-style variant of `created_by` |
-| `updated_by` | create + update | ID of the last user who wrote the row |
-| `last_updated_by` | create + update | Alias-style variant of `updated_by` |
-| `last_updated_by_id` | create + update | Alias-style variant of `updated_by` |
+The package detects the following names for backward compatibility. Any subset
+works — it only touches columns present in the table's `columns` map:
 
-Any subset works — the package only touches columns present in the table's
-`columns` map.
+| Column | Filled on | Notes |
+|---|---|---|
+| `created_by_id` | create | **Recommended** |
+| `created_by` | create | legacy / relationship-key variant |
+| `last_updated_by_id` | create + update | **Recommended** |
+| `last_updated_by` | create + update | legacy / relationship-key variant |
+| `updated_by` | create + update | legacy variant |
 
 ## How It Works
 
@@ -38,8 +54,8 @@ and `RecordService::applyTimestampsAndAuditFields()` inspect the authenticated
 user and the table schema:
 
 ```php
-// create: only created_by / created_by_id filled
-// update: updated_by / last_updated_by / last_updated_by_id filled
+// create: only created_by_id / created_by filled
+// update: last_updated_by_id / last_updated_by / updated_by filled
 // (created_by* untouched on update)
 ```
 
@@ -56,10 +72,23 @@ column in config but missing from the database makes writes fail.
 new RecordTableType(
     table: 'invoices',
     pmsName: 'invoice',
+    columnWriteDisabled: ['created_by_id', 'last_updated_by_id'],
+    relationships: [
+        'created_by' => new RecordBelongsToType(
+            table: 'users',
+            foreignKey: 'created_by_id',
+            ownerKey: 'id',
+        ),
+        'last_updated_by' => new RecordBelongsToType(
+            table: 'users',
+            foreignKey: 'last_updated_by_id',
+            ownerKey: 'id',
+        ),
+    ],
     columns: [
         // ...
-        'created_by' => ['type' => 'bigInteger', 'nullable' => true],
-        'updated_by' => ['type' => 'bigInteger', 'nullable' => true],
+        'created_by_id' => ['type' => 'bigInteger', 'nullable' => true],
+        'last_updated_by_id' => ['type' => 'bigInteger', 'nullable' => true],
     ],
 ),
 ```
@@ -67,8 +96,8 @@ new RecordTableType(
 ```php
 // Migration for the columns
 Schema::table('invoices', function (Blueprint $table) {
-    $table->unsignedBigInteger('created_by')->nullable();
-    $table->unsignedBigInteger('updated_by')->nullable();
+    $table->unsignedBigInteger('created_by_id')->nullable();
+    $table->unsignedBigInteger('last_updated_by_id')->nullable();
 });
 ```
 
@@ -84,13 +113,14 @@ new RecordTableType(
     pmsName: 'invoice',
     overrideUserstamps: true,
     columns: [
-        'created_by' => ['type' => 'bigInteger', 'nullable' => true],
+        'created_by_id' => ['type' => 'bigInteger', 'nullable' => true],
     ],
 ),
 ```
 
-When `true`, a client-provided `created_by`/`updated_by` value in the payload
-is kept as-is; when `false` (default), the authenticated user's ID always wins.
+When `true`, a client-provided `created_by_id`/`last_updated_by_id` value in the
+payload is kept as-is; when `false` (default), the authenticated user's ID always
+wins.
 
 ## Interaction with Own-Records Scoping
 
@@ -113,5 +143,6 @@ row itself. Both can be enabled independently:
 ## Related Docs
 
 - [Built-in Role/Permission](/guide/features/feature-permission)
+- [Own-Records Scoping](/guide/feature-permission-own-records)
 - [Record Type Reference](/guide/api/api-type-reference-and-examples)
 - [Record Hooks](/guide/record-hooks)

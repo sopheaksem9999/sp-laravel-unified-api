@@ -7,22 +7,24 @@ namespace Sopheak\Core\Types;
 use Sopheak\Core\Enums\RecordRelationshipsEnum;
 
 /**
- * Class RecordBelongToType.
+ * Class RecordBelongsToType.
  *
- * Represents a relationship configuration between models.
+ * Represents a belongs-to relationship configuration between models.
  *
  * @property string                  $table      The related table name (e.g. 'users')
  * @property RecordRelationshipsEnum $type       The relationship type, defaults to BELONGS_TO
- * @property null|string             $foreignKey Foreign key on the source model (e.g. 'created_by')
+ * @property null|string             $foreignKey Foreign key on the source model (e.g. 'created_by_id')
  * @property null|string             $ownerKey   Primary key on the target model (e.g. 'id')
  *
  * Sample usage:
- * [
- *     'table' => 'users',
- *     'type' => 'belongsTo',
- *     'foreignKey' => 'created_by',
- *     'ownerKey' => 'id',
- * ]
+ * ```php
+ * new RecordBelongsToType(
+ *     table: 'users',
+ *     type: RecordRelationshipsEnum::BELONGS_TO,
+ *     foreignKey: 'created_by_id',
+ *     ownerKey: 'id',
+ * )
+ * ```
  */
 class RecordBelongsToType
 {

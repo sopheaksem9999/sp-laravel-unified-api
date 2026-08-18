@@ -60,14 +60,12 @@ use Sopheak\Core\Enums\RecordRelationshipsEnum;
  */
 class RecordSpatiePermissionType
 {
-    public $recordRelationshipsEnum;
-
     /**
      * Create a new RecordSpatiePermissionType instance.
      *
      * @param string                  $related         The related model class name (required)
      * @param string                  $relation        The morph relation name (required)
-     * @param RecordRelationshipsEnum $recordRelationshipsEnum The relationship type
+     * @param RecordRelationshipsEnum $type            The relationship type (defaults to SPATIE_PERMISSION)
      * @param null|string             $table           The intermediate pivot table name
      * @param null|string             $foreignPivotKey Foreign key on pivot table for parent model
      * @param null|string             $relatedPivotKey Foreign key on pivot table for related model
@@ -169,7 +167,7 @@ class RecordSpatiePermissionType
         $config = [
             'related' => $this->related,
             'relation' => $this->relation,
-            'type' => $this->recordRelationshipsEnum,
+            'type' => $this->type,
         ];
 
         // Add optional properties only if they have values

@@ -22,7 +22,7 @@ new RecordTableType(
     hasTenantId: false,
     softDeletes: false,
     disableAuditLog: false,
-    disableCache: false,
+    disableCache: true,
     disableBroadcast: false,
     canRead: true,
     canCreate: true,
@@ -30,7 +30,6 @@ new RecordTableType(
     canDelete: true,
     isAuthRead: true,
     isAuthWrite: true,
-    public: new RecordTablePublic(),
     relationships: [],
     functions: [],
     primaryKey: 'id',
@@ -69,7 +68,7 @@ new RecordTableType(
 
 - `isAuthRead` (bool, default: `true`): Auth requirement flag for read endpoints. `true` forces authentication, `false` makes read endpoints public.
 - `isAuthWrite` (bool, default: `true`): Auth requirement flag for write endpoints. `true` forces authentication, `false` makes write endpoints public.
-- `public` (RecordTablePublic|bool, legacy compatibility): Derived from `isAuthRead`/`isAuthWrite` for backward compatibility. New config should prefer auth flags directly.
+- `public` (RecordTablePublic|bool, **deprecated**): Derived automatically from `isAuthRead`/`isAuthWrite` (public read = `!isAuthRead`, public write = `!isAuthWrite`). Only honored as a legacy override when both auth flags are left at their defaults — new config should set the auth flags directly and never set `public`.
 - `canRead` (bool, default: `true`): Enables/disables read endpoints for this table (list/show). When false, read routes respond as “not found”.
 - `canCreate` (bool, default: `true`): Enables/disables create endpoint.
 - `canUpdate` (bool, default: `true`): Enables/disables update and restore endpoints.
@@ -81,7 +80,7 @@ new RecordTableType(
 
 #### Caching & Audit
 
-- `disableCache` (bool, default: `false`): Disables query caching for this table (even if `record.cache.enabled` is true).
+- `disableCache` (bool, default: `true`): Disables query caching for this table (even if `record.cache.enabled` is true). Caching is **opt-in per table** — set `disableCache: false` to enable it.
 - `disableAuditLog` (bool, default: `false`): Disables audit log inserts for create/update/delete on this table.
 - `disableBroadcast` (bool, default: `false`): Suppresses `RecordMutated` broadcast events for this table even when `record.broadcast_events` is globally enabled. Useful for high-volume tables where real-time broadcasting is not needed.
 - `auditLogFn` (?string, default: `null`): Reserved for custom audit log behavior; not used by the current runtime.
@@ -441,11 +440,11 @@ $beforeCreate = new RecordTableTriggerType(
 
 Defines a callable RPC endpoint config (table RPC or global RPC).
 
-- `httpMethod` (array|string|RecordFunctionMethodEnum, required): Allowed HTTP methods.
+- `httpMethod` (array|string|RecordFunctionMethodEnum, required): Allowed HTTP method(s). Must come from `RecordFunctionMethodEnum` — either the enum value (`RecordFunctionMethodEnum::POST->value`), an array of them, or the enum instance itself. Any other string throws `InvalidArgumentException`.
 - `class` (string, required): Handler class.
 - `functionName` (string, required): Method name on handler class.
 - `pmsName` (array|string|null, default: `null`): Permission(s). When `null`, the function is public (no permission check).
-- `disableCache` (bool, default: `false`): Disable caching for this function.
+- `disableCache` (bool, default: `true`): Disable caching for this function. Caching is **opt-in per function** — set `disableCache: false` to enable it.
 - `cacheTTL` (?int, default: `null`): Custom cache TTL (seconds). When set, overrides the default cache TTL.
 - `clearCacheTables` (array|string|null, default: `null`): Tables to clear after successful write methods (`POST`, `PUT`, `PATCH`, `DELETE`). If omitted for table functions, the current table is cleared.
 - `name` (?string, default: `null`): Display name used for the OpenAPI operation summary. Falls back to `description`, then a humanized function key, when empty.
@@ -630,5 +629,73 @@ $userRoles = new RecordSpatiePermissionType(
     foreignPivotKey: config('permission.column_names.model_morph_key'),
     relatedPivotKey: 'role_id',
     teamsEnabled: true,
+);
+```
+
+#### RecordValidationType
+
+Validator configuration for table write events.
+
+- `class` (string, required): Validator handler class name.
+- `functionName` (string, required): Static method to call on the class.
+- `description` (?string, default: `null`): Optional description.
+
+```php
+use Sopheak\Core\Types\RecordValidationType;
+
+$createValidator = new RecordValidationType(
+    class: \App\Validators\InvoiceValidator::class,
+    functionName: 'createRules',
+);
+```
+
+#### RecordMetaHasManyThroughType
+
+Has-many-through over a global meta table (`owner`, `owner_id`, `target`, `target_id`).
+
+- `table` (string, required): Target table name.
+- `through` (string, required): Intermediate (meta) table name.
+- `firstKey` (string, required): FK on the meta table referencing the source (`owner_id`).
+- `secondLocalKey` (string, default: `''`): FK on the meta table referencing the target (`target_id`).
+- `secondKey` (string, default: `'id'`): PK on the target table.
+- `localKey` (string, default: `'id'`): PK on the source table.
+- `ownerColumn` (?string): Column storing the source table name (`owner`).
+- `owner` (?string): Source table name value (e.g. `packages`).
+
+```php
+use Sopheak\Core\Types\RecordMetaHasManyThroughType;
+
+$modules = new RecordMetaHasManyThroughType(
+    table: 'modules',
+    through: 'meta',
+    firstKey: 'owner_id',
+    secondKey: 'id',
+    secondLocalKey: 'target_id',
+    ownerColumn: 'owner',
+    owner: 'packages',
+);
+```
+
+#### RecordAassociationType
+
+Association has-many-through with simplified parameters, usable when the meta table uses the standard `owner`/`owner_id`/`target`/`target_id` columns.
+
+- `related` (string, required): Related table name.
+- `type` (RecordRelationshipsEnum, default: `RecordRelationshipsEnum::HAS_MANY_THROUGH`)
+- `fromObjectType` (string): Source table name (e.g. `packages`).
+- `fromObjectId` (string, default: `'owner_id'`): Meta column referencing the source.
+- `toObjectType` (string): Target table name.
+- `toObjectId` (string, default: `'target_id'`): Meta column referencing the target.
+
+```php
+use Sopheak\Core\Types\RecordAassociationType;
+
+$modules = new RecordAassociationType(
+    related: 'modules',
+    type: RecordRelationshipsEnum::HAS_MANY_THROUGH,
+    fromObjectType: 'packages',
+    fromObjectId: 'owner_id',
+    toObjectType: 'modules',
+    toObjectId: 'target_id',
 );
 ```
