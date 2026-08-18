@@ -45,8 +45,9 @@ composer quality                 # format-check -> analyse -> test
 composer docs:validate           # php bin/validate-docs.php
 ```
 
-## Artisan Commands (in `src/Console/`, 15 total)
+## Artisan Commands (in `src/Console/`, 16 total)
 - `php artisan sp-laravel-api:setup` — publish configs + migrations
+- `php artisan sp-laravel-api:agent` — set up AI agent skill, rules, and MCP
 - `php artisan sp-laravel-api:record {name}` — scaffold a table config
 - `php artisan sp-laravel-api:validate` — validate current config
 - `php artisan sp-laravel-api:export-openapi` — generate OpenAPI spec

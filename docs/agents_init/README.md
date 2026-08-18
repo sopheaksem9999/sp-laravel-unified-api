@@ -42,7 +42,8 @@ project's existing `.agents/` rules, not rebuild them.
 
 ## How to use
 
-1. Copy the whole prompt file (the text after the `---` front-matter).
+1. Open the prompt page and click the **copy button** in the top-right corner of
+   the code block (or manually select and copy the prompt text).
 2. Replace the `{PLACEHOLDERS}` (`{project-name}`, `{api-host}`,
    `{schema-mcp-url}`, `{api-prefix}`, etc.) with your deployment's values.
 3. Paste it into your AI agent's chat (Claude Code, Trae, opencode, etc.) at the

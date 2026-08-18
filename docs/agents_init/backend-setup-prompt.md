@@ -12,6 +12,9 @@ keywords:
   - permissions
 ---
 
+# Backend Setup Prompt
+
+```markdown
 You are initializing a LOCAL agentic setup in an EXISTING Laravel backend that
 uses the `sopheak/sp-laravel-api` package. The project already has its own
 structure, rules, and conventions — your job is NOT to rebuild them. You ADD the
@@ -149,3 +152,4 @@ Return: (1) the files you ADDED or UPDATED (a diff-style summary, not a full
 rebuild), (2) the sp-laravel-api conventions you encoded into the project's
 `.agents/` docs, and (3) the tables/endpoints you validated via
 `sp-laravel-api:validate` / the schema MCP.
+```

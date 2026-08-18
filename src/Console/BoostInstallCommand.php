@@ -55,9 +55,8 @@ class BoostInstallCommand extends Command
         $this->newLine();
 
         $this->line('Next steps:');
-        $this->line('  • Run `php artisan boost:install` (or `boost:update --discover`) first so the');
-        $this->line('    sp-laravel-api guidelines + "sp-laravel-api-development" skill are installed.');
-        $this->line('  • Boost regenerates .mcp.json — re-run `php artisan sp-laravel-api:boost` afterwards.');
+        $this->line('  • Run `php artisan sp-laravel-api:agent` to install the agent skill and rules.');
+        $this->line('  • If you use Laravel Boost, re-run `php artisan sp-laravel-api:boost` if Boost regenerates .mcp.json.');
 
         return Command::SUCCESS;
     }
