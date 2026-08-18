@@ -74,4 +74,3 @@ Add to the table config `functions:`:
 ),
 </code-snippet>
 @endverbatim
-
