@@ -696,7 +696,7 @@ class RecordService
             $disableCache = $functionConfig->disableCache;
             $functionCacheTtl = $functionConfig->cacheTTL;
         } elseif (is_array($functionConfig)) {
-            $disableCache = (bool) ($functionConfig['disableCache'] ?? false);
+            $disableCache = (bool) ($functionConfig['disableCache'] ?? true);
             $functionCacheTtl = isset($functionConfig['cacheTTL']) ? (int) $functionConfig['cacheTTL'] : null;
         }
 
@@ -799,7 +799,7 @@ class RecordService
             $disableCache = $functionConfig->disableCache;
             $functionCacheTtl = $functionConfig->cacheTTL;
         } elseif (is_array($functionConfig)) {
-            $disableCache = (bool) ($functionConfig['disableCache'] ?? false);
+            $disableCache = (bool) ($functionConfig['disableCache'] ?? true);
             $functionCacheTtl = isset($functionConfig['cacheTTL']) ? (int) $functionConfig['cacheTTL'] : null;
         }
 

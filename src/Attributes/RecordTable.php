@@ -56,7 +56,7 @@ class RecordTable
         public readonly bool $canDelete = true,
         public readonly bool $canUpsert = true,
         public readonly bool $disableAuditLog = false,
-        public readonly bool $disableCache = false,
+        public readonly bool $disableCache = true,
         public readonly bool $disableBroadcast = false,
     ) {}
 }

@@ -1,99 +1,21 @@
 ---
-title: "API Access, Query Filtering, and Relationships"
-description: "API docs access mode plus query filtering, relationship selection, relationship types, and relationship write payload patterns."
+title: "Relationships"
+description: "Relationship selection (select/with), filtering, supported relationship types, configuration limits, and the relationship write payload guide."
 keywords:
-  - api docs access
-  - query filters
   - relationship selection
   - relationship types
+  - relationship filtering
   - relationship write payload
+  - select include
+  - with include
 ---
 
-## Record CRUD API Documentation
+# Relationships
 
-This section documents the record CRUD endpoints provided by this package, including request/response formats, filtering, pagination, and error handling.
-
-### API Docs Access Mode
-
-The bundled docs UI endpoint is:
-
-- `GET /api-docs`
-
-Use `config/record.php` to control visibility:
-
-```php
-'api_docs' => [
-    'is_private' => env('SP_LARAVEL_API_DOCS_PRIVATE', false),
-    'access_token_key' => 'access_token',
-    'login_api' => '/v1/auth/login',
-    'email' => env('SP_LARAVEL_API_DOCS_EMAIL'),
-],
-```
-
-Behavior:
-
-- If `api_docs` config is missing, docs stay public by default.
-- If `is_private=false`, `/api-docs` loads Scalar directly.
-- If `is_private=true`, `/api-docs` shows a custom login form first.
-- If `is_private=true`, Scalar uses secure web routes:
-  - `POST /api-docs/auth/login`
-  - `POST /api-docs/auth/logout`
-  - `GET /api-docs/openapi.json`
-- In private mode, API endpoints `/{api_prefix}/docs/openapi(.json)` and `/{api_prefix}/docs/llms.*` are hidden with `404` to avoid schema leakage.
-- `login_api` supports relative route or absolute URL, so each client project can point docs login to its own auth endpoint.
-- `access_token_key` controls token extraction key from login response payload.
-- `email` is optional and enforces a fixed docs login account.
-
-### Query Filtering (applyRequestFilters macro)
-
-The package extends Laravel's `Illuminate\Database\Query\Builder` with a macro `applyRequestFilters`. This is the same filtering/pagination mechanism used by the record CRUD endpoints when listing records.
-
-```php
-use Illuminate\Support\Facades\DB;
-use Illuminate\Http\Request;
-
-public function index(Request $request)
-{
-    // Start with any base query
-    $query = DB::table('invoices')->where('active', true);
-
-    // Apply filters from request (e.g. ?status=eq.paid&sortby=created_at)
-    $result = $query->applyRequestFilters($request);
-
-    return response()->json($result);
-}
-```
-
-The `applyRequestFilters` method returns an array containing:
-
-- `data`: The result set
-- `meta`: Pagination metadata
-- `headers`: Response headers
-- `filters`: Applied filters
-- `request`: Original request object
-- `cursor_meta`: Cursor pagination metadata (if applicable)
-
-**Builder macro signature:**
-
-```php
-public function applyRequestFilters(
-    \Illuminate\Http\Request $request,
-    bool $isArray = false,
-    string $orderBy = 'id',
-    ?string $tenantColumn = ''
-): array
-```
-
-Because the macro has named parameters, you can also call it using named arguments (PHP 8+):
-
-```php
-$result = DB::table('invoices')->applyRequestFilters(
-    request: $request,
-    isArray: true,
-    orderBy: 'created_at',
-    tenantColumn: 'company_id',
-);
-```
+This page documents relationship selection (`select=` / `with=`), nested
+filtering, the supported relationship types, and the relationship write payload
+guide. For the request-filtering macro used outside dynamic CRUD, see
+[Apply Request Filters](/guide/api-apply-request-filters).
 
 ### Relationship Selection & Filtering
 

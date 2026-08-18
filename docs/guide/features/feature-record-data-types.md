@@ -341,3 +341,9 @@ files.
 If you want a `Closure` validator badly enough to give something up, the thing
 to give up is `config:cache` itself — not `autoloaded`, which changes nothing
 here.
+
+## Related Docs
+
+- [Record Type Reference](/guide/api-type-reference-and-examples) — full `RecordTableType` / `Record*Type` parameter reference
+- [Validation](/guide/api-validation) — validators and default validation
+- [Configuration and Middleware](/guide/api-config-and-middleware)

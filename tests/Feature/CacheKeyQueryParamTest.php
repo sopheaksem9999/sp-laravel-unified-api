@@ -43,6 +43,7 @@ class CacheKeyQueryParamTest extends TestCase
                 pmsName: 'products',
                 hasTenantId: true,
                 softDeletes: true,
+                disableCache: false,
                 public: new RecordTablePublic(read: true, write: true),
                 relationships: [],
             ),

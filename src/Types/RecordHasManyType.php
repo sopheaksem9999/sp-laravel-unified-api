@@ -13,10 +13,13 @@ use Sopheak\Core\Enums\RecordRelationshipsEnum;
  * It is typically used to define how one model relates to multiple records in another table.
  *
  * @param string                  $table      The name of the related table (e.g., 'receive_payment_items')
- * @param RecordRelationshipsEnum $type       The relationship type, defaults to HAS_MANY
  * @param string                  $foreignKey The foreign key in the related table (e.g., 'invoice_id')
+ * @param RecordRelationshipsEnum $type       The relationship type, defaults to HAS_MANY
  * @param string                  $localKey   The local key in the parent table, defaults to 'id'
  * @param null|array              $with       Array of relationships to eager load, defaults to empty array
+ * @param bool                    $allowCreate Whether nested creates are allowed through this relationship
+ * @param bool                    $allowUpdate Whether nested updates are allowed through this relationship
+ * @param bool                    $allowDelete Whether nested deletes are allowed through this relationship
  *
  * Example usage:
  * ```php

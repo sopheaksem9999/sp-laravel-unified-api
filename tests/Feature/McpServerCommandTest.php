@@ -57,6 +57,7 @@ class McpServerCommandTest extends TestCase
                 table: 'mcp_cli_tasks',
                 pmsName: 'mcp_cli_tasks',
                 hasTenantId: false,
+                disableCache: false,
                 public: new RecordTablePublic(read: true, write: true)
             ),
         ]);
