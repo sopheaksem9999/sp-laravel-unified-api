@@ -29,6 +29,8 @@ use Closure;
  * @property null|array        $relationships    Array of relationships with other tables
  * @property null|array        $functions        Array of function configurations
  * @property null|string       $primaryKey      The primary key column name (defaults to 'id')
+ * @property null|string       $ownerColumn     Column holding the record owner's user id, used by `viewOwn:*` scoping.
+ *                                               Defaults to auto-detection via `record.own_records_owner_columns`.
  * @property null|array        $columns          Array of column definitions
  * @property null|array        $columnHiddens   Columns to hide from responses
  * @property null|array        $columnWriteDisabled    Columns that cannot be written via API payloads
@@ -119,6 +121,7 @@ class RecordTableType
         public bool $isAuthWrite = true,
         public RecordTablePublic|bool $public = new RecordTablePublic(),
         public ?string $primaryKey = 'id',
+        public ?string $ownerColumn = null,
         public ?array $columns = [],
         public ?array $columnHiddens = [],
         public ?array $columnWriteDisabled = [],
@@ -276,6 +279,7 @@ class RecordTableType
             isAuthWrite: self::normalizeBool($properties['isAuthWrite'] ?? ($properties['is_auth_write'] ?? true)),
             public: is_array($properties['public'] ?? null) ? RecordTablePublic::__set_state($properties['public']) : ($properties['public'] ?? new RecordTablePublic()),
             primaryKey: $properties['primaryKey'] ?? 'id',
+            ownerColumn: self::normalizeOwnerColumn($properties['ownerColumn'] ?? ($properties['owner_column'] ?? null)),
             columns: $properties['columns'] ?? [],
             columnHiddens: $properties['columnHiddens'] ?? [],
             columnWriteDisabled: $properties['columnWriteDisabled'] ?? [],
@@ -320,6 +324,22 @@ class RecordTableType
             read: !$isAuthRead,
             write: !$isAuthWrite,
         );
+    }
+
+    /**
+     * Legacy array configs may carry the key in snake_case; anything that is not
+     * a non-empty string is treated as "not configured" so resolution falls back
+     * to the auto-detected audit columns.
+     */
+    private static function normalizeOwnerColumn(mixed $value): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $value = trim($value);
+
+        return '' === $value ? null : $value;
     }
 
     private static function normalizeBool(mixed $value): bool

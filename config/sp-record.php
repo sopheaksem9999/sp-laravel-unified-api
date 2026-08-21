@@ -353,6 +353,16 @@ return [
     'restrict_to_own_records' => false, // limit queries to records created by the authenticated user
     'own_records_permission_prefix' => 'viewOwn', // example: viewOwn_invoice
 
+    // Column-resolution order used by `viewOwn:*` scoping when a table does not
+    // declare its own `ownerColumn`. The first column that the table actually
+    // declares wins; if none match, scoping is skipped.
+    //
+    // Default keeps the historical audit-stamp behaviour. Add 'user_id' first if
+    // your domain tables track the record's subject/owner there (so rows created
+    // by an admin on a customer's behalf stay visible to that customer):
+    //   ['user_id', 'created_by_id', 'created_by']
+    'own_records_owner_columns' => ['created_by_id', 'created_by'],
+
     /*
     |--------------------------------------------------------------------------
     | Config-Driven Middleware Map

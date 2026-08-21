@@ -238,7 +238,7 @@ class BasicTest extends TestCase
     }
 
     /** @test */
-    public function it_auto_fills_created_by_created_by_id_updated_by_last_updated_by_and_last_updated_by_id_when_columns_exist(): void
+    public function it_auto_fills_all_userstamps_on_create_and_only_the_update_stamps_on_update(): void
     {
         auth('api')->setUser(new GenericUser(['id' => 77]));
 
@@ -265,9 +265,11 @@ class BasicTest extends TestCase
         $this->assertSame(77, $createPayload['last_updated_by']);
         $this->assertSame(77, $createPayload['last_updated_by_id']);
 
+        // created_by* must NOT be touched on update: they record who created the
+        // row, so rewriting them reassigns ownership to whoever edited last.
         $updatePayload = $service->applyTimestampsAndAuditFields([], $schema, true);
-        $this->assertSame(77, $updatePayload['created_by']);
-        $this->assertSame(77, $updatePayload['created_by_id']);
+        $this->assertArrayNotHasKey('created_by', $updatePayload);
+        $this->assertArrayNotHasKey('created_by_id', $updatePayload);
         $this->assertSame(77, $updatePayload['updated_by']);
         $this->assertSame(77, $updatePayload['last_updated_by']);
         $this->assertSame(77, $updatePayload['last_updated_by_id']);
