@@ -45,6 +45,20 @@ class RecordService
     private const TENANT_SOURCE_PRIORITY = ['attribute', 'header'];
 
     /**
+     * Audit columns that record *who created the row*. They are written on create
+     * only: rewriting them on update silently reassigns record ownership (an admin
+     * editing a customer's row would claim it), which also breaks `viewOwn:*`
+     * scoping for tables whose owner column resolves to an audit stamp.
+     */
+    private const CREATE_AUDIT_COLUMNS = ['created_by', 'created_by_id'];
+
+    /**
+     * Audit columns that record *who wrote the row last*. Written on create and
+     * on every update.
+     */
+    private const UPDATE_AUDIT_COLUMNS = ['updated_by', 'last_updated_by', 'last_updated_by_id'];
+
+    /**
      * Create a new record with all related processing.
      *
      * @return array Returns ['id' => mixed, 'payload' => array, 'tenant_id' => mixed]
@@ -287,14 +301,7 @@ class RecordService
 
         // Apply timestamps and audit fields
         $item = $this->applyTimestampsAndAuditFields($item, $tableSchema, true);
-
-        // The UPDATE branch above only sets updated_at. Fill created_at for the
-        // INSERT branch of the upsert (no existing row matches match_on), which
-        // would otherwise insert NULL into a nullable timestamp column. Safe for
-        // existing rows: created_at is excluded from $updateColumns below.
-        if (isset($tableSchema->columns['created_at']) && !array_key_exists('created_at', $item)) {
-            $item['created_at'] = TimeUtils::now();
-        }
+        $item = $this->applyUpsertCreateStamps($item, $tableSchema);
 
         // Restore an explicit primary key (e.g. a client-generated UUID) or generate one for
         // a UUID-typed key with no database default. sanitizePayload() strips 'id'
@@ -311,7 +318,7 @@ class RecordService
         }
 
         // Upsert requires update columns; exclude match columns, primary key and system timestamps
-        $excludeColumns = array_merge($matchOn, [$pk, 'id', 'created_at', 'deleted_at']);
+        $excludeColumns = array_merge($matchOn, [$pk, 'id', 'created_at', 'deleted_at'], self::CREATE_AUDIT_COLUMNS);
 
         // If specific update columns are configured, use them. Otherwise, update all non-excluded columns.
         $updateColumns = array_values(array_diff(array_keys($item), $excludeColumns));
@@ -397,12 +404,7 @@ class RecordService
             }
 
             $item = $this->applyTimestampsAndAuditFields($item, $tableSchema, true);
-
-            // See upsertRecord() for why created_at must also be filled here for
-            // the INSERT branch of the upsert (NULL timestamp otherwise).
-            if (isset($tableSchema->columns['created_at']) && !array_key_exists('created_at', $item)) {
-                $item['created_at'] = TimeUtils::now();
-            }
+            $item = $this->applyUpsertCreateStamps($item, $tableSchema);
 
             // See upsertRecord() for why an explicit/generated primary key is needed here.
             if (isset($tableSchema->columns[$pk]) && array_key_exists($pk, $payload) && null !== $payload[$pk]) {
@@ -420,7 +422,7 @@ class RecordService
 
         // Calculate update columns from the first item (assuming uniform payload structure)
         $firstItem = $preparedItems[0];
-        $excludeColumns = array_merge($matchOn, [$pk, 'id', 'created_at', 'deleted_at']);
+        $excludeColumns = array_merge($matchOn, [$pk, 'id', 'created_at', 'deleted_at'], self::CREATE_AUDIT_COLUMNS);
         $updateColumns = array_values(array_diff(array_keys($firstItem), $excludeColumns));
         if (empty($updateColumns) && array_key_exists('updated_at', $firstItem)) {
             $updateColumns = ['updated_at'];
@@ -1454,7 +1456,8 @@ class RecordService
             }
 
             if ($user) {
-                foreach (['created_by', 'created_by_id', 'updated_by', 'last_updated_by', 'last_updated_by_id'] as $auditField) {
+                // created_by* deliberately excluded: see self::CREATE_AUDIT_COLUMNS.
+                foreach (self::UPDATE_AUDIT_COLUMNS as $auditField) {
                     if (isset($tableSchema->columns[$auditField]) && (!array_key_exists($auditField, $payload) || !$overrideUserstamps)) {
                         $payload[$auditField] = $user->id;
                     }
@@ -1470,7 +1473,7 @@ class RecordService
             }
 
             if ($user) {
-                foreach (['created_by', 'created_by_id', 'updated_by', 'last_updated_by', 'last_updated_by_id'] as $auditField) {
+                foreach ([...self::CREATE_AUDIT_COLUMNS, ...self::UPDATE_AUDIT_COLUMNS] as $auditField) {
                     if (isset($tableSchema->columns[$auditField]) && (!array_key_exists($auditField, $payload) || !$overrideUserstamps)) {
                         $payload[$auditField] = $user->id;
                     }
@@ -1479,6 +1482,42 @@ class RecordService
         }
 
         return $payload;
+    }
+
+    /**
+     * Fill the create-time stamps that an upsert's INSERT branch needs.
+     *
+     * Both upsert paths call applyTimestampsAndAuditFields() with $isUpdate = true,
+     * which by design only writes updated_at and the UPDATE_AUDIT_COLUMNS. When no
+     * existing row matches match_on the upsert inserts instead, and those columns
+     * would go in as NULL. Filling them here is safe for the UPDATE branch too:
+     * created_at and CREATE_AUDIT_COLUMNS are excluded from $updateColumns, so an
+     * existing row keeps its original author and creation time.
+     *
+     * Only absent keys are filled, so an explicit client value that survived
+     * sanitization (overrideUserstamps / overrideTimestamps) still wins.
+     *
+     * @param array<string, mixed> $item
+     * @return array<string, mixed>
+     */
+    private function applyUpsertCreateStamps(array $item, object $tableSchema): array
+    {
+        if (isset($tableSchema->columns['created_at']) && !array_key_exists('created_at', $item)) {
+            $item['created_at'] = TimeUtils::now();
+        }
+
+        $user = auth('api')->user();
+        if (null === $user) {
+            return $item;
+        }
+
+        foreach (self::CREATE_AUDIT_COLUMNS as $auditField) {
+            if (isset($tableSchema->columns[$auditField]) && !array_key_exists($auditField, $item)) {
+                $item[$auditField] = $user->id;
+            }
+        }
+
+        return $item;
     }
 
     public function shouldApplyTenantId(object $tableSchema): bool

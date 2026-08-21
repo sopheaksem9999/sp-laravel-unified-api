@@ -33,6 +33,7 @@ new RecordTableType(
     relationships: [],
     functions: [],
     primaryKey: 'id',
+    ownerColumn: null,
     columns: [],
     columnHiddens: [],
     columnWriteDisabled: [],
@@ -59,6 +60,7 @@ new RecordTableType(
 - `pmsName` (?string, default: `null`): Used for permission mapping (e.g. `view:{pmsName}`). If `null`, it falls back to the table name (singular, snake_case) for permission generation.
 - `table` (?string, default: `null`): Physical database table name. When `null`, the route table name is used as the DB table name.
 - `primaryKey` (?string, default: `'id'`): Primary key column name used by show/update/delete endpoints.
+- `ownerColumn` (?string, default: `null`): Column holding the record owner's user id, used by [`viewOwn:*` scoping](/guide/feature-permission-own-records). When `null`, the column is auto-detected from `record.own_records_owner_columns`. Set this on domain tables where the owner is the record's *subject* (e.g. `user_id`) rather than the audit author (`created_by_id`).
 
 #### Tenancy
 
