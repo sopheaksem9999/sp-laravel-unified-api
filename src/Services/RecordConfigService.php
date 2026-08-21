@@ -245,6 +245,33 @@ class RecordConfigService
         return (string) config('record.own_records_permission_prefix', 'viewOwn');
     }
 
+    /**
+     * Owner-column resolution order for `viewOwn:*` scoping, used when a table
+     * declares no explicit `ownerColumn`. Non-string / blank entries are dropped
+     * so a malformed config degrades to the shipped default rather than
+     * producing an invalid column reference.
+     *
+     * @return array<int, string>
+     */
+    public static function ownRecordsOwnerColumns(): array
+    {
+        $configured = config('record.own_records_owner_columns', ['created_by_id', 'created_by']);
+
+        $columns = [];
+        foreach ((array) $configured as $column) {
+            if (!is_string($column)) {
+                continue;
+            }
+
+            $column = trim($column);
+            if ('' !== $column) {
+                $columns[] = $column;
+            }
+        }
+
+        return [] === $columns ? ['created_by_id', 'created_by'] : array_values(array_unique($columns));
+    }
+
     public static function debugEnabled(): bool
     {
         return (bool) config('record.debug', false);

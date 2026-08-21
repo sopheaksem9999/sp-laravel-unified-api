@@ -2,6 +2,21 @@
 
 All notable changes to `sp-laravel-api` will be documented in this file.
 
+## [0.4.96] - 2026-08-21
+
+### Added
+- **`RecordTableType::$ownerColumn`**: explicit owner column for `viewOwn:*` scoping, plus the `record.own_records_owner_columns` config key that sets the auto-detection order when a table declares no `ownerColumn`.
+
+### Fixed
+- **`created_by_id` / `created_by` were rewritten on every update**: `RecordService::applyTimestampsAndAuditFields()` looped over all five audit columns inside its `$isUpdate` branch, so `PUT`/`PATCH` (and the update branch of upsert) stamped the *editing* user into the create-time columns. This contradicted both `docs/guide/features/feature-userstamps.md` ("created_by* untouched on update") and `RecordPayloadExtractor`, whose update branch correctly omits them — the extractor's output was simply overwritten one call later. Effect: record ownership silently transferred to whoever wrote last, so an admin editing or approving a customer's row claimed it, which broke `viewOwn:*` scoping for any table scoped on an audit stamp and would have undone a `created_by_id = user_id` backfill. Create-time columns are now split out as `CREATE_AUDIT_COLUMNS` and written on create only; the two upsert paths fill them through the new `applyUpsertCreateStamps()` for their INSERT branch (mirroring the existing `created_at` handling) and exclude them from the upsert's update columns, so upsert-inserted rows are still stamped and upsert-updated rows keep their original author. See `tests/Feature/UpdatePreservesRecordOwnerTest.php`.
+- **`viewOwn` scoping filtered on the audit author instead of the record owner**: the own-records pass in `QueryBuilderFiltersUtils::apply()` resolved its owner column from `created_by_id` / `created_by` only. Those are audit stamps — they record *who inserted the row*, which is the admin, support agent, or system worker when a record is created, granted, or approved on a customer's behalf. Domain tables (purchases, subscriptions, orders, invoices, notifications, tickets, payment methods) track the owning *subject* in `user_id`, so a row with `created_by_id = {admin}` and `user_id = {customer}` was invisible to the customer who owned it — purchased content stayed locked in client apps. Resolution now tries the table's `ownerColumn` first, then each entry of `record.own_records_owner_columns`, taking the first column the table actually declares; when nothing matches, scoping is still skipped rather than erroring. See `tests/Feature/OwnRecordsScopingTest.php`.
+
+### Notes
+- **The default resolution order is unchanged** (`['created_by_id', 'created_by']`), so existing installs keep their current behaviour on upgrade. Opt in per table with `ownerColumn: 'user_id'`, or globally with `'own_records_owner_columns' => ['user_id', 'created_by_id', 'created_by']`. The default was deliberately *not* switched to `user_id`-first: on tables where `user_id` references a user other than the owner (the employee a review is about, a message recipient), a silent flip would expose rows a `viewOwn:*` holder previously could not see.
+- `tests/Unit/BasicTest.php` asserted the old update-rewrites-`created_by*` behaviour; it now pins the documented split (all userstamps on create, only `updated_by` / `last_updated_by` / `last_updated_by_id` on update) and was renamed accordingly.
+- `last_updated_by_id` / `last_updated_by` / `updated_by` are deliberately absent from the owner-column resolution order and must not be added: they move on every write, so an admin editing a customer's row would take visibility from the customer and grant it to the admin.
+- An `ownerColumn` that the table does not declare in `columns` is ignored and resolution falls through to the next candidate — it does not raise an unknown-column error.
+
 ## [0.4.95] - 2026-08-18
 
 ### Changed

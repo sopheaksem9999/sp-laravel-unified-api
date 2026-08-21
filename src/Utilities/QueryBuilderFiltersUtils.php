@@ -232,9 +232,7 @@ class QueryBuilderFiltersUtils
             }
 
             if ($shouldRestrictToOwn) {
-                $ownerColumn = in_array('created_by_id', $allowedCols, true)
-                    ? 'created_by_id'
-                    : (in_array('created_by', $allowedCols, true) ? 'created_by' : null);
+                $ownerColumn = self::resolveOwnRecordsOwnerColumn($recordConfig, $allowedCols);
 
                 if (null !== $ownerColumn) {
                     $builder->where($table . '.' . $ownerColumn, Auth::user()->id);
@@ -1509,6 +1507,55 @@ class QueryBuilderFiltersUtils
         $sort = self::resolveSort($request, $table, $defaultOrderBy);
 
         $builder->orderBy($table . '.' . $sort['column'], $sort['direction']);
+    }
+
+    /**
+     * Resolve the column that `viewOwn:*` scoping filters on.
+     *
+     * `created_by_id` / `created_by` are *audit* stamps: they record who inserted
+     * the row, which may be an admin, support agent or system worker acting on a
+     * customer's behalf. Domain tables usually track the record's actual owner
+     * (the subject/beneficiary) in a separate column such as `user_id`. Scoping on
+     * the audit stamp therefore hides admin-created rows from the customer who
+     * owns them.
+     *
+     * Resolution order:
+     *   1. The table's explicit `ownerColumn`.
+     *   2. `record.own_records_owner_columns` (defaults to the audit stamps, so
+     *      existing installs keep their current behaviour).
+     *
+     * The first candidate the table actually declares wins. When no candidate is
+     * declared, scoping is skipped — matching the long-standing behaviour for
+     * tables without audit columns.
+     *
+     * @param array<int, string> $allowedCols
+     */
+    private static function resolveOwnRecordsOwnerColumn(mixed $recordConfig, array $allowedCols): ?string
+    {
+        $candidates = [];
+
+        if ($recordConfig instanceof RecordTableType) {
+            $candidates[] = $recordConfig->ownerColumn;
+        } elseif (is_array($recordConfig)) {
+            $candidates[] = $recordConfig['ownerColumn'] ?? ($recordConfig['owner_column'] ?? null);
+        }
+
+        foreach (RecordConfigService::ownRecordsOwnerColumns() as $fallback) {
+            $candidates[] = $fallback;
+        }
+
+        foreach ($candidates as $candidate) {
+            if (!is_string($candidate)) {
+                continue;
+            }
+
+            $candidate = trim($candidate);
+            if ('' !== $candidate && in_array($candidate, $allowedCols, true)) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 
     /**

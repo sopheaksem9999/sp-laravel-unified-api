@@ -63,6 +63,14 @@ The value is always `auth('api')->user()->id`. Client-supplied values for
 these columns are **ignored** unless the table opts out (see
 [overrideUserstamps](#overrideuserstamps)).
 
+`created_by*` is **never rewritten by an update**. Those columns record who
+created the row, so rewriting them on `PUT`/`PATCH` would hand ownership to
+whoever edited last — an admin approving a customer's record would claim it.
+
+Upsert follows the same rule per branch: a row the upsert *inserts* gets
+`created_at` and `created_by*` filled, while a row it *updates* keeps the values
+it already had (they are excluded from the upsert's update columns).
+
 **Requirement:** the column must exist in the table's `columns` map. A column
 in the database but missing from config is treated as an unknown field, and a
 column in config but missing from the database makes writes fail.
@@ -124,10 +132,26 @@ wins.
 
 ## Interaction with Own-Records Scoping
 
-The own-records scoping pass reads the same columns: it prefers
-`created_by_id`, falls back to `created_by`, and skips scoping when neither is
-declared. A table that only declares `created_by_id` works correctly — see
-[Own-Records Scoping](/guide/features/feature-permission) for details.
+The own-records scoping pass can filter on these columns, but they are only its
+**fallback**. Resolution order is the table's `ownerColumn`, then each entry of
+`record.own_records_owner_columns` (default `created_by_id`, then `created_by`),
+taking the first column the table declares; scoping is skipped when none match.
+
+Prefer an explicit `ownerColumn` on domain tables whose owner is the record's
+*subject* rather than its author:
+
+```php
+new RecordTableType(
+    table: 'video_purchases',
+    pmsName: 'video_purchase',
+    ownerColumn: 'user_id',   // audit author still recorded in created_by_id
+    // ...
+),
+```
+
+`last_updated_by_id` and friends must **never** be used as an owner column —
+they move on every write. See
+[Own-Records Scoping](/guide/feature-permission-own-records).
 
 ## Audit Logs
 

@@ -773,6 +773,9 @@ class SetupPackageCommand extends Command
                 'permission_separator' => ':', // separator for permission ex: view:invoice
                 'restrict_to_own_records' => false, // limit queries to records created by the authenticated user
                 'own_records_permission_prefix' => 'viewOwn', // example: viewOwn_invoice
+                // Owner-column resolution order for viewOwn scoping (first declared column wins).
+                // Prepend 'user_id' when domain tables track the record owner there.
+                'own_records_owner_columns' => ['created_by_id', 'created_by'],
 
                 // Config-driven middleware map (default + per-table overrides)
                 'middleware_map' => [
