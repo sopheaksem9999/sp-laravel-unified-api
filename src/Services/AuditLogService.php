@@ -312,10 +312,41 @@ class AuditLogService
      */
     public static function insertAuditLog(AuditLogEventEnum $auditLogEventEnum, string $entityClass, array|object $queryData = [], ?string $subject = '', ?string $recap = '', mixed $tenantId = null): void
     {
+        static::insertAuditLogWithContext($auditLogEventEnum, $entityClass, $queryData, $subject, $recap, $tenantId);
+    }
+
+    /**
+     * Submit an audit with explicit actor/request context without changing the legacy signature.
+     * Context affects admission only, not the existing persisted metadata or job payload.
+     * @param array<string, mixed> $context
+     */
+    public static function insertAuditLogWithContext(AuditLogEventEnum $auditLogEventEnum, string $entityClass, array|object $queryData = [], ?string $subject = '', ?string $recap = '', mixed $tenantId = null, array $context = []): void
+    {
         if (!static::isAuditEnabled()) {
             return;
         }
 
+        if (config('audit.filter') !== null && in_array($auditLogEventEnum, [AuditLogEventEnum::CREATED, AuditLogEventEnum::UPDATED, AuditLogEventEnum::DELETED], true)) {
+            $request = array_key_exists('request', $context) ? $context['request'] : (app()->runningInConsole() ? null : request());
+            $user = array_key_exists('actor', $context) ? $context['actor'] : ($request?->user());
+            $context = array_replace([
+                'request' => $request,
+                'table' => static::getTableNameFromEntityType($entityClass),
+                'operation' => $auditLogEventEnum->value,
+                'record_context' => [],
+                'request_context' => [],
+                'source' => 'manual',
+            ], $context, ['tenant_id' => $tenantId]);
+            if (!(new AuditLogFilterService())->shouldLog($auditLogEventEnum, $context['table'], (array) $queryData, $user, $context)) {
+                return;
+            }
+        }
+
+        self::persistAuditLog($auditLogEventEnum, $entityClass, $queryData, $subject, $recap, $tenantId);
+    }
+
+    private static function persistAuditLog(AuditLogEventEnum $auditLogEventEnum, string $entityClass, array|object $queryData, ?string $subject, ?string $recap, mixed $tenantId): void
+    {
         $entityName = AuditLogService::getTableNameFromEntityType($entityClass);
         $entityType = $entityName;
 

@@ -19,6 +19,15 @@ class ValidateSetupCommandTest extends TestCase
      */
     private ?string $configDir = null;
 
+    public function test_invalid_audit_filter_is_reported(): void
+    {
+        config(['audit.filter' => ['UnknownAuditFilter', 'decide']]);
+        $this->artisan('sp-laravel-api:validate')
+            ->expectsOutputToContain('Invalid audit.filter: invalid_filter_method')
+            ->assertExitCode(1);
+    }
+
+
     protected function tearDown(): void
     {
         if ($this->configDir !== null) {

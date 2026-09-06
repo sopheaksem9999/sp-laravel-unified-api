@@ -542,14 +542,17 @@ class RecordService
                 return;
             }
 
-            AuditLogService::insertAuditLog(
-                auditLogEventEnum: $event,
-                entityClass: $entityClass,
-                queryData: $auditData,
-                subject: '',
-                recap: '',
-                tenantId: $tenantId
-            );
+            $auditMethod = config('audit.filter') === null ? 'insertAuditLog' : 'insertAuditLogWithContext';
+            $auditContext = config('audit.filter') === null ? [] : ['context' => array_replace($context, ['source' => 'record'])];
+            AuditLogService::$auditMethod(...[
+                'auditLogEventEnum' => $event,
+                'entityClass' => $entityClass,
+                'queryData' => $auditData,
+                'subject' => '',
+                'recap' => '',
+                'tenantId' => $tenantId,
+                ...$auditContext
+            ]);
         }
 
         // 3. Fire broadcast event (opt-in via record.broadcast_events)
@@ -1018,14 +1021,17 @@ class RecordService
                                 tenantId: $tenantId,
                                 context: $context,
                             ))) {
-                                AuditLogService::insertAuditLog(
-                                    auditLogEventEnum: AuditLogEventEnum::UPDATED,
-                                    entityClass: $entityClass,
-                                    queryData: $recordResult['data'],
-                                    subject: '',
-                                    recap: '',
-                                    tenantId: $tenantId
-                                );
+                                $auditMethod = config('audit.filter') === null ? 'insertAuditLog' : 'insertAuditLogWithContext';
+                                $auditContext = config('audit.filter') === null ? [] : ['context' => array_replace($context, ['source' => 'record'])];
+                                AuditLogService::$auditMethod(...[
+                                    'auditLogEventEnum' => AuditLogEventEnum::UPDATED,
+                                    'entityClass' => $entityClass,
+                                    'queryData' => $recordResult['data'],
+                                    'subject' => '',
+                                    'recap' => '',
+                                    'tenantId' => $tenantId,
+                                    ...$auditContext
+                                ]);
                             }
                         }
                     }

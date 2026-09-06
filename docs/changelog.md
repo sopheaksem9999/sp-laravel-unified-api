@@ -1,6 +1,27 @@
+---
+title: "Changelog"
+description: "Package release history, compatibility notes, and feature changes."
+keywords:
+  - releases
+  - changelog
+  - compatibility
+---
+
 # Changelog
 
 All notable changes to `sp-laravel-api` will be documented in this file.
+
+## [0.4.97] - 2026-09-06
+
+### Added
+
+- Optional `audit.filter` mutation policy with `AuditLogFilterInterface`, container resolution, and configuration validation.
+- `AuditLogService::insertAuditLogWithContext()` for explicit actor, request, and tenant context during admission, before audit preparation or job dispatch.
+
+### Compatibility
+
+- Missing/null filter preserves existing behavior. Existing `customAuditLog` return semantics and audit job payloads remain unchanged; no migration is required.
+- Authentication and direct low-level/trait auditing remain outside this filter. Queued lifecycle listeners evaluate the policy when they call `log` in the worker. See [audit policy coverage](/features/audit-logging).
 
 ## [0.4.96] - 2026-08-21
 

@@ -23,6 +23,10 @@ return [
     */
     'enabled' => env('SP_LARAVEL_API_AUDIT_LOG_ENABLED', false),
 
+    // Optional mutation admission policy: interface class or [ClassName::class, 'method'].
+    // Null preserves existing behavior. Policy failures retain the audit entry.
+    'filter' => null,
+
     /*
     |--------------------------------------------------------------------------
     | Audit Log Model
