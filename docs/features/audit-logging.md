@@ -49,6 +49,87 @@ To modify this behavior, publish the configuration and edit `config/sp-audit.php
 - Queue mode via `config('audit.queue_enabled')`
 - Per-table control via `RecordTableType` (`disableAuditLog`, `customAuditLog`)
 
+## Optional mutation admission policy
+
+Set `filter` in `config/sp-audit.php` (canonical runtime key: `audit.filter`). Missing/null preserves existing behavior and does not resolve any policy. No migration or mandatory config republish is needed.
+
+```php
+'filter' => App\Audit\MutationPolicy::class,
+```
+
+Implement the package interface in the consuming application:
+
+```php
+<?php
+
+namespace App\Audit;
+
+use Illuminate\Contracts\Auth\Authenticatable;
+use Sopheak\Core\Enums\AuditLogEventEnum;
+use Sopheak\Core\Interfaces\AuditLogFilterInterface;
+
+final class MutationPolicy implements AuditLogFilterInterface
+{
+    public function shouldLog(
+        AuditLogEventEnum $event,
+        string $table,
+        array $auditData,
+        ?Authenticatable $user,
+        array $context = [],
+    ): bool {
+        // Keep business-critical changes regardless of actor.
+        if (in_array($table, ['payments', 'permissions'], true)) {
+            return true;
+        }
+
+        // Example application-owned rule; the package assumes no role/type schema.
+        return !($table === 'device_locations'
+            && $event === AuditLogEventEnum::UPDATED
+            && $user !== null);
+    }
+}
+```
+
+Alternatively configure `[MutationPolicy::class, 'shouldLog']` for a public static or container-resolved instance method. Class-only policies implement `AuditLogFilterInterface`. Constructor dependencies use the container. Explicitly configuring the interface name also works when the application binds it to an implementation. Binding alone does not enable filtering.
+
+Use class strings or class/method arrays in cached config, never closures or instances. Run `php artisan sp-laravel-api:validate` to check class/method configuration without invoking the policy. After deployment, rebuild cached config and reload long-running workers through the application's normal procedure.
+
+### Decisions and failure behavior
+
+The hook runs once per submission through `insertAuditLog`, `insertAuditLogWithContext`, or `log`, before audit history lookup, diff reduction, persistence, or `AuditLogJob` dispatch. Only CREATED, UPDATED, and DELETED events are filtered. Restore retains its existing UPDATED mapping; use the record `operation` context to distinguish it.
+
+Return a boolean: false skips this audit submission; true continues existing processing, including no-change suppression. It does not authorize a business write, enable disabled auditing, or force an audit row to exist. Rejection does not skip record triggers or broadcasts.
+
+Invalid config, resolution failures, callback exceptions, and non-boolean results retain the audit and emit a sanitized warning. This protects audit coverage and business writes, but means a policy error can increase storage. It is not a privacy/redaction guarantee. Diagnostics contain a reason and filter identifier, never the audited payload or exception message.
+
+`disableAuditLog` and existing `customAuditLog` behavior are preserved. A callable custom logger consumes the built-in audit regardless of its return value, including void/null/false. A custom logger calling the package submission API is subject to filtering there; direct custom storage is its own responsibility.
+
+### Context and request isolation
+
+`$auditData` is the incoming payload. Old/new snapshots and complete diffs are not guaranteed. The hook does not fetch historical data to manufacture them.
+
+| Context key | Meaning |
+| --- | --- |
+| `table` | Record table key, or the existing entity-to-table resolver result for manual submissions. |
+| `operation` | Record operation; generic manual submissions use the enum value. Inner bulk-upsert submissions retain `update`, wrapper submissions use `upsert`. |
+| `tenant_id` | Explicit audit tenant argument; overrides a conflicting context value. |
+| `source` | `record` for post-write/bulk orchestration, `manual` for manual submission. |
+| `request` | Supplied/current HTTP request, otherwise null. |
+| `record_context` / `request_context` | Existing record metadata, or empty arrays. |
+| `actor` | Optional explicit actor or null for the context-aware API; controls the `$user` argument. |
+
+Explicit `actor: null` stays anonymous/system. Otherwise a supplied request's user resolver determines the actor; a request resolving null never falls back to a different guard. Generic console submissions have no actor/request by default. Policies must remain stateless: do not capture requests/users in singleton constructors, cache decisions, or mutate config between requests. Runtime context is not serialized into audit jobs and does not change existing stored attribution.
+
+### Coverage boundaries
+
+The policy controls the built-in submission API, not every write to the audit table. Direct `handleAuditDataEntry`, `createAuditLogEntry`, direct job dispatch, and `AuditableTrait` bypass this admission API. Authentication via `authEvent`, LOGIN/LOGOUT/FAILED_LOGIN, and GET events remains unchanged.
+
+Queued `LogRecordAuditListener` calls `log` in its worker: filtering happens there with generic worker context, not before the listener was enqueued. For actor-dependent decisions before queueing, use the context-aware submission API directly. Already submitted `AuditLogJob` jobs are not re-filtered when they execute or retry.
+
+Bulk upsert currently submits through both an inner update and the bulk wrapper. This feature preserves that existing behavior and evaluates each submission independently; it does not deduplicate audits or alter transaction/after-commit timing.
+
+See [manual audit logging](/guide/features/feature-audit-manual-controller) for explicit actor and tenant examples.
+
 ## Record Lifecycle Events
 
 When a dynamic table write succeeds, the package dispatches Laravel 13-safe domain events that carry an `auditContext` array (serializable primitives) instead of a full `Request` object:

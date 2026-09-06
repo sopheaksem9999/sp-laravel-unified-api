@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Sopheak\Core\Config\ConfigNamespaceBridge;
 use Sopheak\Core\Services\RecordConfigService;
+use Sopheak\Core\Services\AuditLogFilterService;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
 class ValidateSetupCommand extends Command
@@ -57,6 +58,10 @@ class ValidateSetupCommand extends Command
         $this->validateRateLimiters();
         $this->validateWebhooks();
         $this->validateMcpConfiguration();
+        $filterError = AuditLogFilterService::configurationError(config('audit.filter'));
+        if ($filterError !== null) {
+            $this->addResult('❌', 'Invalid audit.filter: ' . $filterError, 'error');
+        }
 
         // Display results
         $this->displayResults();

@@ -14,6 +14,18 @@ use Sopheak\Core\Tests\TestCase;
 
 class ConfigNamespaceBridgeTest extends TestCase
 {
+    public function test_audit_filter_follows_existing_namespace_precedence(): void
+    {
+        $config = new Repository(['audit' => ['filter' => ['LegacyFilter', 'decide']], 'sp-audit' => ['filter' => null]]);
+        ConfigNamespaceBridge::adopt($config);
+        $this->assertNull($config->get('audit.filter'));
+        $config->set('sp-audit.filter', ['PublishedFilter', 'decide']);
+        ConfigNamespaceBridge::adopt($config);
+        ConfigNamespaceBridge::mirror($config);
+        $this->assertSame(['PublishedFilter', 'decide'], $config->get('audit.filter'));
+        $this->assertSame($config->get('audit.filter'), $config->get('sp-audit.filter'));
+    }
+
     /** @test */
     public function adopt_folds_a_published_new_file_into_the_canonical_namespace(): void
     {
