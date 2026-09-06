@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Tests\Feature;
 
+use Sopheak\Core\Interfaces\AuditLogFilterInterface;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Sopheak\Core\Console\SetupPackageCommand;
@@ -42,6 +43,8 @@ class ConfigCacheCommandsTest extends TestCase
 {
     private const PACKAGE_CONFIG = 'sp-record.php';
 
+    private const AUDIT_FILTER = [self::class, 'policy'];
+
     /**
      * Absolute paths this test created and must remove, deepest first.
      *
@@ -63,6 +66,28 @@ class ConfigCacheCommandsTest extends TestCase
 
         parent::tearDown();
     }
+
+    public function test_audit_filter_forms_survive_real_config_cache(): void
+    {
+        $target = config_path('sp-audit.php');
+        $original = File::exists($target) ? File::get($target) : null;
+        try {
+            foreach ([null, AuditLogFilterInterface::class, self::AUDIT_FILTER] as $filter) {
+                File::put($target, '<?php return ' . var_export(['filter' => $filter], true) . ';');
+                $this->assertSame(0, Artisan::call('config:cache'), Artisan::output());
+                $cached = require $this->app->getCachedConfigPath();
+                $this->assertSame($filter, $cached['sp-audit']['filter']);
+            }
+        } finally {
+            if ($original === null) {
+                File::delete($target);
+            } else {
+                File::put($target, $original);
+            }
+        }
+    }
+
+    public static function policy(): bool { return false; }
 
     /** @test */
     public function config_cache_succeeds_with_the_shipped_record_config_present(): void

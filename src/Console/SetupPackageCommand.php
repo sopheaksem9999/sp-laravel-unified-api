@@ -828,6 +828,9 @@ class SetupPackageCommand extends Command
                 */
                 'enabled' => env('AUDIT_LOG_ENABLED', true),
 
+                // Optional mutation policy: interface class or [ClassName::class, 'method'].
+                'filter' => null,
+
                 /*
                 |--------------------------------------------------------------------------
                 | Queue Configuration
