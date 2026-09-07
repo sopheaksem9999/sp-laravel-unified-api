@@ -11,7 +11,7 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Throwable;
 
 /**
- * Artisan command that exports the OpenAPI 3.1 specification generated
+ * Artisan command that exports the OpenAPI 3.0.3 specification generated
  * from the registered RecordTableType configurations.
  *
  * Usage:
@@ -33,7 +33,7 @@ class ExportOpenApiCommand extends Command
     /**
      * The console command description.
      */
-    protected $description = 'Export the OpenAPI 3.1 specification generated from registered RecordTableType configs.';
+    protected $description = 'Export the OpenAPI 3.0.3 specification generated from registered RecordTableType configs.';
 
     public function handle(): int
     {

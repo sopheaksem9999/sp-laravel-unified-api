@@ -13,23 +13,17 @@ class PostmanEmitter implements ApiClientEmitterInterface
     /**
      * @return array<string, mixed>
      */
-    public function render(ExportResult $result): array
+    public function render(ExportResult $result, ?array $existing = null, bool $force = false): array
     {
-        return [
+        $generated = [
             'info' => [
                 'name' => $result->appName . ' API',
                 'schema' => self::SCHEMA_URL,
             ],
-            'auth' => [
-                'type' => 'bearer',
-                'bearer' => [
-                    ['key' => 'token', 'value' => '{{bearerToken}}'],
-                ],
-            ],
             'variable' => [
                 ['key' => 'baseUrl', 'value' => $result->baseUrl],
                 ['key' => 'apiPrefix', 'value' => $result->apiPrefix],
-                ['key' => 'bearerToken', 'value' => ''],
+                ['key' => 'authToken', 'value' => ''],
             ],
             'item' => array_map(
                 static fn(ExportFolder $folder): array => [
@@ -42,6 +36,12 @@ class PostmanEmitter implements ApiClientEmitterInterface
                 $result->folders,
             ),
         ];
+
+        if ($existing === null || !isset($existing['item']) || !is_array($existing['item'])) {
+            return $generated;
+        }
+
+        return self::mergeExistingCollection($existing, $generated, $result, $force);
     }
 
     /**
@@ -75,25 +75,27 @@ class PostmanEmitter implements ApiClientEmitterInterface
             $description = $description . "\n\n" . self::RELATIONSHIP_TIP;
         }
 
+        $headers = array_map(
+            static fn(array $h): array => [
+                'key' => (string) ($h['name'] ?? ''),
+                'value' => (string) ($h['value'] ?? ''),
+            ],
+            $req->headers,
+        );
+        if ($req->requiresAuth && ! $req->isLoginRequest) {
+            $headers[] = ['key' => 'Authorization', 'value' => 'Bearer {{authToken}}'];
+        }
+
         $item = [
             'name' => $req->name,
             'request' => [
                 'method' => $req->method,
-                'header' => array_map(
-                    static fn(array $h): array => [
-                        'key' => (string) ($h['name'] ?? ''),
-                        'value' => (string) ($h['value'] ?? ''),
-                    ],
-                    $req->headers,
-                ),
+                'header' => $headers,
                 'url' => self::buildUrl($req),
                 'description' => $description,
+                'auth' => ['type' => 'noauth'],
             ],
         ];
-
-        if (! $req->requiresAuth) {
-            $item['request']['auth'] = ['type' => 'noauth'];
-        }
 
         if ($req->isLoginRequest) {
             $item['event'] = [
@@ -125,7 +127,7 @@ class PostmanEmitter implements ApiClientEmitterInterface
     /**
      * Recursively searches the JSON response for a key named $accessTokenKey
      * (mirroring the docs UI's login proxy in routes/web.php) and writes the
-     * match into the `bearerToken` collection variable.
+     * match into the `authToken` collection variable.
      *
      * @return string[]
      */
@@ -134,37 +136,37 @@ class PostmanEmitter implements ApiClientEmitterInterface
         $key = (string) json_encode($accessTokenKey);
 
         $script = <<<JS
-        const key = {$key};
-        const body = pm.response.json();
-        let token = null;
+            const key = {$key};
+            const body = pm.response.json();
+            let token = null;
 
-        if (body && typeof body === "object" && !Array.isArray(body) && typeof body[key] === "string" && body[key] !== "") {
-          token = body[key];
-        } else {
-          const stack = [body];
-          let guard = 0;
-          while (stack.length > 0 && guard < 200) {
-            guard++;
-            const current = stack.shift();
-            if (!current || typeof current !== "object") {
-              continue;
-            }
-            if (!Array.isArray(current) && typeof current[key] === "string" && current[key] !== "") {
-              token = current[key];
-              break;
-            }
-            if (Array.isArray(current)) {
-              current.forEach((item) => stack.push(item));
+            if (body && typeof body === "object" && !Array.isArray(body) && typeof body[key] === "string" && body[key] !== "") {
+              token = body[key];
             } else {
-              Object.keys(current).forEach((k) => stack.push(current[k]));
+              const stack = [body];
+              let guard = 0;
+              while (stack.length > 0 && guard < 200) {
+                guard++;
+                const current = stack.shift();
+                if (!current || typeof current !== "object") {
+                  continue;
+                }
+                if (!Array.isArray(current) && typeof current[key] === "string" && current[key] !== "") {
+                  token = current[key];
+                  break;
+                }
+                if (Array.isArray(current)) {
+                  current.forEach((item) => stack.push(item));
+                } else {
+                  Object.keys(current).forEach((k) => stack.push(current[k]));
+                }
+              }
             }
-          }
-        }
 
-        if (token) {
-          pm.collectionVariables.set("bearerToken", token);
-        }
-        JS;
+            if (token) {
+              pm.collectionVariables.set("authToken", token);
+            }
+            JS;
 
         return explode("\n", $script);
     }
@@ -210,5 +212,107 @@ class PostmanEmitter implements ApiClientEmitterInterface
     private static function requestHasBody(ExportRequest $req): bool
     {
         return in_array(strtoupper($req->method), ['POST', 'PUT', 'PATCH'], true);
+    }
+
+    /**
+     * @param array<string, mixed> $existing
+     * @param array<string, mixed> $generated
+     * @return array<string, mixed>
+     */
+    private static function mergeExistingCollection(array $existing, array $generated, ExportResult $result, bool $force): array
+    {
+        $merged = $force ? $generated : $existing;
+        $merged['variable'] = self::mergeVariables(
+            is_array($existing['variable'] ?? null) ? $existing['variable'] : [],
+            $generated['variable'],
+            $force,
+        );
+        $merged['item'] = self::mergeFolders($existing['item'], $generated['item'], $result, $force);
+
+        return $merged;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $existing
+     * @param array<int, array<string, mixed>> $generated
+     * @return array<int, array<string, mixed>>
+     */
+    private static function mergeVariables(array $existing, array $generated, bool $force): array
+    {
+        $merged = $existing;
+        $positions = [];
+        foreach ($merged as $index => $variable) {
+            if (is_array($variable) && isset($variable['key']) && is_string($variable['key'])) {
+                $positions[$variable['key']] = $index;
+            }
+        }
+
+        foreach ($generated as $variable) {
+            $key = (string) $variable['key'];
+            if (isset($positions[$key])) {
+                if ($force) {
+                    $merged[$positions[$key]] = $variable;
+                }
+
+                continue;
+            }
+
+            $merged[] = $variable;
+        }
+
+        return $merged;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $existing
+     * @param array<int, array<string, mixed>> $generated
+     * @return array<int, array<string, mixed>>
+     */
+    private static function mergeFolders(array $existing, array $generated, ExportResult $result, bool $force): array
+    {
+        $merged = $existing;
+        $folderPositions = [];
+        foreach ($merged as $index => $folder) {
+            if (is_array($folder) && isset($folder['name']) && is_string($folder['name'])) {
+                $folderPositions[$folder['name']] = $index;
+            }
+        }
+
+        foreach ($generated as $generatedFolder) {
+            $folderName = (string) ($generatedFolder['name'] ?? '');
+            if (!isset($folderPositions[$folderName])) {
+                $merged[] = $generatedFolder;
+
+                continue;
+            }
+
+            $position = $folderPositions[$folderName];
+            $currentFolder = $merged[$position];
+            $currentItems = is_array($currentFolder['item'] ?? null) ? $currentFolder['item'] : [];
+            $requestPositions = [];
+            foreach ($currentItems as $requestIndex => $request) {
+                if (is_array($request) && isset($request['name']) && is_string($request['name'])) {
+                    $requestPositions[$request['name']] = $requestIndex;
+                }
+            }
+
+            foreach ($generatedFolder['item'] ?? [] as $generatedRequest) {
+                $requestName = (string) ($generatedRequest['name'] ?? '');
+                if (!isset($requestPositions[$requestName])) {
+                    $currentItems[] = $generatedRequest;
+
+                    continue;
+                }
+
+                if ($force || $result->shouldRegenerateTag($folderName)) {
+                    $currentItems[$requestPositions[$requestName]] = $generatedRequest;
+                }
+            }
+
+            $currentFolder['item'] = $currentItems;
+            $merged[$position] = $currentFolder;
+        }
+
+        return $merged;
     }
 }

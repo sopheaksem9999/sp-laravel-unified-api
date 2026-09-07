@@ -46,6 +46,9 @@ php artisan sp-laravel-api:export-bruno --regen=users,orders
 
 # Regenerate the entire collection
 php artisan sp-laravel-api:export-bruno --regen=all
+
+# Explicitly refresh every generated request and collection support file
+php artisan sp-laravel-api:export-bruno --force
 ```
 
 The first run creates the collection with every endpoint in the spec. Subsequent runs add only what's new and skip requests that already exist (and weren't requested for regeneration).
@@ -63,6 +66,7 @@ The first run creates the collection with every endpoint in the spec. Subsequent
 |---|---|---|
 | `--output=<path>` | (format-specific default) | Output folder/file path. Relative paths are resolved from `base_path()`. Parent directories are created if they don't exist. |
 | `--regen=<list>`  | (none)             | Comma-separated table keys to regenerate, or `all`. Matching is case-insensitive against OpenAPI tags. `rpc` is a wildcard that regenerates every RPC-prefixed folder (`RPC`, `RPC - Auth`, `RPC - Media`, ...) at once; an exact subgroup tag (e.g. `RPC - Auth`) regenerates only that folder. Tables not listed are skipped if they already exist in the collection. |
+| `--force`         | `false`            | Regenerate every current package-generated request. For Bruno it also refreshes `bruno.json`, `collection.bru`, and `environments/Local.bru`; for Postman it refreshes package-managed collection metadata. Cannot be combined with `--regen`. |
 | `--dry-run`       | `false`            | Print the diff summary to stdout; do not write files. |
 
 ## Exit codes
@@ -71,7 +75,7 @@ The first run creates the collection with every endpoint in the spec. Subsequent
 |---|---|
 | `0` | Success (including `--dry-run`) |
 | `1` | OpenAPI generation failed, existing file is invalid JSON, or write failed |
-| `2` | One or more `--regen` values do not match any tag in the spec |
+| `2` | One or more `--regen` values do not match any tag in the spec, or `--force` and `--regen` were combined |
 
 ## How the diff works
 
@@ -80,11 +84,11 @@ On every run the command asks the emitter to enumerate the request names already
 | Bucket | Meaning |
 |---|---|
 | **Added** (`+`)       | New in the spec, not present on disk — gets written. |
-| **Regenerated** (`~`) | On disk **and** in the `--regen` set — gets re-rendered (overwrites your hand edits). |
+| **Regenerated** (`~`) | On disk and in the `--regen` set, or selected by `--force` — gets re-rendered (overwrites that generated request). |
 | **Skipped** (`-`)     | On disk and **not** in the `--regen` set — preserved as-is. |
 | **Suggestions** (`?`) | A non-RPC table tag in the spec that ended up with zero requests (e.g. endpoint hidden by auth); surfaced for review. |
 
-Default behavior (no `--regen` flag): skip existing, add new. To update a request you hand-edited, list its tag in `--regen=`.
+Default behavior (no `--regen`/`--force` flag): existing generated requests are preserved byte-for-byte and newly discovered endpoints are added. To refresh one table, list its tag in `--regen=`. Use `--force` only when you deliberately want every current generated request overwritten. Neither mode deletes custom requests, custom folders, or stale endpoint examples.
 
 ## Output layout
 
@@ -95,9 +99,9 @@ your-app/
 └── api-client/
     ├── bruno/
     │   ├── bruno.json            # Collection manifest
-    │   ├── collection.bru        # Bearer auth mode (no vars)
+    │   ├── collection.bru        # Collection metadata
     │   ├── environments/
-    │   │   └── Local.bru         # baseUrl / apiPrefix / bearerToken (Bruno environment)
+    │   │   └── Local.bru         # baseUrl / apiPrefix / authToken (Bruno environment)
     │   ├── Users/                # Folder per table tag
     │   │   ├── List Users.bru
     │   │   ├── Create Users.bru
@@ -118,13 +122,13 @@ Override with `--output=`. The path can be absolute or relative.
 |---------------|------------------------|-------|
 | `baseUrl`     | `config('app.url')`    | e.g. `http://localhost` |
 | `apiPrefix`   | `config('record.api_prefix')` | Leading `/` is prepended automatically (e.g. `/api/v1`) |
-| `bearerToken` | (empty, secret)        | Treated as a secret by both clients |
+| `authToken` | (empty, secret)        | Sent as `Authorization: Bearer {{authToken}}` only by protected generated requests |
 
 The request URL is built as `{{baseUrl}}{{apiPrefix}}{{path}}`, so the same collection works across local, staging, and production by changing the `baseUrl` var.
 
-**Bruno** stores these in `environments/Local.bru`, a proper Bruno environment (selectable from the environment dropdown in the app), regenerated from `config('app.url')` on every export run. Duplicate it inside Bruno to add `Staging`/`Production` environments — exports won't touch environment files other than `Local.bru`.
+**Bruno** stores these in `environments/Local.bru`, a proper Bruno environment (selectable from the environment dropdown in the app). Existing values are preserved on ordinary exports; a missing `authToken` secret declaration is appended. Use `--force` to refresh the generated Local environment. Duplicate it inside Bruno to add `Staging`/`Production` environments — exports never touch those copies.
 
-**Postman** stores them as collection-level `variable[]` entries (see [Format-specific behavior](#format-specific-behavior)).
+**Postman** stores them as collection-level `variable[]` entries (see [Format-specific behavior](#format-specific-behavior)). Existing variable values are retained on ordinary exports; missing package variables are added.
 
 ## Per-endpoint authentication
 
@@ -132,15 +136,15 @@ Each request's auth requirement is read from the OpenAPI `security` field, which
 
 | | Requires auth | Public (no auth) |
 |---|---|---|
-| **Bruno** | `auth: inherit` (uses the collection's bearer auth) | `auth: none` |
-| **Postman** | No override — inherits the collection's bearer auth | `"auth": {"type": "noauth"}` on the request |
+| **Bruno** | `auth: none` plus `Authorization: Bearer {{authToken}}` header | `auth: none`, no Authorization header |
+| **Postman** | `"auth": {"type": "noauth"}` plus `Authorization: Bearer {{authToken}}` header | `"auth": {"type": "noauth"}`, no Authorization header |
 
 ## Login token auto-capture
 
 If `config('record.api_docs.login_api')` (the same setting used by the docs UI's login form) matches the path of a generated RPC request, that request gets a script that captures the access token automatically:
 
-- **Bruno**: a `script:post-response` block that recursively searches the JSON response for a key named `config('record.api_docs.access_token_key')` (default `access_token`) and calls `bru.setVar("bearerToken", token)` — a runtime variable, which takes precedence over the `environments/Local.bru` value. Run "Login" once and every other request in the session is authenticated.
-- **Postman**: a `"test"` event script on the item doing the same search via `pm.response.json()` and writing the result with `pm.collectionVariables.set("bearerToken", token)`.
+- **Bruno**: a `script:post-response` block that recursively searches the JSON response for a key named `config('record.api_docs.access_token_key')` (default `access_token`) and calls `bru.setVar("authToken", token)` — a runtime variable, which takes precedence over the `environments/Local.bru` value. Run "Login" once and every other generated protected request in the session is authenticated.
+- **Postman**: a `"test"` event script on the item doing the same search via `pm.response.json()` and writing the result with `pm.collectionVariables.set("authToken", token)`.
 
 The token search matches whatever key structure the login endpoint actually returns (top-level or nested), mirroring `routes/web.php`'s `/api-docs/auth/login` proxy exactly. If `login_api` is unset or doesn't match any generated request, no script is attached.
 
@@ -148,7 +152,7 @@ The token search matches whatever key structure the login endpoint actually retu
 
 | Behavior | Bruno | Postman |
 |---|---|---|
-| Auth at collection level | `bearer` mode | `bearer` with `token: {{bearerToken}}` |
+| Auth at collection level | None; generated protected requests use an explicit Authorization header | None; generated protected requests use an explicit Authorization header |
 | `select` query param on list endpoints | Injected as a **disabled** param with description | Omitted, but description includes a `Tip:` line |
 | Folder naming | First `tag` from the OpenAPI operation (pluralized) | Same as Bruno |
 | RPC endpoints | One folder per RPC tag (`RPC`, `RPC - Auth`, `RPC - Media`, ...), all appended last in spec order | Same as Bruno |
@@ -172,6 +176,9 @@ php artisan sp-laravel-api:export-bruno
 
 # You hand-edited a request and want to refresh it from the spec
 php artisan sp-laravel-api:export-bruno --regen=users
+
+# Replace every current generated request and generated support file
+php artisan sp-laravel-api:export-bruno --force
 
 # Catch a typo in a regen value before it runs
 php artisan sp-laravel-api:export-bruno --regen=usr

@@ -12,6 +12,7 @@ class ExportResult
      * @param string[]       $regenerated  request names that were regenerated
      * @param string[]       $skipped      request names that were skipped (existing + not in --regen)
      * @param string[]       $suggestions  table keys that exist in OpenAPI but were not generated this run
+     * @param array<string, true> $regenerateTags lower-cased tags selected by --regen
      */
     public function __construct(
         public readonly string $appName,
@@ -23,6 +24,8 @@ class ExportResult
         public readonly array $skipped = [],
         public readonly array $suggestions = [],
         public readonly string $accessTokenKey = 'access_token',
+        public readonly array $regenerateTags = [],
+        public readonly bool $regenerateAll = false,
     ) {}
 
     public function isEmpty(): bool
@@ -38,5 +41,10 @@ class ExportResult
         }
 
         return $count;
+    }
+
+    public function shouldRegenerateTag(string $tag): bool
+    {
+        return $this->regenerateAll || isset($this->regenerateTags[strtolower($tag)]);
     }
 }

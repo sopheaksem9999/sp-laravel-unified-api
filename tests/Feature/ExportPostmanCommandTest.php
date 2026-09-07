@@ -64,7 +64,9 @@ class ExportPostmanCommandTest extends TestCase
         $this->assertIsArray($decoded);
         $this->assertSame('TestApp API', $decoded['info']['name']);
         $this->assertSame('https://schema.getpostman.com/json/collection/v2.1.0/collection.json', $decoded['info']['schema']);
-        $this->assertSame('bearer', $decoded['auth']['type']);
+        $this->assertArrayNotHasKey('auth', $decoded);
+        $variables = array_column($decoded['variable'], null, 'key');
+        $this->assertArrayHasKey('authToken', $variables);
     }
 
     public function test_includes_users_folder_in_output(): void
@@ -140,7 +142,10 @@ class ExportPostmanCommandTest extends TestCase
         $existing = [
             'info' => ['name' => 'TestApp API', 'schema' => 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'],
             'item' => [
-                ['name' => 'Users', 'item' => [['name' => 'List Users']]],
+                ['name' => 'Users', 'item' => [[
+                    'name' => 'List Users',
+                    'request' => ['method' => 'GET', 'body' => ['mode' => 'raw', 'raw' => '{"name":"fixture"}']],
+                ]]],
             ],
         ];
         file_put_contents($this->outputPath, json_encode($existing));
@@ -152,8 +157,79 @@ class ExportPostmanCommandTest extends TestCase
 
         $decoded = json_decode((string) file_get_contents($this->outputPath), true);
         $usersFolder = array_values(array_filter($decoded['item'], static fn(array $f): bool => $f['name'] === 'Users'))[0];
-        $requestNames = array_column($usersFolder['item'], 'name');
-        $this->assertContains('List Users', $requestNames);
+        $listUsers = collect($usersFolder['item'])->firstWhere('name', 'List Users');
+        $this->assertArrayNotHasKey('body', $listUsers['request']);
+    }
+
+    public function test_force_replaces_generated_postman_requests_and_preserves_custom_items(): void
+    {
+        $existing = [
+            'item' => [
+                ['name' => 'Users', 'item' => [
+                    [
+                        'name' => 'List Users',
+                        'request' => ['method' => 'GET', 'body' => ['mode' => 'raw', 'raw' => '{"name":"fixture"}']],
+                    ],
+                    ['name' => 'Manual smoke test', 'request' => ['method' => 'GET']],
+                ]],
+            ],
+        ];
+        file_put_contents($this->outputPath, json_encode($existing));
+
+        $this->artisan('sp-laravel-api:export-postman', [
+            '--output' => $this->outputPath,
+            '--force' => true,
+        ])->assertExitCode(0);
+
+        $decoded = json_decode((string) file_get_contents($this->outputPath), true);
+        $users = collect($decoded['item'])->firstWhere('name', 'Users');
+        $listUsers = collect($users['item'])->firstWhere('name', 'List Users');
+
+        $this->assertArrayNotHasKey('body', $listUsers['request']);
+        $this->assertNotNull(collect($users['item'])->firstWhere('name', 'Manual smoke test'));
+    }
+
+    public function test_default_export_preserves_matching_requests_and_custom_items_while_adding_new_endpoints(): void
+    {
+        $existing = [
+            'info' => ['name' => 'My hand-edited collection'],
+            'item' => [
+                ['name' => 'Users', 'item' => [
+                    [
+                        'name' => 'List Users',
+                        'request' => [
+                            'method' => 'GET',
+                            'body' => ['mode' => 'raw', 'raw' => '{"name":"fixture"}'],
+                            'header' => [['key' => 'X-Test', 'value' => 'keep']],
+                        ],
+                    ],
+                    ['name' => 'Manual smoke test', 'request' => ['method' => 'GET']],
+                ]],
+            ],
+        ];
+        file_put_contents($this->outputPath, json_encode($existing));
+
+        Config::set('record.tables', [
+            ...Config::get('record.tables'),
+            'orders' => new RecordTableType(
+                table: 'orders',
+                pmsName: 'orders',
+                columns: ['id' => ['type' => 'integer', 'nullable' => false]],
+            ),
+        ]);
+
+        $this->artisan('sp-laravel-api:export-postman', [
+            '--output' => $this->outputPath,
+        ])->assertExitCode(0);
+
+        $decoded = json_decode((string) file_get_contents($this->outputPath), true);
+        $users = collect($decoded['item'])->firstWhere('name', 'Users');
+        $listUsers = collect($users['item'])->firstWhere('name', 'List Users');
+
+        $this->assertSame('{"name":"fixture"}', $listUsers['request']['body']['raw']);
+        $this->assertSame('keep', $listUsers['request']['header'][0]['value']);
+        $this->assertNotNull(collect($users['item'])->firstWhere('name', 'Manual smoke test'));
+        $this->assertNotNull(collect($decoded['item'])->firstWhere('name', 'Orders'));
     }
 
     public function test_invalid_regen_returns_exit_code_2(): void

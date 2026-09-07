@@ -120,6 +120,74 @@ class ExportBrunoCommandTest extends TestCase
         $this->assertStringContainsString('url: {{baseUrl}}{{apiPrefix}}/users', $listUsersBru);
     }
 
+    public function test_default_export_preserves_an_edited_request_and_adds_new_endpoints(): void
+    {
+        @mkdir($this->outputPath . '/Users', 0o755, true);
+        $editedRequest = "meta {\n  name: List Users\n}\n\nbody:json {\n  {\"name\": \"fixture\"}\n}\n\nscript:post-response {\n  test(\"kept\", () => true);\n}\n";
+        file_put_contents($this->outputPath . '/Users/List Users.bru', $editedRequest);
+
+        Config::set('record.tables', [
+            ...Config::get('record.tables'),
+            'orders' => new RecordTableType(
+                table: 'orders',
+                pmsName: 'orders',
+                columns: ['id' => ['type' => 'integer', 'nullable' => false]],
+            ),
+        ]);
+
+        $this->artisan('sp-laravel-api:export-bruno', [
+            '--output' => $this->outputPath,
+        ])->assertExitCode(0);
+
+        $this->assertSame($editedRequest, file_get_contents($this->outputPath . '/Users/List Users.bru'));
+        $this->assertFileExists($this->outputPath . '/Orders/List Orders.bru');
+    }
+
+    public function test_default_reexport_of_an_unchanged_collection_succeeds_without_writing_files(): void
+    {
+        $this->artisan('sp-laravel-api:export-bruno', [
+            '--output' => $this->outputPath,
+        ])->assertExitCode(0);
+
+        $listPath = $this->outputPath . '/Users/List Users.bru';
+        $before = (string) file_get_contents($listPath);
+
+        $this->artisan('sp-laravel-api:export-bruno', [
+            '--output' => $this->outputPath,
+        ])->assertExitCode(0);
+
+        $this->assertSame($before, file_get_contents($listPath));
+    }
+
+    public function test_force_replaces_generated_files_without_deleting_custom_requests(): void
+    {
+        @mkdir($this->outputPath . '/Users', 0o755, true);
+        file_put_contents($this->outputPath . '/Users/List Users.bru', "meta {\n  name: List Users\n}\n\nbody:json {\n  {\"name\": \"fixture\"}\n}\n");
+        file_put_contents($this->outputPath . '/Users/Manual smoke test.bru', "meta {\n  name: Manual smoke test\n}\n");
+        file_put_contents($this->outputPath . '/bruno.json', '{"name":"Old API"}');
+
+        $this->artisan('sp-laravel-api:export-bruno', [
+            '--output' => $this->outputPath,
+            '--force' => true,
+        ])->assertExitCode(0);
+
+        $this->assertStringContainsString('url: {{baseUrl}}{{apiPrefix}}/users', (string) file_get_contents($this->outputPath . '/Users/List Users.bru'));
+        $this->assertSame("meta {\n  name: Manual smoke test\n}\n", file_get_contents($this->outputPath . '/Users/Manual smoke test.bru'));
+        $this->assertSame('TestApp API', json_decode((string) file_get_contents($this->outputPath . '/bruno.json'), true)['name']);
+    }
+
+    public function test_force_and_regen_cannot_be_used_together(): void
+    {
+        $this->artisan('sp-laravel-api:export-bruno', [
+            '--output' => $this->outputPath,
+            '--force' => true,
+            '--regen' => 'users',
+        ])->expectsOutputToContain('cannot be used together')
+            ->assertExitCode(2);
+
+        $this->assertDirectoryDoesNotExist($this->outputPath);
+    }
+
     public function test_creates_output_directory_if_missing(): void
     {
         $nestedPath = sys_get_temp_dir() . '/bruno-test-' . uniqid() . '/nested/bruno';

@@ -36,17 +36,16 @@ class PostmanEmitterTest extends TestCase
         );
     }
 
-    public function test_renders_collection_level_bearer_auth_with_token_var(): void
+    public function test_does_not_render_collection_level_bearer_auth(): void
     {
         $result = $this->buildResult();
 
         $output = $this->emitter->render($result);
 
-        $this->assertSame('bearer', $output['auth']['type']);
-        $this->assertSame('{{bearerToken}}', $output['auth']['bearer'][0]['value']);
+        $this->assertArrayNotHasKey('auth', $output);
     }
 
-    public function test_renders_baseUrl_apiPrefix_and_bearerToken_as_variables(): void
+    public function test_renders_base_url_api_prefix_and_auth_token_as_variables(): void
     {
         $result = $this->buildResult(baseUrl: 'http://localhost:8000', apiPrefix: '/api/v1');
 
@@ -55,7 +54,7 @@ class PostmanEmitterTest extends TestCase
         $vars = array_column($output['variable'], null, 'key');
         $this->assertSame('http://localhost:8000', $vars['baseUrl']['value']);
         $this->assertSame('/api/v1', $vars['apiPrefix']['value']);
-        $this->assertSame('', $vars['bearerToken']['value']);
+        $this->assertSame('', $vars['authToken']['value']);
     }
 
     public function test_renders_folders_in_input_order_with_sub_items(): void
@@ -192,14 +191,18 @@ class PostmanEmitterTest extends TestCase
         $this->assertTrue($query[1]['disabled']);
     }
 
-    public function test_omits_auth_override_when_request_requires_auth(): void
+    public function test_renders_authorization_header_and_noauth_when_request_requires_auth(): void
     {
         $request = $this->req('List Users', 'GET', '/users');
 
         $result = $this->buildResult(folders: [new ExportFolder('Users', [$request])]);
         $output = $this->emitter->render($result);
 
-        $this->assertArrayNotHasKey('auth', $output['item'][0]['item'][0]['request']);
+        $generated = $output['item'][0]['item'][0]['request'];
+        $headers = array_column($generated['header'], 'value', 'key');
+
+        $this->assertSame('Bearer {{authToken}}', $headers['Authorization']);
+        $this->assertSame(['type' => 'noauth'], $generated['auth']);
     }
 
     public function test_sets_noauth_override_when_request_does_not_require_auth(): void
@@ -219,6 +222,7 @@ class PostmanEmitterTest extends TestCase
         $output = $this->emitter->render($result);
 
         $this->assertSame(['type' => 'noauth'], $output['item'][0]['item'][0]['request']['auth']);
+        $this->assertNotContains('Authorization', array_column($output['item'][0]['item'][0]['request']['header'], 'key'));
     }
 
     public function test_attaches_test_event_script_to_login_request(): void
@@ -231,7 +235,6 @@ class PostmanEmitterTest extends TestCase
             pathParams: [],
             queryParams: [],
             headers: [],
-            requiresAuth: false,
             isLoginRequest: true,
         );
 
@@ -242,7 +245,8 @@ class PostmanEmitterTest extends TestCase
         $this->assertSame('test', $item['event'][0]['listen']);
         $script = implode("\n", $item['event'][0]['script']['exec']);
         $this->assertStringContainsString('"access_token"', $script);
-        $this->assertStringContainsString('pm.collectionVariables.set("bearerToken", token)', $script);
+        $this->assertStringContainsString('pm.collectionVariables.set("authToken", token)', $script);
+        $this->assertNotContains('Authorization', array_column($item['request']['header'], 'key'));
     }
 
     public function test_uses_configured_access_token_key_in_login_test_script(): void

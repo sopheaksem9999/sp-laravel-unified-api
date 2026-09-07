@@ -17,6 +17,15 @@ Custom functions (RPC endpoints) let you expose arbitrary logic under `/{api_pre
 > **Tip — generate OpenAPI schemas for custom functions:**
 > The package cannot auto-infer request/response shapes for custom functions. Use **[wk-tools.vercel.app/json-to-openapi](https://wk-tools.vercel.app/json-to-openapi)** to convert a sample JSON payload/response into an OpenAPI `schema` object, then attach it to `RecordFunctionType::$requestSchema` / `$responseSchema`. The exported schema and live `/docs/openapi.json` will include it automatically.
 
+> **Application routes outside package RPC:** Use
+> `sp-laravel-api.openapi.contributions.paths` and
+> `sp-laravel-api.openapi.contributions.components` to document a route your
+> Laravel application registers itself. This is intentionally separate from
+> `RecordFunctionType`: package RPC has runtime behavior and route generation;
+> an OpenAPI contribution documents an application-owned route without asking
+> the package to infer its controller or authorization. See
+> [Realtime Events, OpenAPI Export, and Attribute Config](/guide/api-realtime-openapi-attribute-config).
+
 ### Global Functions
 
 ```http
@@ -253,4 +262,3 @@ With this override, `GET /api/v2/rpc/health` uses `HealthController::fromConfig`
 
 - [Global RPC Functions](/guide/api-rpc-functions)
 - [Realtime Events, OpenAPI Export, and Attribute Config](/guide/api-realtime-openapi-attribute-config)
-

@@ -71,6 +71,134 @@ Broadcast::channel('tenant.{tenantId}', function ($user, $tenantId) {
 
 ---
 
+### Realtime Metadata in OpenAPI
+
+Set both record broadcasting and OpenAPI realtime documentation to publish the
+package-managed `RecordMutated` subscription contract in the runtime and
+exported OpenAPI 3.0.3 document:
+
+```php
+// config/sp-record.php
+'broadcast_events' => true,
+
+// config/sp-laravel-api.php
+'openapi' => [
+    'realtime' => [
+        'enabled' => true,
+    ],
+],
+```
+
+The result contains an opt-in `x-sp-realtime` extension and a
+`#/components/schemas/RecordMutated` schema. The extension states the private
+`tenant.{tenantId}` channel pattern, the `{table}.{action}` event pattern, and
+the effective broadcast table list. The schema contains the exact event wire
+fields: `table`, `action`, `record`, `tenant_id`, and `timestamp`.
+
+`record` is intentionally an open object because its fields depend on the
+table and mutation response. `action` is also an open string so clients do not
+break when the package adds a mutation type. A missing tenant uses the existing
+`tenant.global` channel at runtime.
+
+Private-channel authorization remains the host application's responsibility.
+The OpenAPI document never includes broadcaster credentials, app keys, private
+keys, or authorization closures.
+
+#### Documenting application-owned realtime channels
+
+Applications can explicitly append their own documented channels. The package
+does not inspect `routes/channels.php` or infer authorization rules.
+
+```php
+// config/sp-laravel-api.php
+'openapi' => [
+    'realtime' => [
+        'enabled' => true,
+        'channels' => [
+            [
+                'name' => 'booking-status',
+                'pattern' => 'booking.{bookingId}',
+                'private' => true,
+                'parameters' => [
+                    'bookingId' => [
+                        'description' => 'Booking UUID.',
+                        'schema' => ['type' => 'string', 'format' => 'uuid'],
+                    ],
+                ],
+                'events' => [[
+                    'name' => 'booking.status.updated',
+                    'payload' => ['$ref' => '#/components/schemas/BookingStatusUpdated'],
+                ]],
+                'authorization' => 'The user must be allowed to view the booking.',
+            ],
+        ],
+    ],
+],
+```
+
+Channel `name` values are unique stable documentation identifiers. A channel
+requires a non-empty pattern, boolean `private`, parameters matching every
+`{placeholder}`, and at least one event. Each event has exactly one of `name`
+or `pattern`, plus a payload schema or local component reference. Invalid
+declarations fail OpenAPI generation rather than returning a partial document.
+
+#### Documenting application-owned HTTP routes
+
+Use `openapi.contributions` for routes the client application implements
+outside package CRUD/RPC configuration:
+
+```php
+'openapi' => [
+    'contributions' => [
+        'tags' => [
+            ['name' => 'Reports', 'description' => 'Application reporting routes.'],
+        ],
+        'paths' => [
+            '/api/v1/reports/monthly' => [
+                'get' => [
+                    'tags' => ['Reports'],
+                    'summary' => 'Get monthly report',
+                    'operationId' => 'getMonthlyReport',
+                    'responses' => [
+                        '200' => [
+                            'description' => 'Monthly report.',
+                            'content' => [
+                                'application/json' => [
+                                    'schema' => ['$ref' => '#/components/schemas/MonthlyReport'],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+        'components' => [
+            'schemas' => [
+                'MonthlyReport' => ['type' => 'object'],
+                'BookingStatusUpdated' => ['type' => 'object'],
+            ],
+        ],
+        'extensions' => [
+            'x-client-documentation' => ['owner' => 'reporting-team'],
+        ],
+    ],
+],
+```
+
+Contribution paths must begin with `/`, use a non-empty `summary`, a globally
+unique `operationId`, and at least one response. A `{pathParameter}` needs a
+matching required `in: path` parameter. Contributions may not replace a
+package path, component, tag, or extension. The `x-sp-*` namespace is reserved
+for package metadata; use an application namespace such as `x-client-*`.
+
+For reusable modules, configure a class string that implements
+`Sopheak\Core\Contracts\OpenApiDocumentContributorInterface`. The class is
+resolved by Laravel's container and receives an append-only
+`OpenApiDocumentBuilder`; config closures and mutable root-document access are
+not supported, so `config:cache` remains safe.
+
+---
+
 ### OpenAPI Export Command
 
 Export the package-generated OpenAPI 3.0 schema to a local file.
@@ -112,6 +240,25 @@ The default output path is configurable via `config/sp-laravel-api.php`:
 ```
 
 The command uses the same `OpenApiService::generateInternal()` that powers the runtime `/docs/openapi.json` endpoint, so the exported file is always consistent with the live API schema.
+
+#### Filter operator documentation link
+
+Dynamic CRUD list operations expose one top-level query parameter per configured
+column. To avoid repeating the full filter-operator catalogue in every field
+description, configure the absolute URL of your canonical filter guide:
+
+```php
+// config/sp-laravel-api.php
+'openapi' => [
+    'filter_documentation_url' => 'https://docs.example.com/guide/api-filter-operators',
+],
+```
+
+Each list operation then includes the standard OpenAPI `externalDocs` object
+with that URL. Field descriptions remain short (`Filter value for \`status\`; use
+\`{operator}.{value}\` syntax.`), while the complete operator list, grouped
+logic, and top-level parameter rule remain in one authoritative guide. Leave
+the setting empty to omit `externalDocs`.
 
 #### Documenting Custom Function Endpoints
 
@@ -303,4 +450,3 @@ php artisan sp-laravel-api:list-tables --source=attributes
 Output columns: `Key`, `Table`, `PMS Name`, `Auth R/W`, `Soft Del`, `Tenant`, `Source`, `Note` (where `Note` shows `⚠ overridden by file` for attribute tables that are shadowed by a file-based entry).
 
 ---
-

@@ -45,8 +45,8 @@ The package provides two separate MCP endpoints with different security postures
 
 | | Data MCP | Schema MCP |
 |---|---|---|
-| **Route** | `POST /mcp/message` | `POST /api/v1/mcp/schema` |
-| **Tools** | CRUD (`list_*`, `read_*`, `create_*`, `update_*`, `delete_*`) + 3 schema tools | 3 schema tools **only** |
+| **Route** | `POST /{api_prefix}/mcp/message` | `POST /{api_prefix}/mcp/schema` |
+| **Tools** | CRUD (`list_*`, `read_*`, `create_*`, `update_*`, `delete_*`) + 4 schema tools | 4 schema tools **only** |
 | **Data access** | Yes (reads/writes real data) | **None** (read-only schema) |
 | **Auth** | User Bearer token (your app auth) | `SP_API_MCP_TOKEN` (separate shared secret) |
 | **Production-safe** | Only behind full auth | Yes — no data exposure even if token leaks |
@@ -114,7 +114,7 @@ SP_API_MCP_TOKEN=YOUR_MCP_TOKEN
 
 ## Available Resources & Tools
 
-When an MCP client connects, it queries your server for available capabilities. The Data MCP exposes both resources and CRUD tools. The Schema MCP exposes only the 3 schema discovery tools (always present).
+When an MCP client connects, it queries your server for available capabilities. The Data MCP exposes both resources and CRUD tools. The Schema MCP exposes only the 4 schema discovery tools (always present).
 
 ### Resources
 - `schema://{table}`: Returns a JSON representation of the `RecordTableType` configuration, showing the AI which columns exist, which relations are available, and the primary key details.
@@ -162,9 +162,49 @@ Available on **both** endpoints (Data MCP and Schema MCP):
 
 | Tool | Description |
 |------|-------------|
-| `sp_api_list_endpoints` | List all API endpoints (tables + custom RPCs). Returns endpoint name, HTTP method, URI, table, and supported actions — including `upsert`, `restore`, `forceDelete`, and the four `bulk*` endpoints when the table/config enables them, not just list/read/create/update/delete. Accepts `?search` for substring filtering. |
-| `sp_api_get_endpoint` | Get full schema for a single endpoint: `actions` (every enabled operation — CRUD, `upsert`, `restore`, `forceDelete`, `bulkCreate`/`bulkUpdate`/`bulkDelete`/`bulkUpsert`/`bulkMixed` — each with method, URI, and a `note` on non-obvious ones like the `match_on` query param or the bulk-item shape), fields (name, type, nullable, writeable), filters (field + operators), sortable columns, relationship includes, validation rules, and required permissions. Requires `?endpoint` param. |
+| `sp_api_list_endpoints` | List all API endpoints (tables + custom RPCs). Returns endpoint name, HTTP method, URI, table, supported actions, and a lightweight request/response summary — including `upsert`, `restore`, `forceDelete`, and the four `bulk*` endpoints when the table/config enables them, not just list/read/create/update/delete. Accepts `?search` for substring filtering. |
+| `sp_api_get_endpoint` | Get full schema for a single endpoint: `actions` (every enabled operation — CRUD, `upsert`, `restore`, `forceDelete`, `bulkCreate`/`bulkUpdate`/`bulkDelete`/`bulkUpsert`/`bulkMixed` — each with method, URI, request context, response context, and a `note` on non-obvious ones like the `match_on` query param or the bulk-item shape), fields (name, type, nullable, writeable), filters (field + operators), sortable columns, relationship includes, validation rules, and required permissions. Requires `?endpoint` param. |
 | `sp_api_list_permissions` | List all available permissions across all configured tables: `{name, guard, table}`. Deduplicated and grouped by resource. |
+| `sp_api_get_api_guidance` | First-call guide for agentic development: explains Data versus Schema MCP, the discovery workflow, and safe HTTP request rules. No arguments or database access. |
+
+### MCP result format and agent workflow
+
+Every MCP tool now advertises an `outputSchema` and returns a standard MCP
+result. Agents should prefer `result.structuredContent`; the same JSON is also
+serialized in `result.content[0].text` for older MCP clients.
+
+```json
+{
+  "result": {
+    "content": [
+      { "type": "text", "text": "{ ...same JSON... }" }
+    ],
+    "structuredContent": {
+      "endpoints": []
+    }
+  }
+}
+```
+
+For Schema MCP, list tools use `{ "endpoints": [...] }` or
+`{ "permissions": [...] }`; endpoint detail and API guidance return their
+documented object directly. Data MCP returns
+`{ "response": { "data": ..., "meta": ... } }`. Internal Laravel request
+objects are never exposed to MCP clients.
+
+For an agent that needs to call the HTTP API, use this sequence:
+
+1. Call `sp_api_get_api_guidance` once after connecting.
+2. Call `sp_api_list_endpoints` to find a route.
+3. Call `sp_api_get_endpoint` before an HTTP or Data MCP operation.
+4. Follow each action's `request`, `response`, and `guidance` fields. A
+   body-less GET/DELETE explicitly returns `payload: null`; send filters and
+   selection as query parameters instead.
+
+Custom RPC functions also include their configured `querySchema`,
+`payloadSchema`, and `responseSchema` in endpoint discovery. If an application
+has not configured a schema, Schema MCP explicitly marks it as generic; agents
+must not invent a body or response shape.
 
 ## Use Case 1: Local AI IDE Integration (Stdio)
 
@@ -383,7 +423,7 @@ Authorization: Bearer YOUR_MCP_TOKEN
 
 ### AI Agent MCP Configuration
 
-Add the Schema MCP endpoint to your AI agent's config. The agent will automatically discover the 3 tools on startup and use them to understand your API.
+Add the Schema MCP endpoint to your AI agent's config. The agent will automatically discover the 4 tools on startup and use them to understand your API.
 
 **opencode** (`.opencode/opencode.json`):
 ```json
@@ -436,7 +476,7 @@ With token (production):
 }
 ```
 
-**What the AI agent learns after calling the 3 tools:**
+**What the AI agent learns after calling the 4 tools:**
 
 | Knowledge | Source |
 |-----------|--------|
