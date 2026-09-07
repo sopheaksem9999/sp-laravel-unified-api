@@ -13,10 +13,11 @@ class ApiSchemaMcpController extends Controller
     /**
      * Handle an incoming MCP JSON-RPC request (schema-only mode).
      *
-     * This endpoint only serves the three schema discovery tools:
+     * This endpoint only serves the four schema discovery tools:
      *   - sp_api_list_endpoints
      *   - sp_api_get_endpoint
      *   - sp_api_list_permissions
+     *   - sp_api_get_api_guidance
      *
      * CRUD data-access tools are NEVER exposed through this route.
      */

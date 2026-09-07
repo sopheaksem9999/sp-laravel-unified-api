@@ -78,6 +78,8 @@ class ApiClientExportServiceTest extends TestCase
         $this->assertContains('List Users', $result->regenerated);
         $this->assertContains('Create Users', $result->added);
         $this->assertContains('List Orders', $result->skipped);
+        $this->assertTrue($result->shouldRegenerateTag('Users'));
+        $this->assertFalse($result->shouldRegenerateTag('Orders'));
         $this->assertSame([], $result->suggestions);
     }
 
@@ -98,19 +100,22 @@ class ApiClientExportServiceTest extends TestCase
         $this->assertContains('List Orders', $result->regenerated);
         $this->assertSame([], $result->added);
         $this->assertSame([], $result->skipped);
+        $this->assertTrue($result->shouldRegenerateTag('Users'));
+        $this->assertTrue($result->shouldRegenerateTag('Orders'));
     }
 
-    public function test_lists_unprocessed_tables_as_suggestions(): void
+    public function test_adds_new_endpoints_outside_the_selected_regeneration_scope(): void
     {
         $spec = $this->buildFixtureSpec();
 
         $result = $this->service->build($spec, null, ['users'], $this->brunoEmitter());
 
-        $this->assertContains('Orders', $result->suggestions);
         $this->assertContains('List Users', $result->added);
         $this->assertContains('Create Users', $result->added);
+        $this->assertContains('List Orders', $result->added);
         $this->assertSame([], $result->skipped);
         $this->assertSame([], $result->regenerated);
+        $this->assertSame([], $result->suggestions);
     }
 
     public function test_orders_folders_in_spec_order_with_rpc_last(): void
@@ -498,7 +503,7 @@ class ApiClientExportServiceTest extends TestCase
             /**
              * @return array{}
              */
-            public function render(ExportResult $result): array
+            public function render(ExportResult $result, ?array $existing = null, bool $force = false): array
             {
                 return [];
             }

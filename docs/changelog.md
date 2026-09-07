@@ -11,6 +11,45 @@ keywords:
 
 All notable changes to `sp-laravel-api` will be documented in this file.
 
+## [Unreleased]
+
+## [0.4.98] - 2026-09-07
+
+### Added
+
+- **Opt-in OpenAPI realtime metadata**: when `record.broadcast_events` and
+  `sp-laravel-api.openapi.realtime.enabled` are both true, the generated
+  OpenAPI 3.0.3 document includes `x-sp-realtime` and a `RecordMutated`
+  component schema. It documents the existing private tenant channel and event
+  contract only; it never exposes broadcaster credentials or changes runtime
+  authorization.
+- **Application OpenAPI contributions**: consumers can append declared paths,
+  components, tags, non-reserved `x-*` extensions, realtime channels, and
+  container-resolved contributor classes. Contributions are config-cache safe,
+  append-only, and rejected on invalid OpenAPI structure or package-name
+  collisions.
+- **Agentic MCP structured output and call guidance**: Data MCP and Schema MCP
+  tools now publish MCP `outputSchema` definitions and return JSON-safe
+  `structuredContent`, while retaining JSON text content for older clients.
+  Schema MCP adds `sp_api_get_api_guidance` and action-level request/response
+  context so agents can distinguish body-less GET/DELETE calls from JSON-body
+  writes without accessing database data.
+
+### Changed
+
+- **OpenAPI filter fields are concise**: generated list-operation filter
+  parameters now state only the field and `{operator}.{value}` syntax. Set
+  `sp-laravel-api.openapi.filter_documentation_url` to attach the full
+  operator guide once through the standard operation-level `externalDocs`
+  object.
+- **Bruno and Postman exports preserve user edits by default**: existing
+  generated requests, test payloads, headers, scripts, and custom requests now
+  remain intact while newly documented endpoints are added. Use `--regen=<tag>`
+  for a targeted replacement or `--force` to refresh all current generated
+  requests. Protected generated requests now use an explicit
+  `Authorization: Bearer {{authToken}}` header instead of inherited
+  collection-level bearer authentication.
+
 ## [0.4.97] - 2026-09-06
 
 ### Added

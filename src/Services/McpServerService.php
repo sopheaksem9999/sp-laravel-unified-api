@@ -190,7 +190,9 @@ class McpServerService
                         'description' => 'Filter endpoints by name, table, or URI (case-insensitive substring match)',
                     ],
                 ],
+                'additionalProperties' => false,
             ],
+            'outputSchema' => $this->endpointsOutputSchema(),
         ];
 
         $tools[] = [
@@ -206,7 +208,9 @@ class McpServerService
                     ],
                 ],
                 'required' => ['endpoint'],
+                'additionalProperties' => false,
             ],
+            'outputSchema' => $this->endpointOutputSchema(),
         ];
 
         $tools[] = [
@@ -214,8 +218,19 @@ class McpServerService
             'description' => 'List all available permissions grouped by resource.',
             'inputSchema' => [
                 'type' => 'object',
-                'properties' => (object) [],
+                'additionalProperties' => false,
             ],
+            'outputSchema' => $this->permissionsOutputSchema(),
+        ];
+
+        $tools[] = [
+            'name' => 'sp_api_get_api_guidance',
+            'description' => 'Explain the Data MCP and Schema MCP roles, then guide an agent through discovering and safely calling a documented API endpoint.',
+            'inputSchema' => [
+                'type' => 'object',
+                'additionalProperties' => false,
+            ],
+            'outputSchema' => $this->guidanceOutputSchema(),
         ];
 
         // CRUD data-access tools — only in full mode
@@ -245,6 +260,7 @@ class McpServerService
                             'tenantId' => ['type' => ['string', 'integer', 'null']],
                         ],
                     ],
+                    'outputSchema' => $this->dataToolOutputSchema(),
                 ];
 
                 $tools[] = [
@@ -263,6 +279,7 @@ class McpServerService
                         ],
                         'required' => ['id'],
                     ],
+                    'outputSchema' => $this->dataToolOutputSchema(),
                 ];
 
                 if (!$readOnly) {
@@ -286,6 +303,7 @@ class McpServerService
                             ],
                             'required' => ['payload'],
                         ],
+                        'outputSchema' => $this->dataToolOutputSchema(),
                     ];
 
                     $tools[] = [
@@ -301,6 +319,7 @@ class McpServerService
                             ],
                             'required' => ['id', 'payload'],
                         ],
+                        'outputSchema' => $this->dataToolOutputSchema(),
                     ];
 
                     $tools[] = [
@@ -315,6 +334,7 @@ class McpServerService
                             ],
                             'required' => ['id'],
                         ],
+                        'outputSchema' => $this->dataToolOutputSchema(),
                     ];
                 }
             }
@@ -332,22 +352,22 @@ class McpServerService
         $args = $params['arguments'] ?? [];
 
         // Schema discovery tools
-        if (in_array($name, ['sp_api_list_endpoints', 'sp_api_get_endpoint', 'sp_api_list_permissions'], true)) {
+        if (in_array($name, ['sp_api_list_endpoints', 'sp_api_get_endpoint', 'sp_api_list_permissions', 'sp_api_get_api_guidance'], true)) {
             try {
                 $result = match ($name) {
                     'sp_api_list_endpoints' => $this->handleSchemaListEndpoints($args),
                     'sp_api_get_endpoint' => $this->handleSchemaGetEndpoint($args),
                     'sp_api_list_permissions' => $this->handleSchemaListPermissions(),
+                    'sp_api_get_api_guidance' => $this->handleSchemaGetApiGuidance(),
                 };
 
-                return [
-                    'content' => [
-                        [
-                            'type' => 'text',
-                            'text' => json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-                        ],
-                    ],
-                ];
+                $structuredContent = match ($name) {
+                    'sp_api_list_endpoints' => ['endpoints' => $result],
+                    'sp_api_list_permissions' => ['permissions' => $result],
+                    default => $result,
+                };
+
+                return $this->toolResult($structuredContent, $result);
             } catch (Exception $exception) {
                 return [
                     'isError' => true,
@@ -406,14 +426,7 @@ class McpServerService
                 'delete' => RecordService::executeDelete($table, $id, $queryParams, $tenantId),
             };
 
-            return [
-                'content' => [
-                    [
-                        'type' => 'text',
-                        'text' => json_encode($result, JSON_PRETTY_PRINT),
-                    ],
-                ],
-            ];
+            return $this->dataToolResult($result);
         } catch (Exception $exception) {
             return [
                 'isError' => true,
@@ -702,7 +715,7 @@ class McpServerService
                         ? '/' . $apiPrefix . '/' . $table . '/' . $fnName
                         : '/' . $apiPrefix . '/' . $table . '/' . $rpcPrefix . '/' . $fnName;
 
-                    $tableEndpoints[] = [
+                    $tableEndpoints[] = array_merge([
                         'name' => $table . '.' . $fnName,
                         'method' => $methods,
                         'uri' => $rpcUri,
@@ -710,7 +723,7 @@ class McpServerService
                         'actions' => ['rpc'],
                         'permission' => $fnConfig['pmsName'] ?? null,
                         'isPublic' => $fnConfig['isPublic'] ?? false,
-                    ];
+                    ], $this->functionCallContext($fnConfig));
                 }
             }
 
@@ -741,7 +754,7 @@ class McpServerService
                 ? '/' . $apiPrefix . '/' . $fnName
                 : '/' . $apiPrefix . '/' . $rpcPrefix . '/' . $fnName;
 
-            $endpoints[] = [
+            $endpoints[] = array_merge([
                 'name' => 'global.' . $fnName,
                 'method' => $methods,
                 'uri' => $globalUri,
@@ -749,10 +762,10 @@ class McpServerService
                 'actions' => ['rpc'],
                 'permission' => $fnConfig['pmsName'] ?? null,
                 'isPublic' => $fnConfig['isPublic'] ?? false,
-            ];
+            ], $this->functionCallContext($fnConfig));
         }
 
-        return $endpoints;
+        return $this->withEndpointSummaries($endpoints);
     }
 
     /**
@@ -890,6 +903,8 @@ class McpServerService
             }
         }
 
+        $actions = $this->withActionContexts($actions, $fields);
+
         // Relationships / includes
         $includes = [];
         if (!empty($config->relationships)) {
@@ -953,6 +968,7 @@ class McpServerService
                 if (!empty($fnConfig['description'])) {
                     $rf['description'] = $fnConfig['description'];
                 }
+                $rf = array_merge($rf, $this->functionCallContext($fnConfig));
 
                 $rpcFunctions[] = $rf;
             }
@@ -1122,7 +1138,305 @@ class McpServerService
         return array_values($permissions);
     }
 
+    /** @return array<string, mixed> */
+    protected function handleSchemaGetApiGuidance(): array
+    {
+        $apiPrefix = trim(RecordConfigService::apiPrefix(), '/');
+        $mcpPrefix = trim((string) config('record.mcp.route_prefix', 'mcp'), '/');
+
+        return [
+            'dataMcp' => [
+                'route' => '/' . $apiPrefix . '/' . $mcpPrefix . '/message',
+                'purpose' => 'Use authorized CRUD tools to read or modify real database records.',
+            ],
+            'schemaMcp' => [
+                'route' => '/' . $apiPrefix . '/mcp/schema',
+                'purpose' => 'Use schema discovery tools for API metadata only; this endpoint never returns database rows.',
+            ],
+            'workflow' => [
+                'Call sp_api_list_endpoints to discover an endpoint.',
+                'Call sp_api_get_endpoint before making an HTTP or Data MCP call.',
+                'Use only the documented method, URI, parameters, and writeable fields.',
+            ],
+            'httpRules' => [
+                'get' => 'Do not send a request body; send filters, selection, sorting, and pagination as query parameters.',
+                'write' => 'Send only documented writeable fields in the JSON request body.',
+                'response' => 'Successful package API responses use success, error_code, data, and meta.',
+            ],
+        ];
+    }
+
     // ─── Helpers ────────────────────────────────────────────────────────────
+
+    /**
+     * @param array<string, mixed> $structuredContent
+     * @return array<string, mixed>
+     */
+    private function toolResult(array $structuredContent, mixed $legacyContent): array
+    {
+        return [
+            'content' => [
+                [
+                    'type' => 'text',
+                    'text' => json_encode($legacyContent, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+                ],
+            ],
+            'structuredContent' => $structuredContent,
+        ];
+    }
+
+    /**
+     * RecordService returns the current Laravel request for internal processing.
+     * It is not part of an API result and cannot be represented as MCP JSON.
+     *
+     * @param array<string, mixed> $result
+     * @return array<string, mixed>
+     */
+    private function dataToolResult(array $result): array
+    {
+        unset($result['request']);
+
+        return $this->toolResult(['response' => $result], $result);
+    }
+
+    /** @return array<string, mixed> */
+    private function endpointsOutputSchema(): array
+    {
+        return [
+            'type' => 'object',
+            'properties' => [
+                'endpoints' => ['type' => 'array', 'items' => ['type' => 'object']],
+            ],
+            'required' => ['endpoints'],
+            'additionalProperties' => false,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function endpointOutputSchema(): array
+    {
+        return [
+            'type' => 'object',
+            'additionalProperties' => true,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function permissionsOutputSchema(): array
+    {
+        return [
+            'type' => 'object',
+            'properties' => [
+                'permissions' => ['type' => 'array', 'items' => ['type' => 'object']],
+            ],
+            'required' => ['permissions'],
+            'additionalProperties' => false,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function guidanceOutputSchema(): array
+    {
+        return [
+            'type' => 'object',
+            'properties' => [
+                'dataMcp' => ['type' => 'object'],
+                'schemaMcp' => ['type' => 'object'],
+                'workflow' => ['type' => 'array', 'items' => ['type' => 'string']],
+                'httpRules' => ['type' => 'object'],
+            ],
+            'required' => ['dataMcp', 'schemaMcp', 'workflow', 'httpRules'],
+            'additionalProperties' => false,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function dataToolOutputSchema(): array
+    {
+        return [
+            'type' => 'object',
+            'properties' => [
+                'response' => ['type' => 'object'],
+            ],
+            'required' => ['response'],
+            'additionalProperties' => false,
+        ];
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $actions
+     * @param array<int, array<string, mixed>> $fields
+     * @return array<string, array<string, mixed>>
+     */
+    private function withActionContexts(array $actions, array $fields): array
+    {
+        foreach ($actions as $action => $definition) {
+            $bodyless = in_array($action, ['list', 'read', 'delete', 'forceDelete', 'restore'], true);
+            $definition['request'] = [
+                'pathParameters' => str_contains((string) $definition['uri'], '{id}') ? ['id'] : [],
+                'queryParameters' => $this->queryParametersForAction($action),
+                'payload' => $bodyless ? null : $this->payloadSchemaForAction($action, $fields),
+            ];
+            $definition['response'] = [
+                'envelope' => ['success', 'error_code', 'data', 'meta'],
+                'dataSchema' => $this->dataSchemaForAction($action, $fields),
+            ];
+            $definition['guidance'] = $bodyless
+                ? 'Do not send a request body; send filters and selection as query parameters when the action supports them.'
+                : 'Send only documented writeable fields in the JSON request body.';
+            $actions[$action] = $definition;
+        }
+
+        return $actions;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $endpoints
+     * @return array<int, array<string, mixed>>
+     */
+    private function withEndpointSummaries(array $endpoints): array
+    {
+        foreach ($endpoints as $index => $endpoint) {
+            if (isset($endpoint['request'], $endpoint['response'])) {
+                continue;
+            }
+
+            $actions = $endpoint['actions'] ?? [];
+            $bodyless = array_reduce(
+                $actions,
+                static fn(bool $carry, mixed $action): bool => $carry && in_array($action, ['list', 'read', 'delete', 'forceDelete'], true),
+                true,
+            );
+            $isCollection = in_array('list', $actions, true);
+            $endpoint['request'] = [
+                'payload' => $bodyless ? null : [
+                    'description' => 'Inspect sp_api_get_endpoint for the exact payload schema before calling.',
+                ],
+            ];
+            $endpoint['response'] = [
+                'summary' => $isCollection
+                    ? 'Returns a response containing an array of matching records and pagination metadata.'
+                    : 'Returns a response containing the action result and metadata.',
+            ];
+            $endpoint['guidance'] = $bodyless
+                ? 'Do not send a request body. Inspect sp_api_get_endpoint for supported query parameters.'
+                : 'Call sp_api_get_endpoint before sending a request body.';
+            $endpoints[$index] = $endpoint;
+        }
+
+        return $endpoints;
+    }
+
+    /**
+     * @param array<string, mixed> $function
+     * @return array<string, mixed>
+     */
+    private function functionCallContext(array $function): array
+    {
+        $payloadSchema = $function['payloadSchema'] ?? null;
+        $responseSchema = $function['responseSchema'] ?? [
+            'type' => 'object',
+            'additionalProperties' => true,
+            'description' => 'No response schema is configured for this custom RPC.',
+        ];
+
+        return [
+            'request' => [
+                'querySchema' => $function['querySchema'] ?? null,
+                'payload' => $payloadSchema,
+            ],
+            'response' => [
+                'dataSchema' => $responseSchema,
+            ],
+            'guidance' => $payloadSchema === null
+                ? 'No request body schema is configured; do not invent a payload. Check querySchema and the function description before calling.'
+                : 'Send a JSON request body that conforms to payloadSchema.',
+        ];
+    }
+
+    /** @return array<int, string> */
+    private function queryParametersForAction(string $action): array
+    {
+        return match ($action) {
+            'list', 'read' => ['filters', 'select', 'with', 'sortby', 'order', 'per_page', 'page', 'cursor'],
+            'upsert', 'bulkUpsert' => ['match_on'],
+            default => [],
+        };
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $fields
+     * @return array<string, mixed>
+     */
+    private function payloadSchemaForAction(string $action, array $fields): array
+    {
+        $recordSchema = $this->recordSchema($fields, writeableOnly: true);
+
+        if (str_starts_with($action, 'bulk')) {
+            return [
+                'type' => 'array',
+                'items' => $recordSchema,
+            ];
+        }
+
+        return $recordSchema;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $fields
+     * @return array<string, mixed>
+     */
+    private function dataSchemaForAction(string $action, array $fields): array
+    {
+        $recordSchema = $this->recordSchema($fields);
+
+        if (in_array($action, ['list', 'bulkCreate', 'bulkUpdate', 'bulkDelete', 'bulkUpsert', 'bulkMixed'], true)) {
+            return [
+                'type' => 'array',
+                'items' => $recordSchema,
+            ];
+        }
+
+        return $recordSchema;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $fields
+     * @return array<string, mixed>
+     */
+    private function recordSchema(array $fields, bool $writeableOnly = false): array
+    {
+        $properties = [];
+        foreach ($fields as $field) {
+            if ($writeableOnly && !in_array('write', $field['in'] ?? [], true)) {
+                continue;
+            }
+
+            $properties[(string) $field['name']] = [
+                'type' => $this->jsonSchemaType((string) ($field['type'] ?? 'string')),
+            ];
+            if (isset($field['enum'])) {
+                $properties[(string) $field['name']]['enum'] = $field['enum'];
+            }
+        }
+
+        return [
+            'type' => 'object',
+            'properties' => $properties,
+            'additionalProperties' => false,
+        ];
+    }
+
+    private function jsonSchemaType(string $type): string
+    {
+        return match ($type) {
+            'integer', 'bigint', 'smallint', 'tinyint', 'int', 'unsigned' => 'integer',
+            'decimal', 'float', 'double', 'numeric' => 'number',
+            'boolean', 'bool' => 'boolean',
+            'json', 'array' => 'object',
+            default => 'string',
+        };
+    }
 
     /**
      * Operator tokens returned here must match QueryBuilderFiltersUtils::FILTER_OPERATORS —

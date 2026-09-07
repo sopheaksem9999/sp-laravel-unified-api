@@ -15,7 +15,7 @@ interface ApiClientEmitterInterface
      *
      * @return array<string, mixed>
      */
-    public function render(ExportResult $result): array;
+    public function render(ExportResult $result, ?array $existing = null, bool $force = false): array;
 
     /**
      * Extract the set of request names already present in an existing collection.

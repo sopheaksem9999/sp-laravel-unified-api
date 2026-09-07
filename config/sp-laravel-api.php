@@ -7,6 +7,19 @@ return [
     'openapi' => [
         // default output path relative to project root
         'output' => 'openapi-schema.json',
+        // Absolute URL for the filter syntax reference linked from CRUD list operations.
+        'filter_documentation_url' => env('SP_LARAVEL_API_FILTER_DOCUMENTATION_URL'),
+        'realtime' => [
+            'enabled' => false,
+            'channels' => [],
+        ],
+        'contributions' => [
+            'paths' => [],
+            'components' => [],
+            'tags' => [],
+            'extensions' => [],
+            'contributors' => [],
+        ],
     ],
     'auth' => [
         'guard' => env('SP_LARAVEL_API_AUTH_GUARD', 'api'),

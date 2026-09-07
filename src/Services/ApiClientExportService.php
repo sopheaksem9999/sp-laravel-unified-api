@@ -49,6 +49,7 @@ class ApiClientExportService
         $regenerated = [];
         $skipped = [];
         $generatedTableNames = [];
+        $regenerateTags = [];
 
         foreach ($allRequests as $req) {
             $tag = $req['tag'];
@@ -61,13 +62,8 @@ class ApiClientExportService
                 || ($isRpc && isset($regenSet['rpc']));
             $inExisting = in_array($req['name'], $existingNames, true);
 
-            // Default mode (no --regen) processes everything.
-            // regen=<list> processes the listed tables PLUS anything already in the
-            // existing collection (so we don't accidentally drop it from the output).
-            // regen=all processes everything.
-            $process = ! $regenKeysProvided || $inRegenSet || $inExisting;
-            if (! $process) {
-                continue;
+            if ($inRegenSet) {
+                $regenerateTags[strtolower((string) $tag)] = true;
             }
 
             if ($inExisting) {
@@ -136,6 +132,8 @@ class ApiClientExportService
             skipped: $skipped,
             suggestions: $suggestions,
             accessTokenKey: $accessTokenKey,
+            regenerateTags: $regenerateTags,
+            regenerateAll: $regenAll,
         );
     }
 

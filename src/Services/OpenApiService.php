@@ -10,6 +10,7 @@ use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Utilities\RelationshipResolverUtils;
 use Sopheak\Core\Constants\HttpErrorCodeConstant;
+use Sopheak\Core\Exceptions\OpenApiContributionException;
 use Sopheak\Core\Http\Middleware\RecordRouteMiddleware;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Arr;
@@ -145,7 +146,7 @@ class OpenApiService
 
         $globalFunctions = RecordConfigService::globalFunctions();
 
-        return [
+        $spec = [
             'openapi' => '3.0.3',
             'info' => [
                 'title' => config('app.name') . ' - Internal Documentation',
@@ -478,6 +479,101 @@ Accepts an array of IDs or an array of objects with the primary key.
             ],
             'security' => [['bearerAuth' => []]],
         ];
+
+        $contributionService = app(OpenApiContributionService::class);
+        $spec = $contributionService->apply($spec);
+
+        if (self::realtimeDocumentationEnabled()) {
+            if (isset($spec['components']['schemas']['RecordMutated'])) {
+                throw new OpenApiContributionException('components.schemas.RecordMutated conflicts with the package realtime schema.');
+            }
+
+            $spec['components']['schemas']['RecordMutated'] = self::recordMutatedSchema($tables);
+            $realtime = self::realtimeMetadata();
+            $realtime['channels'] = $contributionService->realtimeChannels($spec, $realtime['channels']);
+            $spec['x-sp-realtime'] = $realtime;
+        }
+
+        return $spec;
+    }
+
+    /**
+     * @param array<string, RecordTableType> $tables
+     *
+     * @return array<string, mixed>
+     */
+    private static function recordMutatedSchema(array $tables): array
+    {
+        $allowedTables = RecordConfigService::broadcastTables();
+        $broadcastTables = [];
+
+        foreach ($tables as $table => $config) {
+            if ($config->disableBroadcast) {
+                continue;
+            }
+
+            if ([] !== $allowedTables && !in_array($table, $allowedTables, true)) {
+                continue;
+            }
+
+            $broadcastTables[] = $table;
+        }
+
+        return [
+            'type' => 'object',
+            'required' => ['table', 'action', 'record', 'tenant_id', 'timestamp'],
+            'properties' => [
+                'table' => ['type' => 'string', 'enum' => $broadcastTables],
+                'action' => [
+                    'type' => 'string',
+                    'description' => 'The emitted mutation action. Clients must not assume a closed enum.',
+                ],
+                'record' => [
+                    'type' => 'object',
+                    'additionalProperties' => true,
+                    'description' => 'The affected record. Fields depend on the table and mutation response shape.',
+                ],
+                'tenant_id' => [
+                    'description' => 'Tenant identifier, or null when the event uses tenant.global.',
+                ],
+                'timestamp' => ['type' => 'string', 'format' => 'date-time'],
+            ],
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private static function realtimeMetadata(): array
+    {
+        return [
+            'version' => '1.0',
+            'transport' => 'laravel-broadcasting',
+            'channels' => [
+                [
+                    'name' => 'record-mutations',
+                    'pattern' => 'tenant.{tenantId}',
+                    'private' => true,
+                    'parameters' => [
+                        'tenantId' => [
+                            'description' => 'Tenant identifier. tenant.global is used when no tenant context exists.',
+                            'schema' => ['type' => 'string'],
+                        ],
+                    ],
+                    'events' => [
+                        [
+                            'pattern' => '{table}.{action}',
+                            'payload' => ['$ref' => '#/components/schemas/RecordMutated'],
+                        ],
+                    ],
+                    'authorization' => 'Private-channel authorization is implemented by the host application.',
+                ],
+            ],
+        ];
+    }
+
+    private static function realtimeDocumentationEnabled(): bool
+    {
+        return RecordConfigService::broadcastEventsEnabled()
+            && (bool) config('sp-laravel-api.openapi.realtime.enabled', false);
     }
 
     private static function schemaName(string $table): string
@@ -1244,6 +1340,11 @@ Accepts an array of IDs or an array of objects with the primary key.
             ], static fn(mixed $value): bool => [] !== $value);
 
             if (isset($paths[$basePath]['get'])) {
+                $filterDocumentation = self::filterDocumentation();
+                if (null !== $filterDocumentation) {
+                    $paths[$basePath]['get']['externalDocs'] = $filterDocumentation;
+                }
+
                 $paths[$basePath]['get'] = self::appendNote(
                     self::tableOperationDocs($paths[$basePath]['get'], $config, $recordName, 'list', true, $tableConfigSource, $tenantScoped),
                     self::paginationDefaultNote()
@@ -2323,10 +2424,30 @@ Accepts an array of IDs or an array of objects with the primary key.
     }
 
     /**
+     * OpenAPI supports external documentation on an operation, but not on a
+     * Parameter Object. Link the canonical guide once on each list operation
+     * instead of repeating the full operator catalogue for every table field.
+     *
+     * @return array{description: string, url: string}|null
+     */
+    private static function filterDocumentation(): ?array
+    {
+        $url = trim((string) config('sp-laravel-api.openapi.filter_documentation_url', ''));
+
+        if ('' === $url) {
+            return null;
+        }
+
+        return [
+            'description' => 'Filter syntax and supported operators',
+            'url' => $url,
+        ];
+    }
+
+    /**
      * One query parameter per table column, documenting the actual '{column}={operator}.{value}'
-     * filter syntax directly in the OpenAPI schema — not just in the free-text description —
-     * so a schema-driven client/agent doesn't have to guess (or invent unsupported bracket
-     * syntax like 'filter[column]=value').
+     * filter syntax directly in the OpenAPI schema. The full operator catalogue is linked from
+     * the list operation's optional OpenAPI externalDocs field.
      *
      * @param array<string, mixed> $columns
      * @return array<int, array<string, mixed>>
@@ -2345,10 +2466,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                 'name' => $columnName,
                 'in' => 'query',
                 'required' => false,
-                'description' => sprintf(
-                    "Filter by `%s` using `{operator}.{value}` syntax (e.g. `eq.`, `neq.`, `gt.`, `gte.`, `lt.`, `lte.`, `in.`, `contains.`, ...) — see \"Filter Operators\" in the API description for the full list. Do not wrap this in a `filter[...]` key.",
-                    $columnName
-                ),
+                'description' => sprintf('Filter value for `%s`; use `{operator}.{value}` syntax.', $columnName),
                 'schema' => ['type' => 'string'],
                 'example' => self::columnFilterExample($type),
             ];
