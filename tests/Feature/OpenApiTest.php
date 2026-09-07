@@ -331,9 +331,10 @@ class OpenApiTest extends TestCase
     }
 
     /** @test */
-    public function it_declares_a_structured_filter_parameter_per_column_on_the_list_operation(): void
+    public function it_declares_concise_filter_parameters_and_references_configured_filter_documentation_once(): void
     {
         Config::set('record.api_prefix', 'api/v2');
+        Config::set('sp-laravel-api.openapi.filter_documentation_url', 'https://docs.example.test/guide/api-filter-operators');
         Config::set('record.tables', [
             'invoices' => new RecordTableType(
                 table: 'invoices',
@@ -348,15 +349,22 @@ class OpenApiTest extends TestCase
 
         $spec = (new OpenApiService())->generateInternal();
         $parameters = $spec['paths']['/api/v2/invoices']['get']['parameters'] ?? [];
+        $operation = $spec['paths']['/api/v2/invoices']['get'];
         $byName = collect($parameters)->keyBy('name');
+
+        $this->assertSame([
+            'description' => 'Filter syntax and supported operators',
+            'url' => 'https://docs.example.test/guide/api-filter-operators',
+        ], $operation['externalDocs']);
 
         foreach (['id', 'status', 'total', 'created_at'] as $column) {
             $this->assertTrue($byName->has($column), "Expected a '{$column}' filter parameter on the list operation");
             $param = $byName->get($column);
             $this->assertSame('query', $param['in']);
             $this->assertSame('string', $param['schema']['type']);
-            $this->assertStringContainsString('{operator}.{value}', $param['description']);
-            $this->assertStringContainsString('filter[', $param['description']);
+            $this->assertSame(sprintf('Filter value for `%s`; use `{operator}.{value}` syntax.', $column), $param['description']);
+            $this->assertStringNotContainsString('contains.', $param['description']);
+            $this->assertStringNotContainsString('filter[', $param['description']);
         }
 
         $this->assertSame('gte.100', $byName->get('total')['example']);

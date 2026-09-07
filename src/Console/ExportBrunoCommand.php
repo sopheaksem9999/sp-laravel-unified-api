@@ -12,6 +12,7 @@ class ExportBrunoCommand extends AbstractExportCommand
     protected $signature = 'sp-laravel-api:export-bruno
                             {--output= : Output folder path. Defaults to api-client/bruno (relative to project root).}
                             {--regen= : Comma-separated table keys to regenerate, or "all". Tables not listed are skipped if already in the collection.}
+                            {--force : Regenerate all package-generated requests and collection support files.}
                             {--dry-run : Print the diff summary; do not write files.}';
 
     protected $description = 'Export the OpenAPI spec to a Bruno collection folder with sub-folders for each table.';

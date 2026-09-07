@@ -9,11 +9,11 @@ class BrunoEmitter implements ApiClientEmitterInterface
     /**
      * @return array<string, string>
      */
-    public function render(ExportResult $result): array
+    public function render(ExportResult $result, ?array $existing = null, bool $force = false): array
     {
         $files = [];
 
-        $files['bruno.json'] = (string) json_encode([
+        $brunoJson = (string) json_encode([
             'version' => '1',
             'name' => $result->appName . ' API',
             'type' => 'collection',
@@ -22,9 +22,10 @@ class BrunoEmitter implements ApiClientEmitterInterface
                 '.git',
             ],
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        $this->addSupportFile($files, 'bruno.json', $brunoJson, $existing, $force);
 
-        $files['collection.bru'] = $this->renderCollectionBru($result);
-        $files['environments/Local.bru'] = $this->renderEnvironmentBru($result);
+        $this->addSupportFile($files, 'collection.bru', $this->renderCollectionBru($result), $existing, $force);
+        $this->addEnvironmentFile($files, $result, $existing, $force);
 
         foreach ($result->folders as $folder) {
             $folderName = $this->sanitizeFilename($folder->name);
@@ -32,11 +33,64 @@ class BrunoEmitter implements ApiClientEmitterInterface
             foreach ($folder->requests as $req) {
                 $fileName = $this->sanitizeFilename($req->name) . '.bru';
                 $relativePath = $folderName . '/' . $fileName;
-                $files[$relativePath] = $this->renderRequestBru($req, $seq++, $result->accessTokenKey);
+                if ($force || $result->shouldRegenerateTag($folder->name) || ! isset($existing[$relativePath])) {
+                    $files[$relativePath] = $this->renderRequestBru($req, $seq, $result->accessTokenKey);
+                }
+
+                $seq++;
             }
         }
 
         return $files;
+    }
+
+    /**
+     * @param array<string, string> $files
+     * @param array<string, mixed>|null $existing
+     */
+    private function addSupportFile(array &$files, string $path, string $content, ?array $existing, bool $force): void
+    {
+        if ($force || ! isset($existing[$path])) {
+            $files[$path] = $content;
+        }
+    }
+
+    /**
+     * @param array<string, string> $files
+     * @param array<string, mixed>|null $existing
+     */
+    private function addEnvironmentFile(array &$files, ExportResult $result, ?array $existing, bool $force): void
+    {
+        $path = 'environments/Local.bru';
+        $generated = $this->renderEnvironmentBru($result);
+
+        if ($force || ! isset($existing[$path])) {
+            $files[$path] = $generated;
+
+            return;
+        }
+
+        $current = (string) $existing[$path];
+        $withAuthToken = $this->addMissingAuthTokenSecret($current);
+        if ($withAuthToken !== $current) {
+            $files[$path] = $withAuthToken;
+        }
+    }
+
+    private function addMissingAuthTokenSecret(string $environment): string
+    {
+        if (preg_match('/^\s*authToken\s*$/m', $environment) === 1) {
+            return $environment;
+        }
+
+        if (preg_match('/(vars:secret\s*\[\s*)(.*?)(\s*\])/s', $environment, $matches) === 1) {
+            $secrets = rtrim($matches[2]);
+            $replacement = $matches[1] . $secrets . ('' === $secrets ? '' : "\n") . '  authToken' . $matches[3];
+
+            return (string) preg_replace('/vars:secret\s*\[\s*.*?\s*\]/s', $replacement, $environment, 1);
+        }
+
+        return rtrim($environment) . "\n\nvars:secret [\n  authToken\n]\n";
     }
 
     /**
@@ -69,14 +123,6 @@ class BrunoEmitter implements ApiClientEmitterInterface
         $lines[] = '  name: ' . $result->appName . ' API';
         $lines[] = '}';
         $lines[] = '';
-        $lines[] = 'auth {';
-        $lines[] = '  mode: bearer';
-        $lines[] = '}';
-        $lines[] = '';
-        $lines[] = 'auth:bearer {';
-        $lines[] = '  token: {{bearerToken}}';
-        $lines[] = '}';
-        $lines[] = '';
 
         return implode("\n", $lines);
     }
@@ -90,7 +136,7 @@ class BrunoEmitter implements ApiClientEmitterInterface
         $lines[] = '}';
         $lines[] = '';
         $lines[] = 'vars:secret [';
-        $lines[] = '  bearerToken';
+        $lines[] = '  authToken';
         $lines[] = ']';
         $lines[] = '';
 
@@ -115,7 +161,7 @@ class BrunoEmitter implements ApiClientEmitterInterface
         $lines[] = $method . ' {';
         $lines[] = '  url: ' . $url;
         $lines[] = '  body: ' . ($hasBody ? 'json' : 'none');
-        $lines[] = '  auth: ' . ($req->requiresAuth ? 'inherit' : 'none');
+        $lines[] = '  auth: none';
         $lines[] = '}';
         $lines[] = '';
 
@@ -150,9 +196,14 @@ class BrunoEmitter implements ApiClientEmitterInterface
             $lines[] = '';
         }
 
-        if ($req->headers !== []) {
+        $headers = $req->headers;
+        if ($req->requiresAuth && ! $req->isLoginRequest) {
+            $headers[] = ['name' => 'Authorization', 'value' => 'Bearer {{authToken}}', 'enabled' => true];
+        }
+
+        if ($headers !== []) {
             $lines[] = 'headers {';
-            foreach ($req->headers as $header) {
+            foreach ($headers as $header) {
                 $lines[] = '  ' . $header['name'] . ': ' . $header['value'];
             }
             $lines[] = '}';
@@ -186,44 +237,44 @@ class BrunoEmitter implements ApiClientEmitterInterface
     /**
      * Recursively searches the JSON response for a key named $accessTokenKey
      * (mirroring the docs UI's login proxy in routes/web.php) and writes the
-     * match into the `bearerToken` runtime variable.
+     * match into the `authToken` runtime variable.
      */
     private function loginTokenCaptureScript(string $accessTokenKey): string
     {
         $key = (string) json_encode($accessTokenKey);
 
         return <<<JS
-        const key = {$key};
-        const body = res.body;
-        let token = null;
+            const key = {$key};
+            const body = res.body;
+            let token = null;
 
-        if (body && typeof body === "object" && !Array.isArray(body) && typeof body[key] === "string" && body[key] !== "") {
-          token = body[key];
-        } else {
-          const stack = [body];
-          let guard = 0;
-          while (stack.length > 0 && guard < 200) {
-            guard++;
-            const current = stack.shift();
-            if (!current || typeof current !== "object") {
-              continue;
-            }
-            if (!Array.isArray(current) && typeof current[key] === "string" && current[key] !== "") {
-              token = current[key];
-              break;
-            }
-            if (Array.isArray(current)) {
-              current.forEach((item) => stack.push(item));
+            if (body && typeof body === "object" && !Array.isArray(body) && typeof body[key] === "string" && body[key] !== "") {
+              token = body[key];
             } else {
-              Object.keys(current).forEach((k) => stack.push(current[k]));
+              const stack = [body];
+              let guard = 0;
+              while (stack.length > 0 && guard < 200) {
+                guard++;
+                const current = stack.shift();
+                if (!current || typeof current !== "object") {
+                  continue;
+                }
+                if (!Array.isArray(current) && typeof current[key] === "string" && current[key] !== "") {
+                  token = current[key];
+                  break;
+                }
+                if (Array.isArray(current)) {
+                  current.forEach((item) => stack.push(item));
+                } else {
+                  Object.keys(current).forEach((k) => stack.push(current[k]));
+                }
+              }
             }
-          }
-        }
 
-        if (token) {
-          bru.setVar("bearerToken", token);
-        }
-        JS;
+            if (token) {
+              bru.setVar("authToken", token);
+            }
+            JS;
     }
 
     private function convertUrlParams(string $url): string

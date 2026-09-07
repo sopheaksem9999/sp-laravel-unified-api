@@ -38,7 +38,8 @@ class BrunoEmitterTest extends TestCase
 
         $collectionBru = $output['collection.bru'];
         $this->assertStringContainsString('name: MyApp API', $collectionBru);
-        $this->assertStringContainsString('mode: bearer', $collectionBru);
+        $this->assertStringNotContainsString('mode: bearer', $collectionBru);
+        $this->assertStringNotContainsString('auth:bearer', $collectionBru);
         $this->assertStringNotContainsString('baseUrl:', $collectionBru);
         $this->assertStringNotContainsString('apiPrefix:', $collectionBru);
     }
@@ -55,7 +56,7 @@ class BrunoEmitterTest extends TestCase
         $this->assertStringContainsString('baseUrl: http://localhost:8000', $envBru);
         $this->assertStringContainsString('apiPrefix: /api/v1', $envBru);
         $this->assertStringContainsString('vars:secret [', $envBru);
-        $this->assertStringContainsString('bearerToken', $envBru);
+        $this->assertStringContainsString('authToken', $envBru);
     }
 
     public function test_renders_subfolders_and_bru_files(): void
@@ -169,7 +170,7 @@ class BrunoEmitterTest extends TestCase
         $this->assertStringNotContainsString('body:json {', $output['Users/List Users.bru']);
     }
 
-    public function test_renders_auth_inherit_when_request_requires_auth(): void
+    public function test_renders_authorization_header_and_noauth_when_request_requires_auth(): void
     {
         $request = $this->req('List Users', 'GET', '/users');
 
@@ -177,7 +178,10 @@ class BrunoEmitterTest extends TestCase
 
         $output = $this->emitter->render($result);
 
-        $this->assertStringContainsString('auth: inherit', $output['Users/List Users.bru']);
+        $bru = $output['Users/List Users.bru'];
+
+        $this->assertStringContainsString('auth: none', $bru);
+        $this->assertStringContainsString('Authorization: Bearer {{authToken}}', $bru);
     }
 
     public function test_renders_auth_none_when_request_does_not_require_auth(): void
@@ -199,7 +203,7 @@ class BrunoEmitterTest extends TestCase
         $bru = $output['Products/List Public Products.bru'];
 
         $this->assertStringContainsString('auth: none', $bru);
-        $this->assertStringNotContainsString('auth: inherit', $bru);
+        $this->assertStringNotContainsString('Authorization:', $bru);
     }
 
     public function test_attaches_post_response_login_script_to_login_request(): void
@@ -213,7 +217,6 @@ class BrunoEmitterTest extends TestCase
             queryParams: [],
             headers: [],
             bodyJson: '{"email": "", "password": ""}',
-            requiresAuth: false,
             isLoginRequest: true,
         );
 
@@ -223,7 +226,8 @@ class BrunoEmitterTest extends TestCase
 
         $this->assertStringContainsString('script:post-response {', $bru);
         $this->assertStringContainsString('"access_token"', $bru);
-        $this->assertStringContainsString('bru.setVar("bearerToken", token)', $bru);
+        $this->assertStringContainsString('bru.setVar("authToken", token)', $bru);
+        $this->assertStringNotContainsString('Authorization:', $bru);
     }
 
     public function test_uses_configured_access_token_key_in_login_script(): void

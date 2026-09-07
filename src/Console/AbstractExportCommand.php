@@ -31,7 +31,18 @@ abstract class AbstractExportCommand extends Command
     {
         $outputPath = $this->resolveOutputPath();
         $regenKeys = $this->parseRegenKeys();
+        $force = (bool) $this->option('force');
         $dryRun = (bool) $this->option('dry-run');
+
+        if ($force && $regenKeys !== null) {
+            $this->error('The --force and --regen options cannot be used together.');
+
+            return 2;
+        }
+
+        if ($force) {
+            $regenKeys = ['all'];
+        }
 
         try {
             SchemaRegistryUtils::refresh();
@@ -67,7 +78,7 @@ abstract class AbstractExportCommand extends Command
             $emitter = $this->emitter();
             $service = new ApiClientExportService();
             $result = $service->build($spec, $existing, $regenKeys, $emitter);
-            $rendered = $emitter->render($result);
+            $rendered = $emitter->render($result, $existing, $force);
         } catch (Throwable $throwable) {
             $this->error('Failed to render ' . $this->formatName() . ' collection: ' . $throwable->getMessage());
 
@@ -98,7 +109,7 @@ abstract class AbstractExportCommand extends Command
         $files = [];
         $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($outputPath));
         foreach ($iterator as $file) {
-            if ($file->isFile() && $file->getExtension() === 'bru') {
+            if ($file->isFile() && ($file->getExtension() === 'bru' || $file->getFilename() === 'bruno.json')) {
                 $relativePath = ltrim(substr($file->getPathname(), strlen($outputPath)), '/\\');
                 $files[$relativePath] = (string) file_get_contents($file->getPathname());
             }
@@ -189,7 +200,11 @@ abstract class AbstractExportCommand extends Command
             }
         }
 
-        if ($isFileMap && $rendered !== []) {
+        if ($isFileMap) {
+            if ($rendered === []) {
+                return true;
+            }
+
             $baseDir = $outputPath;
             foreach ($rendered as $relativePath => $content) {
                 $fullPath = $baseDir . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $relativePath);
