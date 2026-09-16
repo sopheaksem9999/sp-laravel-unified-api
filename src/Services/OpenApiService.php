@@ -619,7 +619,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                 continue;
             }
 
-            $mapped = self::mapColumnToOpenApi($info['type'] ?? 'string');
+            $mapped = self::mapColumnToOpenApi($info['type'] ?? 'string', $info);
             $properties[$name] = $mapped;
             // Avoid forcing typical system fields as required
             if (!(bool) ($info['nullable'] ?? true) && !in_array($name, ['id', 'created_at', 'updated_at', 'deleted_at'], true)) {
@@ -635,8 +635,16 @@ Accepts an array of IDs or an array of objects with the primary key.
         ];
     }
 
-    private static function mapColumnToOpenApi(string $dbType): array
+    /**
+     * @param array<string, mixed> $info
+     * @return array<string, mixed>
+     */
+    private static function mapColumnToOpenApi(string $dbType, array $info = []): array
     {
+        if (isset($info['enum']) && is_array($info['enum']) && !empty($info['enum'])) {
+            return ['type' => 'string', 'enum' => array_values(array_map('strval', $info['enum']))];
+        }
+
         $type = strtolower($dbType);
 
         // Parse enum('a','b')
@@ -714,7 +722,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                 continue;
             }
 
-            $mapped = self::mapColumnToOpenApi($info['type'] ?? 'string');
+            $mapped = self::mapColumnToOpenApi($info['type'] ?? 'string', $info);
             $properties[$name] = $mapped;
             // Avoid forcing typical system fields as required
             if (!(bool) ($info['nullable'] ?? true) && !in_array($name, ['id', 'created_at', 'updated_at', 'deleted_at'], true)) {
@@ -758,7 +766,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                 continue;
             }
 
-            $mapped = self::mapColumnToOpenApi($info['type'] ?? 'string');
+            $mapped = self::mapColumnToOpenApi($info['type'] ?? 'string', $info);
             if (isset($writeDisabledSet[$name])) {
                 $mapped['readOnly'] = true;
                 $mapped['description'] = 'Write-disabled (columnWriteDisabled): sending this field is ignored (silent no-op).';

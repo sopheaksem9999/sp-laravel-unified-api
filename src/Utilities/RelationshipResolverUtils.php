@@ -1704,6 +1704,11 @@ class RelationshipResolverUtils
     {
         if ($columns === ['*'] || [] === $columns) {
             $columns = array_keys($schemaColumns);
+            $relatedConfig = self::getSchema()[$relatedTable] ?? SchemaRegistryUtils::getTable($relatedTable) ?? SchemaRegistryUtils::resolveTableSchema($relatedTable);
+            $hiddenCols = $relatedConfig?->columnHiddens ?? [];
+            if (!empty($hiddenCols)) {
+                $columns = array_values(array_diff($columns, $hiddenCols));
+            }
         }
 
         // Validate columns against schema
