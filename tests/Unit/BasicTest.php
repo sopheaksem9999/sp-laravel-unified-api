@@ -21,6 +21,7 @@ use Illuminate\Console\OutputStyle;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\NullOutput;
 use Sopheak\Core\Console\SyncRecordColumnsCommand;
+use Sopheak\Core\Services\OpenApiService;
 use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Services\RecordService;
@@ -773,6 +774,59 @@ class BasicTest extends TestCase
         }
 
         unlink($path);
+    }
+
+    /** @test */
+    public function it_exports_inline_enum_array_in_sync_record_columns(): void
+    {
+        $command = new SyncRecordColumnsCommand();
+        $method = new ReflectionMethod($command, 'exportValue');
+
+        $result = $method->invoke($command, ['draft', 'published', 'archived'], '    ');
+
+        $this->assertSame("['draft', 'published', 'archived']", $result);
+    }
+
+    /** @test */
+    public function it_syncs_record_columns_with_enum_attribute(): void
+    {
+        $command = new SyncRecordColumnsCommand();
+        $command->setOutput(new OutputStyle(new ArrayInput([]), new NullOutput()));
+
+        $method = new ReflectionMethod($command, 'updateConfigFile');
+
+        $content = "<?php\n\nreturn new RecordTableType(\n    pmsName: 'orders',\n    hasTenantId: true,\n    softDeletes: true,\n    public: new RecordTablePublic(read: true, write: true),\n    primaryKey: 'id',\n);\n";
+
+        $path = tempnam(sys_get_temp_dir(), 'record_table_');
+        file_put_contents($path, $content);
+
+        $columns = [
+            'status' => [
+                'type' => 'enum',
+                'enum' => ['pending', 'completed', 'cancelled'],
+                'nullable' => false,
+                'key' => '',
+                'default' => 'pending',
+                'extra' => '',
+            ],
+        ];
+
+        $method->invoke($command, $path, 'orders', $columns, false);
+
+        $updated = file_get_contents($path);
+        $this->assertNotFalse($updated);
+        $this->assertStringContainsString("'enum' => ['pending', 'completed', 'cancelled']", $updated);
+
+        unlink($path);
+    }
+
+    /** @test */
+    public function it_maps_column_enum_to_openapi_schema(): void
+    {
+        $refMethod = new ReflectionMethod(OpenApiService::class, 'mapColumnToOpenApi');
+        $schema = $refMethod->invoke(null, 'varchar', ['enum' => ['draft', 'published', 'archived']]);
+
+        $this->assertSame(['type' => 'string', 'enum' => ['draft', 'published', 'archived']], $schema);
     }
 
     /** @test */

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sopheak\Core\Tests\Feature;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Schema\Blueprint;
@@ -21,6 +22,7 @@ use Sopheak\Core\Tests\TestCase;
 class HiddenColumnTest extends TestCase
 {
     protected int $userId;
+    protected int $postId;
 
     protected function setUp(): void
     {
@@ -66,8 +68,12 @@ class HiddenColumnTest extends TestCase
             'email_verified_at' => now(),
         ]);
 
+        $this->postId = DB::table('posts')->insertGetId([
+            'user_id' => $this->userId,
+            'title' => 'Post A',
+            'secret' => 'post_secret_1',
+        ]);
         DB::table('posts')->insert([
-            ['user_id' => $this->userId, 'title' => 'Post A', 'secret' => 'post_secret_1'],
             ['user_id' => $this->userId, 'title' => 'Post B', 'secret' => 'post_secret_2'],
         ]);
 
@@ -85,6 +91,9 @@ class HiddenColumnTest extends TestCase
         // Register Schema for Users
         $userConfig = new RecordTableType('users');
         $userConfig->disableCache = true;
+        $userConfig->hasTenantId = false;
+        $userConfig->isAuthRead = false;
+        $userConfig->public = new RecordTablePublic(read: true, write: true);
         $userConfig->columnHiddens = ['password', 'remember_token', 'email_verified_at']; // Hide multiple columns
         $userConfig->columnWriteDisabled = ['email'];
         $userConfig->relationships = [
@@ -94,6 +103,9 @@ class HiddenColumnTest extends TestCase
         // Register Schema for Posts
         $postConfig = new RecordTableType('posts');
         $postConfig->disableCache = true;
+        $postConfig->hasTenantId = false;
+        $postConfig->isAuthRead = false;
+        $postConfig->public = new RecordTablePublic(read: true, write: true);
         $postConfig->columnHiddens = ['secret']; // Hide secret
         $postConfig->columnWriteDisabled = ['secret'];
         $postConfig->relationships = [
@@ -116,6 +128,13 @@ class HiddenColumnTest extends TestCase
                 'reporter' => new RecordBelongsToType(table: 'users', foreignKey: 'reporter_id'),
             ]
         );
+
+        Config::set('record.tables', [
+            'users' => $userConfig,
+            'posts' => $postConfig,
+            'tasks' => $taskConfig,
+        ]);
+        SchemaRegistryUtils::clearAllCache();
 
         SchemaRegistryUtils::register('users', $userConfig);
         SchemaRegistryUtils::register('posts', $postConfig);
@@ -271,5 +290,70 @@ class HiddenColumnTest extends TestCase
 
         $this->assertSame('Nested Post', $post['title']);
         $this->assertNull($post['secret']);
+    }
+
+    public function test_hidden_columns_are_removed_from_single_record(): void
+    {
+        $service = new RecordService();
+        $request = Request::create('/api/v1/users/' . $this->userId, 'GET', [
+            'select' => '*',
+        ]);
+
+        $result = $service->getRecord($request, 'users', $this->userId, null);
+        $user = (array) $result['data'];
+
+        $this->assertArrayHasKey('name', $user);
+        $this->assertArrayHasKey('email', $user);
+        $this->assertArrayNotHasKey('password', $user);
+        $this->assertArrayNotHasKey('remember_token', $user);
+        $this->assertArrayNotHasKey('email_verified_at', $user);
+    }
+
+    public function test_hidden_columns_are_removed_from_single_record_and_relations(): void
+    {
+        $service = new RecordService();
+        $request = Request::create('/api/v1/posts/' . $this->postId, 'GET', [
+            'select' => '*,user(*)',
+        ]);
+
+        $result = $service->getRecord($request, 'posts', $this->postId, null);
+        $post = (array) $result['data'];
+
+        $this->assertArrayHasKey('title', $post);
+        $this->assertArrayNotHasKey('secret', $post);
+        $this->assertNotEmpty($post['user']);
+
+        $user = (array) $post['user'];
+        $this->assertArrayHasKey('name', $user);
+        $this->assertArrayNotHasKey('password', $user);
+        $this->assertArrayNotHasKey('remember_token', $user);
+        $this->assertArrayNotHasKey('email_verified_at', $user);
+    }
+
+    public function test_hidden_columns_are_removed_via_http_get_record_by_id(): void
+    {
+        $response = $this->getJson('/api/users/' . $this->userId);
+        $response->assertStatus(200);
+
+        $user = $response->json('data');
+        $this->assertArrayHasKey('name', $user);
+        $this->assertArrayHasKey('email', $user);
+        $this->assertArrayNotHasKey('password', $user);
+        $this->assertArrayNotHasKey('remember_token', $user);
+        $this->assertArrayNotHasKey('email_verified_at', $user);
+
+        $postResponse = $this->getJson('/api/posts/' . $this->postId . '?select=*,user(*)');
+        $postResponse->assertStatus(200);
+
+        $post = $postResponse->json('data');
+        $this->assertArrayHasKey('title', $post);
+        $this->assertArrayNotHasKey('secret', $post);
+        $this->assertNotEmpty($post['user']);
+
+        $userInPost = $post['user'];
+        $this->assertArrayHasKey('name', $userInPost);
+        $this->assertArrayNotHasKey('password', $userInPost);
+        $this->assertArrayNotHasKey('remember_token', $userInPost);
+        $this->assertArrayNotHasKey('email_verified_at', $userInPost);
     }
 }

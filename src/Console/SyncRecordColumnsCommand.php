@@ -148,6 +148,20 @@ class SyncRecordColumnsCommand extends Command
 
                 $this->info('  - Found ' . count($columns) . ' columns.');
 
+                foreach ($columns as $colName => &$colMeta) {
+                    if (!isset($colMeta['enum']) && isset($colMeta['type']) && is_string($colMeta['type'])) {
+                        $parsed = SchemaRegistryUtils::parseEnumValues($colMeta['type']);
+                        if (!empty($parsed)) {
+                            $colMeta['enum'] = $parsed;
+                        }
+                    }
+
+                    if (!isset($colMeta['enum']) && isset($config->columns[$colName]['enum']) && is_array($config->columns[$colName]['enum'])) {
+                        $colMeta['enum'] = array_values($config->columns[$colName]['enum']);
+                    }
+                }
+                unset($colMeta);
+
                 // 5. Update all corresponding config files
                 foreach ($tableFiles[$tableName] as $fileInfo) {
                     $this->updateConfigFile(
@@ -389,6 +403,21 @@ class SyncRecordColumnsCommand extends Command
     private function exportValue(mixed $value, string $currentIndent): string
     {
         if (is_array($value)) {
+            if ($this->isInlineableList($value)) {
+                $elements = array_map(function ($item): string {
+                    if (is_string($item)) {
+                        return $this->exportString($item);
+                    }
+
+                    return var_export($item, true);
+                }, $value);
+
+                $inline = '[' . implode(', ', $elements) . ']';
+                if (strlen($inline) <= 80) {
+                    return $inline;
+                }
+            }
+
             $nextIndent = $currentIndent . '  ';
             $lines = ['['];
 
@@ -411,6 +440,24 @@ class SyncRecordColumnsCommand extends Command
         }
 
         return var_export($value, true);
+    }
+
+    /**
+     * @param array<mixed> $array
+     */
+    private function isInlineableList(array $array): bool
+    {
+        if (!array_is_list($array)) {
+            return false;
+        }
+
+        foreach ($array as $item) {
+            if (!is_scalar($item) && $item !== null) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function exportString(string $value): string

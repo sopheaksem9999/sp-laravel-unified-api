@@ -3278,6 +3278,7 @@ class RecordService
         }
 
         $record = RecordApiResponseService::removeDeletedAtFields($record);
+        $record = RecordApiResponseService::removeHiddenFields($record, $table);
         $record = RecordApiResponseService::convertCompositeFields($record, $table);
         $record = RecordApiResponseService::applyCasts($record, $tableSchema->columns ?? [], $tableSchema->casting ?? []);
         if (!empty($tableSchema->attributes)) {

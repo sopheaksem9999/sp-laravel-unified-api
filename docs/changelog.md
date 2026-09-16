@@ -13,6 +13,15 @@ All notable changes to `sp-laravel-api` will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Enum column extraction in `SyncRecordColumnsCommand`**: `SchemaRegistryUtils::getTableColumns()` now inspects database schemas across MySQL (`enum(...)`), PostgreSQL (user-defined `typtype = 'e'` enum types), and SQLite (`CHECK(col IN (...))` table constraints) to extract enum values as `'enum' => [...]`. `SyncRecordColumnsCommand` populates these into `RecordTableType::$columns`, preserves existing manual `enum` definitions from configs, and renders compact scalar lists inline. `OpenApiService` now maps column `enum` definitions directly into OpenAPI schemas.
+
+### Fixed
+
+- **Sanitize `columnHiddens` in `RecordService::getRecord()`**: Single-record reads (`GET /{apiPrefix}/{table}/{id}`) previously omitted `RecordApiResponseService::removeHiddenFields()`, causing sensitive columns (like `password` and `remember_token`) and hidden columns on nested relationships to be leaked in single-record responses and committed to the query cache. Hidden fields are now properly stripped before caching and returning single records.
+- **Exclude hidden columns in relational subquery projection**: In `RelationshipResolverUtils::resolveJsonObjectColumns()`, wildcard `*` expansion now strips `columnHiddens` of the related table so hidden columns are never projected into relational JSON subqueries.
+
 ## [0.4.98] - 2026-09-07
 
 ### Added
