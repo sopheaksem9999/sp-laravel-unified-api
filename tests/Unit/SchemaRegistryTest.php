@@ -481,4 +481,118 @@ class SchemaRegistryTest extends TestCase
         $this->assertSame(['lat', 'lng'], $columns['location']['compositeFields']);
         $this->assertArrayNotHasKey('compositeFields', $columns['name']);
     }
+
+    public function test_parse_enum_values(): void
+    {
+        $this->assertSame(['draft', 'published', 'archived'], SchemaRegistryUtils::parseEnumValues("enum('draft','published','archived')"));
+        $this->assertSame(["it's", "that's"], SchemaRegistryUtils::parseEnumValues("enum('it''s','that\'s')"));
+        $this->assertSame([], SchemaRegistryUtils::parseEnumValues('varchar(255)'));
+    }
+
+    public function test_get_table_columns_extracts_enum_values_for_mysql(): void
+    {
+        DB::shouldReceive('getDriverName')
+            ->once()
+            ->andReturn('mysql');
+
+        DB::shouldReceive('select')
+            ->once()
+            ->with('DESCRIBE `orders`')
+            ->andReturn([
+                (object) [
+                    'Field' => 'id',
+                    'Type' => 'bigint unsigned',
+                    'Null' => 'NO',
+                    'Key' => 'PRI',
+                    'Default' => null,
+                    'Extra' => 'auto_increment',
+                ],
+                (object) [
+                    'Field' => 'status',
+                    'Type' => "enum('pending','approved','rejected')",
+                    'Null' => 'NO',
+                    'Key' => '',
+                    'Default' => 'pending',
+                    'Extra' => '',
+                ],
+            ]);
+
+        $columns = SchemaRegistryUtils::getTableColumns('orders');
+
+        $this->assertArrayHasKey('status', $columns);
+        $this->assertSame(['pending', 'approved', 'rejected'], $columns['status']['enum']);
+        $this->assertArrayNotHasKey('enum', $columns['id']);
+    }
+
+    public function test_get_table_columns_extracts_enum_values_for_pgsql(): void
+    {
+        DB::shouldReceive('getDriverName')
+            ->once()
+            ->andReturn('pgsql');
+
+        DB::shouldReceive('select')
+            ->once()
+            ->with(
+                'select column_name, data_type, udt_name, udt_schema, is_nullable, column_default from information_schema.columns where table_name = ? and table_schema = current_schema()',
+                ['invoices']
+            )
+            ->andReturn([
+                (object) [
+                    'column_name' => 'status',
+                    'data_type' => 'USER-DEFINED',
+                    'udt_name' => 'invoice_status',
+                    'udt_schema' => 'public',
+                    'is_nullable' => 'NO',
+                    'column_default' => "'draft'::invoice_status",
+                ],
+            ]);
+
+        // Composite type check returns empty
+        DB::shouldReceive('select')
+            ->once()
+            ->with(
+                'select a.attname as field_name from pg_type t join pg_namespace n on n.oid = t.typnamespace join pg_class c on c.oid = t.typrelid join pg_attribute a on a.attrelid = c.oid where t.typtype = ? and n.nspname = ? and t.typname = ? and a.attnum > 0 and not a.attisdropped order by a.attnum',
+                ['c', 'public', 'invoice_status']
+            )
+            ->andReturn([]);
+
+        // Enum values query
+        DB::shouldReceive('select')
+            ->once()
+            ->with(
+                'select e.enumlabel as value from pg_type t join pg_enum e on e.enumtypid = t.oid join pg_namespace n on n.oid = t.typnamespace where t.typtype = ? and n.nspname = ? and t.typname = ? order by e.enumsortorder',
+                ['e', 'public', 'invoice_status']
+            )
+            ->andReturn([
+                (object) ['value' => 'draft'],
+                (object) ['value' => 'sent'],
+                (object) ['value' => 'paid'],
+            ]);
+
+        $columns = SchemaRegistryUtils::getTableColumns('invoices');
+
+        $this->assertArrayHasKey('status', $columns);
+        $this->assertSame(['draft', 'sent', 'paid'], $columns['status']['enum']);
+    }
+
+    public function test_get_table_columns_extracts_enum_values_for_sqlite(): void
+    {
+        if (DB::getDriverName() !== 'sqlite') {
+            $this->markTestSkipped('Only runs on SQLite driver');
+        }
+
+        Schema::dropIfExists('test_sqlite_enums');
+        Schema::create('test_sqlite_enums', function (Blueprint $table): void {
+            $table->id();
+            $table->enum('status', ['open', 'in_progress', 'closed']);
+        });
+
+        $columns = SchemaRegistryUtils::getTableColumns('test_sqlite_enums');
+
+        $this->assertArrayHasKey('status', $columns);
+        $this->assertSame(['open', 'in_progress', 'closed'], $columns['status']['enum']);
+        $this->assertArrayNotHasKey('enum', $columns['id']);
+
+        Schema::dropIfExists('test_sqlite_enums');
+    }
 }

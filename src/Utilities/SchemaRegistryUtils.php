@@ -307,15 +307,49 @@ class SchemaRegistryUtils
 
             if ($driver === 'sqlite') {
                 $columns = DB::select(sprintf('PRAGMA table_info(%s)', $tableName));
+                $createSql = null;
 
                 foreach ($columns as $column) {
-                    $columnInfo[$column->name] = [
+                    $enumValues = [];
+                    $colType = (string) $column->type;
+                    if (str_starts_with(strtolower($colType), 'enum(')) {
+                        $enumValues = self::parseEnumValues($colType);
+                    }
+
+                    if (empty($enumValues)) {
+                        if ($createSql === null) {
+                            try {
+                                $masterRow = DB::selectOne("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", [$tableName]);
+                                $createSql = (string) ($masterRow->sql ?? '');
+                            } catch (Throwable) {
+                                $createSql = '';
+                            }
+                        }
+                        if ($createSql !== '') {
+                            $escapedCol = preg_quote((string) $column->name, '/');
+                            $pattern = '/(?:\b' . $escapedCol . '\b|\"' . $escapedCol . '\")[^,)]*?\bcheck\s*\(\s*(?:' . $escapedCol . '|\"' . $escapedCol . '\")\s+in\s*\(([^)]+)\)/i';
+                            if (preg_match($pattern, $createSql, $m)) {
+                                $inside = $m[1];
+                                if (preg_match_all("/'((?:''|\\\\'|[^'])*)'/", $inside, $matches)) {
+                                    $enumValues = array_map(static fn($val): string => str_replace(["''", "\\'"], ["'", "'"], $val), $matches[1]);
+                                }
+                            }
+                        }
+                    }
+
+                    $colMeta = [
                         'type' => $column->type,
                         'key' => $column->pk == 1 ? 'PRI' : '',
                         'nullable' => $column->notnull == 0,
                         'default' => $column->dflt_value,
                         'extra' => '',
                     ];
+
+                    if (!empty($enumValues)) {
+                        $colMeta['enum'] = array_values($enumValues);
+                    }
+
+                    $columnInfo[$column->name] = $colMeta;
                 }
             } elseif ($driver === 'pgsql') {
                 $columns = DB::select(
@@ -324,9 +358,11 @@ class SchemaRegistryUtils
                 );
 
                 $compositeCache = [];
+                $enumCache = [];
 
                 foreach ($columns as $column) {
                     $compositeFields = [];
+                    $enumValues = [];
                     $typeName = $column->udt_name ?? null;
                     $typeSchema = $column->udt_schema ?? null;
                     $dataType = strtolower((string) $column->data_type);
@@ -340,9 +376,16 @@ class SchemaRegistryUtils
                         }
 
                         $compositeFields = $compositeCache[$cacheKey];
+
+                        if ($compositeFields === []) {
+                            if (!array_key_exists($cacheKey, $enumCache)) {
+                                $enumCache[$cacheKey] = self::getEnumTypeValues($schemaKey, $typeName);
+                            }
+                            $enumValues = $enumCache[$cacheKey];
+                        }
                     }
 
-                    $columnInfo[$column->column_name] = [
+                    $colMeta = [
                         'type' => $column->data_type,
                         'udt_name' => $column->udt_name ?? null,
                         'udt_schema' => $column->udt_schema ?? null,
@@ -353,20 +396,35 @@ class SchemaRegistryUtils
                     ];
 
                     if ($compositeFields !== []) {
-                        $columnInfo[$column->column_name]['compositeFields'] = $compositeFields;
+                        $colMeta['compositeFields'] = $compositeFields;
                     }
+
+                    if ($enumValues !== []) {
+                        $colMeta['enum'] = array_values($enumValues);
+                    }
+
+                    $columnInfo[$column->column_name] = $colMeta;
                 }
             } else {
                 $columns = DB::select(sprintf('DESCRIBE `%s`', $tableName));
 
                 foreach ($columns as $column) {
-                    $columnInfo[$column->Field] = [
+                    $colMeta = [
                         'type' => $column->Type,
                         'key' => $column->Key,
                         'nullable' => 'YES' === $column->Null,
                         'default' => $column->Default,
                         'extra' => $column->Extra,
                     ];
+
+                    if (str_starts_with(strtolower((string) $column->Type), 'enum(')) {
+                        $enumValues = self::parseEnumValues((string) $column->Type);
+                        if (!empty($enumValues)) {
+                            $colMeta['enum'] = array_values($enumValues);
+                        }
+                    }
+
+                    $columnInfo[$column->Field] = $colMeta;
                 }
             }
 
@@ -526,5 +584,42 @@ class SchemaRegistryUtils
         );
 
         return array_map(static fn($row): string => (string) $row->field_name, $rows);
+    }
+
+    /**
+     * @return string[]
+     */
+    private static function getEnumTypeValues(string $schema, string $typeName): array
+    {
+        try {
+            $rows = DB::select(
+                'select e.enumlabel as value from pg_type t join pg_enum e on e.enumtypid = t.oid join pg_namespace n on n.oid = t.typnamespace where t.typtype = ? and n.nspname = ? and t.typname = ? order by e.enumsortorder',
+                ['e', $schema, $typeName]
+            );
+
+            return array_map(static fn($row): string => (string) $row->value, $rows);
+        } catch (Throwable) {
+            return [];
+        }
+    }
+
+    /**
+     * Parse enum values from an enum('val1','val2') type definition.
+     *
+     * @return string[]
+     */
+    public static function parseEnumValues(string $typeDefinition): array
+    {
+        $lower = strtolower($typeDefinition);
+        if (!str_starts_with($lower, 'enum(') || !str_ends_with($lower, ')')) {
+            return [];
+        }
+
+        $inside = substr($typeDefinition, 5, -1);
+        if (preg_match_all("/'((?:''|\\\\'|[^'])*)'/", $inside, $matches)) {
+            return array_map(static fn($val): string => str_replace(["''", "\\'"], ["'", "'"], $val), $matches[1]);
+        }
+
+        return array_values(array_filter(array_map(static fn($v): string => trim($v, "'\" "), explode(',', $inside)), fn($v) => $v !== ''));
     }
 }

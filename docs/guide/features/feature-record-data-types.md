@@ -69,6 +69,7 @@ Example:
     columns: [
         'id' => ['type' => 'uuid', 'nullable' => false],
         'customer_id' => ['type' => 'bigint', 'nullable' => false],
+        'status' => ['type' => 'enum', 'enum' => ['pending', 'processing', 'completed'], 'nullable' => false],
         'total' => ['type' => 'decimal(12,2)', 'nullable' => false],
         'is_paid' => ['type' => 'boolean', 'nullable' => false, 'default' => false],
         'placed_at' => ['type' => 'timestamp', 'nullable' => true],
@@ -77,6 +78,16 @@ Example:
     ],
 )
 ```
+
+::: tip Enum Column Support
+Enum columns can specify an array of permitted values via `'enum' => [...]`.
+`php artisan sp-laravel-api:sync-record-columns` automatically extracts enum values from database schemas:
+- **MySQL**: parsed from native `enum('val1','val2')` column types.
+- **PostgreSQL**: extracted from user-defined enum types (`typtype = 'e'`).
+- **SQLite**: parsed from table check constraints (`CHECK (column_name IN (...))`).
+
+The `'enum'` array is used by OpenAPI generation (`OpenApiService`) to document permitted string values, by MCP tool schemas (`McpServerService`), and can be validated against.
+:::
 
 ## 2) Default Validation Type Mapping (`DefaultValidationUtils`)
 
