@@ -60,6 +60,7 @@ The Schema MCP is specifically designed for **frontend AI coding agents** (Curso
 - **Dynamic CRUD Tools**: The Data MCP exposes `list_{table}`, `read_{table}`, `create_{table}`, `update_{table}`, and `delete_{table}` operations.
 - **Native Security**: Integrates seamlessly with your `RecordTableType` auth flags (`isAuthRead`/`isAuthWrite`), custom authorizers, and Spatie Permissions.
 - **Tenancy Support**: MCP operations enforce your `tenant_id` configurations automatically.
+- **Sensitive Column Parity (`columnHiddens`)**: MCP mirrors the REST API. Sensitive columns (like `password` and `remember_token`) are stripped from Data MCP responses (`list_*`, `read_*`), excluded from Schema MCP read response schemas (`dataSchema`), filters, and sorts, and marked as write-only (`in: ['write']`, `hidden: true`).
 - **Read-Only Mode**: A global toggle to strictly disable write operations (Create, Update, Delete) for the AI.
 
 ## Configuration
@@ -73,8 +74,8 @@ The Data MCP configuration lives in your `config/sp-record.php` file under the `
 'mcp' => [
     'enabled' => env('SP_MCP_ENABLED', false),
     
-    // Set to true to disable all write tools (create, update, delete)
-    'read_only' => env('SP_MCP_READ_ONLY', false),
+    // Set to true to disable all write tools (create, update, delete) — default: true (safe-by-default)
+    'read_only' => env('SP_MCP_READ_ONLY', true),
     
     // Optional prefix for the HTTP/SSE endpoints (default: mcp)
     'route_prefix' => env('SP_MCP_ROUTE_PREFIX', 'mcp'),
@@ -138,6 +139,13 @@ For every table where `isAuthWrite` is enabled (and `mcp.read_only` is false):
 ```
 
 Call `sp_api_get_endpoint` first to see which operators (`eq`, `neq`, `gt`, `lt`, `gte`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `ends_with`, `between`, ...) each field supports. Do **not** nest filters under a `filter` key or use bracket syntax like `column[operator]=value` — that shape is rejected (or silently ignored) by the underlying query engine; pass the column name directly as the `queryParams` key.
+
+#### Performance Tip: Use `limit` Instead of `per_page` for AI Agent Queries
+
+When AI agents query records (e.g. *"Show top 5 invoices"*, *"Find the user's latest order"*), they should pass **`limit`** instead of `per_page`:
+
+- **`{"limit": 5, "sortby": "created_at", "order": "desc"}` (Recommended for AI)**: Executes a direct, lightweight SQL `LIMIT 5` query. It skips computing total counts (`SELECT COUNT(*)`), yielding significantly faster response times and conserving database resources.
+- **`{"page": 1, "per_page": 25}`**: Triggers full pagination metadata calculation (`total`, `page`, `per_page`, `last_page`). Use this **only** when an interactive user interface is actively navigating multiple pages.
 
 #### Writing related data in a single `create_{table}` / `update_{table}` call
 

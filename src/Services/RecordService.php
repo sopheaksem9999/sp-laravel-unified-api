@@ -534,7 +534,7 @@ class RecordService
                     callback: $tableSchema->customAuditLog,
                     event: $event,
                     entityClass: $entityClass,
-                    auditData: $auditData,
+                    auditData: self::stripHiddenColumns($auditData, $tableSchema),
                     tenantId: $tenantId,
                     context: $context,
                 )
@@ -603,6 +603,8 @@ class RecordService
 
         $tenantId = $recordContext[RecordConfigService::tenantColumn()] ?? null;
 
+        $record = self::stripHiddenColumns($record, $tableSchema);
+
         try {
             RecordMutated::dispatch(
                 $table,
@@ -615,6 +617,46 @@ class RecordService
             // Never let a broadcast failure break the HTTP response
 
         }
+    }
+
+    /**
+     * @param array<string, mixed>|object $data
+     * @return array<string, mixed>
+     */
+    public static function stripHiddenColumns(array|object $data, ?RecordTableType $tableSchema): array
+    {
+        if (is_object($data)) {
+            $data = (array) $data;
+        }
+
+        if (array_is_list($data) && !empty($data)) {
+            /** @var array<string, mixed> */
+            return array_map(static fn($item): mixed => (is_array($item) || is_object($item)) ? self::stripHiddenColumns($item, $tableSchema) : $item, $data);
+        }
+
+        $tableName = $tableSchema?->table;
+        if (is_string($tableName) && '' !== $tableName) {
+            $cleaned = RecordApiResponseService::removeHiddenFields($data, $tableName);
+            if (is_array($cleaned)) {
+                $data = $cleaned;
+            }
+        } else {
+            $hidden = is_array($tableSchema?->columnHiddens ?? null) ? $tableSchema->columnHiddens : [];
+            foreach ($hidden as $col) {
+                unset($data[$col]);
+            }
+        }
+
+        $excluded = RecordConfigService::auditExcludedAttributes();
+        if (is_array($excluded)) {
+            foreach ($excluded as $col) {
+                if (is_string($col)) {
+                    unset($data[$col]);
+                }
+            }
+        }
+
+        return $data;
     }
 
     private function stripRelationshipAuditData(array $auditData, RecordTableType $tableSchema, bool $includeRelationships): array
@@ -1013,11 +1055,13 @@ class RecordService
                                 ],
                             ];
 
+                            $upsertAuditData = self::stripHiddenColumns($recordResult['data'], $tableSchema);
+
                             if (!(!empty($tableSchema->customAuditLog) && $this->callCustomAuditLogger(
                                 callback: $tableSchema->customAuditLog,
                                 event: AuditLogEventEnum::UPDATED,
                                 entityClass: $entityClass,
-                                auditData: $recordResult['data'],
+                                auditData: $upsertAuditData,
                                 tenantId: $tenantId,
                                 context: $context,
                             ))) {
@@ -1026,7 +1070,7 @@ class RecordService
                                 AuditLogService::$auditMethod(...[
                                     'auditLogEventEnum' => AuditLogEventEnum::UPDATED,
                                     'entityClass' => $entityClass,
-                                    'queryData' => $recordResult['data'],
+                                    'queryData' => $upsertAuditData,
                                     'subject' => '',
                                     'recap' => '',
                                     'tenantId' => $tenantId,
@@ -2600,6 +2644,9 @@ class RecordService
             $recordData = json_decode(json_encode($recordData), true) ?: [];
         }
 
+        $tableSchema = SchemaRegistryUtils::getTable($table);
+        $recordData = self::stripHiddenColumns($recordData, $tableSchema);
+
         RecordCreated::dispatch($table, $recordData, $result['id'], $auditContext);
 
         return $record;
@@ -2667,6 +2714,10 @@ class RecordService
             $newRecordData = json_decode(json_encode($newRecordData), true) ?: [];
         }
 
+        $tableSchema = SchemaRegistryUtils::getTable($table);
+        $oldPayload = self::stripHiddenColumns($oldPayload, $tableSchema);
+        $newRecordData = self::stripHiddenColumns($newRecordData, $tableSchema);
+
         RecordUpdated::dispatch($table, $oldPayload, $newRecordData, $id, $auditContext);
 
         return $newRecord;
@@ -2711,6 +2762,9 @@ class RecordService
             'user_id' => auth(RecordConfigService::authGuard())->id(),
             'request_id' => $request->attributes->get('request_id'),
         ];
+
+        $tableSchema = SchemaRegistryUtils::getTable($table);
+        $oldPayload = self::stripHiddenColumns($oldPayload, $tableSchema);
 
         RecordDeleted::dispatch($table, $oldPayload, $id, $auditContext);
 

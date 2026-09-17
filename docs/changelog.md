@@ -13,6 +13,8 @@ All notable changes to `sp-laravel-api` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.99] - 2026-09-17
+
 ### Added
 
 - **Enum column extraction in `SyncRecordColumnsCommand`**: `SchemaRegistryUtils::getTableColumns()` now inspects database schemas across MySQL (`enum(...)`), PostgreSQL (user-defined `typtype = 'e'` enum types), and SQLite (`CHECK(col IN (...))` table constraints) to extract enum values as `'enum' => [...]`. `SyncRecordColumnsCommand` populates these into `RecordTableType::$columns`, preserves existing manual `enum` definitions from configs, and renders compact scalar lists inline. `OpenApiService` now maps column `enum` definitions directly into OpenAPI schemas.
@@ -21,6 +23,16 @@ All notable changes to `sp-laravel-api` will be documented in this file.
 
 - **Sanitize `columnHiddens` in `RecordService::getRecord()`**: Single-record reads (`GET /{apiPrefix}/{table}/{id}`) previously omitted `RecordApiResponseService::removeHiddenFields()`, causing sensitive columns (like `password` and `remember_token`) and hidden columns on nested relationships to be leaked in single-record responses and committed to the query cache. Hidden fields are now properly stripped before caching and returning single records.
 - **Exclude hidden columns in relational subquery projection**: In `RelationshipResolverUtils::resolveJsonObjectColumns()`, wildcard `*` expansion now strips `columnHiddens` of the related table so hidden columns are never projected into relational JSON subqueries.
+- **Sanitize `columnHiddens` across all mutation and event dispatch channels**: Sensitive fields configured under `columnHiddens` and `config('audit.excluded_attributes')` are now unconditionally removed (`unset`) across all mutation channels:
+  - `AuditLogService` completely strips hidden fields from `sp_audit_logs.old_data`, `sp_audit_logs.new_data`, and `metadata.field_changes`, and excludes them from generated recap messages, while still logging the event so password changes are tracked without leaking secrets or cluttering changed-field feeds.
+  - `AuditLogService::getFieldTimeline()` and `AuditLogService::getFieldStats()` unconditionally return empty structures for hidden/excluded fields.
+  - `RecordService::fireBroadcastEvent()` strips hidden fields from `RecordMutated` event payloads.
+  - `RecordService::executeCreate()`, `executeUpdate()`, and `executeDelete()` strip hidden fields from `RecordCreated`, `RecordUpdated`, and `RecordDeleted` payloads.
+  - `WebhookTrigger::dispatchWebhooks()` strips hidden fields from webhook delivery payloads and database logs.
+  - `AuditableTrait::sanitizeAuditData()` automatically resolves `columnHiddens` from the table's schema and strips them from model audit payloads.
+  - `McpServerService` aligns MCP with REST API capabilities: Data MCP tools (`list_*`, `read_*`, etc.) strip hidden columns from response data; Schema MCP (`sp_api_get_endpoint`) marks hidden columns as write-only (`in: ['write']`, `hidden: true`), omits them from read response `dataSchema`, and excludes them from query `filters` and `sorts`.
+- **Safe-by-default MCP read-only configuration**: `config/sp-record.php` and `SetupPackageCommand` scaffold template now default `SP_MCP_READ_ONLY` to `true` (`env('SP_MCP_READ_ONLY', true)`), enforcing a safe-by-default security posture for autonomous AI tools unless write operations are explicitly opted into.
+- **Agent query performance guidance (`limit` vs `per_page`)**: `McpServerService` tools and schema guidance (`sp_api_get_api_guidance`) now explicitly document and recommend `limit` over `per_page` for AI queries, executing direct SQL `LIMIT` queries without computing expensive `COUNT(*)` pagination totals.
 
 ## [0.4.98] - 2026-09-07
 

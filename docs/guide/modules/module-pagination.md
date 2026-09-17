@@ -189,6 +189,15 @@ GET /api/v1/invoices?limit=50&total=true           # includes total
 By default `limit` mode omits the count; pass `total=true` (legacy
 `add_total=true`) to include it. Never mix `limit` and `per_page` on one request.
 
+### Performance Guidance: When to Use `limit` vs `per_page`
+
+| Use Case | Recommended Parameter | Why? |
+|---|---|---|
+| **AI Agent / Assistant queries** | `limit=N` | Fast and lightweight. Skips `SELECT COUNT(*)` overhead and returns only the necessary context rows. |
+| **Top-N / Latest Record Previews** | `limit=N` | Bypasses pagination state calculation, delivering results with minimal DB latency. |
+| **Interactive UI Page Navigation** | `page=N&per_page=M` | Necessary only when building multi-page navigation controls that display total page counts. |
+| **Deep / Infinite Scroll Traversal** | `cursor=TOKEN&limit=N` | O(1) keyset traversal without offset query degradation. |
+
 ## Config Reference
 
 ```php

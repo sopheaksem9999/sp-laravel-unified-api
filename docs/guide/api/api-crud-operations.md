@@ -90,9 +90,10 @@ query surface. Run `php artisan sp-laravel-api:validate` to list any table whose
 config has drifted from its migration.
 :::
 
-**Limiting**
+**Limiting (Recommended for AI Agents & Fixed Previews)**
 
 - `limit` (integer, max: `limit_max` = 10000) - Limit results (only applied when `per_page` is not provided). In limit-only mode `total` is not included by default; pass `total=true` (or legacy `add_total=true`) to include it.
+  > **Performance Tip**: For retrieving a specific number of records (e.g. top 5 invoices, latest 10 orders, or AI assistant queries), **always prefer `limit` over `per_page`**. `limit` executes a direct SQL `LIMIT N` query and skips the expensive `SELECT COUNT(*)` count query, yielding significantly faster response times.
 
 **Result Shape & Aggregation**
 

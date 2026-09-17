@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Sopheak\Core\Attributes\RecordTrigger;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Jobs\DispatchWebhookJob;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
 /**
  * Handles webhook dispatching for record events.
@@ -84,6 +85,9 @@ class WebhookTrigger extends RecordTriggerBase
             return;
         }
 
+        $tableSchema = SchemaRegistryUtils::getTable($table);
+        $payload = RecordService::stripHiddenColumns($payload, $tableSchema);
+
         $event = sprintf('%s.%s', $table, $action);
 
         // Find subscriptions for this table/event
@@ -111,22 +115,29 @@ class WebhookTrigger extends RecordTriggerBase
         $queueName = config('webhooks.queue_name', 'default');
 
         foreach ($endpoints['data'] as $endpoint) {
+            $endpointId = (string) (is_object($endpoint) ? $endpoint->id : $endpoint['id']);
+            $endpointUrl = (string) (is_object($endpoint) ? $endpoint->url : $endpoint['url']);
+            $endpointSecret = (string) (is_object($endpoint) ? $endpoint->secret : $endpoint['secret']);
+
             // Create delivery record
             $deliveryPayload = [
-                'endpoint_id' => $endpoint['id'],
+                'endpoint_id' => $endpointId,
                 'event' => $event,
                 'payload' => json_encode($payload),
                 'status' => 'pending',
             ];
 
             $delivery = RecordService::executeCreate('sp_webhook_deliveries', $deliveryPayload, [], $tenantId);
+            $deliveryId = (string) (is_object($delivery['data'] ?? null)
+                ? $delivery['data']->id
+                : ($delivery['data']['id'] ?? $delivery['id'] ?? ''));
 
             // Dispatch Job
             DispatchWebhookJob::dispatch(
-                $delivery['id'],
-                $endpoint['id'],
-                $endpoint['url'],
-                $endpoint['secret'],
+                $deliveryId,
+                $endpointId,
+                $endpointUrl,
+                $endpointSecret,
                 $event,
                 $payload,
                 $tenantId

@@ -19,6 +19,15 @@ In `RecordTableType`:
 
 - `disableAuditLog`: disable built-in audit for the table
 - `customAuditLog`: custom handler for create/update/delete operations
+- `columnHiddens`: sensitive columns (e.g. `password`, `remember_token`) that are unconditionally stripped (`unset`) from `sp_audit_logs.old_data`, `sp_audit_logs.new_data`, `metadata.field_changes`, update recap messages, and field timeline/stats endpoints. Hidden columns are never displayed in changed-field lists on UI audit feeds.
+
+## Security & Sensitive Field Sanitization
+
+When audit records are generated, sensitive attributes configured under `columnHiddens` (along with `audit.excluded_attributes`) are automatically removed:
+- Mutations affecting hidden fields still generate an audit log entry so the mutation history is preserved, but values are omitted from persisted data payloads.
+- Recap summaries exclude hidden fields.
+- `AuditLogService::getFieldTimeline()` and `AuditLogService::getFieldStats()` return empty data for hidden fields.
+- Real-time broadcasting (`RecordMutated` event), outgoing webhook deliveries (`WebhookTrigger`), and Eloquent model audit logs (`AuditableTrait`) also strip hidden columns by default.
 
 ## Global Config Dependencies
 
