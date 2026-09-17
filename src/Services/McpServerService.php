@@ -253,7 +253,8 @@ class McpServerService
                                 'type' => 'object',
                                 'description' => "Filters are {column: 'operator.value'} pairs, e.g. {\"status\": \"eq.open\", \"total_amount\": \"gte.100\"} "
                                     . '(see filters[] on sp_api_get_endpoint for the operators each field supports). '
-                                    . "Also supports 'select', 'sortby', 'order', 'per_page', 'page', 'search', and grouped-logic 'and'/'or' params. "
+                                    . "Supports 'limit' (RECOMMENDED for AI queries: fast top/recent record retrieval without COUNT overhead), 'select', 'sortby', 'order'. "
+                                    . "Use 'per_page' and 'page' only when actively paginating across multiple pages. "
                                     . "Do not nest a filter under a 'filter' key or use bracket syntax like column[operator]=value — pass the column name directly as the queryParams key.",
                                 'additionalProperties' => true,
                             ],
@@ -425,6 +426,11 @@ class McpServerService
                 'update' => RecordService::executeUpdate($table, $id, $payload, $queryParams, $tenantId),
                 'delete' => RecordService::executeDelete($table, $id, $queryParams, $tenantId),
             };
+
+            if (isset($result['data'])) {
+                $tableSchema = SchemaRegistryUtils::getTable($table);
+                $result['data'] = RecordService::stripHiddenColumns($result['data'], $tableSchema);
+            }
 
             return $this->dataToolResult($result);
         } catch (Exception $exception) {
@@ -879,13 +885,20 @@ class McpServerService
         // Fields from column definitions
         $fields = [];
         if (!empty($config->columns)) {
+            $hiddenCols = (array) ($config->columnHiddens ?? []);
             foreach ($config->columns as $colName => $colDef) {
                 if (is_string($colDef)) {
                     $colDef = ['type' => $colDef];
                 }
 
-                $in = ['read'];
-                if (!in_array($colName, (array) ($config->columnWriteDisabled ?? []), true)) {
+                $isHidden = in_array($colName, $hiddenCols, true);
+                $isWriteDisabled = in_array($colName, (array) ($config->columnWriteDisabled ?? []), true);
+
+                $in = [];
+                if (!$isHidden) {
+                    $in[] = 'read';
+                }
+                if (!$isWriteDisabled) {
                     $in[] = 'write';
                 }
 
@@ -895,6 +908,9 @@ class McpServerService
                     'nullable' => !(($colDef['nullable'] ?? false) === false),
                     'in' => $in,
                 ];
+                if ($isHidden) {
+                    $field['hidden'] = true;
+                }
                 if (isset($colDef['enum'])) {
                     $field['enum'] = $colDef['enum'];
                 }
@@ -974,10 +990,15 @@ class McpServerService
             }
         }
 
-        // Build filter list from columns
+        // Build filter list from columns (excluding hidden columns)
         $filters = [];
         if (!empty($config->columns)) {
+            $hiddenCols = (array) ($config->columnHiddens ?? []);
             foreach ($config->columns as $colName => $colDef) {
+                if (in_array($colName, $hiddenCols, true)) {
+                    continue;
+                }
+
                 if (is_string($colDef)) {
                     $colDef = ['type' => $colDef];
                 }
@@ -990,8 +1011,10 @@ class McpServerService
             }
         }
 
-        // Sortable fields — all columns are sortable
-        $sorts = array_keys((array) ($config->columns ?? []));
+        // Sortable fields — all visible columns are sortable
+        $hiddenCols = (array) ($config->columnHiddens ?? []);
+        $allCols = array_keys((array) ($config->columns ?? []));
+        $sorts = array_values(array_diff($allCols, $hiddenCols));
         if (empty($sorts)) {
             $sorts = [(string) ($config->primaryKey ?? 'id')];
         }
@@ -1159,9 +1182,79 @@ class McpServerService
                 'Use only the documented method, URI, parameters, and writeable fields.',
             ],
             'httpRules' => [
-                'get' => 'Do not send a request body; send filters, selection, sorting, and pagination as query parameters.',
+                'get' => 'Do not send a request body; send filters, selection, sorting, and pagination as query parameters. For optimal query performance, prefer "limit" over "per_page" when retrieving records without needing multi-page navigation.',
                 'write' => 'Send only documented writeable fields in the JSON request body.',
                 'response' => 'Successful package API responses use success, error_code, data, and meta.',
+            ],
+            'querySyntaxExamples' => [
+                'description' => 'For GET HTTP requests and list_{table} queryParams. Do not use bracket syntax (filter[col]=val).',
+                'fieldFiltering' => [
+                    'syntax' => '{column: "operator.value"}',
+                    'examples' => [
+                        'status' => 'eq.active',
+                        'total_amount' => 'gte.100',
+                        'role' => 'in.admin,manager',
+                        'name' => 'like.%acme%',
+                        'deleted_at' => 'is.null',
+                    ],
+                ],
+                'relationshipSelection' => [
+                    'syntax' => 'select=col1,col2,relation(*),childRelation(id,name)',
+                    'examples' => [
+                        'select' => 'id,title,total_amount,items(*),customer(*)',
+                    ],
+                ],
+                'paginationAndSorting' => [
+                    'recordLimiting' => [
+                        'syntax' => 'limit=N',
+                        'recommendedForAgents' => true,
+                        'explanation' => 'Use "limit" to fetch a fixed number of records (e.g. top 5, latest 10, search previews). This performs an ultra-fast query without computing expensive COUNT(*) pagination totals.',
+                        'example' => ['limit' => 10, 'sortby' => 'created_at', 'order' => 'desc'],
+                    ],
+                    'pageBased' => [
+                        'syntax' => 'page=N&per_page=M',
+                        'explanation' => 'Use "per_page" with "page" ONLY when multi-page UI pagination is actively required. Computing total counts for per_page adds query overhead.',
+                        'example' => ['page' => 1, 'per_page' => 25],
+                    ],
+                    'cursorBased' => [
+                        'syntax' => 'cursor=TOKEN&limit=N',
+                        'explanation' => 'Use cursor pagination for large-scale sequential traversal without offset degradation.',
+                        'example' => ['cursor' => 'eyJpZCI6MTAwfQ==', 'direction' => 'next', 'limit' => 25],
+                    ],
+                    'sorting' => ['sortby' => 'created_at', 'order' => 'desc'],
+                ],
+                'groupedLogic' => [
+                    'syntax' => 'or=(condition1,condition2)',
+                    'example' => ['or' => '(status.eq.pending,priority.eq.high)'],
+                ],
+            ],
+            'nestedWriteExamples' => [
+                'description' => 'In create_{table} and update_{table} payloads, writable relationships (hasMany, belongsToMany, morphMany) can be nested directly in the parent payload in a single atomic request.',
+                'childCollections' => [
+                    'explanation' => 'Pass an array under the relationship alias key. Include "id" to update, omit "id" to create, or add "_delete": true to delete.',
+                    'example' => [
+                        'title' => 'Invoice #1001',
+                        'customer_id' => 42,
+                        'items' => [
+                            ['description' => 'Development services', 'quantity' => 10, 'unit_price' => 150.0],
+                            ['id' => 105, 'quantity' => 12],
+                            ['id' => 88, '_delete' => true],
+                        ],
+                    ],
+                ],
+                'manyToManyPivot' => [
+                    'explanation' => 'Pass an array of IDs or object maps to sync/attach pivot associations.',
+                    'example' => [
+                        'name' => 'Support Agent',
+                        'roles' => [1, 3, 5],
+                    ],
+                ],
+                'parentBelongsTo' => [
+                    'explanation' => 'Always set the foreign key column on the parent record. Do not nest an object under the belongsTo relation alias.',
+                    'example' => [
+                        'customer_id' => 42,
+                    ],
+                ],
             ],
         ];
     }
@@ -1244,8 +1337,10 @@ class McpServerService
                 'schemaMcp' => ['type' => 'object'],
                 'workflow' => ['type' => 'array', 'items' => ['type' => 'string']],
                 'httpRules' => ['type' => 'object'],
+                'querySyntaxExamples' => ['type' => 'object'],
+                'nestedWriteExamples' => ['type' => 'object'],
             ],
-            'required' => ['dataMcp', 'schemaMcp', 'workflow', 'httpRules'],
+            'required' => ['dataMcp', 'schemaMcp', 'workflow', 'httpRules', 'querySyntaxExamples', 'nestedWriteExamples'],
             'additionalProperties' => false,
         ];
     }
@@ -1358,7 +1453,7 @@ class McpServerService
     private function queryParametersForAction(string $action): array
     {
         return match ($action) {
-            'list', 'read' => ['filters', 'select', 'with', 'sortby', 'order', 'per_page', 'page', 'cursor'],
+            'list', 'read' => ['filters', 'select', 'with', 'sortby', 'order', 'limit', 'per_page', 'page', 'cursor'],
             'upsert', 'bulkUpsert' => ['match_on'],
             default => [],
         };
@@ -1409,6 +1504,10 @@ class McpServerService
         $properties = [];
         foreach ($fields as $field) {
             if ($writeableOnly && !in_array('write', $field['in'] ?? [], true)) {
+                continue;
+            }
+
+            if (!$writeableOnly && !in_array('read', $field['in'] ?? [], true)) {
                 continue;
             }
 

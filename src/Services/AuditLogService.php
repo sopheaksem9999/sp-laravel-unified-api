@@ -12,6 +12,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Sopheak\Core\Services\RecordConfigService;
+use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
 /**
  * Centralized service for creating and querying audit logs.
@@ -122,16 +123,26 @@ class AuditLogService
             }
         }
 
-        $tableName = static::getTableNameFromEntityType($data['entity_type']);
+        $entityTypeOrName = $data['entity_type'] ?? $data['entity_name'] ?? '';
+        $tableName = static::getTableNameFromEntityType((string) $entityTypeOrName);
+        $hiddenColumns = static::getHiddenColumnsForEntity($tableName);
 
-        // Determine changed fields for enhanced metadata
+        // Determine changed fields for enhanced metadata, filtering out hidden fields
         $changedFields = self::getChangedFields(oldData: $data['old_data'] ?? [], newData: $data['new_data'] ?? []);
+        $visibleChangedFields = array_values(array_diff($changedFields, $hiddenColumns));
+
+        $sanitizedOldData = is_array($data['old_data']) ? self::stripHiddenColumns($data['old_data'], $hiddenColumns) : $data['old_data'];
+        $sanitizedNewData = is_array($data['new_data']) ? self::stripHiddenColumns($data['new_data'], $hiddenColumns) : $data['new_data'];
+
+        $sanitizedMetadata = is_array($data['metadata'] ?? null)
+            ? self::stripHiddenColumns($data['metadata'], $hiddenColumns)
+            : ($data['metadata'] ?? null);
 
         // Prepare the audit log data
         $auditData = [
             'title' => $data['title'],
-            'old_data' => is_array($data['old_data']) ? json_encode($data['old_data'], JSON_PRETTY_PRINT) : $data['old_data'],
-            'new_data' => is_array($data['new_data']) ? json_encode($data['new_data'], JSON_PRETTY_PRINT) : $data['new_data'],
+            'old_data' => is_array($sanitizedOldData) ? json_encode($sanitizedOldData, JSON_PRETTY_PRINT) : $sanitizedOldData,
+            'new_data' => is_array($sanitizedNewData) ? json_encode($sanitizedNewData, JSON_PRETTY_PRINT) : $sanitizedNewData,
             'recap' => $data['recap'] ?? '',
             'subject' => $data['subject'] ?? '',
             'user_id' => $data['user_id'] ?? auth(RecordConfigService::authGuard())->id(),
@@ -139,7 +150,7 @@ class AuditLogService
             'entity_id' => $data['entity_id'],
             'entity_name' => $tableName,
             'event' => $data['event'],
-            'metadata' => isset($data['metadata']) ? (is_array($data['metadata']) ? json_encode($data['metadata']) : $data['metadata']) : null,
+            'metadata' => isset($sanitizedMetadata) ? (is_array($sanitizedMetadata) ? json_encode($sanitizedMetadata) : $sanitizedMetadata) : null,
             'ip_address' => request()->ip(),
             'user_agent' => request()->userAgent(),
             'request_id' => request()->attributes->get('request_id') ?? request()->header('X-Request-ID'),
@@ -154,9 +165,9 @@ class AuditLogService
 
         if (!in_array($data['event'], [AuditLogEventEnum::LOGIN->value, AuditLogEventEnum::LOGOUT->value, AuditLogEventEnum::FAILED_LOGIN->value])) {
             $auditData['metadata'] = json_encode(static::getAuditMetadata(
-                changedFields: $changedFields,
-                oldData: $data['old_data'] ?? [],
-                newData: $data['new_data'] ?? [],
+                changedFields: $visibleChangedFields,
+                oldData: $sanitizedOldData ?? [],
+                newData: $sanitizedNewData ?? [],
                 entityType: $data['entity_type'] ?? null,
                 entityId: $data['entity_id'] ?? null,
                 event: $data['event'] ?? null,
@@ -169,6 +180,41 @@ class AuditLogService
         }
 
         DB::table(RecordConfigService::auditLogModel())->insert($auditData);
+    }
+
+    /**
+     * @return string[]
+     */
+    public static function getHiddenColumnsForEntity(?string $entityType): array
+    {
+        if (null === $entityType || '' === trim($entityType)) {
+            return RecordConfigService::auditExcludedAttributes();
+        }
+
+        $tableName = static::getTableNameFromEntityType($entityType);
+        $schema = SchemaRegistryUtils::getTable($tableName);
+        $hidden = is_array($schema?->columnHiddens ?? null) ? $schema->columnHiddens : [];
+        $excluded = RecordConfigService::auditExcludedAttributes();
+
+        return array_values(array_filter(array_unique(array_merge($hidden, $excluded)), is_string(...)));
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @param string[] $hiddenColumns
+     * @return array<string, mixed>
+     */
+    public static function stripHiddenColumns(array $data, array $hiddenColumns): array
+    {
+        if (empty($hiddenColumns)) {
+            return $data;
+        }
+
+        foreach ($hiddenColumns as $col) {
+            unset($data[$col]);
+        }
+
+        return $data;
     }
 
     /**
@@ -479,7 +525,7 @@ class AuditLogService
             $query->where(RecordConfigService::tenantColumn(), $tenantId);
         }
 
-        $query->orderByDesc('created_at');
+        $query->orderByDesc('id');
 
         $data = $query->first();
 
@@ -631,7 +677,8 @@ class AuditLogService
                     $excluded = [];
                 }
 
-                $excluded = array_values(array_unique(array_merge($excluded, ['id', 'created_at', 'updated_at', 'deleted_at'])));
+                $hiddenCols = static::getHiddenColumnsForEntity($entityName);
+                $excluded = array_values(array_unique(array_merge($excluded, $hiddenCols, ['id', 'created_at', 'updated_at', 'deleted_at'])));
 
                 $changes = array_reduce(array_keys($newData ?? []), function (array $acc, int|string $key) use ($oldData, $newData, $excluded): array {
                     if (!isset($oldData[$key])) {
@@ -1340,6 +1387,12 @@ class AuditLogService
      */
     public static function getFieldTimeline(string $entityType, int $entityId, string $field, int $limit = 50): array
     {
+        $hiddenCols = static::getHiddenColumnsForEntity($entityType);
+        $excludedAttrs = RecordConfigService::auditExcludedAttributes();
+        if (in_array($field, $hiddenCols, true) || in_array($field, is_array($excludedAttrs) ? $excludedAttrs : [], true)) {
+            return [];
+        }
+
         $tableName = static::getTableNameFromEntityType($entityType);
 
         $query = DB::table(RecordConfigService::auditLogModel())
@@ -1395,6 +1448,19 @@ class AuditLogService
      */
     public static function getFieldStats(string $entityType, int $entityId, string $field): array
     {
+        $hiddenCols = static::getHiddenColumnsForEntity($entityType);
+        $excludedAttrs = RecordConfigService::auditExcludedAttributes();
+        if (in_array($field, $hiddenCols, true) || in_array($field, is_array($excludedAttrs) ? $excludedAttrs : [], true)) {
+            return [
+                'total_changes' => 0,
+                'changed_by_users' => [],
+                'value_frequency' => [],
+                'current_value' => null,
+                'first_changed_at' => null,
+                'last_changed_at' => null,
+            ];
+        }
+
         $timeline = self::getFieldTimeline($entityType, $entityId, $field, 10000);
 
         $totalChanges = count($timeline);

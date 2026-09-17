@@ -669,7 +669,7 @@ class SetupPackageCommand extends Command
                 */
                 'mcp' => [
                     'enabled' => env('SP_MCP_ENABLED', false),
-                    'read_only' => env('SP_MCP_READ_ONLY', false),
+                    'read_only' => env('SP_MCP_READ_ONLY', true),
                     'route_prefix' => env('SP_MCP_ROUTE_PREFIX', 'mcp'),
                     'middleware' => ['api', 'auth:sanctum'],
                 ],

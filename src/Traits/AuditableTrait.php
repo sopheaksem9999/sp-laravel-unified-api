@@ -17,6 +17,14 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
  *
  * Adds automatic audit logging for Eloquent model lifecycle events.
  * Records create, update, and delete operations with configurable payloads.
+ *
+ * @mixin \Illuminate\Database\Eloquent\Model
+ *
+ * @method static void created(\Closure|string $callback)
+ * @method static void updating(\Closure|string $callback)
+ * @method static void updated(\Closure|string $callback)
+ * @method static void deleting(\Closure|string $callback)
+ * @method static void deleted(\Closure|string $callback)
  */
 trait AuditableTrait
 {
@@ -271,7 +279,10 @@ trait AuditableTrait
             $excluded = [];
         }
 
-        $excluded = array_values(array_unique(array_merge($excluded, ['created_at', 'updated_at', 'deleted_at'])));
+        $schema = method_exists($this, 'getTable') ? SchemaRegistryUtils::getTable($this->getTable()) : null;
+        $hidden = is_array($schema?->columnHiddens ?? null) ? $schema->columnHiddens : [];
+
+        $excluded = array_values(array_unique(array_merge($excluded, $hidden, ['created_at', 'updated_at', 'deleted_at'])));
 
         foreach ($excluded as $key) {
             if (is_string($key) && array_key_exists($key, $data)) {
