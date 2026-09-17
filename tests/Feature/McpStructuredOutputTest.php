@@ -114,6 +114,12 @@ class McpStructuredOutputTest extends TestCase
         $this->assertSame('/api/v1/mcp/schema', $guidance['schemaMcp']['route']);
         $this->assertContains('Call sp_api_list_endpoints to discover an endpoint.', $guidance['workflow']);
         $this->assertStringContainsString('query parameters', $guidance['httpRules']['get']);
+        $this->assertArrayHasKey('fieldFiltering', $guidance['querySyntaxExamples']);
+        $this->assertArrayHasKey('relationshipSelection', $guidance['querySyntaxExamples']);
+        $this->assertArrayHasKey('recordLimiting', $guidance['querySyntaxExamples']['paginationAndSorting']);
+        $this->assertTrue($guidance['querySyntaxExamples']['paginationAndSorting']['recordLimiting']['recommendedForAgents']);
+        $this->assertArrayHasKey('childCollections', $guidance['nestedWriteExamples']);
+        $this->assertArrayHasKey('parentBelongsTo', $guidance['nestedWriteExamples']);
     }
 
     /** @test */

@@ -12,7 +12,7 @@ keywords:
 
 The package follows [Semantic Versioning](https://semver.org) (MAJOR.MINOR.PATCH).
 
-- **Current version:** `0.4.96` (2026-08-21)
+- **Current version:** `0.4.99` (2026-09-17)
 - **Installation:** `composer require sopheak/sp-laravel-api`
 - **Full details:** see the [Changelog](/changelog)
 
@@ -20,6 +20,9 @@ The package follows [Semantic Versioning](https://semver.org) (MAJOR.MINOR.PATCH
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [0.4.99](/changelog#0499---2026-09-17) | 2026-09-17 | Extract enum values in `SyncRecordColumnsCommand`, sanitize `columnHiddens` in single-record reads and relational subqueries |
+| [0.4.98](/changelog#0498---2026-09-07) | 2026-09-07 | Opt-in OpenAPI realtime metadata, application OpenAPI contributions, agentic MCP structured output |
+| [0.4.97](/changelog#0497---2026-09-06) | 2026-09-06 | Optional `audit.filter` mutation policy, `AuditLogService::insertAuditLogWithContext()` |
 | [0.4.96](/changelog#0496---2026-08-21) | 2026-08-21 | `viewOwn` owner-column resolution (`ownerColumn` + `own_records_owner_columns`), `created_by_id` no longer rewritten on update |
 | [0.4.95](/changelog#0495---2026-08-18) | 2026-08-18 | Disabled auto-creation of agent assets in Boost, introduced `sp-laravel-api:agent` on-demand command |
 | [0.4.94](/changelog#0494---2026-08-18) | 2026-08-18 | Caching opt-in per table/function (`disableCache` defaults `true`), `httpMethod` enum validation, `public` deprecated |
