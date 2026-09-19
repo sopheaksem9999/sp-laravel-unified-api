@@ -16,6 +16,7 @@ use Sopheak\Core\Exceptions\RecordNotFoundException;
 use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Services\RecordService;
+use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Utilities\DefaultValidationUtils;
 
 /**
@@ -23,6 +24,62 @@ use Sopheak\Core\Utilities\DefaultValidationUtils;
  */
 trait HasBulkOperations
 {
+    /**
+     * Envelope keys the bulk endpoints accept around their item list. `data` is the
+     * shape the bulk docs prescribe for create/update; `items` is what the legacy
+     * `/bulk` dispatcher has always accepted.
+     */
+    private const BULK_ENVELOPE_KEYS = ['data', 'items'];
+
+    /** Bulk delete is additionally documented with an `{"ids": [...]}` body. */
+    private const BULK_DELETE_ENVELOPE_KEYS = ['ids', 'data', 'items'];
+
+    /**
+     * Unwrap a documented bulk envelope into the bare list of items.
+     *
+     * The detection below treats any non-list payload as a single row, which is a
+     * deliberate convenience (`POST /{table}/bulk/create` with one object creates
+     * one record). That heuristic cannot tell a one-row body apart from the wrapped
+     * body the docs prescribe, so `{"data": [...]}` used to become a single row
+     * whose only field was `data` — and per-row validation then failed on every
+     * required column, one nesting level too high.
+     *
+     * Unwrapping happens before the detection so both shapes converge on the same
+     * list, and bare arrays / single objects keep behaving exactly as before.
+     *
+     * A key is only treated as an envelope when it is the payload's *sole* top-level
+     * key, its value is a list, and the table declares no column of that name — a
+     * table with a real `data` column owns that key, and hijacking it would silently
+     * turn one row into many.
+     *
+     * @param array<int, string> $envelopeKeys
+     */
+    private function unwrapBulkEnvelope(mixed $payload, RecordTableType $tableSchema, array $envelopeKeys): mixed
+    {
+        if (!is_array($payload) || [] === $payload) {
+            return $payload;
+        }
+
+        $keys = array_keys($payload);
+
+        foreach ($envelopeKeys as $envelopeKey) {
+            if ($keys !== [$envelopeKey]) {
+                continue;
+            }
+
+            if (isset($tableSchema->columns[$envelopeKey])) {
+                continue;
+            }
+
+            $value = $payload[$envelopeKey];
+            if (is_array($value) && array_is_list($value)) {
+                return $value;
+            }
+        }
+
+        return $payload;
+    }
+
     /**
      * Batch create, update, or delete records in a single API call (legacy mixed action).
      */
@@ -91,6 +148,7 @@ trait HasBulkOperations
             $matchOn = explode(',', $matchOn);
 
             $payload = $request->except(['match_on', 'select', 'per_page', 'page']);
+            $payload = $this->unwrapBulkEnvelope($payload, $tableSchema, self::BULK_ENVELOPE_KEYS);
 
             if (!is_array($payload) || (is_array($payload) && !array_key_exists(0, $payload) && !empty($payload))) {
                 $items = [$payload];
@@ -143,6 +201,7 @@ trait HasBulkOperations
 
             // See HasCrudOperations::createRecord() for why the query string is excluded from the payload.
             $payload = $request->except(array_keys($request->query()));
+            $payload = $this->unwrapBulkEnvelope($payload, $tableSchema, self::BULK_ENVELOPE_KEYS);
             $items   = (!is_array($payload) || (is_array($payload) && !array_key_exists(0, $payload) && !empty($payload)))
                 ? [$payload]
                 : $payload;
@@ -262,6 +321,7 @@ trait HasBulkOperations
             $pk      = $tableSchema->primaryKey ?? 'id';
             // See HasCrudOperations::createRecord() for why the query string is excluded from the payload.
             $payload = $request->except(array_keys($request->query()));
+            $payload = $this->unwrapBulkEnvelope($payload, $tableSchema, self::BULK_ENVELOPE_KEYS);
             $items   = (!is_array($payload) || (is_array($payload) && !array_key_exists(0, $payload) && !empty($payload)))
                 ? [$payload]
                 : $payload;
@@ -398,6 +458,7 @@ trait HasBulkOperations
 
             $pk      = $tableSchema->primaryKey ?? 'id';
             $payload = $request->all();
+            $payload = $this->unwrapBulkEnvelope($payload, $tableSchema, self::BULK_DELETE_ENVELOPE_KEYS);
             $items   = (!is_array($payload) || (is_array($payload) && !array_key_exists(0, $payload) && !empty($payload)))
                 ? [$payload]
                 : $payload;

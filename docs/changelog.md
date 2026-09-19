@@ -13,6 +13,19 @@ All notable changes to `sp-laravel-api` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.01] - 2026-09-19
+
+### Fixed
+
+- **Bulk endpoints misparsed their own documented request body**: `POST /{table}/bulk/create`, `/bulk/update`, and `/bulk/delete` recognised only a bare top-level array, but the docs prescribe `{"data": [...]}` for create/update and `{"ids": [...]}` for delete. A documented body was therefore treated as a *single row* whose only field was the envelope key, so per-row validation ran one nesting level too high and failed on every required column — e.g. `{"data":[{"key":"x"}]}` returned `422 "The key field is required."` for a row that plainly had `key`. Bulk delete failed the same way with `Primary key (id) is required`, since no `ids` handling existed anywhere. The item detection in `HasBulkOperations` now unwraps a recognised envelope before running, so both shapes converge on the same list. `RecordService::bulkRecord()` (the legacy `/bulk` dispatcher, which accepted only `{"items": [...]}`) now also accepts `{"data": [...]}`, so every bulk route takes the same shapes. See `tests/Feature/BulkEnvelopeShapeTest.php`.
+
+### Notes
+
+- Existing bodies are unaffected: a bare array and the long-standing "a single object is one row" convenience both behave exactly as before — unwrapping happens *before* the previous heuristic, which is otherwise untouched.
+- A key is only treated as an envelope when it is the body's sole top-level key, its value is a JSON array, and the table declares no column of that name. A table with a real `data` column keeps ownership of it, so one row is never silently split into many.
+- `/bulk/upsert` was already documented with a bare array and was never broken for clients following its docs; it accepts the `data` envelope now too, for consistency.
+- Unrelated gap noticed while fixing this: `OpenApiService` emits only `/bulk/upsert`, so `/bulk`, `/bulk/create`, `/bulk/update`, and `/bulk/delete` are missing from the generated OpenAPI spec and from exported Postman/Bruno collections. Not addressed here.
+
 ## [0.4.99] - 2026-09-17
 
 ### Added
