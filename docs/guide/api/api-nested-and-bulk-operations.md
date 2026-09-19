@@ -145,6 +145,32 @@ For performance considerations and best practices when using bulk operations, se
 - **Triggers**: Table-level triggers (`beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete`) **are executed** for each individual item in the bulk batch.
   - This allows you to maintain consistent business logic (e.g., setting default values, syncing with external systems) regardless of whether a record is created individually or in bulk.
 
+### Request Body Shapes
+
+Every bulk endpoint accepts the item list in either shape, so the wrapped body the
+examples below use and a bare array are equivalent:
+
+```json
+{ "data": [ { "name": "Product A" }, { "name": "Product B" } ] }
+```
+
+```json
+[ { "name": "Product A" }, { "name": "Product B" } ]
+```
+
+Additionally:
+
+- **A single object is one row.** `POST /{table}/bulk/create` with `{"name": "A"}`
+  creates one record — you do not have to wrap a single item in an array.
+- **`/bulk/delete`** also accepts `{"ids": [10, 11, 12]}`.
+- **`/bulk`** (the legacy dispatcher) also accepts `{"items": [...]}`.
+
+> **Envelope keys vs. real columns:** `data`, `items`, and `ids` are only treated as
+> envelopes when the key is the body's *only* top-level key, its value is a JSON
+> array, and the table declares no column of that name. A table with a real `data`
+> column keeps ownership of it, so `{"data": [...]}` there is one row whose `data`
+> field is a list — not a wrapper around several rows.
+
 ### Legacy Bulk Operation
 
 ```http
@@ -261,7 +287,8 @@ Bulk create or update records based on matching columns.
 
 #### Request Body
 
-JSON array of objects.
+JSON array of objects, or the same list wrapped in `{"data": [...]}` — see
+[Request Body Shapes](#request-body-shapes).
 
 ```json
 [

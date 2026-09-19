@@ -924,6 +924,17 @@ class RecordService
         $requestData = $request->all();
         if (isset($requestData['items']) && is_array($requestData['items'])) {
             $items = $requestData['items'];
+        } elseif (
+            isset($requestData['data'])
+            && is_array($requestData['data'])
+            && array_is_list($requestData['data'])
+            && !isset($tableSchema->columns['data'])
+        ) {
+            // `{"data": [...]}` is the envelope the bulk docs prescribe for
+            // create/update; accept it here too so every bulk route takes the same
+            // shapes. Skipped when the table declares a real `data` column, which
+            // makes the body a single row rather than an envelope.
+            $items = $requestData['data'];
         } else {
             $jsonInput = $request->getContent();
             $decodedJson = json_decode($jsonInput, true);
