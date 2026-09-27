@@ -499,6 +499,44 @@ With token (production):
 
 This is ~2-3K tokens of targeted data vs. 50K+ tokens for the full OpenAPI JSON — the agent queries only what it needs, when it needs it.
 
+## Tenant Isolation
+
+The tenant for every data tool call is resolved from the **request**, never from
+the tool arguments:
+
+1. `resolved_tenant_id` on the request (set by your middleware), then
+2. `record_context['tenant_id']`, then
+3. the configured tenant header (`record.tenant_header`, default `X-Tenant-ID`).
+
+Rules enforced by `McpServerService::resolveToolTenantId()`:
+
+- **Tool arguments are not a source of tenant identity.** A `tenantId` argument is
+  accepted only when it matches the resolved tenant, and is refused otherwise. It
+  is no longer advertised in the tool schemas.
+- **A tenant-scoped table with no resolvable tenant refuses the call.** It never
+  widens to every tenant.
+- **Tables declaring `hasTenantId: false` need no tenant of their own**, but they
+  are not outside tenancy: a relationship from such a table into a tenant-scoped
+  one *is* scoped by the request tenant. Nested relationship **writes** under such
+  a parent are a known open gap — see
+  `docs/bug-reports/2026-09-27-nested-relationship-write-tenant-scope.md`.
+
+```text
+tools/call list_invoices  +  X-Tenant-ID: 42   -> only tenant 42's rows
+tools/call list_invoices  +  arguments.tenantId: 7  (request says 42)  -> refused
+tools/call list_invoices  +  no tenant anywhere  -> refused
+```
+
+> **Deployment note:** because the tenant rides on the request, each company's MCP
+> client configuration must carry that company's tenant context (header or a
+> credential your middleware maps to one). A single shared static token with no
+> tenant binding is **not** sufficient for multi-tenant use — anyone holding it can
+> name any tenant in the header.
+
+> **Stdio transport:** a console process has no request, so `php artisan
+> sp-laravel-api:mcp` cannot resolve a tenant header. Pass `--tenant=<id>` to scope
+> the whole session; without it, tenant-scoped tables are refused.
+
 ## Security & Authentication
 
 The MCP integration is not a backdoor. It strictly adheres to the security layers already defined in `sp-laravel-api`.

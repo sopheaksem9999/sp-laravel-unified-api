@@ -74,7 +74,7 @@ class WebhookTrigger extends RecordTriggerBase
     /**
      * Dispatch matching webhooks.
      */
-    private static function dispatchWebhooks(string $table, string $action, array $payload, ?string $tenantId): void
+    private static function dispatchWebhooks(string $table, string $action, array $payload, int|string|null $tenantId): void
     {
         if (!config('webhooks.enabled', false)) {
             return;

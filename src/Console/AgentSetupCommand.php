@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Sopheak\Core\Console;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\File;
 use JsonException;
+use Throwable;
 
 class AgentSetupCommand extends Command
 {
@@ -147,7 +149,19 @@ class AgentSetupCommand extends Command
             return;
         }
 
-        File::copy($source, $destination);
+        // The guidelines ship as a Blade template. Copying it verbatim leaves
+        // directives such as @verbatim in the installed .md, where an agent reads
+        // them as content, so it is compiled the same way Laravel Boost compiled it.
+        $contents = (string) File::get($source);
+
+        try {
+            $contents = Blade::render($contents);
+        } catch (Throwable $e) {
+            $this->warn('  ⚠ Could not render the guidelines template (' . $e->getMessage() . ').');
+            $this->warn('    Installing it unrendered — Blade directives may appear in the output.');
+        }
+
+        File::put($destination, rtrim($contents) . PHP_EOL);
         $this->info('  ✓ Installed agent rules to [.agents/rules/sp-laravel-api.md].');
     }
 

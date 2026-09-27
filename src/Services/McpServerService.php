@@ -8,6 +8,7 @@ use Throwable;
 use Closure;
 use Exception;
 use Sopheak\Core\Authorization\PermissionService;
+use Sopheak\Core\Utilities\RecordUtils;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Types\RecordTableType;
@@ -258,7 +259,6 @@ class McpServerService
                                     . "Do not nest a filter under a 'filter' key or use bracket syntax like column[operator]=value — pass the column name directly as the queryParams key.",
                                 'additionalProperties' => true,
                             ],
-                            'tenantId' => ['type' => ['string', 'integer', 'null']],
                         ],
                     ],
                     'outputSchema' => $this->dataToolOutputSchema(),
@@ -276,7 +276,6 @@ class McpServerService
                                 'description' => 'Query parameters (e.g., select)',
                                 'additionalProperties' => true,
                             ],
-                            'tenantId' => ['type' => ['string', 'integer', 'null']],
                         ],
                         'required' => ['id'],
                     ],
@@ -300,7 +299,6 @@ class McpServerService
                             'properties' => [
                                 'payload' => ['type' => 'object', 'additionalProperties' => true],
                                 'queryParams' => ['type' => 'object', 'additionalProperties' => true],
-                                'tenantId' => ['type' => ['string', 'integer', 'null']],
                             ],
                             'required' => ['payload'],
                         ],
@@ -316,7 +314,6 @@ class McpServerService
                                 'id' => ['type' => ['string', 'integer']],
                                 'payload' => ['type' => 'object', 'additionalProperties' => true],
                                 'queryParams' => ['type' => 'object', 'additionalProperties' => true],
-                                'tenantId' => ['type' => ['string', 'integer', 'null']],
                             ],
                             'required' => ['id', 'payload'],
                         ],
@@ -331,7 +328,6 @@ class McpServerService
                             'properties' => [
                                 'id' => ['type' => ['string', 'integer']],
                                 'queryParams' => ['type' => 'object', 'additionalProperties' => true],
-                                'tenantId' => ['type' => ['string', 'integer', 'null']],
                             ],
                             'required' => ['id'],
                         ],
@@ -416,7 +412,7 @@ class McpServerService
         $id = $args['id'] ?? null;
         $payload = $args['payload'] ?? [];
         $queryParams = $args['queryParams'] ?? [];
-        $tenantId = $args['tenantId'] ?? null;
+        $tenantId = $this->resolveToolTenantId($table, $args);
 
         try {
             $result = match ($action) {
@@ -444,6 +440,84 @@ class McpServerService
                 ],
             ];
         }
+    }
+
+    /**
+     * Resolve the tenant this tool call is allowed to touch.
+     *
+     * The tenant is taken from the request — the same authority the HTTP
+     * controllers use — and never from the tool arguments. A model can put any
+     * value in `arguments`, so trusting `tenantId` there let one company's
+     * client read and write another company's rows simply by naming their id,
+     * and omitting it disabled scoping altogether.
+     *
+     * A `tenantId` argument is therefore only an assertion: it must agree with
+     * the request, or the call is refused. When a tenant-scoped table resolves
+     * no tenant at all, the call is refused rather than silently widened to
+     * every tenant.
+     *
+     * The resolved tenant is returned even for a table that is not itself
+     * tenant-scoped. Such a table is still a pivot into tenant-scoped children:
+     * `RecordService::executeGetByFilter()` only stamps `resolved_tenant_id`
+     * onto its synthetic Request when a tenant is passed, and without it
+     * `resolveRelationshipTenantId()` falls through to `input('tenant_id')` —
+     * which on that synthetic request is the model's own `queryParams`. Passing
+     * the tenant through closes that path; it cannot affect the parent's own
+     * query, which is gated on `shouldApplyTenantId()` separately.
+     *
+     * @param array<string, mixed> $args
+     * @throws Exception
+     */
+    protected function resolveToolTenantId(string $table, array $args): mixed
+    {
+        if (!RecordConfigService::enableTenantId()) {
+            return null;
+        }
+
+        $tableSchema = SchemaRegistryUtils::getTable($table);
+        if (!$tableSchema instanceof RecordTableType) {
+            // "I cannot identify this table" is not the same as "this table has
+            // no tenancy"; only the latter may proceed without a tenant.
+            throw new Exception(message: 'Unknown table: ' . $table, code: -32001);
+        }
+
+        $resolved = RecordUtils::resolveTenantIdFromRequest(request());
+
+        if (array_key_exists('tenantId', $args) && !RecordUtils::isTenantIdMissing($args['tenantId'])) {
+            $claimed = $args['tenantId'];
+
+            if (!is_scalar($claimed)) {
+                throw new Exception(
+                    message: 'The tenantId argument must be a scalar value.',
+                    code: -32001,
+                );
+            }
+
+            // Loose comparison: a header is always a string, an argument may be
+            // an int, and "1" and 1 name the same tenant.
+            if (
+                RecordUtils::isTenantIdMissing($resolved)
+                || (string) RecordUtils::normalizeTenantId($claimed) !== (string) RecordUtils::normalizeTenantId($resolved)
+            ) {
+                throw new Exception(
+                    message: 'The tenantId argument does not match the authenticated tenant context.',
+                    code: -32001,
+                );
+            }
+        }
+
+        if (RecordUtils::isTenantIdMissing($resolved)) {
+            if (RecordUtils::shouldApplyTenantId($tableSchema)) {
+                throw new Exception(
+                    message: 'Tenant context is required for ' . $table . ' but none was resolved from the request.',
+                    code: -32001,
+                );
+            }
+
+            return null;
+        }
+
+        return $resolved;
     }
 
     protected function authorizeAction(string $table, string $action): void
@@ -568,7 +642,6 @@ class McpServerService
                 // Detail endpoints
                 $detailMethods = ['GET'];
                 if ($config->canUpdate) {
-                    $detailMethods[] = 'PUT';
                     $detailMethods[] = 'PUT';
                     $detailMethods[] = 'PATCH';
                 }

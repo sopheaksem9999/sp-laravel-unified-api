@@ -35,6 +35,25 @@ When audit records are generated, sensitive attributes configured under `columnH
 - `audit.queue_enabled`
 - `audit.log_relationships`
 
+## Row Narrative (`title`, `subject`, `recap`)
+
+These three human-readable columns are never stored empty. A value you supply
+always wins; blanks are filled from the event and entity:
+
+| Column | Filled with | Fallback when that is empty |
+|---|---|---|
+| `title` | `getAuditTitle(event, entity)` — e.g. `Updated Settings` | the entity label |
+| `subject` | the first present `audit.subject_fields` value | `{Entity} #{entity_id}` |
+| `recap` | `generateRecap()` — e.g. `Updated Settings: Name` | the resolved `title` |
+
+`recap` falls back most often on a record's **first** update: the previous state
+is read from the last audit row rather than the live row, so there is nothing to
+diff against and the generated recap is empty. Later updates diff normally and
+name the changed fields.
+
+Tenant IDs may be `int` or `string` throughout this path — `record.id_type` of
+`integer` is fully supported.
+
 ## Handler Context
 
 Custom handler receives event/entity/audit data plus runtime context (`request`, `table`, `operation`, `record_context`).
