@@ -4,6 +4,8 @@ All notable changes to `sp-laravel-api` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.02] - 2026-09-27
+
 ### Added
 - **`title`, `subject` and `recap` are never stored empty**: each audit row's human-readable columns now fall back to the best value derivable from the event and entity instead of writing a blank. `recap` previously came back `''` on a record's *first* update — `getOldAuditLogDate()` diffs against the previous audit row rather than the live row, so there was nothing to compare against — and `subject` came back `''` whenever none of the configured `audit.subject_fields` were present. Caller-supplied values always win; only blanks are filled. A generated recap still takes precedence over the fallback, so a real diff reads `Updated Settings: Name` rather than the bare `Updated Settings`.
 
