@@ -842,6 +842,94 @@ Accepts an array of IDs or an array of objects with the primary key.
     /**
      * @return array{}|array<int, array<string, array{}>>
      */
+    /**
+     * Describe one bulk endpoint.
+     *
+     * The bulk routes accept the item list either as a bare JSON array or wrapped
+     * in the envelope the guide documents (`{"data": [...]}`, or `{"ids": [...]}`
+     * for delete), so both shapes are advertised. The success payload is the list
+     * of affected records with the count in `meta.affected` — matching what
+     * HasBulkOperations actually returns.
+     *
+     * @param array<string, mixed> $itemSchema
+     * @return array<string, mixed>
+     */
+    private static function bulkOperationDocs(string $formattedRecordName, string $label, string $envelopeKey, array $itemSchema, bool $isAuthWrite): array
+    {
+        $bareList = ['type' => 'array', 'items' => $itemSchema];
+        $envelope = [
+            'type' => 'object',
+            'properties' => [$envelopeKey => $bareList],
+            'required' => [$envelopeKey],
+        ];
+
+        return [
+            'tags' => [$formattedRecordName],
+            'summary' => 'Bulk ' . $label . ' ' . $formattedRecordName,
+            'description' => sprintf(
+                'Bulk %s %s records in one request. Send a bare JSON array or the wrapped form {"%s": [...]}; both are accepted.',
+                strtolower($label),
+                $formattedRecordName,
+                $envelopeKey,
+            ),
+            'requestBody' => [
+                'required' => true,
+                'content' => [
+                    'application/json' => [
+                        'schema' => ['oneOf' => [$envelope, $bareList]],
+                    ],
+                ],
+            ],
+            'responses' => [
+                '200' => [
+                    'description' => 'Bulk ' . $label . 'd',
+                    'content' => [
+                        'application/json' => [
+                            'schema' => [
+                                'type' => 'object',
+                                'properties' => [
+                                    'success' => ['type' => 'boolean', 'example' => true],
+                                    'error_code' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::SUCCESS],
+                                    'data' => ['type' => 'array', 'items' => ['type' => 'object']],
+                                    'meta' => [
+                                        'type' => 'object',
+                                        'properties' => [
+                                            'request_id' => ['type' => 'string'],
+                                            'affected' => ['type' => 'integer'],
+                                        ],
+                                    ],
+                                ],
+                                'required' => ['success', 'error_code', 'data', 'meta'],
+                            ],
+                        ],
+                    ],
+                ],
+                '422' => [
+                    'description' => 'Validation error',
+                    'content' => [
+                        'application/json' => [
+                            'schema' => [
+                                'type' => 'object',
+                                'properties' => [
+                                    'success' => ['type' => 'boolean', 'example' => false],
+                                    'error_code' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::INVALID_REQUEST],
+                                    'message' => ['type' => 'string', 'example' => 'Validation failed'],
+                                    'errors' => ['type' => 'object'],
+                                    'meta' => [
+                                        'type' => 'object',
+                                        'properties' => ['request_id' => ['type' => 'string']],
+                                    ],
+                                ],
+                                'required' => ['success', 'error_code', 'message', 'meta'],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+            'security' => self::security($isAuthWrite),
+        ];
+    }
+
     private static function security(bool $requiresAuth): array
     {
         return $requiresAuth ? [['bearerAuth' => []]] : [];
@@ -1530,6 +1618,41 @@ Accepts an array of IDs or an array of objects with the primary key.
                 ];
 
                 $paths[$bulkUpsertPath]['post'] = self::tableOperationDocs($paths[$bulkUpsertPath]['post'], $config, $recordName, 'bulk_upsert', false, $tableConfigSource, $tenantScoped);
+            }
+
+            // Bulk create / update / delete. routes/api.php registers these only when
+            // bulk operations are enabled, and gates each on the same can* flag, so the
+            // spec mirrors that rather than advertising endpoints that 404.
+            if (RecordConfigService::bulkOperationsEnabled()) {
+                $bulkOperations = [];
+
+                if ($canCreate) {
+                    $bulkOperations['create'] = ['Create', 'data', ['$ref' => $schemaRefWrite]];
+                }
+
+                if ($canUpdate) {
+                    $bulkOperations['update'] = ['Update', 'data', ['$ref' => $schemaRefWrite]];
+                }
+
+                if ($canDelete) {
+                    $bulkOperations['delete'] = ['Delete', 'ids', ['type' => 'object']];
+                }
+
+                foreach ($bulkOperations as $operation => [$label, $envelopeKey, $itemSchema]) {
+                    $bulkPath = $basePath . '/bulk/' . $operation;
+                    $paths[$bulkPath] = [
+                        'parameters' => $tenantHeaderParameters,
+                        'post' => self::bulkOperationDocs(
+                            formattedRecordName: $formattedRecordName,
+                            label: $label,
+                            envelopeKey: $envelopeKey,
+                            itemSchema: $itemSchema,
+                            isAuthWrite: (bool) $config->isAuthWrite,
+                        ),
+                    ];
+
+                    $paths[$bulkPath]['post'] = self::tableOperationDocs($paths[$bulkPath]['post'], $config, $recordName, 'bulk_' . $operation, false, $tableConfigSource, $tenantScoped);
+                }
             }
 
             // Read/Update/Delete

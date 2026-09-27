@@ -1506,7 +1506,7 @@ class RecordService
      */
     public function applyTimestampsAndAuditFields(array $payload, object $tableSchema, bool $isUpdate = false): array
     {
-        $user = auth('api')->user();
+        $user = auth(RecordConfigService::authGuard())->user();
         $now = TimeUtils::now();
         $overrideTimestamps = $tableSchema->overrideTimestamps ?? false;
         $overrideUserstamps = $tableSchema->overrideUserstamps ?? false;
@@ -1567,7 +1567,7 @@ class RecordService
             $item['created_at'] = TimeUtils::now();
         }
 
-        $user = auth('api')->user();
+        $user = auth(RecordConfigService::authGuard())->user();
         if (null === $user) {
             return $item;
         }

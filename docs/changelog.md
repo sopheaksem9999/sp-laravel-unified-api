@@ -13,6 +13,29 @@ All notable changes to `sp-laravel-api` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.02] - 2026-09-27
+
+### Added
+
+- **`title`, `subject` and `recap` are never stored empty**: each audit row's human-readable columns now fall back to the best value derivable from the event and entity instead of writing a blank. `recap` previously came back `''` on a record's *first* update — `getOldAuditLogDate()` diffs against the previous audit row rather than the live row, so there was nothing to compare against — and `subject` came back `''` whenever none of the configured `audit.subject_fields` were present. Caller-supplied values always win; only blanks are filled. A generated recap still takes precedence over the fallback, so a real diff reads `Updated Settings: Name` rather than the bare `Updated Settings`.
+
+### Fixed
+
+- **MCP data tools could read and write another company's rows**: `McpServerService::handleToolsCall()` took the tenant from `$args['tenantId']` — a value supplied by the model — and never consulted the request, so a caller could name another tenant's id and get their data, or omit the argument and receive every tenant's rows at once. A correct `X-Tenant-ID` header did not constrain either case, and with `record.mcp.read_only` false the same path allowed writing into another company's data. The tenant is now resolved from the request via `RecordUtils::resolveTenantIdFromRequest()`; a `tenantId` argument that disagrees is refused; a tenant-scoped table with no resolvable tenant is refused rather than widened; and `tenantId` no longer appears in the published tool schemas. Tables with `hasTenantId: false` are unaffected. See `tests/Feature/McpTenantIsolationTest.php`.
+- The MCP stdio server (`php artisan sp-laravel-api:mcp`) gained a `--tenant=<id>` option. A console process has no request and therefore no tenant header, so tenant-scoped tables became unreachable over stdio once the tenant stopped coming from tool arguments; `--tenant` scopes the whole session explicitly, and omitting it still refuses rather than widening.
+- **Integer tenant IDs crashed every tenant-scoped write when auditing was enabled**: `record.id_type = 'integer'` is a supported configuration, so the tenant column holds an `int`, but the audit path declared `?string $tenantId` in five places while its callers pass the value through as `mixed`. Under `declare(strict_types=1)` PHP does not coerce, so `PUT /{table}/{id}` on any `hasTenantId: true` table threw `TypeError` and returned a 500 before the audit row could be written. Widened `getOldAuditLogDate()`, `getAuditMetadata()`, `getEntityAuditLogs()`, `cleanupOldLogs()`, and `getPreviousAuditEntry()` to `int|string|null`. The same defect existed on the webhook path — `WebhookTrigger::dispatchWebhooks()` and `DispatchWebhookJob::$tenantId` — and is fixed alongside it, since both read the tenant from an untyped context array. See `tests/Feature/IntegerTenantAuditLoggingTest.php`.
+- **`createAuditLogEntry()` threw on a payload without `title` or `entity_id`**: both were read with direct array access, so any caller invoking this public method without them got `ErrorException: Undefined array key` instead of an audit row. Both are optional now.
+- **Duplicate `PUT` in the MCP schema's detail-endpoint methods**: `sp_api_list_endpoints` emitted `["GET", "PUT", "PUT", "PATCH", "DELETE"]` for every updatable table's `{id}` route — `'PUT'` was appended twice in `McpServerService`, while the equivalent `actions.update` entry correctly emits `["PUT", "PATCH"]`. An agent reading the schema saw the same method listed twice.
+- **Userstamps ignored a configured auth guard**: `RecordPayloadExtractor` and `RecordService` called `auth('api')` directly instead of `RecordConfigService::authGuard()`. An application setting `sp-laravel-api.auth.guard` to anything else got a null user there, so `created_by_id` / `last_updated_by_id` were silently left unstamped — no error, just missing attribution. See `tests/Feature/ConfiguredAuthGuardUserstampsTest.php`.
+- **`sp-laravel-api:agent` installed unrendered Blade**: `installRules()` copied `resources/agent/guidelines/core.blade.php` byte-for-byte to `.agents/rules/sp-laravel-api.md`, so the installed rules contained literal `@verbatim` / `@endverbatim` directives that an agent reads as content. The template is compiled now, as Laravel Boost compiled it before the templates moved. See `tests/Feature/AgentSetupRendersGuidelinesTest.php`.
+- **Bulk endpoints were missing from the OpenAPI spec**: only `/bulk/upsert` was emitted, so `/bulk/create`, `/bulk/update`, and `/bulk/delete` never reached the generated spec or the exported Postman/Bruno collections — no one could generate a working client for them. All three are documented now, gated exactly as `routes/api.php` registers them (`record.bulk_operations` plus the per-action `can*` flag), advertising both the envelope and bare-array bodies. See `tests/Feature/OpenApiBulkPathsTest.php`.
+
+### Notes
+
+- Widening a single signature is not sufficient and was verified not to be: with only `getOldAuditLogDate()` fixed, the identical `TypeError` reappears one frame later in `getAuditMetadata()` within the same request. The regression tests therefore drive the whole write path, not one method.
+- String and UUID tenant IDs are unaffected — the change only widens an accepted type, never narrows one.
+- Test suite: the abstract base `PackageTableGovernedIdTypeTest` was renamed to `...TestCase` so PHPUnit stops warning about an abstract class in a `*Test.php` file on every run.
+
 ## [0.5.01] - 2026-09-19
 
 ### Fixed

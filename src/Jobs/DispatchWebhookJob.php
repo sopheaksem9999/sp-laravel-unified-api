@@ -46,7 +46,7 @@ class DispatchWebhookJob implements ShouldQueue
         public string $secret,
         public string $event,
         public array $payload,
-        public ?string $tenantId = null
+        public int|string|null $tenantId = null
     ) {}
 
     /**
