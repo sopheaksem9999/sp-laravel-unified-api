@@ -25,7 +25,7 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
  * SQLite's type affinity would let a wrong declaration pass a plain insert
  * test, so the assertions read the registered config directly as well.
  */
-abstract class PackageTableGovernedIdTypeTest extends TestCase
+abstract class PackageTableGovernedIdTypeTestCase extends TestCase
 {
     use RefreshDatabase;
 

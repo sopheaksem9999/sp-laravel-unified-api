@@ -106,6 +106,30 @@ class McpSchemaEndpointCoverageTest extends TestCase
     }
 
     /** @test */
+    public function detail_endpoint_methods_are_not_duplicated(): void
+    {
+        $this->configureTable(softDeletes: true, canUpsert: true);
+
+        $detail = null;
+        foreach ($this->listEndpoints() as $endpoint) {
+            if (($endpoint['name'] ?? null) === 'mcp_invoices.detail') {
+                $detail = $endpoint;
+                break;
+            }
+        }
+
+        $this->assertNotNull($detail, 'the detail endpoint must be listed');
+
+        $methods = (array) ($detail['method'] ?? []);
+        $this->assertSame(
+            array_values(array_unique($methods)),
+            $methods,
+            'an agent reading this schema must not see the same HTTP method twice'
+        );
+        $this->assertSame(['GET', 'PUT', 'PATCH', 'DELETE'], $methods);
+    }
+
+    /** @test */
     public function get_endpoint_exposes_upsert_restore_force_delete_and_bulk_actions(): void
     {
         Config::set('record.bulk_operations', true);

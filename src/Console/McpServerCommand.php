@@ -15,7 +15,8 @@ class McpServerCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'sp-laravel-api:mcp';
+    protected $signature = 'sp-laravel-api:mcp
+                            {--tenant= : Tenant id to scope every data tool call to. Required for tenant-scoped tables, which a console process cannot resolve from a request.}';
 
     /**
      * The console command description.
@@ -39,6 +40,17 @@ class McpServerCommand extends Command
      */
     public function handle(): void
     {
+        // A console process has no request, so no tenant header can reach
+        // McpServerService::resolveToolTenantId(). Without this, every
+        // tenant-scoped table is unreachable over stdio. Binding the option onto
+        // the console request keeps the request the single source of tenant
+        // identity — the operator states it once, explicitly, instead of the
+        // model naming a tenant per call.
+        $tenant = $this->option('tenant');
+        if (is_string($tenant) && '' !== trim($tenant)) {
+            request()->attributes->set('resolved_tenant_id', trim($tenant));
+        }
+
         $mcpService = app(McpServerService::class);
 
         // Run an infinite loop reading from STDIN

@@ -138,16 +138,24 @@ class AuditLogService
             ? self::stripHiddenColumns($data['metadata'], $hiddenColumns)
             : ($data['metadata'] ?? null);
 
+        [$title, $subject, $recap] = self::resolveAuditNarrative(
+            data: $data,
+            tableName: $tableName,
+            event: AuditLogEventEnum::tryFrom((string) ($data['event'] ?? '')),
+            oldData: $sanitizedOldData,
+            newData: $sanitizedNewData,
+        );
+
         // Prepare the audit log data
         $auditData = [
-            'title' => $data['title'],
+            'title' => $title,
             'old_data' => is_array($sanitizedOldData) ? json_encode($sanitizedOldData, JSON_PRETTY_PRINT) : $sanitizedOldData,
             'new_data' => is_array($sanitizedNewData) ? json_encode($sanitizedNewData, JSON_PRETTY_PRINT) : $sanitizedNewData,
-            'recap' => $data['recap'] ?? '',
-            'subject' => $data['subject'] ?? '',
+            'recap' => $recap,
+            'subject' => $subject,
             'user_id' => $data['user_id'] ?? auth(RecordConfigService::authGuard())->id(),
             'entity_type' => $tableName,
-            'entity_id' => $data['entity_id'],
+            'entity_id' => $data['entity_id'] ?? null,
             'entity_name' => $tableName,
             'event' => $data['event'],
             'metadata' => isset($sanitizedMetadata) ? (is_array($sanitizedMetadata) ? json_encode($sanitizedMetadata) : $sanitizedMetadata) : null,
@@ -220,7 +228,7 @@ class AuditLogService
     /**
      * Build enriched audit metadata with field-level change tracking.
      */
-    public static function getAuditMetadata(array $changedFields = [], array $oldData = [], array $newData = [], ?string $entityType = null, mixed $entityId = null, ?string $event = null, ?string $tenantId = null): array
+    public static function getAuditMetadata(array $changedFields = [], array $oldData = [], array $newData = [], ?string $entityType = null, mixed $entityId = null, ?string $event = null, int|string|null $tenantId = null): array
     {
         $currentTime = now()->toISOString();
         $guard = RecordConfigService::authGuard();
@@ -515,7 +523,7 @@ class AuditLogService
         );
     }
 
-    public static function getOldAuditLogDate(int|string $entityId, string $entityName, ?string $tenantId = null): ?array
+    public static function getOldAuditLogDate(int|string $entityId, string $entityName, int|string|null $tenantId = null): ?array
     {
         $query = DB::table(RecordConfigService::auditLogModel())
             ->where('entity_id', $entityId)
@@ -539,7 +547,7 @@ class AuditLogService
     /**
      * Retrieve audit logs for a specific entity record.
      */
-    public static function getEntityAuditLogs(string $entityType, mixed $entityId, ?string $tenantId = null, int $limit = 50): Collection
+    public static function getEntityAuditLogs(string $entityType, mixed $entityId, int|string|null $tenantId = null, int $limit = 50): Collection
     {
         $query = DB::table(RecordConfigService::auditLogModel())
             ->where('entity_type', $entityType)
@@ -560,7 +568,7 @@ class AuditLogService
      *
      * @return int Number of deleted records.
      */
-    public static function cleanupOldLogs(?string $tenantId = null, int $daysToKeep = 365): int
+    public static function cleanupOldLogs(int|string|null $tenantId = null, int $daysToKeep = 365): int
     {
         $cutoffDate = Carbon::now()->subDays($daysToKeep);
 
@@ -577,6 +585,67 @@ class AuditLogService
     /**
      * Resolve the audit subject (typically a human-readable identifier).
      */
+    /**
+     * Fill the three human-readable columns of an audit row, never storing a blank.
+     *
+     * Each could previously land empty: `generateRecap()` returns '' for an UPDATE
+     * whose diff comes back empty — which is every record's *first* update, since
+     * `getOldAuditLogDate()` diffs against the previous audit row rather than the
+     * live row — and `getAuditSubject()` returns '' unless one of the configured
+     * `audit.subject_fields` is present. A caller invoking `createAuditLogEntry()`
+     * directly could also omit all three.
+     *
+     * Caller-supplied values always win; only blanks are filled, each falling back
+     * to the best value derivable from the event and entity.
+     *
+     * @param array<string, mixed> $data
+     * @return array{0: string, 1: string, 2: string} [title, subject, recap]
+     */
+    private static function resolveAuditNarrative(array $data, string $tableName, ?AuditLogEventEnum $event, mixed $oldData, mixed $newData): array
+    {
+        $entityLabel = '' === $tableName ? '' : static::getEntityLabel($tableName);
+
+        $title = trim((string) ($data['title'] ?? ''));
+        if ('' === $title) {
+            $title = $event instanceof AuditLogEventEnum
+                ? static::getAuditTitle($event, $tableName)
+                : $entityLabel;
+        }
+
+        $subject = trim((string) ($data['subject'] ?? ''));
+        if ('' === $subject) {
+            $source = is_array($newData) && [] !== $newData
+                ? $newData
+                : (is_array($oldData) ? $oldData : []);
+            $subject = static::getAuditSubject($source);
+        }
+
+        if ('' === $subject) {
+            // No configured subject field matched — identify the row itself.
+            $entityId = $data['entity_id'] ?? null;
+            $subject = null !== $entityId && '' !== (string) $entityId
+                ? trim($entityLabel . ' #' . $entityId)
+                : $entityLabel;
+        }
+
+        $recap = trim((string) ($data['recap'] ?? ''));
+        if ('' === $recap && $event instanceof AuditLogEventEnum) {
+            $recap = static::generateRecap(
+                event: $event,
+                entityName: $tableName,
+                oldData: is_array($oldData) ? $oldData : [],
+                newData: is_array($newData) ? $newData : [],
+            );
+        }
+
+        if ('' === $recap) {
+            // Nothing diffable to describe: state what happened, at least.
+            $recap = $title;
+        }
+
+        return [$title, $subject, $recap];
+    }
+
     public static function getAuditSubject(array $data): string
     {
         $identifierFields = config('audit.subject_fields', []);
@@ -944,7 +1013,7 @@ class AuditLogService
         return $prevEntryCreatedAt ?? null;
     }
 
-    private static function getPreviousAuditEntry(?string $entityType = null, mixed $entityId = null, ?string $tenantId = null): ?object
+    private static function getPreviousAuditEntry(?string $entityType = null, mixed $entityId = null, int|string|null $tenantId = null): ?object
     {
         if (null === $entityType || '' === $entityType || '0' === $entityType || !$entityId) {
             return null;

@@ -212,7 +212,7 @@ final class RecordPayloadExtractor
             }
 
             if ($tableSchema instanceof RecordTableType) {
-                $user = auth('api')->user();
+                $user = auth(RecordConfigService::authGuard())->user();
                 if ($isUpdate) {
                     if ($user) {
                         if (isset($tableSchema->columns['updated_by'])) {
