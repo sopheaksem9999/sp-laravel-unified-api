@@ -350,7 +350,7 @@ return [
 
     // permission
     'permission_separator' => ':', // separator for permission ex: view:invoice
-    'restrict_to_own_records' => false, // limit queries to records created by the authenticated user
+    'restrict_to_own_records' => false, // DEPRECATED — has no effect. Use the viewOwn:{pmsName} permission (see own_records_permission_prefix).
     'own_records_permission_prefix' => 'viewOwn', // example: viewOwn_invoice
 
     // Column-resolution order used by `viewOwn:*` scoping when a table does not

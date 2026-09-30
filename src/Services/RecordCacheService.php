@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Services;
 
+use Sopheak\Core\Utilities\OwnRecordsScope;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
 use Sopheak\Core\Types\RecordTableType;
@@ -127,10 +128,21 @@ class RecordCacheService
      * list one can only split a cache entry, never merge two that should
      * differ.
      */
-    public function queryFingerprint(Request $request): string
+    public function queryFingerprint(Request $request, ?string $table = null): string
     {
         $query = $request->json()->all() + $request->query();
         $this->recursiveKsort($query);
+
+        // Own-records scoping makes an identical query return different rows
+        // for different users. Without the scope in the key, whoever warmed the
+        // cache first decided what every later caller saw. The token is empty
+        // for unrestricted callers, so their keys are byte-identical to before.
+        if (null !== $table) {
+            $ownScope = OwnRecordsScope::cacheToken($table, RecordService::getCombinedSelectParam($request));
+            if ('' !== $ownScope) {
+                $query['__own_scope'] = $ownScope;
+            }
+        }
 
         return md5(serialize($query));
     }

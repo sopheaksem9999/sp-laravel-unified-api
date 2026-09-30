@@ -13,14 +13,11 @@ use ReflectionFunction;
 use ReflectionFunctionAbstract;
 use ReflectionMethod;
 use ReflectionNamedType;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Contracts\Validation\Validator as ValidatorContract;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Gate;
-use Sopheak\Core\Authorization\PermissionService;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 use Sopheak\Core\Exceptions\RecordNotFoundException;
 use Sopheak\Core\Jobs\ProcessBulkOperationJob;
@@ -207,37 +204,11 @@ trait HasControllerHelpers
             $perms = PermissionUtils::mapPermissions($table, $action);
         }
 
-        $superAdminCallback = config('permissions.super_admin_callback');
-        if (null !== $superAdminCallback) {
-            $granted = (bool) $superAdminCallback($user);
-            if ($granted) {
-                return;
-            }
+        if (PermissionUtils::isSuperAdmin($user)) {
+            return;
         }
 
-        $allowed = false;
-        $authHandler = config('record.authorization');
-        $gate = $authHandler === null ? Gate::forUser($user) : null;
-        $permissionService = null;
-        $permissionUser = $user instanceof Model ? $user : null;
-
-        foreach ($perms as $perm) {
-            if ($authHandler !== null) {
-                $granted = is_string($authHandler)
-                    ? (bool) app($authHandler)->handle($user, $perm, $table, $action)
-                    : (bool) $authHandler($user, $perm, $table, $action);
-            } elseif (config('permissions.enabled', false)) {
-                $permissionService ??= app(PermissionService::class);
-                $granted = $permissionUser instanceof Model && $permissionService->userHasPermission($permissionUser, $perm);
-            } else {
-                $granted = $gate->allows($perm);
-            }
-
-            if ($granted) {
-                $allowed = true;
-                break;
-            }
-        }
+        $allowed = PermissionUtils::userHasAnyPermission($user, $perms, $table, $action);
 
         if (!$allowed) {
             throw new HttpResponseException(

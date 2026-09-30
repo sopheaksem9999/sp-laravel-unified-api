@@ -78,6 +78,21 @@ Update a parent record and manage its relationships simultaneously. You can:
 - **Create** new children (omit `id`).
 - **Delete** existing children (provide `id` and `_delete: true` or `_destroy: true`).
 
+Children are scoped to what the caller could write on the child table directly:
+
+- An update or delete only touches a child that belongs to this parent, to the
+  caller's tenant (the child table's own tenant column, even when the parent is
+  not tenant-scoped), and — under [`viewOwn`](/features/feature-permission-own-records)
+  — to the caller. Any other `id` is silently skipped, exactly as if it did not exist.
+- A created child is stamped with the caller's tenant; a `tenant_id` in the payload
+  is ignored.
+- A write to a tenant-scoped child (`hasTenantId: true`) with no resolvable tenant
+  returns `422`, as the child's own endpoint does — even when the parent is not
+  tenant-scoped.
+- Attaching an existing record by `id` to a many-to-many or has-many-through
+  relationship returns `422` (`Related record '…' not found for relationship …`)
+  when the caller could not read that record directly.
+
 #### Request Body
 
 ```json

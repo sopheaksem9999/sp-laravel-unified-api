@@ -34,6 +34,7 @@ use Sopheak\Core\Types\RecordTableTriggerType;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Utilities\RecordPayloadExtractor;
 use Sopheak\Core\Types\RecordBelongsToType;
+use Sopheak\Core\Utilities\OwnRecordsScope;
 use Sopheak\Core\Utilities\RecordUtils;
 
 class RecordService
@@ -128,6 +129,7 @@ class RecordService
 
         $query = DB::table($actualTableName)->where($pk, $id);
         $this->applyTenantFilter($query, $table, $tenantId);
+        OwnRecordsScope::apply($query, $table, $actualTableName);
 
         // Check existence to differentiate between "no changes" and "not found"
         $exists = (clone $query)->exists();
@@ -173,6 +175,7 @@ class RecordService
 
         $query = DB::table($actualTableName)->where($pk, $id);
         $this->applyTenantFilter($query, $table, $tenantId);
+        OwnRecordsScope::apply($query, $table, $actualTableName);
 
         return $query->first() ?: null;
     }
@@ -191,6 +194,7 @@ class RecordService
 
         $query = DB::table($actualTableName)->where($pk, $id);
         $this->applyTenantFilter($query, $table, $tenantId);
+        OwnRecordsScope::apply($query, $table, $actualTableName);
         $affected = $tableSchema->softDeletes ?? false ? $query->update(['deleted_at' => TimeUtils::now()]) : $query->delete();
         if ($affected > 0) {
             $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
@@ -219,6 +223,7 @@ class RecordService
 
         $query = DB::table($actualTableName)->where($pk, $id);
         $this->applyTenantFilter($query, $table, $tenantId);
+        OwnRecordsScope::apply($query, $table, $actualTableName);
         $query->whereNotNull($actualTableName . '.deleted_at');
 
         $restored = $query->update(['deleted_at' => null]);
@@ -249,6 +254,7 @@ class RecordService
 
         $query = DB::table($actualTableName)->where($pk, $id);
         $this->applyTenantFilter($query, $table, $tenantId);
+        OwnRecordsScope::apply($query, $table, $actualTableName);
 
         $deleted = $query->delete();
         if ($deleted > 0) {
@@ -332,6 +338,7 @@ class RecordService
             $updateColumns = ['updated_at'];
         }
 
+        OwnRecordsScope::assertNoForeignMatches($table, $actualTableName, [$item], $matchOn);
         DB::table($actualTableName)->upsert([$item], $matchOn, $updateColumns);
 
         $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
@@ -428,6 +435,7 @@ class RecordService
             $updateColumns = ['updated_at'];
         }
 
+        OwnRecordsScope::assertNoForeignMatches($table, $actualTableName, $preparedItems, $matchOn);
         $affected = DB::table($actualTableName)->upsert($preparedItems, $matchOn, $updateColumns);
 
         $this->invalidateTableCache($table, $cacheTenantId, $tenantEnabled);
@@ -775,7 +783,7 @@ class RecordService
                 queryParams: $request->query(),
                 tenantId: $tenantId,
                 tenantEnabled: $tenantEnabled,
-                queryFingerprint: $this->cacheService()->queryFingerprint($request)
+                queryFingerprint: $this->cacheService()->queryFingerprint($request, $table)
             );
             $cached = QueryCacheService::get($cacheKey, $cacheDependencies);
             if (is_array($cached) && isset($cached['data'], $cached['status'])) {
@@ -1657,7 +1665,7 @@ class RecordService
     /**
      * Get combined select and with parameters from request.
      */
-    private static function getCombinedSelectParam(Request $request): string
+    public static function getCombinedSelectParam(Request $request): string
     {
         $selectParam = $request->query('select', '');
         $withParam = $request->query('with', '');
@@ -2282,7 +2290,7 @@ class RecordService
                     cursorColumn: $request->input('cursor_column', RecordConfigService::cursorDefaultColumn()),
                     limit: $perPage ?? $limit,
                     tenantEnabled: $tenantEnabled,
-                    queryFingerprint: $this->cacheService()->queryFingerprint($request)
+                    queryFingerprint: $this->cacheService()->queryFingerprint($request, $table)
                 );
             } else {
                 $cacheKey = $this->generateOptimizedCacheKey(
@@ -2292,7 +2300,7 @@ class RecordService
                     page: $page,
                     limit: $perPage ?? $limit,
                     tenantEnabled: $tenantEnabled,
-                    queryFingerprint: $this->cacheService()->queryFingerprint($request)
+                    queryFingerprint: $this->cacheService()->queryFingerprint($request, $table)
                 );
             }
 
@@ -2708,9 +2716,16 @@ class RecordService
             $queryParams['select'] = implode(',', array_unique(array_merge($selectArray, $includes)));
         }
 
-        $service->updateRecord($table, $id, $payload, $tenantId);
+        $result = $service->updateRecord($table, $id, $payload, $tenantId);
 
         $newRecord = self::executeGetById($table, $id, $queryParams, $tenantId);
+
+        if (empty($result['exists'])) {
+            // Nothing in scope was updated: a missing id, or a row outside the
+            // caller's tenant or own-records scope. RecordUpdated would send
+            // audit and webhooks an event for a row that did not change.
+            return $newRecord;
+        }
 
         $request = request();
         $auditContext = [
@@ -2764,7 +2779,14 @@ class RecordService
             $oldPayload = json_decode(json_encode($oldPayload), true) ?: [];
         }
 
-        $service->deleteRecord($table, $id, $tenantId);
+        $result = $service->deleteRecord($table, $id, $tenantId);
+
+        if ((int) ($result['affected'] ?? 0) < 1) {
+            // Nothing in scope was deleted: a missing id, or a row outside the
+            // caller's tenant or own-records scope. RecordDeleted would send
+            // audit and webhooks a "deleted" event for a row that still exists.
+            return $record;
+        }
 
         $request = request();
         $auditContext = [
@@ -2938,7 +2960,7 @@ class RecordService
                     cursorColumn: $request->input('cursor_column', RecordConfigService::cursorDefaultColumn()),
                     limit: $perPage ?? $limit,
                     tenantEnabled: $tenantEnabled,
-                    queryFingerprint: app(RecordCacheService::class)->queryFingerprint($request)
+                    queryFingerprint: app(RecordCacheService::class)->queryFingerprint($request, $table)
                 );
             } else {
                 $cacheKey = $service->generateOptimizedCacheKey(
@@ -2948,7 +2970,7 @@ class RecordService
                     page: $page,
                     limit: $perPage ?? $limit,
                     tenantEnabled: $tenantEnabled,
-                    queryFingerprint: app(RecordCacheService::class)->queryFingerprint($request)
+                    queryFingerprint: app(RecordCacheService::class)->queryFingerprint($request, $table)
                 );
             }
 
@@ -3236,7 +3258,7 @@ class RecordService
             tenantId: $tenantId,
             select: $effectiveSelectParam,
             tenantEnabled: $tenantEnabled,
-            queryFingerprint: $this->cacheService()->queryFingerprint($request)
+            queryFingerprint: $this->cacheService()->queryFingerprint($request, $table)
         );
         if ($this->isCacheableRequest(request: $request, table: $table)) {
             $cachedRecord = QueryCacheService::get($recordCacheKey);
@@ -3247,6 +3269,7 @@ class RecordService
 
         $builder = $this->createReadBuilder($actualTableName);
         $this->applyTenantFilter($builder, $actualTableName, $tenantId);
+        OwnRecordsScope::apply($builder, $table, $actualTableName);
 
         if ($tableSchema->softDeletes && !$request->boolean('with_trashed')) {
             $builder->whereNull($actualTableName . '.deleted_at');

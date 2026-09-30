@@ -5,11 +5,69 @@ declare(strict_types=1);
 namespace Sopheak\Core\Utilities;
 
 use Illuminate\Support\Str;
+use Sopheak\Core\Authorization\PermissionService;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Database\Eloquent\Model;
 use Sopheak\Core\Constants\RecordConstants;
 use Sopheak\Core\Services\RecordConfigService;
 
 class PermissionUtils
 {
+    /**
+     * Whether the configured `permissions.super_admin_callback` identifies
+     * $user as a super admin. A super admin bypasses action authorization and
+     * is never restricted to their own records.
+     */
+    public static function isSuperAdmin(mixed $user): bool
+    {
+        $callback = config('permissions.super_admin_callback');
+
+        return null !== $user && null !== $callback && (bool) $callback($user);
+    }
+
+    /**
+     * Whether $user holds any of $permissions, decided the one way the package
+     * decides every permission: a custom `record.authorization` handler when
+     * configured, else the built-in permission module when `permissions.enabled`,
+     * else Laravel's Gate.
+     *
+     * The built-in module is asked directly rather than through the Gate
+     * abilities PermissionRegistrar registers at boot, so a permission created
+     * after boot is honoured immediately, including on long-running workers.
+     *
+     * @param array<int, string> $permissions
+     */
+    public static function userHasAnyPermission(mixed $user, array $permissions, string $table, string $action): bool
+    {
+        if (null === $user || [] === $permissions) {
+            return false;
+        }
+
+        $authHandler = config('record.authorization');
+        $gate = null === $authHandler ? Gate::forUser($user) : null;
+        $permissionService = null;
+        $permissionUser = $user instanceof Model ? $user : null;
+
+        foreach ($permissions as $permission) {
+            if (null !== $authHandler) {
+                $granted = is_string($authHandler)
+                    ? (bool) app($authHandler)->handle($user, $permission, $table, $action)
+                    : (bool) $authHandler($user, $permission, $table, $action);
+            } elseif (config('permissions.enabled', false)) {
+                $permissionService ??= app(PermissionService::class);
+                $granted = $permissionUser instanceof Model && $permissionService->userHasPermission($permissionUser, $permission);
+            } else {
+                $granted = $gate->allows($permission);
+            }
+
+            if ($granted) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Determine if an action on a table is public (no auth required) based on config.
      */

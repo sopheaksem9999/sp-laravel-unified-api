@@ -359,13 +359,6 @@ class McpTenantIsolationTest extends TestCase
     /** @test */
     public function a_nested_write_through_a_non_tenant_parent_cannot_touch_another_tenants_child(): void
     {
-        $this->markTestSkipped(
-            'Known gap, tracked in docs/bug-reports/2026-09-27-nested-relationship-write-tenant-scope.md: '
-            . 'RelationshipResolverUtils::processRelatedData() applies no tenant filter to child writes when the '
-            . 'parent is not tenant-scoped. Pre-existing and reproducible over plain HTTP too, so it is not a '
-            . 'defect of the MCP tenant resolution this suite covers. Un-skip when that report is fixed.'
-        );
-
         $this->seedNotesWithWidgetChildren();
 
         $this->callTool('update_notes', [

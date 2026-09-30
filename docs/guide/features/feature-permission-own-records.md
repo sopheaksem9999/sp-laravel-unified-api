@@ -140,11 +140,66 @@ A user holding `viewOwn:invoice` gets only their own rows from
   the first match wins.
 - The check runs only when a user is authenticated (`Auth::check()`); guests
   fall through to normal table auth.
-- The check applies to list queries only; single-record reads and writes are
-  not affected.
-- `record.restrict_to_own_records` exists in the shipped config but is
-  **not wired up** in the current runtime — the permission-prefix check above
-  is the only live own-records path.
+- The restriction applies to **every** operation on the table, over both HTTP
+  and MCP: list, by-id read, update, delete, restore, force-delete, bulk
+  update/delete, and upsert. A refused by-id read or write returns exactly what
+  a nonexistent id returns, so it does not reveal that the row exists. A refused
+  upsert — one that would overwrite another user's row through `match_on`, the
+  primary key, or any other unique key — returns `403`.
+- **Relationships follow the same rule.** A row of a restricted table is never
+  embedded (`?select=*,rel(*)`, at any nesting depth), matched by a relationship
+  filter (`?rel.col=eq.x`), updated or deleted through a nested write, or attached
+  by id to a many-to-many or has-many-through relationship unless the caller could
+  reach it on that table directly. An embedded belongsTo the caller cannot see
+  comes back as `null`; an attach of such an id is refused with `422`.
+- `record.restrict_to_own_records` is **deprecated and has no effect**. It was
+  never wired into the runtime; the `viewOwn` permission above is the only
+  own-records mechanism.
+
+## How the `viewOwn` check is decided
+
+Whether a user holds `viewOwn:{pmsName}` is decided by exactly the same path as
+every action permission (`PermissionUtils::userHasAnyPermission()`), so it always
+agrees with how your application authorizes:
+
+1. **Super admin** — a user identified by `permissions.super_admin_callback` is
+   never restricted to their own records.
+2. **Custom handler** — when `record.authorization` is set, it is asked with the
+   action **`'view_own'`**, so a handler that decides on `$action` never mistakes
+   this question for the real read check.
+3. **Built-in permission module** — when `permissions.enabled` is true, the
+   permission is checked directly against the database, so a permission created
+   after the application booted applies immediately, including on long-running
+   workers such as Octane.
+4. **Laravel Gate** — otherwise.
+
+**Gate always counts.** `viewOwn` *narrows* access, so a user is restricted when
+**either** the configured mode above **or** Laravel's Gate grants it. An app on a
+custom handler or the built-in module that grants `viewOwn` through
+`Gate::define` stays restricted, and adding Gate can only ever narrow access.
+
+**A mode that cannot answer is not a grant.** If the handler throws for a
+`viewOwn:*` permission it does not know (Spatie's `hasPermissionTo()` throws
+`PermissionDoesNotExist` for an unseeded permission), the exception is reported
+and the handler is treated as not granting it; Gate still decides. A throwing
+`super_admin_callback` is likewise reported and treated as "not a super admin".
+
+> **Super admins and `Gate::before`.** A blanket `Gate::before(fn () => true)`
+> also answers yes to `viewOwn:*`, which would confine a super admin to their own
+> rows. Identify super admins with `permissions.super_admin_callback` — it is
+> checked first — or have your `Gate::before` return `null` for `viewOwn:*`
+> abilities.
+
+## Caching
+
+Cached reads are keyed per owner scope. A `viewOwn` user never receives rows
+another caller cached — an admin, or a different `viewOwn` user — and callers
+without `viewOwn` keep exactly the cache keys they had before, so enabling this
+invalidates nothing.
+
+The key also covers every table the request embeds. A cached response on an
+unrestricted table that includes a restricted one (`/comments?select=*,widget(*)`
+with `viewOwn:widget`) is kept per owner as well.
 
 ## Real-World Example
 
