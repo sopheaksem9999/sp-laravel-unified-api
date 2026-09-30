@@ -96,6 +96,7 @@ trait AuditableTrait
 
         // Handle audit logging based on queue configuration
         if (AuditLogService::isAuditQueueEnabled()) {
+            AuditLogService::rememberRequestContext();
             AuditLogJob::dispatch(
                 event: $auditLogEventEnum,
                 entityName: $entityName,
