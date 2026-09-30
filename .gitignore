@@ -40,9 +40,10 @@ build
 .claude/
 .superpowers/
 .php-cs-fixer.cache
-/.opencode
-.opencode/
-graphify-out/
 /Docs/bug-reports/
 /Docs/feature-requests/
 /.commandcode
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
+.mcp.json

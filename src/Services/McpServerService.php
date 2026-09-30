@@ -7,7 +7,6 @@ namespace Sopheak\Core\Services;
 use Throwable;
 use Closure;
 use Exception;
-use Sopheak\Core\Authorization\PermissionService;
 use Sopheak\Core\Utilities\RecordUtils;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
 use Sopheak\Core\Types\RecordFunctionType;
@@ -16,8 +15,6 @@ use Sopheak\Core\Types\RecordValidationType;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Utilities\PermissionUtils;
 use Sopheak\Core\Services\RecordConfigService;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Gate;
 use Sopheak\Core\Constants\RecordConstants;
 use Sopheak\Core\Enums\RecordRelationshipsEnum;
 
@@ -551,29 +548,14 @@ class McpServerService
             $perms = PermissionUtils::mapPermissions($table, $action);
         }
 
-        $allowed = false;
-        $authHandler = config('record.authorization');
-        $gate = $authHandler === null ? Gate::forUser($user) : null;
-        $permissionService = null;
-        $permissionUser = $user instanceof Model ? $user : null;
-
-        foreach ($perms as $perm) {
-            if ($authHandler !== null) {
-                $granted = is_string($authHandler)
-                    ? (bool) app($authHandler)->handle($user, $perm, $table, $action)
-                    : (bool) $authHandler($user, $perm, $table, $action);
-            } elseif (config('permissions.enabled', false)) {
-                $permissionService ??= app(PermissionService::class);
-                $granted = $permissionUser instanceof Model && $permissionService->userHasPermission($permissionUser, $perm);
-            } else {
-                $granted = $gate->allows($perm);
-            }
-
-            if ($granted) {
-                $allowed = true;
-                break;
-            }
+        // Same decision as HasControllerHelpers::authorizeAction(), including
+        // the super-admin bypass this copy used to lack: a super admin allowed
+        // over HTTP was Forbidden over MCP.
+        if (PermissionUtils::isSuperAdmin($user)) {
+            return;
         }
+
+        $allowed = PermissionUtils::userHasAnyPermission($user, $perms, $table, $action);
 
         if (!$allowed) {
             throw new Exception(message: 'Forbidden', code: -32002);

@@ -235,6 +235,11 @@ class RecordConfigService
         return (string) config('record.permission_separator', ':');
     }
 
+    /**
+     * @deprecated Never wired into the runtime and has no effect. Own-records
+     *             restriction is driven by the viewOwn:{pmsName} permission;
+     *             see OwnRecordsScope.
+     */
     public static function restrictToOwnRecords(): bool
     {
         return (bool) config('record.restrict_to_own_records', false);
