@@ -35,6 +35,22 @@ When audit records are generated, sensitive attributes configured under `columnH
 - `audit.queue_enabled`
 - `audit.log_relationships`
 
+## Request Columns (`user_id`, `ip_address`, `user_agent`, `request_id`)
+
+`audit.queue_enabled` is the only switch that decides whether an audit entry is
+queued — for HTTP CRUD and for `RecordService::executeCreate/Update/Delete`
+(the MCP tools, attachments and your own service calls) alike. With it off,
+every row is written during the request, whatever your `QUEUE_CONNECTION` is.
+
+Each row records who made the request and from where. With
+`audit.queue_enabled`, the row is written later by a queue worker, which has no
+HTTP request and no authenticated user. The package captures these values when
+the entry is queued, carries them with the job through Laravel's `Context`
+(hidden, so they never appear in logs), and writes them in the worker. The same
+values fill `metadata.change_summary` and `metadata.user_id` / `user_name`. A
+custom `audit.job_class` needs no change, because Context travels with every
+queued job.
+
 ## Row Narrative (`title`, `subject`, `recap`)
 
 These three human-readable columns are never stored empty. A value you supply

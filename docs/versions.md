@@ -12,7 +12,7 @@ keywords:
 
 The package follows [Semantic Versioning](https://semver.org) (MAJOR.MINOR.PATCH).
 
-- **Current version:** `0.5.02` (2026-09-27)
+- **Current version:** `0.5.03` (2026-09-30)
 - **Installation:** `composer require sopheak/sp-laravel-api`
 - **Full details:** see the [Changelog](/changelog)
 
@@ -20,6 +20,7 @@ The package follows [Semantic Versioning](https://semver.org) (MAJOR.MINOR.PATCH
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [0.5.03](/changelog#0503---2026-09-30) | 2026-09-30 | SQL injection via X-Tenant-ID in relationship includes, viewOwn enforced on by-id reads/writes/relationships/cache, nested writes scoped by child tenant and owner, audit rows keep actor/IP/agent (queued and service-level CRUD) |
 | [0.5.02](/changelog#0502---2026-09-27) | 2026-09-27 | MCP tenant isolation (cross-tenant read/write leak), integer tenant IDs in audit logging, userstamps honour the configured auth guard, bulk paths in OpenAPI |
 | [0.5.01](/changelog#0501---2026-09-19) | 2026-09-19 | Bulk endpoints accept their documented `{"data": [...]}` / `{"ids": [...]}` request bodies |
 | [0.4.99](/changelog#0499---2026-09-17) | 2026-09-17 | Extract enum values in `SyncRecordColumnsCommand`, sanitize `columnHiddens` in single-record reads and relational subqueries |
