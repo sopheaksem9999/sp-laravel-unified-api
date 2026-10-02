@@ -13,6 +13,14 @@ All notable changes to `sp-laravel-api` will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The built-in permission module bypassed Laravel's Gate**: with `permissions.enabled`, the API, MCP and `viewOwn` checks asked the module directly, so Telescope's Gate watcher never recorded an API permission check and the app's Gate callbacks had no say. `$user->can()` / `@can` disagreed with the API too: abilities were defined once from the permissions that existed at boot — a permission created later stayed denied until the process restarted (Octane, queue and Horizon workers) — `super_admin_callback` never reached `can()`, and the boot-time definitions overwrote any ability the app had defined under the same name. `PermissionRegistrar` now answers package permissions through a single `Gate::before` hook read at check time, and every package check goes through Gate. See `tests/Feature/PermissionGateIntegrationTest.php`.
+
+### Notes
+
+- **Upgrade note — Gate now decides with the built-in module**: your app's own `Gate::before` / `Gate::after` callbacks and abilities now apply to API, MCP and `viewOwn` decisions when `permissions.enabled` is on, as they always did with the module off. A `Gate::before` that returns `true` for admins now grants API access too; one returning `false` denies it. `Gate::has('view:invoice')` is no longer true for package permissions, since they are answered by the hook instead of being defined one by one.
+
 ## [0.5.03] - 2026-09-30
 
 ### Security

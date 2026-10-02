@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace Sopheak\Core\Utilities;
 
 use Illuminate\Support\Str;
-use Sopheak\Core\Authorization\PermissionService;
+use Sopheak\Core\Authorization\PermissionRegistrar;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Database\Eloquent\Model;
 use Sopheak\Core\Constants\RecordConstants;
 use Sopheak\Core\Services\RecordConfigService;
 
@@ -28,12 +27,13 @@ class PermissionUtils
     /**
      * Whether $user holds any of $permissions, decided the one way the package
      * decides every permission: a custom `record.authorization` handler when
-     * configured, else the built-in permission module when `permissions.enabled`,
-     * else Laravel's Gate.
+     * configured, else Laravel's Gate.
      *
-     * The built-in module is asked directly rather than through the Gate
-     * abilities PermissionRegistrar registers at boot, so a permission created
-     * after boot is honoured immediately, including on long-running workers.
+     * With the built-in module (`permissions.enabled`) Gate answers the
+     * package's permissions through PermissionRegistrar's Gate::before hook,
+     * read at check time — so a permission created after boot is honoured
+     * immediately, and every decision is visible to Telescope's Gate watcher
+     * and to the app's own Gate callbacks.
      *
      * @param array<int, string> $permissions
      */
@@ -44,18 +44,19 @@ class PermissionUtils
         }
 
         $authHandler = config('record.authorization');
+        if (null === $authHandler && config('permissions.enabled', false)) {
+            // Registered at boot; this covers the module being enabled later.
+            // Before forUser(), which copies the Gate's callbacks.
+            app(PermissionRegistrar::class)->registerPermissions();
+        }
+
         $gate = null === $authHandler ? Gate::forUser($user) : null;
-        $permissionService = null;
-        $permissionUser = $user instanceof Model ? $user : null;
 
         foreach ($permissions as $permission) {
             if (null !== $authHandler) {
                 $granted = is_string($authHandler)
                     ? (bool) app($authHandler)->handle($user, $permission, $table, $action)
                     : (bool) $authHandler($user, $permission, $table, $action);
-            } elseif (config('permissions.enabled', false)) {
-                $permissionService ??= app(PermissionService::class);
-                $granted = $permissionUser instanceof Model && $permissionService->userHasPermission($permissionUser, $permission);
             } else {
                 $granted = $gate->allows($permission);
             }

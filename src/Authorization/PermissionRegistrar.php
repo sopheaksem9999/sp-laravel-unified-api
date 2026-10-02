@@ -8,6 +8,9 @@ use Illuminate\Cache\CacheManager;
 use Illuminate\Contracts\Auth\Access\Gate;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
+use Sopheak\Core\Utilities\PermissionUtils;
+use Throwable;
+use WeakMap;
 use Sopheak\Core\Authorization\Models\Permission;
 use Sopheak\Core\Authorization\Traits\HasRoles;
 use Sopheak\Core\Services\RecordConfigService;
@@ -20,19 +23,84 @@ class PermissionRegistrar
 
     protected string $configHashKey = 'sp_permissions_config_hash';
 
+    /**
+     * Gates the hook is already registered on.
+     *
+     * @var null|WeakMap<Gate, true>
+     */
+    private static ?WeakMap $hookedGates = null;
+
     public function __construct(protected Gate $gate, protected CacheManager $cache) {}
 
+    /**
+     * Make the package's permissions answerable through Laravel's Gate.
+     *
+     * One Gate::before hook answers every permission at the moment it is
+     * checked, so `$user->can()`, `@can`, `authorize()` and the package's own
+     * API checks all go through Gate — visible to Telescope's Gate watcher and
+     * to the app's Gate callbacks. Abilities used to be defined once, from the
+     * permissions that existed at boot: a permission created later was unknown
+     * to Gate until the process restarted, and the boot-time definitions
+     * replaced any ability the app had defined under the same name.
+     *
+     * Idempotent per Gate instance.
+     */
     public function registerPermissions(): void
     {
-        Permission::query()->pluck('name')->each(function (string $name): void {
-            $this->gate->define($name, function (Model $user) use ($name) {
-                if ($this->userHasTrait($user)) {
-                    return $user->hasPermissionTo($name);
-                }
+        self::$hookedGates ??= new WeakMap();
+        if (isset(self::$hookedGates[$this->gate])) {
+            return;
+        }
 
-                return false;
-            });
-        });
+        self::$hookedGates[$this->gate] = true;
+
+        $this->gate->before(fn($user, string $ability): ?bool => $this->answerAbility($user, $ability));
+    }
+
+    /**
+     * true when $user holds $ability through the package — directly, through
+     * a role, or as a `super_admin_callback` super admin on a package
+     * permission. null otherwise, so the app's own abilities, policies and
+     * Gate callbacks still decide; an ability nobody defines denies.
+     */
+    public function answerAbility(mixed $user, string $ability): ?bool
+    {
+        if ($user instanceof Model && $this->userHasTrait($user) && $user->hasPermissionTo($ability)) {
+            return true;
+        }
+
+        if ($this->isSuperAdminSafely($user) && $this->isPackagePermission($ability)) {
+            return true;
+        }
+
+        return null;
+    }
+
+    /**
+     * The hook runs for every Gate check in the app, so a throwing
+     * `super_admin_callback` must not break unrelated abilities: it is
+     * reported and the user treated as not a super admin.
+     */
+    protected function isSuperAdminSafely(mixed $user): bool
+    {
+        try {
+            return PermissionUtils::isSuperAdmin($user);
+        } catch (Throwable $throwable) {
+            report($throwable);
+
+            return false;
+        }
+    }
+
+    protected function isPackagePermission(string $ability): bool
+    {
+        $names = $this->cache->remember(
+            $this->cacheKey . '_names_v' . $this->getCacheVersion(),
+            config('permissions.cache_ttl', 3600),
+            fn(): array => Permission::query()->pluck('name')->all()
+        );
+
+        return in_array($ability, (array) $names, true);
     }
 
     public function autoRegisterFromConfig(): void

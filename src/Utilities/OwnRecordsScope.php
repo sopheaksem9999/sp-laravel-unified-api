@@ -303,6 +303,9 @@ final class OwnRecordsScope
      * granting it, which is exactly what it did before it was consulted at
      * all; the exception is reported, not swallowed, and Gate still decides.
      *
+     * Without a custom handler the configured mode already is Gate, so Gate is
+     * asked once — one viewOwn entry in Telescope, not two.
+     *
      * @param array<int, string> $permissions
      */
     private static function holdsViewOwn(mixed $user, array $permissions, string $table): bool
@@ -311,15 +314,19 @@ final class OwnRecordsScope
             return false;
         }
 
+        $gateAsked = false;
+
         try {
             if (PermissionUtils::userHasAnyPermission($user, $permissions, $table, self::VIEW_OWN_ACTION)) {
                 return true;
             }
+
+            $gateAsked = null === config('record.authorization');
         } catch (Throwable $throwable) {
             report($throwable);
         }
 
-        return Gate::forUser($user)->any($permissions);
+        return !$gateAsked && Gate::forUser($user)->any($permissions);
     }
 
     /**
