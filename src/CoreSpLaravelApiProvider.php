@@ -164,8 +164,10 @@ class CoreSpLaravelApiProvider extends ServiceProvider
             $this->app->booted(function (): void {
                 try {
                     $registrar = app(PermissionRegistrar::class);
-                    $registrar->autoRegisterFromConfig();
+                    // Needs no database, so it runs before auto-registration,
+                    // which fails until the permission tables are migrated.
                     $registrar->registerPermissions();
+                    $registrar->autoRegisterFromConfig();
                 } catch (Throwable) {
                     // Permission tables may not exist yet (pre-migration)
                     // Silently skip — auto-registration will happen on next boot
