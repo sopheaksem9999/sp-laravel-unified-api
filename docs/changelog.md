@@ -13,6 +13,10 @@ All notable changes to `sp-laravel-api` will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+
+- **Nested writes bypassed the child table's authorization**: a nested create, update or delete (for example `PUT /invoices/1` with `items: [...]`) checked only the parent's permission and the relationship's `allow*` flags. A user allowed to update an invoice could create, edit and delete its items with no `invoice_item` permission, even on a table configured `canCreate: false` / `canDelete: false`. Every child operation is now authorised as a direct request on the child table, on the HTTP CRUD and bulk endpoints, the async bulk job and the Data MCP: a missing permission is `403` (MCP `-32002`), a disabled `can*` flag `422`, and nothing is written. The Data MCP now runs create and update in a transaction, so a refused child also rolls back the parent. Trusted app code is unchanged: direct `RecordService` calls, table and global triggers, post-write hooks and record event listeners write nested children under their own authority, while data a before-trigger merges into the request is still checked. The async bulk job now starts from no user, so a job whose own user cannot be restored never runs as the previous job's user. See `tests/Feature/NestedChildWriteAuthorizationTest.php`.
+
 ### Fixed
 
 - **The built-in permission module bypassed Laravel's Gate**: with `permissions.enabled`, the API, MCP and `viewOwn` checks asked the module directly, so Telescope's Gate watcher never recorded an API permission check and the app's Gate callbacks had no say. `$user->can()` / `@can` disagreed with the API too: abilities were defined once from the permissions that existed at boot — a permission created later stayed denied until the process restarted (Octane, queue and Horizon workers) — `super_admin_callback` never reached `can()`, and the boot-time definitions overwrote any ability the app had defined under the same name. `PermissionRegistrar` now answers package permissions through a single `Gate::before` hook read at check time, and every package check goes through Gate. See `tests/Feature/PermissionGateIntegrationTest.php`.
@@ -20,6 +24,7 @@ All notable changes to `sp-laravel-api` will be documented in this file.
 ### Notes
 
 - **Upgrade note — Gate now decides with the built-in module**: your app's own `Gate::before` / `Gate::after` callbacks and abilities now apply to API, MCP and `viewOwn` decisions when `permissions.enabled` is on, as they always did with the module off. A `Gate::before` that returns `true` for admins now grants API access too; one returning `false` denies it. `Gate::has('view:invoice')` is no longer true for package permissions, since they are answered by the hook instead of being defined one by one.
+- **Upgrade note — nested writes need the child permission**: users who wrote child rows through a parent (for example invoice items through `PUT /invoices/{id}`) now also need the child table's `create:` / `update:` / `delete:` permission. Grant those permissions to the affected roles before upgrading.
 
 ## [0.5.03] - 2026-09-30
 

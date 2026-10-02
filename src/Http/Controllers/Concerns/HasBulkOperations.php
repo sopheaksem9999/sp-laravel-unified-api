@@ -18,6 +18,7 @@ use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Utilities\DefaultValidationUtils;
+use Sopheak\Core\Utilities\NestedWriteAuthorizer;
 
 /**
  * @property RecordService $recordService
@@ -101,7 +102,7 @@ trait HasBulkOperations
                 return $tenantError;
             }
 
-            $result = $this->recordService->bulkRecord($request, $table, $tenantId, $legacyAction);
+            $result = NestedWriteAuthorizer::enforce(fn (): array => $this->recordService->bulkRecord($request, $table, $tenantId, $legacyAction));
 
             return RecordApiResponseService::successWrapped($result['data'], $result['meta']);
         } catch (RecordNotFoundException $e) {

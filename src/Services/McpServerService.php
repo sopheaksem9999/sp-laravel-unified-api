@@ -17,6 +17,9 @@ use Sopheak\Core\Utilities\PermissionUtils;
 use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Constants\RecordConstants;
 use Sopheak\Core\Enums\RecordRelationshipsEnum;
+use Sopheak\Core\Exceptions\NestedWriteRefusedException;
+use Sopheak\Core\Utilities\NestedWriteAuthorizer;
+use Illuminate\Support\Facades\DB;
 
 class McpServerService
 {
@@ -415,8 +418,8 @@ class McpServerService
             $result = match ($action) {
                 'list' => RecordService::executeGetByFilter($table, $queryParams, $tenantId, true, 'id'),
                 'read' => RecordService::executeGetById($table, $id, $queryParams, $tenantId),
-                'create' => RecordService::executeCreate($table, $payload, $queryParams, $tenantId),
-                'update' => RecordService::executeUpdate($table, $id, $payload, $queryParams, $tenantId),
+                'create' => NestedWriteAuthorizer::enforce(fn (): array => DB::transaction(fn (): array => RecordService::executeCreate($table, $payload, $queryParams, $tenantId))),
+                'update' => NestedWriteAuthorizer::enforce(fn (): array => DB::transaction(fn (): array => RecordService::executeUpdate($table, $id, $payload, $queryParams, $tenantId))),
                 'delete' => RecordService::executeDelete($table, $id, $queryParams, $tenantId),
             };
 
@@ -426,6 +429,12 @@ class McpServerService
             }
 
             return $this->dataToolResult($result);
+        } catch (NestedWriteRefusedException $refused) {
+            // Same contract as a refused parent (authorizeAction()): a
+            // JSON-RPC error, not an isError tool result.
+            throw PermissionUtils::DECISION_UNAUTHENTICATED === $refused->decision
+                ? new Exception(message: 'Unauthenticated', code: -32001)
+                : new Exception(message: 'Forbidden', code: -32002);
         } catch (Exception $exception) {
             return [
                 'isError' => true,
@@ -519,45 +528,15 @@ class McpServerService
 
     protected function authorizeAction(string $table, string $action): void
     {
-        if (PermissionUtils::isPublicAction($table, $action)) {
-            return;
-        }
+        // Same decision as HasControllerHelpers::authorizeAction(), mapped to
+        // the MCP error codes.
+        $decision = PermissionUtils::actionDecision(auth(RecordConfigService::authGuard())->user(), $table, $action);
 
-        $guard = RecordConfigService::authGuard();
-        $user = auth($guard)->user();
-        if (!$user) {
+        if (PermissionUtils::DECISION_UNAUTHENTICATED === $decision) {
             throw new Exception(message: 'Unauthenticated', code: -32001);
         }
 
-        $tableSchema = SchemaRegistryUtils::getTable($table);
-        if ($tableSchema instanceof RecordTableType) {
-            if (is_null($tableSchema->pmsName)) {
-                return;
-            }
-
-            if (is_array($tableSchema->pmsName) && [] === $tableSchema->pmsName) {
-                return;
-            }
-        }
-
-        if ($tableSchema instanceof RecordTableType && is_array($tableSchema->permissions) && isset($tableSchema->permissions[$action])) {
-            $perms = (array) $tableSchema->permissions[$action];
-        } elseif ($action === 'force_delete' && $tableSchema instanceof RecordTableType && is_array($tableSchema->permissions) && !isset($tableSchema->permissions['force_delete'])) {
-            $perms = PermissionUtils::mapPermissions($table, 'force_delete');
-        } else {
-            $perms = PermissionUtils::mapPermissions($table, $action);
-        }
-
-        // Same decision as HasControllerHelpers::authorizeAction(), including
-        // the super-admin bypass this copy used to lack: a super admin allowed
-        // over HTTP was Forbidden over MCP.
-        if (PermissionUtils::isSuperAdmin($user)) {
-            return;
-        }
-
-        $allowed = PermissionUtils::userHasAnyPermission($user, $perms, $table, $action);
-
-        if (!$allowed) {
+        if (PermissionUtils::DECISION_FORBIDDEN === $decision) {
             throw new Exception(message: 'Forbidden', code: -32002);
         }
     }

@@ -80,6 +80,15 @@ Update a parent record and manage its relationships simultaneously. You can:
 
 Children are scoped to what the caller could write on the child table directly:
 
+- Every child create, update or delete needs the child table's own permission
+  (`create:` / `update:` / `delete:` + its `pmsName`) and its `canCreate` /
+  `canUpdate` / `canDelete` flag, exactly as a direct request would. A missing
+  permission fails the whole request with `403`, and a disabled flag with
+  `422`; nothing is written. Attaching or detaching an existing related record
+  needs only the parent's update permission.
+  Your own triggers, hooks and record event listeners are trusted app code:
+  nested writes they make themselves are not checked against the requesting
+  user.
 - An update or delete only touches a child that belongs to this parent, to the
   caller's tenant (the child table's own tenant column, even when the parent is
   not tenant-scoped), and — under [`viewOwn`](/features/feature-permission-own-records)
