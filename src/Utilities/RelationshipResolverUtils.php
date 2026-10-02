@@ -745,10 +745,17 @@ class RelationshipResolverUtils
                 $allowedCols = array_values(array_diff($allowedCols, $writeDisabled));
             }
 
+            // Only hasMany / morphMany arrays are strict. Any other type reaching this branch
+            // (a belongsTo object echoed back from a `select=*,rel(*)` read) keeps ignoring
+            // what it cannot write, so a GET -> PUT round trip still works.
+            $strictItems = in_array($type, ['hasMany', 'morphMany'], true);
+
             foreach ($relatedData as $item) {
-                if (!is_array($item)) {
+                if (!$strictItems && !is_array($item)) {
                     continue;
                 }
+
+                $item = self::normalizeNestedItem($item, $table, (string) $alias, $relatedPk, false);
 
                 self::assertChildTenantResolved($table, (string) $alias, $relatedSchema, $childTenant);
 
@@ -970,6 +977,39 @@ class RelationshipResolverUtils
     }
 
     /**
+     * A bare id in a many-to-many / hasManyThrough array means "attach this
+     * record" and is rewritten to {pk: id}. Everywhere else a non-object item
+     * used to be dropped silently, which hid client mistakes; it is a 422 now.
+     *
+     * @return array<string, mixed>
+     */
+    private static function normalizeNestedItem(mixed $item, string $table, string $alias, string $primaryKey, bool $attachable): array
+    {
+        if (is_array($item)) {
+            return $item;
+        }
+
+        if (is_int($item) || is_string($item)) {
+            if ('' === $item || 0 === $item || '0' === $item) {
+                throw new InvalidArgumentException(sprintf("Relationship '%s' on table '%s' got an empty value; send a record id or an object.", $alias, $table));
+            }
+
+            if ($attachable) {
+                return [$primaryKey => $item];
+            }
+
+            throw new InvalidArgumentException(sprintf(
+                "Relationship '%s' on table '%s' expects objects, got scalar %s. Send {\"id\": ...} to update a child or {...fields} to create one.",
+                $alias,
+                $table,
+                $item
+            ));
+        }
+
+        throw new InvalidArgumentException(sprintf("Relationship '%s' on table '%s' got an empty value; send a record id or an object.", $alias, $table));
+    }
+
+    /**
      * @param array<string, mixed> $config
      */
     private static function processBelongsToManyOperation(string $table, string $alias, array $data, mixed $mainId, array $config, array $schema, mixed $tenantId, bool $allowCreate, bool $allowUpdate, bool $allowDelete): void
@@ -991,9 +1031,7 @@ class RelationshipResolverUtils
         $childTenant = self::childTenant($tenantId);
 
         foreach ($data as $item) {
-            if (!is_array($item)) {
-                continue;
-            }
+            $item = self::normalizeNestedItem($item, $table, $alias, $relatedPk, true);
 
             $isDelete = ($item['_delete'] ?? false) || ($item['_destroy'] ?? false);
             $relatedId = $item[$relatedPk] ?? null;
@@ -1136,9 +1174,7 @@ class RelationshipResolverUtils
         $childTenant = self::childTenant($tenantId);
 
         foreach ($data as $item) {
-            if (!is_array($item)) {
-                continue;
-            }
+            $item = self::normalizeNestedItem($item, $table, $alias, $targetPk, true);
 
             $isDelete = ($item['_delete'] ?? false) || ($item['_destroy'] ?? false);
             $targetId = $item[$targetPk] ?? null;

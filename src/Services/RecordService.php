@@ -52,13 +52,13 @@ class RecordService
      * editing a customer's row would claim it), which also breaks `viewOwn:*`
      * scoping for tables whose owner column resolves to an audit stamp.
      */
-    private const CREATE_AUDIT_COLUMNS = ['created_by', 'created_by_id'];
+    public const CREATE_AUDIT_COLUMNS = ['created_by', 'created_by_id'];
 
     /**
      * Audit columns that record *who wrote the row last*. Written on create and
      * on every update.
      */
-    private const UPDATE_AUDIT_COLUMNS = ['updated_by', 'last_updated_by', 'last_updated_by_id'];
+    public const UPDATE_AUDIT_COLUMNS = ['updated_by', 'last_updated_by', 'last_updated_by_id'];
 
     /**
      * Create a new record with all related processing.

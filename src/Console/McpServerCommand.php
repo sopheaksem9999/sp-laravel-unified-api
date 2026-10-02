@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sopheak\Core\Console;
 
 use Sopheak\Core\Services\McpServerService;
+use Sopheak\Core\Mcp\McpDriver;
 use Sopheak\Core\Support\CacheRequestContext;
 use Illuminate\Console\Command;
 
@@ -49,6 +50,22 @@ class McpServerCommand extends Command
         $tenant = $this->option('tenant');
         if (is_string($tenant) && '' !== trim($tenant)) {
             request()->attributes->set('resolved_tenant_id', trim($tenant));
+        }
+
+        if (McpDriver::isLaravel()) {
+            McpDriver::assertInstalled();
+
+            $server = app(\Laravel\Mcp\Server\Registrar::class)->getLocalServer('sp-laravel-api');
+            if (null === $server) {
+                $this->error('The MCP server is not registered: enable record.mcp.enabled.');
+
+                return;
+            }
+
+            // laravel/mcp owns STDIN/STDOUT from here until the client closes the pipe.
+            $server();
+
+            return;
         }
 
         $mcpService = app(McpServerService::class);

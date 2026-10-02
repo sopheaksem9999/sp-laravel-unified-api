@@ -1,0 +1,86 @@
+{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+        "resources": [
+            {
+                "uri": "schema://sp_webhook_endpoints",
+                "name": "sp_webhook_endpoints Schema",
+                "description": "Database schema and configuration for sp_webhook_endpoints",
+                "mimeType": "application/json"
+            },
+            {
+                "uri": "schema://sp_webhook_subscriptions",
+                "name": "sp_webhook_subscriptions Schema",
+                "description": "Database schema and configuration for sp_webhook_subscriptions",
+                "mimeType": "application/json"
+            },
+            {
+                "uri": "schema://sp_webhook_deliveries",
+                "name": "sp_webhook_deliveries Schema",
+                "description": "Database schema and configuration for sp_webhook_deliveries",
+                "mimeType": "application/json"
+            },
+            {
+                "uri": "schema://sp_attachments",
+                "name": "sp_attachments Schema",
+                "description": "Database schema and configuration for sp_attachments",
+                "mimeType": "application/json"
+            },
+            {
+                "uri": "schema://sp_attachment_folders",
+                "name": "sp_attachment_folders Schema",
+                "description": "Database schema and configuration for sp_attachment_folders",
+                "mimeType": "application/json"
+            },
+            {
+                "uri": "schema://sp_attachment_links",
+                "name": "sp_attachment_links Schema",
+                "description": "Database schema and configuration for sp_attachment_links",
+                "mimeType": "application/json"
+            },
+            {
+                "uri": "schema://sp_audit_logs",
+                "name": "sp_audit_logs Schema",
+                "description": "Database schema and configuration for sp_audit_logs",
+                "mimeType": "application/json"
+            },
+            {
+                "uri": "schema://sp_permissions",
+                "name": "sp_permissions Schema",
+                "description": "Database schema and configuration for sp_permissions",
+                "mimeType": "application/json"
+            },
+            {
+                "uri": "schema://sp_roles",
+                "name": "sp_roles Schema",
+                "description": "Database schema and configuration for sp_roles",
+                "mimeType": "application/json"
+            },
+            {
+                "uri": "schema://invoices",
+                "name": "invoices Schema",
+                "description": "Database schema and configuration for invoices",
+                "mimeType": "application/json"
+            },
+            {
+                "uri": "schema://customers",
+                "name": "customers Schema",
+                "description": "Database schema and configuration for customers",
+                "mimeType": "application/json"
+            },
+            {
+                "uri": "schema://invoice_items",
+                "name": "invoice_items Schema",
+                "description": "Database schema and configuration for invoice_items",
+                "mimeType": "application/json"
+            },
+            {
+                "uri": "schema://tags",
+                "name": "tags Schema",
+                "description": "Database schema and configuration for tags",
+                "mimeType": "application/json"
+            }
+        ]
+    }
+}

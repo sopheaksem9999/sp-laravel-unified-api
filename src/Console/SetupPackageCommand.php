@@ -664,14 +664,22 @@ class SetupPackageCommand extends Command
                 | Configuration for the AI agent MCP integration.
                 | - enabled: Toggle the MCP feature entirely (default: false).
                 | - read_only: Globally disable MCP write tools (create, update, delete).
-                | - route_prefix: The prefix for HTTP/SSE MCP endpoints.
-                | - middleware: The middleware applied to the HTTP/SSE endpoints.
+                | - route_prefix: Deprecated, no effect. The MCP routes are always /{api_prefix}/mcp/...; kept for compatibility.
+                | - middleware: The middleware applied to the HTTP endpoints.
+                | - driver: 'legacy' (default) serves MCP from the package's own JSON-RPC
+                |   server. 'laravel' serves it through laravel/mcp (Streamable HTTP, current
+                |   protocol versions, OAuth, the Inspector); install it with
+                |   `composer require laravel/mcp`.
+                | - oauth: With the 'laravel' driver, publish OAuth discovery routes
+                |   (requires laravel/passport). Default: false.
                 */
                 'mcp' => [
                     'enabled' => env('SP_MCP_ENABLED', false),
                     'read_only' => env('SP_MCP_READ_ONLY', true),
                     'route_prefix' => env('SP_MCP_ROUTE_PREFIX', 'mcp'),
                     'middleware' => ['api', 'auth:sanctum'],
+                    'driver' => env('SP_MCP_DRIVER', 'legacy'),
+                    'oauth' => env('SP_MCP_OAUTH', false),
                 ],
 
                 /*

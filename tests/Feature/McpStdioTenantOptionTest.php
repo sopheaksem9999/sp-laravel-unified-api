@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Console\McpServerCommand;
 use Sopheak\Core\CoreSpLaravelApiProvider;
+use Sopheak\Core\Tests\Concerns\SkipsOnLaravelMcpDriver;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordTableType;
@@ -27,6 +28,8 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
  */
 class McpStdioTenantOptionTest extends TestCase
 {
+    use SkipsOnLaravelMcpDriver;
+
     use RefreshDatabase;
 
     protected function getPackageProviders($app): array
@@ -45,6 +48,7 @@ class McpStdioTenantOptionTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->skipOnLaravelMcpDriver('the legacy STDIN/STDOUT loop mocks; the laravel driver is covered by McpLaravelStdioTest and McpLaravelServerTest::tenant cases');
 
         Schema::create('widgets', function (Blueprint $t): void {
             $t->id();

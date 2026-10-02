@@ -121,9 +121,15 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
     |--------------------------------------------------------------------------
     */
     if (config('sp-api-mcp.enabled', false)) {
-        Route::post('mcp/schema', [\Sopheak\Core\Http\Controllers\ApiSchemaMcpController::class, 'handle'])
-            ->name('api_schema_mcp')
-            ->middleware(['throttle:api-reads']);
+        if (\Sopheak\Core\Mcp\McpDriver::isLaravel()) {
+            \Laravel\Mcp\Facades\Mcp::web('mcp/schema', \Sopheak\Core\Mcp\Servers\SchemaServer::class)
+                ->name('api_schema_mcp')
+                ->middleware(['throttle:api-reads', \Sopheak\Core\Http\Middleware\VerifySchemaMcpToken::class]);
+        } else {
+            Route::post('mcp/schema', [\Sopheak\Core\Http\Controllers\ApiSchemaMcpController::class, 'handle'])
+                ->name('api_schema_mcp')
+                ->middleware(['throttle:api-reads']);
+        }
     }
 
     /*
@@ -132,10 +138,29 @@ Route::prefix(RecordConfigService::apiPrefix())->middleware(['api', 'request.id'
     |--------------------------------------------------------------------------
     */
     if (config('record.mcp.enabled', false)) {
-        Route::prefix('mcp')->middleware(config('record.mcp.middleware', []))->group(function () {
-            Route::get('sse', [\Sopheak\Core\Http\Controllers\McpHttpController::class, 'handleSse'])->name('mcp.sse');
-            Route::post('message', [\Sopheak\Core\Http\Controllers\McpHttpController::class, 'handlePost'])->name('mcp.message');
-        });
+        if (\Sopheak\Core\Mcp\McpDriver::isLaravel()) {
+            // The auth middleware is attached to each route rather than to a group:
+            // laravel/mcp's own route middleware (AddWwwAuthenticateHeader) must wrap
+            // it so a 401 carries the OAuth discovery hint, and a GET/DELETE answers
+            // 405 whether or not the caller is authenticated.
+            $mcpMiddleware = config('record.mcp.middleware', []);
+
+            Route::get('mcp/sse', [\Sopheak\Core\Http\Controllers\McpHttpController::class, 'handleSse'])
+                ->name('mcp.sse')
+                ->middleware($mcpMiddleware);
+            \Laravel\Mcp\Facades\Mcp::web('mcp/message', \Sopheak\Core\Mcp\Servers\DataServer::class)
+                ->name('mcp.message')
+                ->middleware($mcpMiddleware);
+            // The Streamable HTTP endpoint: POST /{api}/mcp.
+            \Laravel\Mcp\Facades\Mcp::web('mcp', \Sopheak\Core\Mcp\Servers\DataServer::class)
+                ->name('mcp.http')
+                ->middleware($mcpMiddleware);
+        } else {
+            Route::prefix('mcp')->middleware(config('record.mcp.middleware', []))->group(function () {
+                Route::get('sse', [\Sopheak\Core\Http\Controllers\McpHttpController::class, 'handleSse'])->name('mcp.sse');
+                Route::post('message', [\Sopheak\Core\Http\Controllers\McpHttpController::class, 'handlePost'])->name('mcp.message');
+            });
+        }
     }
 
 
