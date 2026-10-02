@@ -24,6 +24,7 @@ use Sopheak\Core\Jobs\ProcessBulkOperationJob;
 use Sopheak\Core\Services\RecordApiResponseService;
 use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Services\RecordService;
+use Sopheak\Core\Utilities\NestedWriteAuthorizer;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordValidationType;
 use Sopheak\Core\Utilities\PermissionUtils;
@@ -42,7 +43,9 @@ trait HasControllerHelpers
     {
         DB::beginTransaction();
         try {
-            $result = $fn();
+            // Nested child writes made by this request are authorised as
+            // direct requests on the child table (NestedWriteAuthorizer).
+            $result = NestedWriteAuthorizer::enforce(fn (): mixed => $fn());
             DB::commit();
             return $result;
         } catch (Throwable $throwable) {
@@ -171,46 +174,15 @@ trait HasControllerHelpers
      */
     private function authorizeAction(string $table, string $action): void
     {
-        if (PermissionUtils::isPublicAction($table, $action)) {
-            return;
-        }
+        $decision = PermissionUtils::actionDecision(auth(RecordConfigService::authGuard())->user(), $table, $action);
 
-        $guard = RecordConfigService::authGuard();
-        $user = auth($guard)->user();
-        if (!$user) {
+        if (PermissionUtils::DECISION_UNAUTHENTICATED === $decision) {
             throw new HttpResponseException(
                 RecordApiResponseService::errorWrapped('Unauthenticated', RecordApiJsonResponseEnum::UNAUTHORIZED->value)
             );
         }
 
-        $tableSchema = SchemaRegistryUtils::getTable($table);
-        if ($tableSchema instanceof RecordTableType) {
-            if (is_null($tableSchema->pmsName)) {
-                return;
-            }
-
-            if (is_array($tableSchema->pmsName) && [] === $tableSchema->pmsName) {
-                return;
-            }
-        }
-
-        // Use per-table custom permission map if defined
-        if ($tableSchema instanceof RecordTableType && is_array($tableSchema->permissions) && isset($tableSchema->permissions[$action])) {
-            $perms = (array) $tableSchema->permissions[$action];
-        } elseif ($action === 'force_delete' && $tableSchema instanceof RecordTableType && is_array($tableSchema->permissions) && !isset($tableSchema->permissions['force_delete'])) {
-            // force_delete has no override — use mapPermissions with 'force_delete' action (independent, no fallback to 'delete')
-            $perms = PermissionUtils::mapPermissions($table, 'force_delete');
-        } else {
-            $perms = PermissionUtils::mapPermissions($table, $action);
-        }
-
-        if (PermissionUtils::isSuperAdmin($user)) {
-            return;
-        }
-
-        $allowed = PermissionUtils::userHasAnyPermission($user, $perms, $table, $action);
-
-        if (!$allowed) {
+        if (PermissionUtils::DECISION_FORBIDDEN === $decision) {
             throw new HttpResponseException(
                 RecordApiResponseService::errorWrapped('Forbidden', RecordApiJsonResponseEnum::FORBIDDEN->value)
             );

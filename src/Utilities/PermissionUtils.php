@@ -9,6 +9,7 @@ use Sopheak\Core\Authorization\PermissionRegistrar;
 use Illuminate\Support\Facades\Gate;
 use Sopheak\Core\Constants\RecordConstants;
 use Sopheak\Core\Services\RecordConfigService;
+use Sopheak\Core\Types\RecordTableType;
 
 class PermissionUtils
 {
@@ -22,6 +23,58 @@ class PermissionUtils
         $callback = config('permissions.super_admin_callback');
 
         return null !== $user && null !== $callback && (bool) $callback($user);
+    }
+
+    public const DECISION_ALLOWED = 'allowed';
+
+    public const DECISION_UNAUTHENTICATED = 'unauthenticated';
+
+    public const DECISION_FORBIDDEN = 'forbidden';
+
+    /**
+     * Whether $user may perform $action on $table — the single decision every
+     * entry point makes: HTTP and MCP authorizeAction(), and nested child
+     * writes (NestedWriteAuthorizer). Each caller maps the result to its own
+     * error contract.
+     */
+    public static function actionDecision(mixed $user, string $table, string $action): string
+    {
+        if (self::isPublicAction($table, $action)) {
+            return self::DECISION_ALLOWED;
+        }
+
+        if (!$user) {
+            return self::DECISION_UNAUTHENTICATED;
+        }
+
+        $tableSchema = SchemaRegistryUtils::getTable($table);
+        if ($tableSchema instanceof RecordTableType) {
+            if (is_null($tableSchema->pmsName)) {
+                return self::DECISION_ALLOWED;
+            }
+
+            if (is_array($tableSchema->pmsName) && [] === $tableSchema->pmsName) {
+                return self::DECISION_ALLOWED;
+            }
+        }
+
+        // Use the per-table permission map when it defines this action.
+        if ($tableSchema instanceof RecordTableType && is_array($tableSchema->permissions) && isset($tableSchema->permissions[$action])) {
+            $permissions = (array) $tableSchema->permissions[$action];
+        } elseif ('force_delete' === $action && $tableSchema instanceof RecordTableType && is_array($tableSchema->permissions) && !isset($tableSchema->permissions['force_delete'])) {
+            // force_delete has no override — independent, no fallback to 'delete'.
+            $permissions = self::mapPermissions($table, 'force_delete');
+        } else {
+            $permissions = self::mapPermissions($table, $action);
+        }
+
+        if (self::isSuperAdmin($user)) {
+            return self::DECISION_ALLOWED;
+        }
+
+        return self::userHasAnyPermission($user, $permissions, $table, $action)
+            ? self::DECISION_ALLOWED
+            : self::DECISION_FORBIDDEN;
     }
 
     /**

@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Services\RecordService;
+use Sopheak\Core\Utilities\NestedWriteAuthorizer;
 use Throwable;
 
 class ProcessBulkOperationJob implements ShouldQueue
@@ -44,6 +45,30 @@ class ProcessBulkOperationJob implements ShouldQueue
      * Execute the job.
      */
     public function handle(RecordService $recordService): void
+    {
+        // A daemon worker keeps the previous job's user on the guard. Start
+        // from no user, so a job whose own user cannot be restored (deleted,
+        // or a guard with no provider) never runs — or authorises nested
+        // children — as someone else. Put the previous user back afterwards
+        // (the sync queue runs this inside the dispatching request).
+        $guard = Auth::guard($this->requestContext['guard'] ?? RecordConfigService::authGuard());
+        $previousUser = $guard->hasUser() ? $guard->user() : null;
+        if (method_exists($guard, 'forgetUser')) {
+            $guard->forgetUser();
+        }
+
+        try {
+            $this->process($recordService);
+        } finally {
+            if (null !== $previousUser) {
+                $guard->setUser($previousUser);
+            } elseif (method_exists($guard, 'forgetUser')) {
+                $guard->forgetUser();
+            }
+        }
+    }
+
+    private function process(RecordService $recordService): void
     {
         try {
             // Reconstruct Request
@@ -87,7 +112,9 @@ class ProcessBulkOperationJob implements ShouldQueue
             }
 
             // Execute Bulk Operation
-            $recordService->bulkRecord($request, $this->table, $this->tenantId, $this->operation);
+            // The parent was authorised when the request dispatched this job;
+            // its nested children are authorised here, as the restored user.
+            NestedWriteAuthorizer::enforce(fn (): array => $recordService->bulkRecord($request, $this->table, $this->tenantId, $this->operation));
         } catch (Throwable $throwable) {
             Log::error("ProcessBulkOperationJob Failed", [
                 'table' => $this->table,

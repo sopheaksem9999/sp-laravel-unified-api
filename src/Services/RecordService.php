@@ -35,6 +35,7 @@ use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Utilities\RecordPayloadExtractor;
 use Sopheak\Core\Types\RecordBelongsToType;
 use Sopheak\Core\Utilities\OwnRecordsScope;
+use Sopheak\Core\Utilities\NestedWriteAuthorizer;
 use Sopheak\Core\Utilities\RecordUtils;
 
 class RecordService
@@ -457,6 +458,15 @@ class RecordService
      * @param array<string, mixed> $recordContext
      */
     public function processPostWriteLogic(Request $request, string $table, string $operation, array $recordContext): void
+    {
+        // After-triggers, custom audit loggers and webhooks are the app's own
+        // code: their nested writes are trusted (NestedWriteAuthorizer).
+        NestedWriteAuthorizer::trusted(function () use ($request, $table, $operation, $recordContext): void {
+            $this->runPostWriteLogic($request, $table, $operation, $recordContext);
+        });
+    }
+
+    private function runPostWriteLogic(Request $request, string $table, string $operation, array $recordContext): void
     {
         $tableSchema = SchemaRegistryUtils::getTable($table);
 
@@ -1295,7 +1305,8 @@ class RecordService
         }
 
         try {
-            $result = call_user_func_array([$className, $method], $params);
+            // Trigger code is the app's own: its nested writes are trusted.
+            $result = NestedWriteAuthorizer::trusted(fn (): mixed => call_user_func_array([$className, $method], $params));
             if ($result instanceof JsonResponse) {
                 throw new HttpResponseException($this->normalizeTriggerResponse($result));
             }
@@ -2666,7 +2677,8 @@ class RecordService
         $tableSchema = SchemaRegistryUtils::getTable($table);
         $recordData = self::stripHiddenColumns($recordData, $tableSchema);
 
-        RecordCreated::dispatch($table, $recordData, $result['id'], $auditContext);
+        // Listeners are the app's own code: their nested writes are trusted.
+        NestedWriteAuthorizer::trusted(fn (): mixed => RecordCreated::dispatch($table, $recordData, $result['id'], $auditContext));
 
         return $record;
     }
@@ -2744,7 +2756,7 @@ class RecordService
         $oldPayload = self::stripHiddenColumns($oldPayload, $tableSchema);
         $newRecordData = self::stripHiddenColumns($newRecordData, $tableSchema);
 
-        RecordUpdated::dispatch($table, $oldPayload, $newRecordData, $id, $auditContext);
+        NestedWriteAuthorizer::trusted(fn (): mixed => RecordUpdated::dispatch($table, $oldPayload, $newRecordData, $id, $auditContext));
 
         return $newRecord;
     }
@@ -2799,7 +2811,7 @@ class RecordService
         $tableSchema = SchemaRegistryUtils::getTable($table);
         $oldPayload = self::stripHiddenColumns($oldPayload, $tableSchema);
 
-        RecordDeleted::dispatch($table, $oldPayload, $id, $auditContext);
+        NestedWriteAuthorizer::trusted(fn (): mixed => RecordDeleted::dispatch($table, $oldPayload, $id, $auditContext));
 
         return $record;
     }

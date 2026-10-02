@@ -768,6 +768,7 @@ class RelationshipResolverUtils
                     }
 
                     self::assertRelationshipOperationAllowed($table, (string) $alias, 'delete', $allowDelete);
+                    NestedWriteAuthorizer::authorizeChild($table, (string) $alias, $relatedTable, 'delete');
 
                     $deleteQuery = self::scopeChildRow(self::scopeToParent(
                         DB::table($actualRelatedTableName)->where($relatedPk, $idVal),
@@ -792,6 +793,7 @@ class RelationshipResolverUtils
                     $hasPk ? 'update' : 'create',
                     $hasPk ? $allowUpdate : $allowCreate
                 );
+                NestedWriteAuthorizer::authorizeChild($table, (string) $alias, $relatedTable, $hasPk ? 'update' : 'create');
 
                 // Sanitize payload: only allowed columns; drop system/protected fields
                 $item = array_intersect_key($item, array_flip($allowedCols));
@@ -814,20 +816,6 @@ class RelationshipResolverUtils
                 }
 
                 $item = RecordUtils::applyCompositeTypes($item, $relatedSchema->columns ?? []);
-
-                // Permission check per related action
-                // $action = ($hasPk && $allowUpdate) ? 'update' : 'create';
-                // if (!PermissionUtils::isPublicAction($relatedTable, $action)) {
-                //     $user = auth('api')->user();
-                //     if (!$user) {
-                //         abort(401, 'Unauthenticated');
-                //     }
-
-                //     $perm = PermissionUtils::mapPermission($relatedTable, $action);
-                //     if (!$user->can($perm)) {
-                //         abort(RecordApiJsonResponseEnum::FORBIDDEN->value, 'Forbidden');
-                //     }
-                // }
 
                 if ($hasPk) {
                     // Update path (already asserted allowUpdate above)
@@ -1034,6 +1022,7 @@ class RelationshipResolverUtils
 
             if (!$relatedId) {
                 self::assertRelationshipOperationAllowed($table, $alias, 'create', $allowCreate);
+                NestedWriteAuthorizer::authorizeChild($table, $alias, $relatedTable, 'create');
 
                 // Create new related record
                 $relatedFields = array_intersect_key($item, array_flip($allowedRelatedCols));
@@ -1187,6 +1176,7 @@ class RelationshipResolverUtils
 
             if (!$targetId) {
                 self::assertRelationshipOperationAllowed($table, $alias, 'create', $allowCreate);
+                NestedWriteAuthorizer::authorizeChild($table, $alias, $targetTable, 'create');
 
                 $targetFields = array_intersect_key($item, array_flip(array_keys($targetSchema->columns ?? [])));
                 $writeDisabled = is_array($targetSchema->columnWriteDisabled ?? null) ? $targetSchema->columnWriteDisabled : [];
