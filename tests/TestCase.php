@@ -40,6 +40,10 @@ class TestCase extends BaseTestCase
         ]);
 
         $app['config']->set('record.api_prefix', 'api');
+        // MCP driver matrix: `SP_MCP_DRIVER=laravel vendor/bin/phpunit --filter Mcp`
+        // runs the MCP suites against the laravel/mcp driver. Tests that set
+        // record.mcp.driver themselves still win.
+        $app['config']->set('record.mcp.driver', getenv('SP_MCP_DRIVER') ?: 'legacy');
         $app['config']->set('record.rpc_prefix', 'rpc');
         $app['config']->set('record.enable_tenant_id', false);
         $app['config']->set('record.tables', []);

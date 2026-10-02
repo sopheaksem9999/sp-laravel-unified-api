@@ -106,7 +106,11 @@ class AuditLogQueuedRequestContextTest extends TestCase
         Auth::forgetUser();
         $this->app->instance('request', Request::create('/'));
 
-        $this->artisan('queue:work', ['connection' => 'database', '--once' => false, '--stop-when-empty' => true])->assertExitCode(0);
+        // The worker runs inside this PHPUnit process; by the time this test runs
+        // late in a long suite the process is past queue:work's 128 MB default and
+        // the worker would stop with exit code 12 (EXIT_MEMORY_LIMIT) before
+        // working a single job.
+        $this->artisan('queue:work', ['connection' => 'database', '--once' => false, '--stop-when-empty' => true, '--memory' => 2048])->assertExitCode(0);
     }
 
     private function asClient(): static

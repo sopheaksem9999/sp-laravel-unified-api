@@ -1,0 +1,966 @@
+{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+        "tools": [
+            {
+                "name": "sp_api_list_endpoints",
+                "description": "List all API endpoints (tables + custom RPCs). Returns endpoint name, HTTP method, URI, table, and supported actions. Supports substring search.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "search": {
+                            "type": "string",
+                            "description": "Filter endpoints by name, table, or URI (case-insensitive substring match)"
+                        }
+                    },
+                    "additionalProperties": false
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "endpoints": {
+                            "type": "array",
+                            "items": {
+                                "type": "object"
+                            }
+                        }
+                    },
+                    "required": [
+                        "endpoints"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "sp_api_get_endpoint",
+                "description": "Get full schema for a single endpoint: fields, filters, sorts, includes, relationships, validation rules, and auth requirements. Check includes[].writable/payloadHint before writing related data — relationships marked writable:true can be nested in the SAME create/update payload (one request) instead of a separate request per child table.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "endpoint": {
+                            "type": "string",
+                            "description": "Endpoint name from sp_api_list_endpoints, e.g. 'invoices'"
+                        },
+                        "actions": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "Return only these actions (for example [\"list\", \"create\"]); omit to get every action. Fields, filters and includes are always returned."
+                        }
+                    },
+                    "required": [
+                        "endpoint"
+                    ],
+                    "additionalProperties": false
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "additionalProperties": true
+                }
+            },
+            {
+                "name": "sp_api_list_permissions",
+                "description": "List all available permissions grouped by resource.",
+                "inputSchema": {
+                    "type": "object",
+                    "additionalProperties": false
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "permissions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object"
+                            }
+                        }
+                    },
+                    "required": [
+                        "permissions"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "sp_api_get_api_guidance",
+                "description": "Explain the Data MCP and Schema MCP roles, then guide an agent through discovering and safely calling a documented API endpoint.",
+                "inputSchema": {
+                    "type": "object",
+                    "additionalProperties": false
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "dataMcp": {
+                            "type": "object"
+                        },
+                        "schemaMcp": {
+                            "type": "object"
+                        },
+                        "workflow": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "httpRules": {
+                            "type": "object"
+                        },
+                        "querySyntaxExamples": {
+                            "type": "object"
+                        },
+                        "nestedWriteExamples": {
+                            "type": "object"
+                        },
+                        "references": {
+                            "type": "string"
+                        },
+                        "headers": {
+                            "type": "object"
+                        },
+                        "querySyntax": {
+                            "type": "object"
+                        },
+                        "operators": {
+                            "type": "object"
+                        },
+                        "pagination": {
+                            "type": "object"
+                        },
+                        "errors": {
+                            "type": "object"
+                        },
+                        "rateLimits": {
+                            "type": "object"
+                        },
+                        "nestedWrites": {
+                            "type": "object"
+                        },
+                        "validation": {
+                            "type": "object"
+                        },
+                        "docs": {
+                            "type": "object"
+                        },
+                        "realtime": {
+                            "type": "object"
+                        },
+                        "modules": {
+                            "type": "object"
+                        },
+                        "recommendations": {
+                            "type": "array",
+                            "items": {
+                                "type": "object"
+                            }
+                        }
+                    },
+                    "required": [
+                        "dataMcp",
+                        "schemaMcp",
+                        "workflow",
+                        "httpRules",
+                        "querySyntaxExamples",
+                        "nestedWriteExamples"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "list_sp_webhook_endpoints",
+                "description": "List records from sp_webhook_endpoints",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Filters are {column: 'operator.value'} pairs, e.g. {\"status\": \"eq.open\", \"total_amount\": \"gte.100\"} (see filters[] on sp_api_get_endpoint for the operators each field supports). Supports 'limit' (RECOMMENDED for AI queries: fast top/recent record retrieval without COUNT overhead), 'select', 'sortby', 'order'. Use 'per_page' and 'page' only when actively paginating across multiple pages. Do not nest a filter under a 'filter' key or use bracket syntax like column[operator]=value — pass the column name directly as the queryParams key.",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "read_sp_webhook_endpoints",
+                "description": "Read a single record from sp_webhook_endpoints",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": [
+                                "string",
+                                "integer"
+                            ]
+                        },
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Query parameters (e.g., select)",
+                            "additionalProperties": true
+                        }
+                    },
+                    "required": [
+                        "id"
+                    ]
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "list_sp_webhook_subscriptions",
+                "description": "List records from sp_webhook_subscriptions",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Filters are {column: 'operator.value'} pairs, e.g. {\"status\": \"eq.open\", \"total_amount\": \"gte.100\"} (see filters[] on sp_api_get_endpoint for the operators each field supports). Supports 'limit' (RECOMMENDED for AI queries: fast top/recent record retrieval without COUNT overhead), 'select', 'sortby', 'order'. Use 'per_page' and 'page' only when actively paginating across multiple pages. Do not nest a filter under a 'filter' key or use bracket syntax like column[operator]=value — pass the column name directly as the queryParams key.",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "read_sp_webhook_subscriptions",
+                "description": "Read a single record from sp_webhook_subscriptions",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": [
+                                "string",
+                                "integer"
+                            ]
+                        },
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Query parameters (e.g., select)",
+                            "additionalProperties": true
+                        }
+                    },
+                    "required": [
+                        "id"
+                    ]
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "list_sp_webhook_deliveries",
+                "description": "List records from sp_webhook_deliveries",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Filters are {column: 'operator.value'} pairs, e.g. {\"status\": \"eq.open\", \"total_amount\": \"gte.100\"} (see filters[] on sp_api_get_endpoint for the operators each field supports). Supports 'limit' (RECOMMENDED for AI queries: fast top/recent record retrieval without COUNT overhead), 'select', 'sortby', 'order'. Use 'per_page' and 'page' only when actively paginating across multiple pages. Do not nest a filter under a 'filter' key or use bracket syntax like column[operator]=value — pass the column name directly as the queryParams key.",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "read_sp_webhook_deliveries",
+                "description": "Read a single record from sp_webhook_deliveries",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": [
+                                "string",
+                                "integer"
+                            ]
+                        },
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Query parameters (e.g., select)",
+                            "additionalProperties": true
+                        }
+                    },
+                    "required": [
+                        "id"
+                    ]
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "list_sp_attachments",
+                "description": "List records from sp_attachments",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Filters are {column: 'operator.value'} pairs, e.g. {\"status\": \"eq.open\", \"total_amount\": \"gte.100\"} (see filters[] on sp_api_get_endpoint for the operators each field supports). Supports 'limit' (RECOMMENDED for AI queries: fast top/recent record retrieval without COUNT overhead), 'select', 'sortby', 'order'. Use 'per_page' and 'page' only when actively paginating across multiple pages. Do not nest a filter under a 'filter' key or use bracket syntax like column[operator]=value — pass the column name directly as the queryParams key.",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "read_sp_attachments",
+                "description": "Read a single record from sp_attachments",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": [
+                                "string",
+                                "integer"
+                            ]
+                        },
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Query parameters (e.g., select)",
+                            "additionalProperties": true
+                        }
+                    },
+                    "required": [
+                        "id"
+                    ]
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "list_sp_attachment_folders",
+                "description": "List records from sp_attachment_folders",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Filters are {column: 'operator.value'} pairs, e.g. {\"status\": \"eq.open\", \"total_amount\": \"gte.100\"} (see filters[] on sp_api_get_endpoint for the operators each field supports). Supports 'limit' (RECOMMENDED for AI queries: fast top/recent record retrieval without COUNT overhead), 'select', 'sortby', 'order'. Use 'per_page' and 'page' only when actively paginating across multiple pages. Do not nest a filter under a 'filter' key or use bracket syntax like column[operator]=value — pass the column name directly as the queryParams key.",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "read_sp_attachment_folders",
+                "description": "Read a single record from sp_attachment_folders",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": [
+                                "string",
+                                "integer"
+                            ]
+                        },
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Query parameters (e.g., select)",
+                            "additionalProperties": true
+                        }
+                    },
+                    "required": [
+                        "id"
+                    ]
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "list_sp_attachment_links",
+                "description": "List records from sp_attachment_links",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Filters are {column: 'operator.value'} pairs, e.g. {\"status\": \"eq.open\", \"total_amount\": \"gte.100\"} (see filters[] on sp_api_get_endpoint for the operators each field supports). Supports 'limit' (RECOMMENDED for AI queries: fast top/recent record retrieval without COUNT overhead), 'select', 'sortby', 'order'. Use 'per_page' and 'page' only when actively paginating across multiple pages. Do not nest a filter under a 'filter' key or use bracket syntax like column[operator]=value — pass the column name directly as the queryParams key.",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "read_sp_attachment_links",
+                "description": "Read a single record from sp_attachment_links",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": [
+                                "string",
+                                "integer"
+                            ]
+                        },
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Query parameters (e.g., select)",
+                            "additionalProperties": true
+                        }
+                    },
+                    "required": [
+                        "id"
+                    ]
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "list_sp_audit_logs",
+                "description": "List records from sp_audit_logs",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Filters are {column: 'operator.value'} pairs, e.g. {\"status\": \"eq.open\", \"total_amount\": \"gte.100\"} (see filters[] on sp_api_get_endpoint for the operators each field supports). Supports 'limit' (RECOMMENDED for AI queries: fast top/recent record retrieval without COUNT overhead), 'select', 'sortby', 'order'. Use 'per_page' and 'page' only when actively paginating across multiple pages. Do not nest a filter under a 'filter' key or use bracket syntax like column[operator]=value — pass the column name directly as the queryParams key.",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "read_sp_audit_logs",
+                "description": "Read a single record from sp_audit_logs",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": [
+                                "string",
+                                "integer"
+                            ]
+                        },
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Query parameters (e.g., select)",
+                            "additionalProperties": true
+                        }
+                    },
+                    "required": [
+                        "id"
+                    ]
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "list_sp_permissions",
+                "description": "List records from sp_permissions",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Filters are {column: 'operator.value'} pairs, e.g. {\"status\": \"eq.open\", \"total_amount\": \"gte.100\"} (see filters[] on sp_api_get_endpoint for the operators each field supports). Supports 'limit' (RECOMMENDED for AI queries: fast top/recent record retrieval without COUNT overhead), 'select', 'sortby', 'order'. Use 'per_page' and 'page' only when actively paginating across multiple pages. Do not nest a filter under a 'filter' key or use bracket syntax like column[operator]=value — pass the column name directly as the queryParams key.",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "read_sp_permissions",
+                "description": "Read a single record from sp_permissions",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": [
+                                "string",
+                                "integer"
+                            ]
+                        },
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Query parameters (e.g., select)",
+                            "additionalProperties": true
+                        }
+                    },
+                    "required": [
+                        "id"
+                    ]
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "list_sp_roles",
+                "description": "List records from sp_roles",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Filters are {column: 'operator.value'} pairs, e.g. {\"status\": \"eq.open\", \"total_amount\": \"gte.100\"} (see filters[] on sp_api_get_endpoint for the operators each field supports). Supports 'limit' (RECOMMENDED for AI queries: fast top/recent record retrieval without COUNT overhead), 'select', 'sortby', 'order'. Use 'per_page' and 'page' only when actively paginating across multiple pages. Do not nest a filter under a 'filter' key or use bracket syntax like column[operator]=value — pass the column name directly as the queryParams key.",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "read_sp_roles",
+                "description": "Read a single record from sp_roles",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": [
+                                "string",
+                                "integer"
+                            ]
+                        },
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Query parameters (e.g., select)",
+                            "additionalProperties": true
+                        }
+                    },
+                    "required": [
+                        "id"
+                    ]
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "list_invoices",
+                "description": "List records from invoices",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Filters are {column: 'operator.value'} pairs, e.g. {\"status\": \"eq.open\", \"total_amount\": \"gte.100\"} (see filters[] on sp_api_get_endpoint for the operators each field supports). Supports 'limit' (RECOMMENDED for AI queries: fast top/recent record retrieval without COUNT overhead), 'select', 'sortby', 'order'. Use 'per_page' and 'page' only when actively paginating across multiple pages. Do not nest a filter under a 'filter' key or use bracket syntax like column[operator]=value — pass the column name directly as the queryParams key.",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "read_invoices",
+                "description": "Read a single record from invoices",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": [
+                                "string",
+                                "integer"
+                            ]
+                        },
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Query parameters (e.g., select)",
+                            "additionalProperties": true
+                        }
+                    },
+                    "required": [
+                        "id"
+                    ]
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "list_customers",
+                "description": "List records from customers",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Filters are {column: 'operator.value'} pairs, e.g. {\"status\": \"eq.open\", \"total_amount\": \"gte.100\"} (see filters[] on sp_api_get_endpoint for the operators each field supports). Supports 'limit' (RECOMMENDED for AI queries: fast top/recent record retrieval without COUNT overhead), 'select', 'sortby', 'order'. Use 'per_page' and 'page' only when actively paginating across multiple pages. Do not nest a filter under a 'filter' key or use bracket syntax like column[operator]=value — pass the column name directly as the queryParams key.",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "read_customers",
+                "description": "Read a single record from customers",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": [
+                                "string",
+                                "integer"
+                            ]
+                        },
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Query parameters (e.g., select)",
+                            "additionalProperties": true
+                        }
+                    },
+                    "required": [
+                        "id"
+                    ]
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "list_invoice_items",
+                "description": "List records from invoice_items",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Filters are {column: 'operator.value'} pairs, e.g. {\"status\": \"eq.open\", \"total_amount\": \"gte.100\"} (see filters[] on sp_api_get_endpoint for the operators each field supports). Supports 'limit' (RECOMMENDED for AI queries: fast top/recent record retrieval without COUNT overhead), 'select', 'sortby', 'order'. Use 'per_page' and 'page' only when actively paginating across multiple pages. Do not nest a filter under a 'filter' key or use bracket syntax like column[operator]=value — pass the column name directly as the queryParams key.",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "read_invoice_items",
+                "description": "Read a single record from invoice_items",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": [
+                                "string",
+                                "integer"
+                            ]
+                        },
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Query parameters (e.g., select)",
+                            "additionalProperties": true
+                        }
+                    },
+                    "required": [
+                        "id"
+                    ]
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "list_tags",
+                "description": "List records from tags",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Filters are {column: 'operator.value'} pairs, e.g. {\"status\": \"eq.open\", \"total_amount\": \"gte.100\"} (see filters[] on sp_api_get_endpoint for the operators each field supports). Supports 'limit' (RECOMMENDED for AI queries: fast top/recent record retrieval without COUNT overhead), 'select', 'sortby', 'order'. Use 'per_page' and 'page' only when actively paginating across multiple pages. Do not nest a filter under a 'filter' key or use bracket syntax like column[operator]=value — pass the column name directly as the queryParams key.",
+                            "additionalProperties": true
+                        }
+                    }
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "read_tags",
+                "description": "Read a single record from tags",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": [
+                                "string",
+                                "integer"
+                            ]
+                        },
+                        "queryParams": {
+                            "type": "object",
+                            "description": "Query parameters (e.g., select)",
+                            "additionalProperties": true
+                        }
+                    },
+                    "required": [
+                        "id"
+                    ]
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "object"
+                        }
+                    },
+                    "required": [
+                        "response"
+                    ],
+                    "additionalProperties": false
+                }
+            }
+        ]
+    }
+}

@@ -6,10 +6,20 @@ namespace Sopheak\Core\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Sopheak\Core\Http\Middleware\VerifySchemaMcpToken;
 use Sopheak\Core\Services\McpServerService;
 
 class ApiSchemaMcpController extends Controller
 {
+    /**
+     * The bearer-token check travels with the controller, so it applies
+     * wherever this controller is routed.
+     */
+    public function __construct()
+    {
+        $this->middleware(VerifySchemaMcpToken::class);
+    }
+
     /**
      * Handle an incoming MCP JSON-RPC request (schema-only mode).
      *
@@ -23,33 +33,6 @@ class ApiSchemaMcpController extends Controller
      */
     public function handle(Request $request)
     {
-        // Auth check
-        $token = config('sp-api-mcp.token');
-        $isLocal = app()->environment('local');
-
-        if ($token !== null) {
-            if ($request->bearerToken() !== $token) {
-                return response()->json([
-                    'jsonrpc' => '2.0',
-                    'id' => $request->json('id'),
-                    'error' => [
-                        'code' => -32001,
-                        'message' => 'Invalid MCP token',
-                    ],
-                ], 401);
-            }
-        } elseif (!$isLocal) {
-            // Non-local without token configured = require auth
-            return response()->json([
-                'jsonrpc' => '2.0',
-                'id' => $request->json('id'),
-                'error' => [
-                    'code' => -32001,
-                    'message' => 'MCP schema requires authentication',
-                ],
-            ], 401);
-        }
-
         $service = new McpServerService(schemaOnly: true);
         $response = $service->handleRequest($request->json()->all());
 

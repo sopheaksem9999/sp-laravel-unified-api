@@ -1,0 +1,3 @@
+providers:
+  - Sopheak\Core\Tests\Support\McpStdioConfigProvider
+  - Sopheak\Core\CoreSpLaravelApiProvider

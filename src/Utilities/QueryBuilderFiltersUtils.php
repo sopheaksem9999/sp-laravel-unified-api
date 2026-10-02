@@ -15,15 +15,7 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
 class QueryBuilderFiltersUtils
 {
-    private const FILTER_OPERATORS = [
-        'is', 'eq', 'neq', 'like', 'ilike', 'gt', 'lt', 'gte', 'lte', 'in', 'contains',
-        'between', 'not_between', 'starts_with', 'ends_with', 'not_like', 'not_in', 'is_not',
-        'regex', 'not_regex', 'match', 'not_match', 'imatch', 'not_imatch', 'ilike', 'not_ilike',
-        'date_eq', 'date_gt', 'date_lt', 'date_gte', 'date_lte', 'empty', 'not_empty',
-        'fts', 'not_fts', 'plfts', 'not_plfts', 'phfts', 'not_phfts', 'wfts', 'not_wfts',
-        'cs', 'not_cs', 'cd', 'not_cd', 'ov', 'not_ov', 'sl', 'not_sl', 'sr', 'not_sr',
-        'nxl', 'not_nxl', 'nxr', 'not_nxr', 'adj', 'not_adj',
-    ];
+    private const FILTER_OPERATORS = FilterOperatorCatalog::NAMES;
 
     /**
      * Maps common symbol-style operators to their named equivalent, used only to build
@@ -774,7 +766,7 @@ class QueryBuilderFiltersUtils
                 break;
 
             case 'match':
-                self::assertOperatorDriverSupported('match', ['mysql', 'mariadb', 'pgsql']);
+                self::assertOperatorDriverSupported('match');
                 if ('pgsql' === DB::getDriverName()) {
                     $subquery->whereRaw($fullColumn . ' ~ ?', [(string) $value]);
                 } else {
@@ -784,7 +776,7 @@ class QueryBuilderFiltersUtils
                 break;
 
             case 'imatch':
-                self::assertOperatorDriverSupported('imatch', ['mysql', 'mariadb', 'pgsql']);
+                self::assertOperatorDriverSupported('imatch');
                 if ('pgsql' === DB::getDriverName()) {
                     $subquery->whereRaw($fullColumn . ' ~* ?', [(string) $value]);
                 } else {
@@ -805,7 +797,7 @@ class QueryBuilderFiltersUtils
             case 'not_regex':
             case 'not_match':
             case 'not_imatch':
-                self::assertOperatorDriverSupported($operator, ['mysql', 'mariadb', 'pgsql']);
+                self::assertOperatorDriverSupported($operator);
                 if ('pgsql' === DB::getDriverName()) {
                     $pgOperator = 'not_regex' === $operator || 'not_match' === $operator ? '!~' : '!~*';
                     $subquery->whereRaw($fullColumn . ' ' . $pgOperator . ' ?', [(string) $value]);
@@ -823,7 +815,7 @@ class QueryBuilderFiltersUtils
             case 'not_phfts':
             case 'wfts':
             case 'not_wfts':
-                self::assertOperatorDriverSupported($operator, ['pgsql']);
+                self::assertOperatorDriverSupported($operator);
                 self::applyPgsqlFullTextToSubquery($subquery, $fullColumn, (string) $value, $operator);
 
                 break;
@@ -844,7 +836,7 @@ class QueryBuilderFiltersUtils
             case 'not_nxr':
             case 'adj':
             case 'not_adj':
-                self::assertOperatorDriverSupported($operator, ['pgsql']);
+                self::assertOperatorDriverSupported($operator);
                 self::applyPgsqlNativeToSubquery($subquery, $fullColumn, (string) $value, $operator);
 
                 break;
@@ -1142,7 +1134,7 @@ class QueryBuilderFiltersUtils
                 break;
 
             case 'regex':
-                self::assertOperatorDriverSupported('regex', ['mysql', 'mariadb', 'pgsql']);
+                self::assertOperatorDriverSupported('regex');
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $value, $table): void {
                         foreach ($columns as $column) {
@@ -1166,7 +1158,7 @@ class QueryBuilderFiltersUtils
             case 'not_match':
             case 'imatch':
             case 'not_imatch':
-                self::assertOperatorDriverSupported($operator, ['mysql', 'mariadb', 'pgsql']);
+                self::assertOperatorDriverSupported($operator);
                 self::applyRegexOperator($builder, $table, $columns, (string) $value, $operator, $isMultiple);
 
                 break;
@@ -1179,7 +1171,7 @@ class QueryBuilderFiltersUtils
             case 'not_phfts':
             case 'wfts':
             case 'not_wfts':
-                self::assertOperatorDriverSupported($operator, ['pgsql']);
+                self::assertOperatorDriverSupported($operator);
                 self::applyPgsqlFullTextOperator($builder, $table, $columns, (string) $value, $operator, $isMultiple);
 
                 break;
@@ -1200,7 +1192,7 @@ class QueryBuilderFiltersUtils
             case 'not_nxr':
             case 'adj':
             case 'not_adj':
-                self::assertOperatorDriverSupported($operator, ['pgsql']);
+                self::assertOperatorDriverSupported($operator);
                 self::applyPgsqlNativeOperator($builder, $table, $columns, (string) $value, $operator, $isMultiple);
 
                 break;
@@ -2467,41 +2459,7 @@ class QueryBuilderFiltersUtils
 
     private static function mapNegatedOperator(string $operator): ?string
     {
-        $map = [
-            'eq' => 'neq',
-            'neq' => 'eq',
-            'in' => 'not_in',
-            'not_in' => 'in',
-            'like' => 'not_like',
-            'ilike' => 'not_ilike',
-            'is' => 'is_not',
-            'is_not' => 'is',
-            'gt' => 'lte',
-            'gte' => 'lt',
-            'lt' => 'gte',
-            'lte' => 'gt',
-            'between' => 'not_between',
-            'not_between' => 'between',
-            'empty' => 'not_empty',
-            'not_empty' => 'empty',
-            'regex' => 'not_regex',
-            'match' => 'not_match',
-            'imatch' => 'not_imatch',
-            'fts' => 'not_fts',
-            'plfts' => 'not_plfts',
-            'phfts' => 'not_phfts',
-            'wfts' => 'not_wfts',
-            'cs' => 'not_cs',
-            'cd' => 'not_cd',
-            'ov' => 'not_ov',
-            'sl' => 'not_sl',
-            'sr' => 'not_sr',
-            'nxl' => 'not_nxl',
-            'nxr' => 'not_nxr',
-            'adj' => 'not_adj',
-        ];
-
-        return $map[$operator] ?? null;
+        return FilterOperatorCatalog::negation($operator);
     }
 
     private static function parseModifierValues(?string $value): array
@@ -2524,24 +2482,13 @@ class QueryBuilderFiltersUtils
         return array_values(array_filter($parts, static fn(string $part): bool => '' !== $part));
     }
 
-    /**
-     * @param string[] $supportedDrivers
-     */
-    private static function assertOperatorDriverSupported(string $operator, array $supportedDrivers): void
+    private static function assertOperatorDriverSupported(string $operator): void
     {
-        $driver = DB::getDriverName();
-        if ('mysql' === $driver) {
-            $version = strtolower((string) DB::selectOne('select version() as v')->v ?? '');
-            if (str_contains($version, 'mariadb')) {
-                $driver = 'mariadb';
-            }
-        }
-
-        if (!in_array($driver, $supportedDrivers, true)) {
+        if (!FilterOperatorCatalog::supports($operator)) {
             throw new InvalidArgumentException(sprintf(
                 "Operator '%s' is not supported on current driver '%s'.",
                 $operator,
-                $driver
+                FilterOperatorCatalog::currentDriver()
             ));
         }
     }

@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Console\McpServerCommand;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Support\CacheRequestContext;
+use Sopheak\Core\Tests\Concerns\SkipsOnLaravelMcpDriver;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordTableType;
@@ -22,6 +23,8 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
 class McpServerCommandTest extends TestCase
 {
+    use SkipsOnLaravelMcpDriver;
+
     use RefreshDatabase;
     use WithFaker;
 
@@ -43,6 +46,7 @@ class McpServerCommandTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->skipOnLaravelMcpDriver('these tests drive the legacy STDIN/STDOUT loop through static mocks; the laravel driver owns the real streams and is covered by McpLaravelStdioTest (subprocess)');
         config(['record.mcp.enabled' => true]);
 
         Schema::create('mcp_cli_tasks', function (Blueprint $table): void {

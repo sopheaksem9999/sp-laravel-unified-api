@@ -11,6 +11,7 @@ use Illuminate\Foundation\Testing\WithFaker;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Sopheak\Core\Tests\Concerns\SkipsOnLaravelMcpDriver;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordTablePublic;
 use Sopheak\Core\Types\RecordTableType;
@@ -18,6 +19,8 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
 
 class McpHttpControllerTest extends TestCase
 {
+    use SkipsOnLaravelMcpDriver;
+
     use RefreshDatabase;
     use WithFaker;
 
@@ -64,20 +67,17 @@ class McpHttpControllerTest extends TestCase
     }
 
     /** @test */
-    public function it_can_handle_sse_connection(): void
+    public function the_sse_endpoint_answers_405(): void
     {
-        $response = $this->get('/api/mcp/sse');
-
-        $response->assertStatus(200);
-        $response->assertHeader('Content-Type', 'text/event-stream; charset=UTF-8');
-
-        // SSE streamed response doesn't immediately return content in a normal way
-        // We can just verify the status and headers for now
+        // The SSE transport never delivered a response on the stream and held a
+        // PHP worker open for as long as the client stayed connected.
+        $this->get('/api/mcp/sse')->assertStatus(405)->assertHeader('Allow', 'POST');
     }
 
     /** @test */
     public function it_can_handle_initialize_request(): void
     {
+        $this->skipOnLaravelMcpDriver('the legacy driver answers protocol 2024-11-05; the laravel driver negotiates (McpLaravelRoutesTest)');
         $payload = [
             'jsonrpc' => '2.0',
             'id' => 1,
@@ -159,6 +159,7 @@ class McpHttpControllerTest extends TestCase
     /** @test */
     public function it_respects_read_only_config(): void
     {
+        $this->skipOnLaravelMcpDriver('the legacy driver answers JSON-RPC errors with HTTP 200; the laravel driver maps them to 4xx/5xx (McpDriverParityTest)');
         Config::set('record.mcp.read_only', true);
 
         // list tools should only have read/list
