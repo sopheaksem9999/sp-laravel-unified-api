@@ -33,9 +33,19 @@ value-less shorthand form for `null`.
   - On non-text columns (e.g. integers), `empty` ⇔ `IS NULL`, `not_empty` ⇔ `IS NOT NULL`.
 - Negated style is also supported using expression syntax:
   - `not.eq.5`, `not.in.(1,2,3)`, `not.like.ACME`, `not.fts.invoice`
+  - Only operators with a negated form accept `not.` (`eq`, `neq`, `in`, `like`, `ilike`, `is`, `gt`/`gte`/`lt`/`lte`, `between`, `empty`, `regex`/`match`/`imatch` and the PostgreSQL families). `contains`, `starts_with`, `ends_with` and `date_*` have none, and a `not.` prefix on them is ignored — use another operator (for example `not_like`) instead.
 - `any` / `all` modifiers are supported in expression syntax:
   - `name=like(any).{ACME,SHOP}`
   - `name=ilike(all).{spx,admin}`
+
+::: tip One operator map
+The operator names, the databases each one needs (`regex`/`match` family on
+MySQL, MariaDB and PostgreSQL; `fts` and the array/range operators on
+PostgreSQL only) and the column types each one suits live in a single class,
+`FilterOperatorCatalog`. The filter engine and the MCP schema tools both read
+it, so the operators an agent is told about are exactly the ones this driver
+accepts.
+:::
 
 ## Grouped Logic
 

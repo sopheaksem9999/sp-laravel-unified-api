@@ -102,8 +102,9 @@ vendor/bin/phpunit
 Prefer the `sp-laravel-api` MCP tools over guessing at schema/endpoints:
 
 - `sp_api_list_endpoints` — all registered table/function endpoints
-- `sp_api_get_endpoint` — live schema for one endpoint (columns, relationships, auth flags)
+- `sp_api_get_endpoint` — live schema for one endpoint (columns, relationships, auth flags); pass `actions: ["list", "create"]` to keep it small, and follow any `{"$ref": "#/…"}` it contains
 - `sp_api_list_permissions` — permission map (pmsName + can* flags + custom permissions)
+- `sp_api_get_api_guidance` — headers, query syntax, operators for the current database, paging, errors, rate limits, nested-write rules and recipes for the enabled modules; read it once
 
 ## Debug a failing record request
 

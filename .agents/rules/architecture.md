@@ -48,26 +48,29 @@ MySQL, PostgreSQL, SQLite — always write DB-agnostic SQL; never use DB-specifi
 
 ## MCP (Model Context Protocol)
 
-The package provides two MCP endpoints via a single `McpServerService`:
+Two MCP endpoints (Data and Schema) over one transport-free core, selectable between two drivers (`record.mcp.driver`: `legacy` default, `laravel` opt-in, needs `laravel/mcp`).
+
+### Core (`src/Mcp`, shared by both drivers)
+- `ToolCatalog` — which tools exist (`schema()`, `data()`, `resources()`); titles and annotations.
+- `ToolExecutor` — runs one tool call: tenant from the request → authorize → execute; throws `ToolError` (-32001 unauthenticated/unknown table, -32002 forbidden, -32601 tool not found).
+- `SchemaTools` — the four `sp_api_*` tools. Content generators live in `src/Mcp/Guidance` (`ColumnTypes`, `PayloadSchemaBuilder`, `IncludeGuide`, `EndpointContext`, `ApiReference`, `ModuleRecipes`, `SchemaDeduper`). Filter operators come from `Utilities\FilterOperatorCatalog`, the same map the filter engine uses.
+- `ToolDefinition`, `ToolResult` (compact JSON text copy), `ToolError`, `McpDriver`.
 
 ### Schema MCP — `POST /api/v1/mcp/schema` (route: `api_schema_mcp`)
-- **Controller**: `ApiSchemaMcpController` → `McpServerService(schemaOnly: true)`
-- **Auth**: `SP_API_MCP_TOKEN` Bearer token (config: `sp-api-mcp.*`)
-- **Tools**: 3 schema discovery tools only — no data access
-  - `sp_api_list_endpoints` — list all API routes
-  - `sp_api_get_endpoint` — full schema for one endpoint
-  - `sp_api_list_permissions` — all permissions
-- **Security**: Token optional in local, required in production
+- **Handler**: `ApiSchemaMcpController` → `McpServerService(schemaOnly: true)` (`legacy`) or `Mcp\Servers\SchemaServer` (`laravel`)
+- **Auth**: `VerifySchemaMcpToken` middleware — `SP_API_MCP_TOKEN` Bearer token (config: `sp-api-mcp.*`), optional in local, required elsewhere
+- **Tools**: the four `sp_api_*` tools only — no data access
 
-### Data MCP — `POST /mcp/message` (route: `mcp.message`)
-- **Controller**: `McpHttpController` → `McpServerService(schemaOnly: false)`
-- **Auth**: User Bearer token via middleware (config: `record.mcp.*`)
-- **Tools**: 3 schema tools + CRUD per table (`list_{table}`, `read_{table}`, `create_{table}`, etc.)
+### Data MCP — `POST /api/v1/mcp/message` (route: `mcp.message`), `POST /api/v1/mcp` on the `laravel` driver (route: `mcp.http`)
+- **Handler**: `McpHttpController` → `McpServerService` (`legacy`) or `Mcp\Servers\DataServer` (`laravel`)
+- **Auth**: user Bearer token via `record.mcp.middleware`; `record.mcp.oauth` adds Passport/OAuth discovery (`laravel` driver)
+- **Tools**: the four schema tools + CRUD per table (`list_{table}`, `read_{table}`, `create_{table}`, …)
 
 ### Key design points
-- `McpServerService::handleToolsList()` always includes 3 schema tools; CRUD tools only when `!$this->schemaOnly`
-- `McpServerService::handleToolsCall()` routes schema tool names first, rejects data tools when `$this->schemaOnly`
-- Schema data is read live from `SchemaRegistryUtils::get()`, `RecordConfigService`, and `PermissionUtils` — always fresh
+- `McpServerService` is a thin JSON-RPC adapter over `ToolCatalog`/`ToolExecutor`; the `laravel` driver wraps each `ToolDefinition` in `Mcp\Tools\CatalogTool` and registers its own `tools/call` (`CatalogCallTool`) so `-32001`/`-32002` survive.
+- Tenant comes from the request, never from tool arguments; nested writes are authorized per child table (`NestedWriteAuthorizer`).
+- Schema data is read live from `SchemaRegistryUtils::get()`, `RecordConfigService` and `PermissionUtils`; guidance numbers (limits, headers, prefixes) are read from config at request time.
+- Tests: `SP_MCP_DRIVER=laravel vendor/bin/phpunit --filter Mcp` runs the MCP suites on the `laravel` driver; stdio tests use `vendor/bin/testbench` via `testbench.yaml`.
 
 ## API Client Exporters (Bruno / Postman)
 
