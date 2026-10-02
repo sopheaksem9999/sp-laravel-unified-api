@@ -102,6 +102,25 @@ Children are scoped to what the caller could write on the child table directly:
   relationship returns `422` (`Related record '…' not found for relationship …`)
   when the caller could not read that record directly.
 
+#### Bare ids in a relationship array
+
+A relationship array normally holds objects, but a many-to-many or
+has-many-through array also accepts a bare id, which attaches that record
+exactly like `{"id": <id>}`:
+
+```json
+{ "tags": [1, 2, {"id": 3, "note": "primary"}, {"id": 5, "_delete": true}] }
+```
+
+Links you leave out of the array are kept. Everywhere else a non-object item is
+refused instead of being dropped silently:
+
+| Item | Relationship | Result |
+|---|---|---|
+| `5`, `"5"` | many-to-many, has-many-through | attaches record `5` |
+| `5`, `"5"` | has-many, morph-many | `422` — `Relationship 'items' on table 'invoices' expects objects, got scalar 5. Send {"id": ...} to update a child or {...fields} to create one.` |
+| `0`, `""`, `"0"`, `null`, `false` | any | `422` — empty value; nothing is created |
+
 #### Request Body
 
 ```json
