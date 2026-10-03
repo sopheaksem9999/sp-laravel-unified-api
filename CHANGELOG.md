@@ -4,6 +4,8 @@ All notable changes to `sp-laravel-api` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.04] - 2026-10-03
+
 ### Security
 - **Relationship filters ignored the request's tenant**: a relationship filter (`?pets.name=eq.x`, a grouped `or=(pets.name.…)`, a `searchable` relationship column) took its tenant from a `tenant_id` query parameter instead of the request's tenant, so a caller in one tenant could test another tenant's rows (over HTTP, MCP and the AI SDK tools). It is now bound to the request's tenant — through a tenant-scoped `belongsToMany` pivot too.
 - **beforeRead hooks could add tenant-scoped rows without a tenant**: over HTTP the tenant check ran before the `beforeRead` hooks, so an include or a relationship filter a hook added (or a `select` a middleware set on the request) was not checked. The request is now checked again as the hooks left it, and `422`s like a client-sent include.
