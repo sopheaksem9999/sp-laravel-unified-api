@@ -680,6 +680,7 @@ class SetupPackageCommand extends Command
                     'middleware' => ['api', 'auth:sanctum'],
                     'driver' => env('SP_MCP_DRIVER', 'legacy'),
                     'oauth' => env('SP_MCP_OAUTH', false),
+                    'run_record_hooks' => env('SP_MCP_RUN_RECORD_HOOKS', true),
                 ],
 
                 /*

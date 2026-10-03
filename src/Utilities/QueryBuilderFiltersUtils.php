@@ -66,6 +66,31 @@ class QueryBuilderFiltersUtils
     }
 
     /**
+     * Parse a raw query string keeping dots in its keys (`pets.name=eq.x`):
+     * PHP's parse_str() — and so $request->query() — turns them into
+     * underscores, which loses relationship filters.
+     *
+     * @return array<string, mixed>
+     */
+    public static function parseQueryStringPreservingDots(string $queryString): array
+    {
+        $preservedQueryString = preg_replace_callback(
+            '/(^|&)([^=]+)=/',
+            fn($m): string => $m[1] . str_replace('.', '___DOT___', $m[2]) . '=',
+            $queryString
+        );
+
+        parse_str((string) $preservedQueryString, $params);
+
+        $restoredParams = [];
+        foreach ($params as $key => $value) {
+            $restoredParams[str_replace('___DOT___', '.', (string) $key)] = $value;
+        }
+
+        return $restoredParams;
+    }
+
+    /**
      * Apply filters, selects, ordering, pagination to Query Builder based on request.
      * Optimized for performance with caching and reduced query complexity.
      *
@@ -174,8 +199,11 @@ class QueryBuilderFiltersUtils
         }
 
         // Select
-        if ($request->has('select')) {
-            $requested = self::parseSelectColumns($request->query('select'), $table, $allowedCols);
+        // Only the query string's select: a `select` a hook merged into a JSON request
+        // body is not a query parameter, and the parser needs a string.
+        $selectParam = $request->query('select');
+        if (is_string($selectParam)) {
+            $requested = self::parseSelectColumns($selectParam, $table, $allowedCols);
             if (!empty($requested['main'])) {
                 $main = $requested['main'];
                 if (!in_array($table . '.*', $main, true)) {
@@ -184,7 +212,7 @@ class QueryBuilderFiltersUtils
                     // include, `id` for hasMany). When the main select is
                     // explicit and includes are present, those keys must be
                     // selected too, otherwise relationships resolve to null.
-                    $main = self::augmentMainSelectWithIncludeKeys($request->query('select'), $table, $main, $allowedCols);
+                    $main = self::augmentMainSelectWithIncludeKeys($selectParam, $table, $main, $allowedCols);
                 }
 
                 $builder->select($main);
@@ -203,24 +231,7 @@ class QueryBuilderFiltersUtils
             // Enhanced caching with request fingerprinting
             $cacheKey = md5($queryString . $table . serialize($allowedCols));
             if (!isset(self::$operatorCache[$cacheKey])) {
-                // Preserve dots in parameter keys to support dot notation (e.g. relationship.column)
-                // PHP's parse_str automatically converts dots to underscores
-                $preservedQueryString = preg_replace_callback(
-                    '/(^|&)([^=]+)=/',
-                    fn($m): string => $m[1] . str_replace('.', '___DOT___', $m[2]) . '=',
-                    $queryString
-                );
-
-                parse_str((string) $preservedQueryString, $params);
-
-                // Restore dots in keys
-                $restoredParams = [];
-                foreach ($params as $key => $value) {
-                    $newKey = str_replace('___DOT___', '.', (string) $key);
-                    $restoredParams[$newKey] = $value;
-                }
-
-                $params = $restoredParams;
+                $params = self::parseQueryStringPreservingDots($queryString);
 
                 self::$operatorCache[$cacheKey] = $params;
             } else {
@@ -230,6 +241,10 @@ class QueryBuilderFiltersUtils
             if (isset($params['total']) && self::isBooleanLikeValue($params['total'])) {
                 unset($params['total']);
             }
+
+            // Relationship filters are bound to the request's tenant — the one the
+            // includes use — never to a `tenant_id` the client put in the query.
+            $relationshipTenant = RecordConfigService::enableTenantId() ? RecordUtils::resolveTenantIdFromRequest($request) : null;
 
             // Check for lazy loading parameter
             $isLazy = isset($params['lazy']) && ('true' === $params['lazy'] || '1' === $params['lazy']);
@@ -241,6 +256,7 @@ class QueryBuilderFiltersUtils
                     'table' => $table,
                     'allowedCols' => $allowedCols,
                     'params' => $params,
+                    'relationshipTenant' => $relationshipTenant,
                     'executed' => false,
                     'query' => null,
                     'created_at' => microtime(true),
@@ -254,7 +270,7 @@ class QueryBuilderFiltersUtils
                 });
             } else {
                 // Execute operators immediately with optimized batch processing
-                self::executeOperatorsOptimized($builder, $table, $allowedCols, $params);
+                self::executeOperatorsOptimized($builder, $table, $allowedCols, $params, $relationshipTenant);
             }
         }
 
@@ -274,7 +290,7 @@ class QueryBuilderFiltersUtils
     {
         if (isset(self::$lazyOperations[$operationId]) && !self::$lazyOperations[$operationId]['executed']) {
             $operation = self::$lazyOperations[$operationId];
-            self::executeOperators($builder, $operation['table'], $operation['allowedCols'], $operation['params']);
+            self::executeOperators($builder, $operation['table'], $operation['allowedCols'], $operation['params'], $operation['relationshipTenant'] ?? null);
             self::$lazyOperations[$operationId]['executed'] = true;
 
             return true;
@@ -310,7 +326,7 @@ class QueryBuilderFiltersUtils
                     );
                 } else {
                     // Batch operation
-                    self::executeOperators($builder, $operation['table'], $operation['allowedCols'], $operation['params']);
+                    self::executeOperators($builder, $operation['table'], $operation['allowedCols'], $operation['params'], $operation['relationshipTenant'] ?? null);
                 }
 
                 self::$lazyOperations[$operationId]['executed'] = true;
@@ -593,9 +609,14 @@ class QueryBuilderFiltersUtils
                         // whether a row the caller cannot read exists.
                         OwnRecordsScope::apply($subquery, $relatedTable);
 
-                        // Apply tenant filtering if enabled
+                        // Apply tenant filtering if enabled — the related table and, like
+                        // hasManyThrough's through-table, a tenant-scoped pivot.
                         if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[RecordConfigService::tenantColumn()])) {
                             $subquery->where($relatedTable . '.' . RecordConfigService::tenantColumn(), $tenantId);
+                        }
+
+                        if ($enableTenantId && $tenantId && isset($schema[$pivotTable]->columns[RecordConfigService::tenantColumn()])) {
+                            $subquery->where($pivotTable . '.' . RecordConfigService::tenantColumn(), $tenantId);
                         }
 
                         // Apply soft delete filtering
@@ -1819,14 +1840,14 @@ class QueryBuilderFiltersUtils
     /**
      * Execute operators immediately (extracted from original logic).
      */
-    private static function executeOperators(Builder $builder, string $table, array $allowedCols, array $params): void
+    private static function executeOperators(Builder $builder, string $table, array $allowedCols, array $params, mixed $relationshipTenant = null): void
     {
         $groupedFilters = array_merge(
             self::extractConfiguredSearchFilters($params, $table),
             self::extractGroupedFilters($params)
         );
         if ([] !== $groupedFilters) {
-            self::applyGroupedFilters($builder, $table, $allowedCols, $groupedFilters, null);
+            self::applyGroupedFilters($builder, $table, $allowedCols, $groupedFilters, RecordUtils::isTenantIdMissing($relationshipTenant) ? null : $relationshipTenant);
         }
 
         foreach ($params as $key => $values) {
@@ -1838,7 +1859,7 @@ class QueryBuilderFiltersUtils
             $values = is_array($values) ? $values : [$values];
             foreach ($values as $subKey => $value) {
                 if (is_array($value)) {
-                    throw new InvalidArgumentException(self::invalidNestedFilterMessage((string) $key, [$subKey => $value]));
+                    throw new InvalidArgumentException(self::invalidNestedFilterMessage($key, [$subKey => $value]));
                 }
 
                 $raw = (string) $value;
@@ -1900,7 +1921,7 @@ class QueryBuilderFiltersUtils
      * @param array   $allowedCols Allowed columns for security validation
      * @param array<string, mixed> $params Query parameters containing filter operations
      */
-    private static function executeOperatorsOptimized(Builder $builder, string $table, array $allowedCols, array $params): void
+    private static function executeOperatorsOptimized(Builder $builder, string $table, array $allowedCols, array $params, mixed $relationshipTenant = null): void
     {
         $enableTenantId = RecordConfigService::enableTenantId();
         $tenantCol = RecordConfigService::tenantColumn();
@@ -1922,12 +1943,16 @@ class QueryBuilderFiltersUtils
             }
         }
 
+        // The request's tenant binds relationship filters; a client's `tenant_id`
+        // parameter only when the request resolved none (internal calls).
+        $relationshipTenantId = RecordUtils::isTenantIdMissing($relationshipTenant) ? $tenantId : $relationshipTenant;
+
         $groupedFilters = array_merge(
             self::extractConfiguredSearchFilters($params, $table),
             self::extractGroupedFilters($params)
         );
         if ([] !== $groupedFilters) {
-            self::applyGroupedFilters($builder, $table, $allowedCols, $groupedFilters, $tenantId);
+            self::applyGroupedFilters($builder, $table, $allowedCols, $groupedFilters, $relationshipTenantId);
         }
 
         // Separate relationship filters from regular column filters
@@ -1952,7 +1977,7 @@ class QueryBuilderFiltersUtils
             $values = is_array($values) ? $values : [$values];
             foreach ($values as $subKey => $value) {
                 if (is_array($value)) {
-                    throw new InvalidArgumentException(self::invalidNestedFilterMessage((string) $key, [$subKey => $value]));
+                    throw new InvalidArgumentException(self::invalidNestedFilterMessage($key, [$subKey => $value]));
                 }
 
                 $raw = (string) $value;
@@ -1990,7 +2015,7 @@ class QueryBuilderFiltersUtils
 
         // Apply relationship filters using optimized subqueries
         if ($relationshipFilters !== []) {
-            self::applyRelationshipFilters($builder, $table, $relationshipFilters, $tenantId);
+            self::applyRelationshipFilters($builder, $table, $relationshipFilters, $relationshipTenantId);
         }
 
         // Execute regular operations in optimized order (equality first, then range, text, complex)
@@ -2011,6 +2036,41 @@ class QueryBuilderFiltersUtils
                 $builder->where($table . '.' . $tenantCol, $tenantFilterValue);
             }
         }
+    }
+
+    /**
+     * Every column the `and` / `or` groups of $params name (`title`, `pets.name`),
+     * read with the parser that applies them — and, given the table, the
+     * `searchable` columns a `search` parameter expands into.
+     *
+     * @param array<string, mixed> $params
+     * @return list<string>
+     */
+    public static function groupedFilterColumns(array $params, ?string $table = null): array
+    {
+        $columns = [];
+        $walk = static function (array $node) use (&$walk, &$columns): void {
+            if ('condition' === ($node['type'] ?? null) && is_string($node['column'] ?? null)) {
+                $columns[] = $node['column'];
+            }
+
+            foreach ((array) ($node['children'] ?? []) as $child) {
+                if (is_array($child)) {
+                    $walk($child);
+                }
+            }
+        };
+
+        $groups = self::extractGroupedFilters($params);
+        if (null !== $table) {
+            $groups = [...self::extractConfiguredSearchFilters($params, $table), ...$groups];
+        }
+
+        foreach ($groups as $group) {
+            $walk($group);
+        }
+
+        return array_values(array_unique($columns));
     }
 
     /**
@@ -2166,6 +2226,15 @@ class QueryBuilderFiltersUtils
 
         $column = trim($matches[1]);
         $parsedOperator = self::parseOperatorExpression(trim($matches[2]));
+
+        // A relationship column, `alias.column.operator.value`: the first-dot split
+        // reads `column` as the operator. applyGroupedCondition() applies a dotted
+        // column as a tenant-bound relationship filter.
+        if (null === $parsedOperator && preg_match('/^([A-Za-z_]\w*\.[A-Za-z_]\w*)\.(.+)$/', $expression, $relationshipMatches)) {
+            $column = $relationshipMatches[1];
+            $parsedOperator = self::parseOperatorExpression(trim($relationshipMatches[2]));
+        }
+
         if (null === $parsedOperator) {
             return null;
         }
@@ -2334,7 +2403,11 @@ class QueryBuilderFiltersUtils
                 }
 
                 foreach ($subValue as $operatorToken => $operatorValue) {
-                    if (!is_string($operatorToken) || is_array($operatorValue)) {
+                    if (!is_string($operatorToken)) {
+                        continue;
+                    }
+
+                    if (is_array($operatorValue)) {
                         continue;
                     }
 
@@ -2365,8 +2438,10 @@ class QueryBuilderFiltersUtils
      * bracket-nested filter (e.g. filter[created_at][>=]=2026-08-01) instead of the
      * supported '{column}={operator}.{value}' query-parameter syntax.
      */
-    private static function invalidNestedFilterMessage(string $key, mixed $nestedValue): string
+    private static function invalidNestedFilterMessage(int|string $key, mixed $nestedValue): string
     {
+        // A numeric query key (`?0[a]=1`) reaches here as an int.
+        $key = (string) $key;
         $expressions = is_array($nestedValue) ? self::collectBracketFilterExpressions($key, $nestedValue) : [];
 
         if ([] === $expressions) {
@@ -2686,7 +2761,7 @@ class QueryBuilderFiltersUtils
             $builder->where(function ($subQuery) use ($operations): void {
                 foreach ($operations as [$operationId, $operation]) {
                     $subQuery->where(function (Builder $opQuery) use ($operation): void {
-                        self::executeOperatorsOptimized($opQuery, $operation['table'], $operation['allowedCols'], $operation['params']);
+                        self::executeOperatorsOptimized($opQuery, $operation['table'], $operation['allowedCols'], $operation['params'], $operation['relationshipTenant'] ?? null);
                     });
 
                     // Mark as executed

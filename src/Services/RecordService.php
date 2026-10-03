@@ -37,6 +37,7 @@ use Sopheak\Core\Types\RecordBelongsToType;
 use Sopheak\Core\Utilities\OwnRecordsScope;
 use Sopheak\Core\Utilities\NestedWriteAuthorizer;
 use Sopheak\Core\Utilities\RecordUtils;
+use Sopheak\Core\Utilities\TenantScopedIncludes;
 
 class RecordService
 {
@@ -275,6 +276,7 @@ class RecordService
      * Upsert a record.
      *
      * @return array<string, mixed[]|array<string, mixed>> Returns ['id' => mixed, 'payload' => array]
+     * @param array<string, mixed> $payload
      */
     public function upsertRecord(Request $request, string $table, array $payload, mixed $tenantId, array $matchOn = []): array
     {
@@ -466,11 +468,29 @@ class RecordService
         });
     }
 
-    private function runPostWriteLogic(Request $request, string $table, string $operation, array $recordContext): void
+    /**
+     * The after-write steps of the HTTP API except the audit row: the table and
+     * global after* hooks (and the webhooks delivered through them) and the
+     * RecordMutated broadcast. For writes audited elsewhere — the MCP and AI SDK
+     * tools audit through RecordCreated / RecordUpdated / RecordDeleted.
+     *
+     * @param array<string, mixed> $recordContext
+     */
+    public function processAfterWriteHooks(Request $request, string $table, string $operation, array $recordContext): void
+    {
+        NestedWriteAuthorizer::trusted(function () use ($request, $table, $operation, $recordContext): void {
+            $this->runAfterWriteTriggers($request, $table, $operation, $recordContext);
+            $this->fireBroadcastEvent($table, $operation, $recordContext, SchemaRegistryUtils::getTable($table));
+        });
+    }
+
+    /**
+     * @param array<string, mixed> $recordContext
+     */
+    private function runAfterWriteTriggers(Request $request, string $table, string $operation, array $recordContext): void
     {
         $tableSchema = SchemaRegistryUtils::getTable($table);
 
-        // 1. Execute Table Trigger
         $triggerConfig = match ($operation) {
             'create'  => $tableSchema->afterCreate ?? null,
             'update'  => $tableSchema->afterUpdate ?? null,
@@ -502,6 +522,17 @@ class RecordService
                 $recordContext,
             ]);
         }
+    }
+
+    /**
+     * @param array<string, mixed> $recordContext
+     */
+    private function runPostWriteLogic(Request $request, string $table, string $operation, array $recordContext): void
+    {
+        $tableSchema = SchemaRegistryUtils::getTable($table);
+
+        // 1. Execute Table Trigger, then the global one
+        $this->runAfterWriteTriggers($request, $table, $operation, $recordContext);
 
         // 2. Insert Audit Log
         if (!($tableSchema->disableAuditLog ?? false)) {
@@ -569,7 +600,7 @@ class RecordService
                 'subject' => '',
                 'recap' => '',
                 'tenantId' => $tenantId,
-                ...$auditContext
+                ...$auditContext,
             ]);
         }
 
@@ -1103,7 +1134,7 @@ class RecordService
                                     'subject' => '',
                                     'recap' => '',
                                     'tenantId' => $tenantId,
-                                    ...$auditContext
+                                    ...$auditContext,
                                 ]);
                             }
                         }
@@ -1129,6 +1160,7 @@ class RecordService
 
     /**
      * @param array<array<string, mixed>, mixed> $context
+     * @param array<string, mixed> $auditData
      */
     protected function callCustomAuditLogger(
         string|array $callback,
@@ -1215,6 +1247,9 @@ class RecordService
             }
         }
 
+        $hookedRequest = ($params[0] ?? null) instanceof Request ? $params[0] : null;
+        $queryBefore = $hookedRequest?->query->all();
+
         $triggers = $this->resolveTableTriggers($trigger);
 
         foreach ($triggers as $index => $item) {
@@ -1222,7 +1257,69 @@ class RecordService
             $this->executeSingleTrigger($triggerItem, $params);
         }
 
+        // The Request the hooks left — the same one, or a new one a hook returned
+        // ($request->duplicate() copies the old QUERY_STRING).
+        if ($hookedRequest instanceof Request && ($params[0] ?? null) instanceof Request && $params[0]->query->all() !== $queryBefore) {
+            $this->syncQueryString($params[0], (array) $queryBefore);
+        }
+
         return $params;
+    }
+
+    /**
+     * The HTTP controller checks includes and relationship filters before the
+     * beforeRead hooks run; a hook can add one (an include, a grouped condition on
+     * a relationship), so the request as the hooks left it is checked again.
+     */
+    private function refuseTenantScopedIncludesAfterHooks(Request $request, string $table, mixed $tenantId): void
+    {
+        if (!RecordConfigService::enableTenantId() || !RecordUtils::isTenantIdMissing($tenantId) || !RecordUtils::isTenantIdMissing(RecordUtils::resolveTenantIdFromRequest($request))) {
+            return;
+        }
+
+        $paths = TenantScopedIncludes::requestedBy($request, $table);
+        if ([] !== $paths) {
+            throw new HttpResponseException(TenantScopedIncludes::refusal($paths));
+        }
+    }
+
+    /**
+     * Carry a hook's changes to the query bag ($request->query->set() / remove(),
+     * a merge() on a plain GET) into the raw QUERY_STRING, which is what the filter
+     * parser reads — it parses the raw string itself to keep dotted keys
+     * (`rel.column`), which the query bag stores as `rel_column`. Untouched keys
+     * keep their original (dotted) spelling.
+     *
+     * @param array<string, mixed> $before the query bag before the hooks ran
+     */
+    private function syncQueryString(Request $request, array $before): void
+    {
+        $after = $request->query->all();
+        $raw = QueryBuilderFiltersUtils::parseQueryStringPreservingDots((string) $request->server->get('QUERY_STRING', ''));
+        $bagKey = static fn(string $key): string => str_replace(['.', ' '], '_', $key);
+
+        // Only what the hooks changed: a key they removed, one they set or changed.
+        // A key that was already missing from (or only in) the bag before the hooks
+        // — a middleware's doing — stays as the raw string has it.
+        $present = [];
+        foreach (array_keys($raw) as $key) {
+            $inBag = $bagKey((string) $key);
+            $present[] = $inBag;
+
+            if (array_key_exists($inBag, $before) && !array_key_exists($inBag, $after)) {
+                unset($raw[$key]);
+            } elseif (array_key_exists($inBag, $after) && (!array_key_exists($inBag, $before) || $before[$inBag] !== $after[$inBag])) {
+                $raw[$key] = $after[$inBag];
+            }
+        }
+
+        foreach ($after as $key => $value) {
+            if (!in_array((string) $key, $present, true) && (!array_key_exists($key, $before) || $before[$key] !== $value)) {
+                $raw[$key] = $value;
+            }
+        }
+
+        $request->server->set('QUERY_STRING', http_build_query($raw));
     }
 
     public function executeGlobalTrigger(string $hook, array $params): array
@@ -1306,7 +1403,7 @@ class RecordService
 
         try {
             // Trigger code is the app's own: its nested writes are trusted.
-            $result = NestedWriteAuthorizer::trusted(fn (): mixed => call_user_func_array([$className, $method], $params));
+            $result = NestedWriteAuthorizer::trusted(fn(): mixed => call_user_func_array([$className, $method], $params));
             if ($result instanceof JsonResponse) {
                 throw new HttpResponseException($this->normalizeTriggerResponse($result));
             }
@@ -2266,6 +2363,8 @@ class RecordService
             $request = $triggerParams[0];
         }
 
+        $this->refuseTenantScopedIncludesAfterHooks($request, $table, $tenantId);
+
         $actualTableName = $tableSchema->table ?? $table;
 
         $filters = $request->except($this->paginationControlParameters($request));
@@ -2622,9 +2721,10 @@ class RecordService
      * @param array $payload The data to insert (can include nested relationships)
      * @param array|string $queryParams The query parameters (e.g., ['select' => '*,category(*)'])
      * @param mixed $tenantId Optional tenant ID
+     * @param array<string, mixed>|null $outcome Receives the createRecord() result, for callers that run the after-write hooks themselves
      * @return array The query results (data, meta, etc.)
      */
-    public static function executeCreate(string $table, array $payload, array|string $queryParams = [], mixed $tenantId = null): array
+    public static function executeCreate(string $table, array $payload, array|string $queryParams = [], mixed $tenantId = null, ?array &$outcome = null): array
     {
         $service = app(self::class);
 
@@ -2649,6 +2749,7 @@ class RecordService
         }
 
         $result = $service->createRecord($table, $payload, $tenantId);
+        $outcome = $result;
 
         if (!is_array($result) || !array_key_exists('id', $result)) {
             throw new RuntimeException('Failed to create record or retrieve inserted ID for table: ' . $table);
@@ -2678,7 +2779,7 @@ class RecordService
         $recordData = self::stripHiddenColumns($recordData, $tableSchema);
 
         // Listeners are the app's own code: their nested writes are trusted.
-        NestedWriteAuthorizer::trusted(fn (): mixed => RecordCreated::dispatch($table, $recordData, $result['id'], $auditContext));
+        NestedWriteAuthorizer::trusted(fn(): mixed => RecordCreated::dispatch($table, $recordData, $result['id'], $auditContext));
 
         return $record;
     }
@@ -2691,9 +2792,10 @@ class RecordService
      * @param array $payload The data to update (can include nested relationships)
      * @param array|string $queryParams The query parameters (e.g., ['select' => '*,category(*)'])
      * @param mixed $tenantId Optional tenant ID
+     * @param array<string, mixed>|null $outcome Receives the updateRecord() result, for callers that run the after-write hooks themselves
      * @return array The query results (data, meta, etc.)
      */
-    public static function executeUpdate(string $table, mixed $id, array $payload, array|string $queryParams = [], mixed $tenantId = null): array
+    public static function executeUpdate(string $table, mixed $id, array $payload, array|string $queryParams = [], mixed $tenantId = null, ?array &$outcome = null): array
     {
         $service = app(self::class);
 
@@ -2729,6 +2831,7 @@ class RecordService
         }
 
         $result = $service->updateRecord($table, $id, $payload, $tenantId);
+        $outcome = $result;
 
         $newRecord = self::executeGetById($table, $id, $queryParams, $tenantId);
 
@@ -2756,7 +2859,7 @@ class RecordService
         $oldPayload = self::stripHiddenColumns($oldPayload, $tableSchema);
         $newRecordData = self::stripHiddenColumns($newRecordData, $tableSchema);
 
-        NestedWriteAuthorizer::trusted(fn (): mixed => RecordUpdated::dispatch($table, $oldPayload, $newRecordData, $id, $auditContext));
+        NestedWriteAuthorizer::trusted(fn(): mixed => RecordUpdated::dispatch($table, $oldPayload, $newRecordData, $id, $auditContext));
 
         return $newRecord;
     }
@@ -2768,9 +2871,10 @@ class RecordService
      * @param mixed $id The primary key value
      * @param array|string $queryParams The query parameters (e.g., ['select' => '*,category(*)'])
      * @param mixed $tenantId Optional tenant ID
+     * @param array<string, mixed>|null $outcome Receives the deleteRecord() result, for callers that run the after-write hooks themselves
      * @return array The query results (data, meta, etc.) containing the record before deletion
      */
-    public static function executeDelete(string $table, mixed $id, array|string $queryParams = [], mixed $tenantId = null): array
+    public static function executeDelete(string $table, mixed $id, array|string $queryParams = [], mixed $tenantId = null, ?array &$outcome = null): array
     {
         $service = app(self::class);
 
@@ -2792,6 +2896,7 @@ class RecordService
         }
 
         $result = $service->deleteRecord($table, $id, $tenantId);
+        $outcome = $result;
 
         if ((int) ($result['affected'] ?? 0) < 1) {
             // Nothing in scope was deleted: a missing id, or a row outside the
@@ -2811,7 +2916,7 @@ class RecordService
         $tableSchema = SchemaRegistryUtils::getTable($table);
         $oldPayload = self::stripHiddenColumns($oldPayload, $tableSchema);
 
-        NestedWriteAuthorizer::trusted(fn (): mixed => RecordDeleted::dispatch($table, $oldPayload, $id, $auditContext));
+        NestedWriteAuthorizer::trusted(fn(): mixed => RecordDeleted::dispatch($table, $oldPayload, $id, $auditContext));
 
         return $record;
     }
@@ -3256,6 +3361,8 @@ class RecordService
         if (isset($triggerParams[0]) && $triggerParams[0] instanceof Request) {
             $request = $triggerParams[0];
         }
+
+        $this->refuseTenantScopedIncludesAfterHooks($request, $table, $tenantId);
 
         $actualTableName = $tableSchema->table ?? $table;
         $pk = $tableSchema->primaryKey ?? 'id';

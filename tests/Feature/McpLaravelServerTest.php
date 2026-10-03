@@ -89,7 +89,7 @@ class McpLaravelServerTest extends TestCase
      */
     public function every_message_starts_with_a_fresh_cache_context(): void
     {
-        config(['permissions.super_admin_callback' => static fn (): bool => true]);
+        config(['permissions.super_admin_callback' => static fn(): bool => true]);
         Schema::create('cached_things', function (Blueprint $t): void {
             $t->id();
             $t->string('title')->nullable();
@@ -105,7 +105,7 @@ class McpLaravelServerTest extends TestCase
         DB::table('cached_things')->insert(['id' => 1, 'title' => 'A']);
 
         [, $transport] = $this->server();
-        $rows = static fn (array $response): int => count($response['result']['structuredContent']['response']['data'] ?? []);
+        $rows = static fn(array $response): int => count($response['result']['structuredContent']['response']['data'] ?? []);
 
         $this->assertSame(1, $rows($this->callTool($transport, 'list_cached_things')), 'precondition: the first read sees one row');
 
@@ -115,7 +115,7 @@ class McpLaravelServerTest extends TestCase
         Cache::add('sp_laravel_api:ns:table:cached_things:tenant:disabled', 1, 315360000);
         Cache::increment('sp_laravel_api:ns:table:cached_things:tenant:disabled');
 
-        $this->assertSame(2, $rows($this->callTool($transport, 'list_cached_things', [], 2)), 'the second message must not reuse the first message\'s memo');
+        $this->assertSame(2, $rows($this->callTool($transport, 'list_cached_things', [], 2)), "the second message must not reuse the first message's memo");
     }
 
     /** @test */
@@ -134,7 +134,7 @@ class McpLaravelServerTest extends TestCase
     public function tools_list_publishes_the_catalog_with_titles_annotations_and_union_types(): void
     {
         // tools/list hides tools the caller cannot use; a super admin sees the whole catalog.
-        config(['permissions.super_admin_callback' => static fn (): bool => true]);
+        config(['permissions.super_admin_callback' => static fn(): bool => true]);
         [, $transport] = $this->server();
 
         $tools = $transport->feed(['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'])['result']['tools'];
@@ -151,7 +151,7 @@ class McpLaravelServerTest extends TestCase
     public function tools_list_returns_the_whole_catalog_in_one_page(): void
     {
         // tools/list hides tools the caller cannot use; a super admin sees the whole catalog.
-        config(['permissions.super_admin_callback' => static fn (): bool => true]);
+        config(['permissions.super_admin_callback' => static fn(): bool => true]);
         [, $transport] = $this->server();
 
         $result = $transport->feed(['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'])['result'];
@@ -291,7 +291,7 @@ class McpLaravelServerTest extends TestCase
         SchemaRegistryUtils::refresh();
         $this->granted = ['view:widget'];
 
-        $names = static fn (array $response): array => array_column($response['result']['structuredContent']['response']['data'] ?? [], 'name');
+        $names = static fn(array $response): array => array_column($response['result']['structuredContent']['response']['data'] ?? [], 'name');
 
         request()->attributes->set('resolved_tenant_id', 't1');
         [, $transport] = $this->server();

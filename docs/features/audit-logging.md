@@ -128,7 +128,7 @@ Queued `LogRecordAuditListener` calls `log` in its worker: filtering happens the
 
 Bulk upsert currently submits through both an inner update and the bulk wrapper. This feature preserves that existing behavior and evaluates each submission independently; it does not deduplicate audits or alter transaction/after-commit timing.
 
-See [manual audit logging](/guide/features/feature-audit-manual-controller) for explicit actor and tenant examples.
+See [manual audit logging](/guide/feature-audit-manual-controller) for explicit actor and tenant examples.
 
 ## Record Lifecycle Events
 

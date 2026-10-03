@@ -64,4 +64,4 @@ Behavior:
 12. [Error Responses, Rate Limiting, and Security](/guide/api-errors-rate-security)
 13. [QueryHelpers Trait Documentation](/guide/api-queryhelpers-trait)
 14. [Model Context Protocol (MCP) Support](/guide/module-mcp)
-15. [Laravel AI SDK Integration](/guide/modules/module-ai-sdk)
+15. [Laravel AI SDK Integration](/guide/module-ai-sdk)

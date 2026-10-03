@@ -419,7 +419,7 @@ class CacheInvalidationCorrectnessTest extends TestCase
 
         Log::shouldReceive('warning')
             ->once()
-            ->withArgs(fn (string $message, array $context): bool => str_contains($message, 'cache namespace bump failed')
+            ->withArgs(fn(string $message, array $context): bool => str_contains($message, 'cache namespace bump failed')
                 && str_contains((string) $context['namespace_key'], 'ns:table:products')
                 && 'cache store unavailable' === $context['exception']);
 

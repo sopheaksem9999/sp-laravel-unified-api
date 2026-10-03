@@ -15,16 +15,12 @@ class OpenApiDocumentBuilder
         'headers', 'securitySchemes', 'links', 'callbacks',
     ];
 
-    /** @var array<string, mixed> */
-    private array $document;
-
     /** @var array<string, true> */
     private array $operationIds = [];
 
     /** @param array<string, mixed> $document */
-    public function __construct(array $document)
+    public function __construct(private array $document)
     {
-        $this->document = $document;
         $this->collectOperationIds();
     }
 
@@ -32,11 +28,11 @@ class OpenApiDocumentBuilder
     public function addPath(string $path, array $pathItem): void
     {
         if (!str_starts_with($path, '/')) {
-            throw new OpenApiContributionException("paths.{$path} must begin with '/'.");
+            throw new OpenApiContributionException(sprintf("paths.%s must begin with '/'.", $path));
         }
 
         if (isset($this->document['paths'][$path])) {
-            throw new OpenApiContributionException("paths.{$path} conflicts with an existing path.");
+            throw new OpenApiContributionException(sprintf('paths.%s conflicts with an existing path.', $path));
         }
 
         $this->validatePathItem($path, $pathItem);
@@ -47,15 +43,15 @@ class OpenApiDocumentBuilder
     public function addComponent(string $group, string $name, array $definition): void
     {
         if (!in_array($group, self::COMPONENT_GROUPS, true)) {
-            throw new OpenApiContributionException("components.{$group} is not supported by OpenAPI 3.0.3.");
+            throw new OpenApiContributionException(sprintf('components.%s is not supported by OpenAPI 3.0.3.', $group));
         }
 
         if (preg_match('/^[a-zA-Z0-9.\\-_]+$/', $name) !== 1) {
-            throw new OpenApiContributionException("components.{$group}.{$name} has an invalid name.");
+            throw new OpenApiContributionException(sprintf('components.%s.%s has an invalid name.', $group, $name));
         }
 
         if (isset($this->document['components'][$group][$name])) {
-            throw new OpenApiContributionException("components.{$group}.{$name} conflicts with an existing component.");
+            throw new OpenApiContributionException(sprintf('components.%s.%s conflicts with an existing component.', $group, $name));
         }
 
         $this->document['components'][$group][$name] = $definition;
@@ -71,7 +67,7 @@ class OpenApiDocumentBuilder
 
         foreach ($this->document['tags'] ?? [] as $existingTag) {
             if (is_array($existingTag) && ($existingTag['name'] ?? null) === $name) {
-                throw new OpenApiContributionException("tags.{$name} conflicts with an existing tag.");
+                throw new OpenApiContributionException(sprintf('tags.%s conflicts with an existing tag.', $name));
             }
         }
 
@@ -81,15 +77,15 @@ class OpenApiDocumentBuilder
     public function addExtension(string $name, mixed $value): void
     {
         if (!str_starts_with($name, 'x-')) {
-            throw new OpenApiContributionException("extensions.{$name} must begin with 'x-'.");
+            throw new OpenApiContributionException(sprintf("extensions.%s must begin with 'x-'.", $name));
         }
 
         if (str_starts_with($name, 'x-sp-')) {
-            throw new OpenApiContributionException("extensions.{$name} is reserved for the package.");
+            throw new OpenApiContributionException(sprintf('extensions.%s is reserved for the package.', $name));
         }
 
         if (array_key_exists($name, $this->document)) {
-            throw new OpenApiContributionException("extensions.{$name} conflicts with an existing extension.");
+            throw new OpenApiContributionException(sprintf('extensions.%s conflicts with an existing extension.', $name));
         }
 
         $this->document[$name] = $value;
@@ -112,32 +108,32 @@ class OpenApiDocumentBuilder
             }
 
             if (!is_array($operation)) {
-                throw new OpenApiContributionException("paths.{$path}.{$key} must be an operation object.");
+                throw new OpenApiContributionException(sprintf('paths.%s.%s must be an operation object.', $path, $key));
             }
 
             $summary = $operation['summary'] ?? null;
             if (!is_string($summary) || '' === trim($summary)) {
-                throw new OpenApiContributionException("paths.{$path}.{$key}.summary must be non-empty.");
+                throw new OpenApiContributionException(sprintf('paths.%s.%s.summary must be non-empty.', $path, $key));
             }
 
             $operationId = $operation['operationId'] ?? null;
             if (!is_string($operationId) || '' === trim($operationId)) {
-                throw new OpenApiContributionException("paths.{$path}.{$key}.operationId must be non-empty.");
+                throw new OpenApiContributionException(sprintf('paths.%s.%s.operationId must be non-empty.', $path, $key));
             }
 
             if (isset($this->operationIds[$operationId])) {
-                throw new OpenApiContributionException("paths.{$path}.{$key}.operationId {$operationId} conflicts with an existing operation.");
+                throw new OpenApiContributionException(sprintf('paths.%s.%s.operationId %s conflicts with an existing operation.', $path, $key, $operationId));
             }
 
             $responses = $operation['responses'] ?? null;
             if (!is_array($responses) || [] === $responses) {
-                throw new OpenApiContributionException("paths.{$path}.{$key}.responses must contain at least one response.");
+                throw new OpenApiContributionException(sprintf('paths.%s.%s.responses must contain at least one response.', $path, $key));
             }
 
             $parameters = $pathParameters + $this->parametersByName($operation['parameters'] ?? [], $path);
             foreach ($this->pathPlaceholders($path) as $placeholder) {
                 if (!isset($parameters[$placeholder])) {
-                    throw new OpenApiContributionException("paths.{$path}.{$key} requires path parameter {$placeholder}.");
+                    throw new OpenApiContributionException(sprintf('paths.%s.%s requires path parameter %s.', $path, $key, $placeholder));
                 }
             }
 
@@ -145,24 +141,28 @@ class OpenApiDocumentBuilder
         }
     }
 
-    /** @param mixed $parameters
+    /**
      * @return array<string, true>
      */
     private function parametersByName(mixed $parameters, string $path): array
     {
         if (!is_array($parameters)) {
-            throw new OpenApiContributionException("paths.{$path}.parameters must be an array.");
+            throw new OpenApiContributionException(sprintf('paths.%s.parameters must be an array.', $path));
         }
 
         $pathParameters = [];
         foreach ($parameters as $parameter) {
-            if (!is_array($parameter) || 'path' !== ($parameter['in'] ?? null)) {
+            if (!is_array($parameter)) {
+                continue;
+            }
+
+            if ('path' !== ($parameter['in'] ?? null)) {
                 continue;
             }
 
             $name = $parameter['name'] ?? null;
             if (!is_string($name) || '' === trim($name) || true !== ($parameter['required'] ?? false)) {
-                throw new OpenApiContributionException("paths.{$path} path parameters require name and required=true.");
+                throw new OpenApiContributionException(sprintf('paths.%s path parameters require name and required=true.', $path));
             }
 
             $pathParameters[$name] = true;
@@ -187,7 +187,11 @@ class OpenApiDocumentBuilder
             }
 
             foreach ($pathItem as $method => $operation) {
-                if (!in_array($method, self::HTTP_METHODS, true) || !is_array($operation)) {
+                if (!in_array($method, self::HTTP_METHODS, true)) {
+                    continue;
+                }
+
+                if (!is_array($operation)) {
                     continue;
                 }
 

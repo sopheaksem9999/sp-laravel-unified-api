@@ -72,6 +72,10 @@ Two MCP endpoints (Data and Schema) over one transport-free core, selectable bet
 - Schema data is read live from `SchemaRegistryUtils::get()`, `RecordConfigService` and `PermissionUtils`; guidance numbers (limits, headers, prefixes) are read from config at request time.
 - Tests: `SP_MCP_DRIVER=laravel vendor/bin/phpunit --filter Mcp` runs the MCP suites on the `laravel` driver; stdio tests use `vendor/bin/testbench` via `testbench.yaml`.
 
+## AI SDK record tools (`src/Ai`, needs `laravel/ai`)
+
+`Sopheak\Core\Ai\RecordTools::for()/readOnly()/schema()` return a `RecordToolSet` of `RecordTool`s (one per `ToolDefinition`) for a Laravel AI SDK agent's `tools()`. They are a third adapter over the MCP core: `RecordTool::handle()` always ends in `ToolExecutor::call()`, optionally with a `Mcp\ToolContext` (user + tenant for one call, always restored; serialises the user's key) for queued agents. Writes request approval by default (`InteractsWithApprovals`). Free-form `payload`/`queryParams` are declared as JSON-text parameters (`SchemaConverter`) because providers cannot express an open object; `RecordTool::handle()` decodes them, answers wrong shapes with an `{"error"}` string, and reports + rethrows unexpected failures with a sanitised message. `record.mcp.read_only` does not apply (`ToolExecutor(honourReadOnly: false)`, `ToolCatalog::data(readOnly: false)`). Nothing in `src/Ai` loads without `laravel/ai`; AI tests use `tests/Concerns/UsesLaravelAi` and skip themselves when it is missing. See `docs/guide/modules/module-ai-sdk.md`.
+
 ## API Client Exporters (Bruno / Postman)
 
 Two Artisan commands turn the OpenAPI spec into ready-to-use API client collections with diff-aware updates.

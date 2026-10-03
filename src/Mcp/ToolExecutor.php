@@ -4,8 +4,13 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Mcp;
 
+use Throwable;
 use Exception;
+use Illuminate\Database\QueryException;
+use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\DB;
+use PDOException;
 use Sopheak\Core\Constants\RecordConstants;
 use Sopheak\Core\Exceptions\NestedWriteRefusedException;
 use Sopheak\Core\Services\RecordConfigService;
@@ -13,8 +18,10 @@ use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Utilities\NestedWriteAuthorizer;
 use Sopheak\Core\Utilities\PermissionUtils;
+use Sopheak\Core\Utilities\QueryBuilderFiltersUtils;
 use Sopheak\Core\Utilities\RecordUtils;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
+use Sopheak\Core\Utilities\TenantScopedIncludes;
 
 /**
  * Runs one MCP tool call, independent of any transport: tenant, then
@@ -28,22 +35,39 @@ final readonly class ToolExecutor
 {
     private SchemaTools $schemaTools;
 
-    public function __construct(private bool $schemaOnly = false)
+    /**
+     * @param bool $honourReadOnly Whether `record.mcp.read_only` removes the write tools. That is an
+     *                             MCP transport setting; in-process callers (the AI SDK tools) pass
+     *                             false because their developer picks the actions in code.
+     */
+    public function __construct(private bool $schemaOnly = false, private bool $honourReadOnly = true)
     {
         $this->schemaTools = new SchemaTools();
+    }
+
+    /**
+     * Run one tool call. With a context the call runs as that user and tenant
+     * and the process is restored afterwards (a queued agent has no request);
+     * without one it runs as the current request, as both MCP drivers do.
+     *
+     * @param array<string, mixed> $args
+     * @throws ToolError
+     */
+    public function call(string $name, array $args, ?ToolContext $context = null): ToolResult
+    {
+        if (!$context instanceof ToolContext || $context->isEmpty()) {
+            return $this->dispatch($name, $args);
+        }
+
+        return $context->run(fn(): ToolResult => $this->dispatch($name, $args));
     }
 
     /**
      * @param array<string, mixed> $args
      * @throws ToolError
      */
-    /**
-     * @param array<string, mixed> $params
-     * @param array<string, mixed> $args
-     */
-    public function call(string $name, array $args): ToolResult
+    private function dispatch(string $name, array $args): ToolResult
     {
-
         // Schema discovery tools
         if (in_array($name, ['sp_api_list_endpoints', 'sp_api_get_endpoint', 'sp_api_list_permissions', 'sp_api_get_api_guidance'], true)) {
             try {
@@ -80,7 +104,7 @@ final readonly class ToolExecutor
         $table = $parts[1];
 
         $readOnly = config('record.mcp.read_only', true);
-        if ($readOnly && in_array($action, ['create', 'update', 'delete'])) {
+        if ($this->honourReadOnly && $readOnly && in_array($action, ['create', 'update', 'delete'])) {
             throw new ToolError('Tool not found or read-only mode is enabled: ' . $name, -32601);
         }
 
@@ -112,16 +136,24 @@ final readonly class ToolExecutor
         $id = $args['id'] ?? null;
         $payload = $args['payload'] ?? [];
         $queryParams = $args['queryParams'] ?? [];
+        if (is_string($queryParams)) {
+            // Not parse_str(): it turns `pets.name` into `pets_name`.
+            $queryParams = QueryBuilderFiltersUtils::parseQueryStringPreservingDots($queryParams);
+        }
+
         $tenantId = $this->resolveToolTenantId($table, $args);
+        $this->refuseTenantScopedIncludesWithoutATenant($table, $queryParams, $tenantId);
 
         try {
-            $result = match ($action) {
-                'list' => RecordService::executeGetByFilter($table, $queryParams, $tenantId, true, 'id'),
-                'read' => RecordService::executeGetById($table, $id, $queryParams, $tenantId),
-                'create' => NestedWriteAuthorizer::enforce(fn (): array => DB::transaction(fn (): array => RecordService::executeCreate($table, $payload, $queryParams, $tenantId))),
-                'update' => NestedWriteAuthorizer::enforce(fn (): array => DB::transaction(fn (): array => RecordService::executeUpdate($table, $id, $payload, $queryParams, $tenantId))),
-                'delete' => RecordService::executeDelete($table, $id, $queryParams, $tenantId),
-            };
+            $result = (bool) config('record.mcp.run_record_hooks', true)
+                ? $this->throughRecordHooks($action, $table, $id, $payload, (array) $queryParams, $tenantId)
+                : match ($action) {
+                    'list' => RecordService::executeGetByFilter($table, $queryParams, $tenantId, true, 'id'),
+                    'read' => RecordService::executeGetById($table, $id, $queryParams, $tenantId),
+                    'create' => NestedWriteAuthorizer::enforce(fn(): array => DB::transaction(fn(): array => RecordService::executeCreate($table, $payload, $queryParams, $tenantId))),
+                    'update' => NestedWriteAuthorizer::enforce(fn(): array => DB::transaction(fn(): array => RecordService::executeUpdate($table, $id, $payload, $queryParams, $tenantId))),
+                    'delete' => RecordService::executeDelete($table, $id, $queryParams, $tenantId),
+                };
 
             if (isset($result['data'])) {
                 $tableSchema = SchemaRegistryUtils::getTable($table);
@@ -135,9 +167,53 @@ final readonly class ToolExecutor
             throw PermissionUtils::DECISION_UNAUTHENTICATED === $refused->decision
                 ? new ToolError('Unauthenticated', -32001)
                 : new ToolError('Forbidden', -32002);
+        } catch (ToolError $toolError) {
+            // Raised inside the hook pipeline (a beforeRead hook added a
+            // tenant-scoped include): a JSON-RPC error, like the same refusal above.
+            throw $toolError;
+        } catch (RecordHookFailed $failed) {
+            report($failed->getPrevious() ?? $failed);
+
+            return ToolResult::error($failed->getMessage());
+        } catch (ValidationException $invalid) {
+            return ToolResult::error('Validation failed: ' . json_encode($invalid->errors(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        } catch (HttpResponseException $refused) {
+            return ToolResult::error($this->refusalMessage($refused));
         } catch (Exception $exception) {
-            return ToolResult::error($exception->getMessage());
+            return ToolResult::error($this->clientMessage($exception));
         }
+    }
+
+    /**
+     * @param array<string, mixed> $queryParams
+     * @return array<string, mixed>
+     */
+    private function throughRecordHooks(string $action, string $table, mixed $id, mixed $payload, array $queryParams, mixed $tenantId): array
+    {
+        $pipeline = new RecordHookPipeline(app(RecordService::class));
+
+        return match ($action) {
+            'list' => $pipeline->list($table, $queryParams, $tenantId),
+            'read' => $pipeline->read($table, $id, $queryParams, $tenantId),
+            'create' => $pipeline->create($table, (array) $payload, $queryParams, $tenantId),
+            'update' => $pipeline->update($table, $id, (array) $payload, $queryParams, $tenantId),
+            'delete' => $pipeline->delete($table, $id, $queryParams, $tenantId),
+        };
+    }
+
+    /**
+     * A hook or validator that answered with an HTTP response (an
+     * HttpResponseException, or a JsonResponse a hook returned): its message, as
+     * the HTTP client would read it. abort() throws an HttpException, which is
+     * a hook failure (RecordHookFailed), not a refusal.
+     */
+    private function refusalMessage(HttpResponseException $refused): string
+    {
+        $response = $refused->getResponse();
+        $body = json_decode((string) $response->getContent(), true);
+        $message = is_array($body) && is_string($body['message'] ?? null) ? $body['message'] : 'The request was refused.';
+
+        return sprintf('%s (HTTP %d)', $message, $response->getStatusCode());
     }
 
     /**
@@ -254,6 +330,45 @@ final readonly class ToolExecutor
         }
 
         return $resolved;
+    }
+
+    /**
+     * What a client may read about a failure. A database error carries the SQL,
+     * its bound values (a hidden or server-filled column among them) and the
+     * schema; HTTP answers "An error occurred" for it, and so does this. The
+     * original goes to the application's log.
+     */
+    private function clientMessage(Exception $exception): string
+    {
+        for ($cause = $exception; $cause instanceof Throwable; $cause = $cause->getPrevious()) {
+            if ($cause instanceof QueryException || $cause instanceof PDOException) {
+                report($exception);
+
+                return 'The database rejected the operation.';
+            }
+        }
+
+        return $exception->getMessage();
+    }
+
+    /**
+     * A table that is not tenant-scoped can still embed rows of one that is
+     * (`owners` -> `pets`). When no tenant resolved, those rows would come back
+     * for every tenant, and the relationship loader falls back to a `tenant_id`
+     * found in the request input — which here is the model's own arguments.
+     * Tool arguments never choose the tenant, so asking for such rows without
+     * a resolved tenant is refused, like a tenant-scoped table itself.
+     */
+    private function refuseTenantScopedIncludesWithoutATenant(string $table, mixed $queryParams, mixed $tenantId): void
+    {
+        if (!RecordConfigService::enableTenantId() || !RecordUtils::isTenantIdMissing($tenantId) || !is_array($queryParams)) {
+            return;
+        }
+
+        $used = TenantScopedIncludes::requested($table, $queryParams);
+        if ([] !== $used) {
+            throw new ToolError(sprintf('Tenant context is required to include %s, but none was resolved from the request.', implode(', ', $used)), -32001);
+        }
     }
 
     private function authorizeAction(string $table, string $action): void

@@ -8,13 +8,18 @@ use Exception;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 use Sopheak\Core\Services\AuditLogService;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
-class AuditLogJob implements ShouldQueue
+/**
+ * Queued only once the surrounding transaction commits: a write that is rolled
+ * back — by a failing after-hook, a nested-write refusal or a database error
+ * later in the request — must not leave an audit entry behind.
+ */
+class AuditLogJob implements ShouldQueueAfterCommit
 {
     use Dispatchable;
     use InteractsWithQueue;

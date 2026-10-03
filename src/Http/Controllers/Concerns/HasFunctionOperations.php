@@ -24,7 +24,7 @@ trait HasFunctionOperations
     {
         try {
             $tableSchema = $this->resolveSchemaOrFail($table);
-            [, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
+            [, $tenantError] = $this->resolveTenantContext($request, $tableSchema, checkIncludes: false);
             if ($tenantError instanceof Response) {
                 return $tenantError;
             }
@@ -60,7 +60,7 @@ trait HasFunctionOperations
 
         try {
             $tableSchema = $this->resolveSchemaOrFail($table);
-            [, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
+            [, $tenantError] = $this->resolveTenantContext($request, $tableSchema, checkIncludes: false);
             if ($tenantError instanceof Response) {
                 return $tenantError;
             }

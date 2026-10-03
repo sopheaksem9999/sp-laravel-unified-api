@@ -31,7 +31,7 @@ This directory contains the API reference split into focused chunks for faster r
 14. [Error Responses, Rate Limiting, and Security](/guide/api-errors-rate-security)
 15. [QueryHelpers Trait Documentation](/guide/api-queryhelpers-trait)
 16. [Model Context Protocol (MCP) Support](/guide/module-mcp)
-17. [Laravel AI SDK Integration](/guide/modules/module-ai-sdk)
+17. [Laravel AI SDK Integration](/guide/module-ai-sdk)
 
 ## Usage Tip for AI Agents
 

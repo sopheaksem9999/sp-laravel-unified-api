@@ -98,6 +98,10 @@ For successful write operations, runtime clears affected table/record caches aut
 - Invalidates executed global-function cache key.
 - Clears tables listed in `clearCacheTables` (if provided).
 
+### Own-Records (`viewOwn`) and Per-User Keys
+
+A cache entry is shared by every caller that sends the same query on the same table and tenant — the key has no user in it. Own-records scoping is the exception: when the caller is restricted by `viewOwn:{pmsName}` on the table, or on any table the request embeds through `select` / `with`, the key also carries the owner column(s) and the caller's user id, so each restricted user gets their own entry and never receives rows another caller cached. Callers without `viewOwn` keep the shared keys, so enabling it invalidates nothing. A write still invalidates every entry for the table and tenant. See [Own-Records Scoping](/guide/feature-permission-own-records#caching).
+
 ## Manual Cache Clear
 
 ```php

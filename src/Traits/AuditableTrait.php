@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Traits;
 
+use Closure;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 use Illuminate\Database\Eloquent\Model;
@@ -18,13 +19,13 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
  * Adds automatic audit logging for Eloquent model lifecycle events.
  * Records create, update, and delete operations with configurable payloads.
  *
- * @mixin \Illuminate\Database\Eloquent\Model
+ * @mixin Model
  *
- * @method static void created(\Closure|string $callback)
- * @method static void updating(\Closure|string $callback)
- * @method static void updated(\Closure|string $callback)
- * @method static void deleting(\Closure|string $callback)
- * @method static void deleted(\Closure|string $callback)
+ * @method static void created((Closure|string) $callback)
+ * @method static void updating((Closure|string) $callback)
+ * @method static void updated((Closure|string) $callback)
+ * @method static void deleting((Closure|string) $callback)
+ * @method static void deleted((Closure|string) $callback)
  */
 trait AuditableTrait
 {

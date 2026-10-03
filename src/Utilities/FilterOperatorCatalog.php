@@ -178,7 +178,7 @@ final class FilterOperatorCatalog
     {
         return array_values(array_filter(
             array_column(self::catalogue($driver), 'name'),
-            static fn (string $name): bool => null !== self::negation($name),
+            static fn(string $name): bool => null !== self::negation($name),
         ));
     }
 

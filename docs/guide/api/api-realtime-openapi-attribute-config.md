@@ -11,7 +11,7 @@ keywords:
 
 ### Broadcast Events (Real-Time Mutations)
 
-When `record.broadcast_events` is enabled, the package fires a `RecordMutated` event over Laravel's broadcasting system after every successful mutation (create, update, upsert, delete, restore, force-delete, bulk).
+When `record.broadcast_events` is enabled, the package fires a `RecordMutated` event over Laravel's broadcasting system after every successful mutation made through the HTTP API (create, update, upsert, delete, restore, force-delete, bulk) or the MCP / AI SDK tools (`record.mcp.run_record_hooks`). Your own `RecordService::execute*` calls do not broadcast.
 
 #### Enabling Broadcasting
 

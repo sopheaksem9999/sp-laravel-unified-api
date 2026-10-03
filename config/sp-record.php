@@ -457,7 +457,7 @@ return [
     'autoloaded' => true,
     'global_functions' => RecordConfigLoader::globalFunctions(
         ...array_map(
-            static fn (string $name): string => __DIR__ . '/' . $name,
+            static fn(string $name): string => __DIR__ . '/' . $name,
             RecordConfigService::globalFunctionDirectoryNames(),
         ),
     ),
@@ -516,6 +516,10 @@ return [
         'middleware' => ['api', 'auth:sanctum'],
         'driver' => env('SP_MCP_DRIVER', 'legacy'),
         'oauth' => env('SP_MCP_OAUTH', false),
+        // Run record hooks (before*/after*, and the webhooks delivered through
+        // them), table validators, default validation and RecordMutated broadcasts
+        // for the MCP data tools and the AI SDK record tools, as over HTTP.
+        'run_record_hooks' => env('SP_MCP_RUN_RECORD_HOOKS', true),
     ],
 
     /*

@@ -254,7 +254,7 @@ class RecordConfigAutoloadedTest extends TestCase
         // evaluating the exported code, not the var_export() call itself.
         $table = new RecordTableType(
             table: 'widgets',
-            createValidator: static fn (): array => ['name' => 'required'],
+            createValidator: static fn(): array => ['name' => 'required'],
         );
 
         $exported = var_export(['widgets' => $table], true);

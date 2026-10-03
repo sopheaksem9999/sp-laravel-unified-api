@@ -56,8 +56,8 @@ class McpToolCatalogTest extends TestCase
     private function fixtureToolNames(array $tools): array
     {
         return array_values(array_map(
-            static fn (ToolDefinition $tool): string => $tool->name,
-            array_filter($tools, static fn (ToolDefinition $tool): bool => in_array($tool->table, ['widgets', 'gadgets'], true))
+            static fn(ToolDefinition $tool): string => $tool->name,
+            array_filter($tools, static fn(ToolDefinition $tool): bool => in_array($tool->table, ['widgets', 'gadgets'], true))
         ));
     }
 
@@ -68,7 +68,7 @@ class McpToolCatalogTest extends TestCase
 
         $this->assertSame(
             ['sp_api_list_endpoints', 'sp_api_get_endpoint', 'sp_api_list_permissions', 'sp_api_get_api_guidance'],
-            array_map(static fn (ToolDefinition $tool): string => $tool->name, $tools)
+            array_map(static fn(ToolDefinition $tool): string => $tool->name, $tools)
         );
 
         foreach ($tools as $tool) {
@@ -99,6 +99,20 @@ class McpToolCatalogTest extends TestCase
     }
 
     /** @test */
+    public function a_caller_can_list_the_write_tools_even_when_mcp_is_read_only(): void
+    {
+        config(['record.mcp.read_only' => true]);
+        $catalog = new ToolCatalog();
+
+        $this->assertNotContains('create_widgets', array_map(static fn(ToolDefinition $tool): string => $tool->name, $catalog->data()));
+
+        $names = array_map(static fn(ToolDefinition $tool): string => $tool->name, $catalog->data(readOnly: false));
+        foreach (['list_widgets', 'read_widgets', 'create_widgets', 'update_widgets', 'delete_widgets'] as $name) {
+            $this->assertContains($name, $names, $name);
+        }
+    }
+
+    /** @test */
     public function read_only_mode_leaves_only_list_and_read(): void
     {
         config(['record.mcp.read_only' => true]);
@@ -117,7 +131,7 @@ class McpToolCatalogTest extends TestCase
 
         $this->assertSame(
             ['sp_api_list_endpoints', 'sp_api_get_endpoint', 'sp_api_list_permissions', 'sp_api_get_api_guidance'],
-            array_map(static fn (ToolDefinition $tool): string => $tool->name, (new ToolCatalog())->tools(schemaOnly: true))
+            array_map(static fn(ToolDefinition $tool): string => $tool->name, (new ToolCatalog())->tools(schemaOnly: true))
         );
     }
 
@@ -127,7 +141,7 @@ class McpToolCatalogTest extends TestCase
         config(['record.mcp.read_only' => false]);
 
         $tools = (new ToolCatalog())->tools(schemaOnly: false);
-        $names = array_map(static fn (ToolDefinition $tool): string => $tool->name, $tools);
+        $names = array_map(static fn(ToolDefinition $tool): string => $tool->name, $tools);
 
         $this->assertSame(
             ['sp_api_list_endpoints', 'sp_api_get_endpoint', 'sp_api_list_permissions', 'sp_api_get_api_guidance'],

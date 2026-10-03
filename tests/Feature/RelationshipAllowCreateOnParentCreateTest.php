@@ -7,7 +7,6 @@ namespace Sopheak\Core\Tests\Feature;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Tests\TestCase;
 use Sopheak\Core\Types\RecordHasManyType;

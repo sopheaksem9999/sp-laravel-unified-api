@@ -63,14 +63,17 @@ class McpSchemaEndpointCoverageTest extends TestCase
                 pmsName: 'mcp_invoices',
                 hasTenantId: false,
                 softDeletes: $softDeletes,
-                public: new RecordTablePublic(read: true, write: true),
                 canDelete: $canDelete,
                 canUpsert: $canUpsert,
+                public: new RecordTablePublic(read: true, write: true),
             ),
         ]);
         SchemaRegistryUtils::refresh();
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getEndpointSchema(): array
     {
         $response = $this->postJson('/api/mcp/message', [
@@ -88,6 +91,9 @@ class McpSchemaEndpointCoverageTest extends TestCase
         return json_decode((string) $response->json('result.content.0.text'), true);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function listEndpoints(): array
     {
         $response = $this->postJson('/api/mcp/message', [
@@ -218,7 +224,7 @@ class McpSchemaEndpointCoverageTest extends TestCase
         $names = collect($endpoints)->pluck('name');
 
         foreach (['mcp_invoices.upsert', 'mcp_invoices.restore', 'mcp_invoices.forceDelete', 'mcp_invoices.bulkCreate', 'mcp_invoices.bulkUpdate', 'mcp_invoices.bulkDelete', 'mcp_invoices.bulkUpsert', 'mcp_invoices.bulk'] as $expectedName) {
-            $this->assertTrue($names->contains($expectedName), "Expected endpoint '{$expectedName}' to be listed");
+            $this->assertTrue($names->contains($expectedName), sprintf("Expected endpoint '%s' to be listed", $expectedName));
         }
     }
 }

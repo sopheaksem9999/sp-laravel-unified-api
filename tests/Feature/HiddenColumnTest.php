@@ -22,6 +22,7 @@ use Sopheak\Core\Tests\TestCase;
 class HiddenColumnTest extends TestCase
 {
     protected int $userId;
+
     protected int $postId;
 
     protected function setUp(): void

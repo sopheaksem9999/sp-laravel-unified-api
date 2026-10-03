@@ -32,6 +32,7 @@ Service class registered as a singleton in the container. Manages Gate registrat
 class PermissionRegistrar
 {
     public function registerPermissions(): void;
+    public function answerAbility(mixed $user, string $ability): ?bool;
     public function autoRegisterFromConfig(): void;
     public function getCacheVersion(): int;
     public function getPermissions(Model $user): Collection;
@@ -42,7 +43,8 @@ class PermissionRegistrar
 
 | Method | Description |
 |--------|-------------|
-| `registerPermissions()` | Registers every row in `sp_permissions` as a Gate ability via `$gate->define()`. The Gate callback checks `$user->hasPermissionTo($permission->name)` when the user model uses the `HasRoles` trait. |
+| `registerPermissions()` | Registers one `Gate::before` hook (once per Gate instance) that answers every ability at check time through `answerAbility()`. No abilities are defined, so an ability your app defines under a package permission name is not overwritten, and `Gate::has()` is `false` for package permissions. Runs once the app has booted when `permissions.enabled`, and lazily on the first API permission check if the module is enabled later. Needs no database. |
+| `answerAbility($user, $ability)` | `true` when the user (with `HasRoles`) holds `$ability` directly or through a role, or is a `super_admin_callback` super admin and `$ability` is a package permission (a name in `sp_permissions`); otherwise `null`, so the app's abilities, policies and Gate callbacks decide. A throwing `super_admin_callback` is reported and treated as "not a super admin". |
 | `autoRegisterFromConfig()` | Scans `config('record.tables')` for `pmsName` + `can*` flags and calls `firstOrCreate` on `sp_permissions` for each permission. Also processes `RecordTableType::$permissions` custom maps and `RecordFunctionType` entries with `pmsName`. Skips when config hash matches cached hash. |
 | `getCacheVersion()` | Returns the current cache version number (int). Initializes to `1` on first call. Used as part of the user-level cache key. |
 | `getPermissions(Model $user)` | Returns a deduplicated `Collection` of all permissions for the user (merged from role-based + direct). Cached per user under a version-scoped key. |
@@ -88,7 +90,7 @@ class PermissionService
 
 | Method | Description |
 |--------|-------------|
-| `isBuiltInPermissionEnabled()` | Returns `config('permission.enabled', false)`. Used by integration points (`HasControllerHelpers`, `McpServerService`) to decide which auth flow to use. |
+| `isBuiltInPermissionEnabled()` | Returns `config('permissions.enabled', false)`. A convenience for app code — the package's API, MCP and `viewOwn` checks do not use `PermissionService`; they go through `PermissionUtils::userHasAnyPermission()` and Laravel's Gate. |
 | `userHasTrait(Model $user)` | Checks if the user model uses the `HasRoles` trait via `class_uses_recursive()`. |
 | `userHasPermission()` | Delegates to `$user->hasPermissionTo()`. Returns `false` if user lacks trait. |
 | `userHasAnyPermission()` | Delegates to `$user->hasAnyPermission()`. |
@@ -217,7 +219,7 @@ The permission system is optimized for the authorization hot path (every CRUD re
 | **Name-only caching** | `getPermissions()` caches only permission name strings (not full Eloquent models). Cache memory footprint is ~6x smaller, with no model serialization overhead. |
 | **Version-based invalidation** | Permission changes increment a version counter instead of flushing the entire cache store. Old entries expire naturally via TTL. |
 | **Config hash skip** | `autoRegisterFromConfig()` computes a hash of table config and skips `firstOrCreate` queries on repeated boots when config is unchanged. |
-| **Pluck queries** | `registerPermissions()` and `getPermissions()` use `->pluck('name')` instead of `->get()` — only the `name` column is transferred from the database. |
+| **Pluck queries** | `getPermissions()` and the package-permission name lookup (`sp_permissions_names_v{version}`, cached for `permissions.cache_ttl`) use `->pluck('name')` instead of `->get()` — only the `name` column is transferred from the database. |
 | **Exists checks** | `PermissionService::assignRoleToUser()` and `givePermissionToUser()` use `->exists()` instead of loading full Eloquent models. |
 
 The `getPermissions()` result is cached per user under a version-scoped key, so the database is queried at most once per cache TTL (default 3600s) per user.

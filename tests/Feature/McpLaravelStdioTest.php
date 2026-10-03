@@ -30,7 +30,7 @@ class McpLaravelStdioTest extends TestCase
         $process->run();
 
         return array_map(
-            static fn (string $line): array => (array) json_decode($line, true),
+            static fn(string $line): array => (array) json_decode($line, true),
             array_values(array_filter(explode("\n", $process->getOutput())))
         );
     }

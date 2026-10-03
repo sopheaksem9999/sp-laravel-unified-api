@@ -24,12 +24,12 @@ class OpenApiContributionService
 
         foreach ($contributions['components'] ?? [] as $group => $definitions) {
             if (!is_array($definitions)) {
-                throw new OpenApiContributionException("components.{$group} must be an array.");
+                throw new OpenApiContributionException(sprintf('components.%s must be an array.', $group));
             }
 
             foreach ($definitions as $name => $definition) {
                 if (!is_string($name) || !is_array($definition)) {
-                    throw new OpenApiContributionException("components.{$group} entries must use string names and array definitions.");
+                    throw new OpenApiContributionException(sprintf('components.%s entries must use string names and array definitions.', $group));
                 }
 
                 $builder->addComponent($group, $name, $definition);
@@ -91,19 +91,19 @@ class OpenApiContributionService
 
         foreach ($channels as $index => $channel) {
             if (!is_array($channel)) {
-                throw new OpenApiContributionException("realtime.channels.{$index} must be an array.");
+                throw new OpenApiContributionException(sprintf('realtime.channels.%s must be an array.', $index));
             }
 
             $name = $channel['name'] ?? null;
             if (!is_string($name) || '' === trim($name)) {
-                throw new OpenApiContributionException("realtime.channels.{$index}.name must be non-empty.");
+                throw new OpenApiContributionException(sprintf('realtime.channels.%s.name must be non-empty.', $index));
             }
 
             if (isset($names[$name])) {
-                throw new OpenApiContributionException("realtime.channels.{$index}.name {$name} conflicts with an existing channel.");
+                throw new OpenApiContributionException(sprintf('realtime.channels.%s.name %s conflicts with an existing channel.', $index, $name));
             }
 
-            $this->validateRealtimeChannel($channel, "realtime.channels.{$index}", $document);
+            $this->validateRealtimeChannel($channel, 'realtime.channels.' . $index, $document);
             $names[$name] = true;
             $packageChannels[] = $channel;
         }
@@ -120,11 +120,11 @@ class OpenApiContributionService
         try {
             $contributor = app($class);
         } catch (Throwable $throwable) {
-            throw new OpenApiContributionException("Contributor {$class} could not be resolved: {$throwable->getMessage()}", previous: $throwable);
+            throw new OpenApiContributionException(sprintf('Contributor %s could not be resolved: %s', $class, $throwable->getMessage()), previous: $throwable);
         }
 
         if (!$contributor instanceof OpenApiDocumentContributorInterface) {
-            throw new OpenApiContributionException("Contributor {$class} must implement OpenApiDocumentContributorInterface.");
+            throw new OpenApiContributionException(sprintf('Contributor %s must implement OpenApiDocumentContributorInterface.', $class));
         }
 
         try {
@@ -132,7 +132,7 @@ class OpenApiContributionService
         } catch (OpenApiContributionException $exception) {
             throw $exception;
         } catch (Throwable $throwable) {
-            throw new OpenApiContributionException("Contributor {$class} failed: {$throwable->getMessage()}", previous: $throwable);
+            throw new OpenApiContributionException(sprintf('Contributor %s failed: %s', $class, $throwable->getMessage()), previous: $throwable);
         }
     }
 
@@ -143,16 +143,16 @@ class OpenApiContributionService
     {
         $pattern = $channel['pattern'] ?? null;
         if (!is_string($pattern) || '' === trim($pattern)) {
-            throw new OpenApiContributionException("{$source}.pattern must be non-empty.");
+            throw new OpenApiContributionException($source . '.pattern must be non-empty.');
         }
 
         if (!is_bool($channel['private'] ?? null)) {
-            throw new OpenApiContributionException("{$source}.private must be boolean.");
+            throw new OpenApiContributionException($source . '.private must be boolean.');
         }
 
         $parameters = $channel['parameters'] ?? [];
         if (!is_array($parameters)) {
-            throw new OpenApiContributionException("{$source}.parameters must be an array.");
+            throw new OpenApiContributionException($source . '.parameters must be an array.');
         }
 
         preg_match_all('/\\{([^}]+)\\}/', $pattern, $matches);
@@ -161,38 +161,38 @@ class OpenApiContributionService
         sort($placeholders);
         sort($parameterNames);
         if ($placeholders !== $parameterNames) {
-            throw new OpenApiContributionException("{$source}.parameters must exactly match pattern placeholders.");
+            throw new OpenApiContributionException($source . '.parameters must exactly match pattern placeholders.');
         }
 
         $events = $channel['events'] ?? null;
         if (!is_array($events) || [] === $events) {
-            throw new OpenApiContributionException("{$source}.events must be a non-empty array.");
+            throw new OpenApiContributionException($source . '.events must be a non-empty array.');
         }
 
         foreach ($events as $eventIndex => $event) {
             if (!is_array($event)) {
-                throw new OpenApiContributionException("{$source}.events.{$eventIndex} must be an array.");
+                throw new OpenApiContributionException(sprintf('%s.events.%s must be an array.', $source, $eventIndex));
             }
 
             $hasName = is_string($event['name'] ?? null) && '' !== trim($event['name']);
             $hasPattern = is_string($event['pattern'] ?? null) && '' !== trim($event['pattern']);
             if ($hasName === $hasPattern) {
-                throw new OpenApiContributionException("{$source}.events.{$eventIndex} requires exactly one of name or pattern.");
+                throw new OpenApiContributionException(sprintf('%s.events.%s requires exactly one of name or pattern.', $source, $eventIndex));
             }
 
             $payload = $event['payload'] ?? null;
             if (!is_array($payload) || [] === $payload) {
-                throw new OpenApiContributionException("{$source}.events.{$eventIndex}.payload must be a schema or reference.");
+                throw new OpenApiContributionException(sprintf('%s.events.%s.payload must be a schema or reference.', $source, $eventIndex));
             }
 
             $reference = $payload['$ref'] ?? null;
             if (is_string($reference)) {
-                $this->assertLocalComponentReferenceExists($reference, $source . ".events.{$eventIndex}.payload", $document);
+                $this->assertLocalComponentReferenceExists($reference, $source . sprintf('.events.%s.payload', $eventIndex), $document);
             }
         }
 
         if (isset($channel['authorization']) && !is_string($channel['authorization'])) {
-            throw new OpenApiContributionException("{$source}.authorization must be a string.");
+            throw new OpenApiContributionException($source . '.authorization must be a string.');
         }
     }
 
@@ -200,17 +200,17 @@ class OpenApiContributionService
     private function assertLocalComponentReferenceExists(string $reference, string $source, array $document): void
     {
         if (!str_starts_with($reference, '#/components/')) {
-            throw new OpenApiContributionException("{$source} must use a local #/components reference.");
+            throw new OpenApiContributionException($source . ' must use a local #/components reference.');
         }
 
         $segments = explode('/', substr($reference, 2));
         if (3 !== count($segments) || 'components' !== $segments[0]) {
-            throw new OpenApiContributionException("{$source} has an invalid component reference.");
+            throw new OpenApiContributionException($source . ' has an invalid component reference.');
         }
 
         [, $group, $name] = $segments;
         if (!isset($document['components'][$group][$name])) {
-            throw new OpenApiContributionException("{$source} references missing component {$reference}.");
+            throw new OpenApiContributionException(sprintf('%s references missing component %s.', $source, $reference));
         }
     }
 
@@ -224,7 +224,7 @@ class OpenApiContributionService
         }
 
         foreach ($value as $key => $nestedValue) {
-            $nestedSource = $source . '.' . (string) $key;
+            $nestedSource = $source . '.' . $key;
             if ('$ref' === $key && is_string($nestedValue) && str_starts_with($nestedValue, '#/components/')) {
                 $this->assertLocalComponentReferenceExists($nestedValue, $nestedSource, $document);
             }

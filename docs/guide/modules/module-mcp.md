@@ -18,7 +18,7 @@ keywords:
 
 The **Model Context Protocol (MCP)** integration lets AI assistants (Claude Code, Cursor, claude.ai, ChatGPT, …) understand, query and — when you allow it — change your `sp-laravel-api` data through a standard protocol.
 
-Instead of giving an AI raw database access or a 50K-token OpenAPI file, MCP exposes your schema and CRUD operations as small tools. The AI stays inside your tenant boundaries, rate limits and permission checks.
+Instead of giving an AI raw database access or a 50K-token OpenAPI file, MCP exposes your schema and CRUD operations as small tools. The AI stays inside your tenant boundaries and permission checks. The Data MCP routes are not in the package's `api-reads`/`api-writes` throttle groups — add a `throttle:…` entry to `record.mcp.middleware` to rate-limit them.
 
 ## Table of Contents
 - [Two MCP Endpoints](#two-mcp-endpoints)
@@ -107,6 +107,10 @@ Both drivers add a `title` and `annotations` (`readOnlyHint`, `destructiveHint`,
     // Opt-in OAuth 2.1 discovery for connector clients. Needs the `laravel`
     // driver and laravel/passport.
     'oauth' => env('SP_MCP_OAUTH', false),
+
+    // Run record hooks, table/default validators, after-hooks (webhooks) and
+    // RecordMutated broadcasts for the data tools and the AI SDK record tools.
+    'run_record_hooks' => env('SP_MCP_RUN_RECORD_HOOKS', true),
 
     // Middleware applied to the Data MCP routes
     'middleware' => ['api', 'auth:sanctum'],
@@ -219,7 +223,7 @@ Check `includes[]` in `sp_api_get_endpoint`. A relationship with `"writable": tr
 }
 ```
 
-- **hasMany / morphMany** (`items`): an item without `id` creates a child, with `id` updates it, `"_delete": true` (with `id`) deletes it. Children you leave out are **kept**. A bare id is a `422`.
+- **hasMany / morphMany** (`items`): an item without `id` creates a child, with `id` updates it, `"_delete": true` (with `id`) deletes it. Children you leave out are **kept**. A bare id is refused (`422` over HTTP; over MCP an `isError` result with `Relationship 'items' on table 'invoices' expects objects, got scalar 5. …`).
 - **belongsToMany / morphToMany / hasManyThrough** (`tags`): `{"id": N}` or a bare `N` attaches, extra pivot fields update the pivot, an item without `id` creates the related row, `{"id": N, "_delete": true}` detaches. Links you leave out are **kept**.
 - **belongsTo** has no nested form: set the root field (`customer_id`).
 - Every nested child needs the **child table's own** create/update/delete permission, exactly like a direct request; attaching an existing row needs only the parent's permission.
@@ -348,7 +352,7 @@ php artisan mcp:inspector api/v1/mcp              # the HTTP route (path without
 
 ### Use Case 1: Local AI IDE integration (stdio)
 
-You develop a frontend in Cursor or Claude Code and want the AI to read real data from your local backend. Add the stdio server (`php artisan sp-laravel-api:mcp --tenant=42`, see above) and ask: *"Check the `customers` schema and show me the latest 3 customers."* The AI reads `schema://customers`, then calls `list_customers` with `{"limit": 3, "order": "desc"}`. A console process has no tenant header, so pass `--tenant`; without it tenant-scoped tables are refused.
+You develop a frontend in Cursor or Claude Code and want the AI to read real data from your local backend. Add the stdio server (`php artisan sp-laravel-api:mcp --tenant=42`, see above) and ask: *"Check the `customers` schema and show me the latest 3 customers."* The AI reads `schema://customers`, then calls `list_customers` with `{"limit": 3, "order": "desc"}`. A console process has no tenant header, so pass `--tenant`; without it tenant-scoped tables are refused. A console process has no user either, so this works only when `customers` reads are public (`isAuthRead: false`); see the stdio note under [Tenant Isolation](#tenant-isolation).
 
 ### Use Case 2: Remote web AI agents (HTTP)
 
@@ -363,7 +367,7 @@ X-Tenant-ID: 42
   "params": { "name": "create_invoices", "arguments": { "payload": { "ref_number": "INV-1", "customer_id": 123 } } } }
 ```
 
-Because the request carries the user's token, the tenant, the user's permissions, `viewOwn` scoping, your triggers and validators all apply.
+Because the request carries the user's token, the tenant, the user's permissions, `viewOwn` scoping and hidden-column stripping all apply. Record hooks, validators and webhooks run too — see point 4 under [Security & Authentication › Data MCP](#data-mcp).
 
 ### Use Case 3: Frontend AI agent — API schema discovery
 
@@ -441,7 +445,7 @@ tools/call list_invoices  +  no tenant anywhere  -> refused
 
 > **Deployment note:** because the tenant rides on the request, each company's MCP client configuration must carry that company's tenant context (header or a credential your middleware maps to one). A single shared static token with no tenant binding is **not** sufficient for multi-tenant use.
 
-> **Stdio:** a console process has no request, so `php artisan sp-laravel-api:mcp` cannot see a tenant header. Pass `--tenant=<id>`; without it, tenant-scoped tables are refused.
+> **Stdio:** a console process has no request and no user. `php artisan sp-laravel-api:mcp` cannot see a tenant header — pass `--tenant=<id>`; without it, tenant-scoped tables are refused. It cannot authenticate either: only public actions (`isAuthRead: false` / `isAuthWrite: false`) run, and every other data tool answers `-32001 Unauthenticated`. Use the HTTP endpoint with a user token for protected tables.
 
 ## Security & Authentication
 
@@ -452,7 +456,7 @@ The MCP integration is not a backdoor. It uses the security layers already defin
 1. **`authorizeAction()` enforcement**: every tool call passes the same permission decision as the REST API (including `super_admin_callback`, a custom `record.authorization` handler, `viewOwn:*`, and Laravel's Gate with the built-in permission module). Without the permission the call fails with `-32002 Forbidden`; with the `laravel` driver a tool the user may not use is also left out of `tools/list` (and is still refused if called).
 2. **Tenant scoping**: see [Tenant Isolation](#tenant-isolation).
 3. **Nested writes** are authorized per child table; see [Nested & Bulk Operations](/guide/api-nested-and-bulk-operations).
-4. **Triggers and validators**: `beforeCreate`, `afterUpdate` and your validators run exactly as over HTTP.
+4. **Hooks and validators run as over HTTP.** Global and table `before*` hooks, `createValidator` / `updateValidator` / `deleteValidator`, column default validation, `after*` hooks (and the webhooks delivered through them) and `RecordMutated` broadcasts run for every data tool call, in the CRUD controller's order; `beforeRead` / `afterRead` run for `list_*` and `read_*`, and query changes a `beforeRead` hook makes apply to both. A refusal comes back as an `isError` result: `Validation failed: {…}`, or the message of the hook's HTTP response. Any other exception a hook or validator throws answers `A record hook failed; the details are in the application log.` and is reported — and the write is rolled back. Hooks receive a request built for the call: the payload as its JSON body, `queryParams` as its query string, the caller's IP, user agent and user, and the resolved tenant (as `resolved_tenant_id` and in the tenant header). Set `record.mcp.run_record_hooks` (`SP_MCP_RUN_RECORD_HOOKS`) to `false` for the old behaviour (no hooks, no validators).
 5. **Authentication**: `record.mcp.middleware` (default `['api', 'auth:sanctum']`), or Passport with `record.mcp.oauth`.
 
 ### Schema MCP (`POST /api/v1/mcp/schema`)
@@ -465,6 +469,8 @@ The Schema MCP exposes **no data** — only endpoint metadata. The `VerifySchema
 | `local` | Yes | Requires `Authorization: Bearer <token>` |
 | other | No | **401** — a token is mandatory |
 | other | Yes | Requires `Authorization: Bearer <token>` |
+
+`SP_API_MCP_TOKEN=` set but empty is not "no token": it matches nothing, so every request answers `401`, `local` included. Leave the variable unset for open local access.
 
 ```bash
 php -r "echo bin2hex(random_bytes(32));"   # generate a strong token
@@ -480,6 +486,7 @@ SP_API_MCP_ENABLED=false                   # → the route is not registered (40
 - **Schema tool content changed** (all additive or corrections): integer columns are `integer`, create/update payload schemas list relationship aliases and `required` and no longer offer `id`, timestamps, tenant or userstamp columns, belongsToMany includes report the related table as `table` (the pivot is `pivotTable`), `payloadHint` shows shapes that write, `filters[].operators` lists the real operator set for the column type and driver, `queryParameters` starts with `{column}={operator}.{value}` instead of `filters`, and repeated schemas are `$ref`s. Clients should follow `$ref` (JSON pointer) when they read `response.dataSchema`, `request.payload` or `filters[].operators`.
 - **`content[0].text` is compact JSON** (was pretty-printed). `structuredContent` is unchanged.
 - **MCP data tools honour the table's `canRead` / `canCreate` / `canUpdate` / `canDelete` flags** (security fix): a tool for an action the table disallows is no longer listed and answers `-32601`. The built-in audit, permission and attachment tables lose the write tools their config never allowed.
+- **Database errors are generic and tenant-scoped includes need a tenant** (security fix): a database failure over MCP now answers "The database rejected the operation." (the SQL and its bound values are in your log, not the response), and with tenancy on and no tenant resolved, a call that includes rows of a tenant-scoped relation (`select=*,rel(*)`, `with`, `rel.column` filters) answers `-32001 Tenant context is required…` instead of returning every tenant's rows.
 - **Nested child writes need the child table's permission** (security fix): grant `create:`/`update:`/`delete:` + the child's `pmsName` to users who write children through a parent. Bare ids in a many-to-many array now attach; in a hasMany array they are a `422`.
 - **Using `laravel/mcp`**: `composer require laravel/mcp`, set `SP_MCP_DRIVER=laravel`. For claude.ai/ChatGPT also `composer require laravel/passport`, `SP_MCP_OAUTH=true` and `auth:api` middleware.
 

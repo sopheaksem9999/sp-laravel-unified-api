@@ -57,7 +57,7 @@ new RecordTableType(
 
 #### Identity & Routing
 
-- `pmsName` (?string, default: `null`): Used for permission mapping (e.g. `view:{pmsName}`). If `null`, it falls back to the table name (singular, snake_case) for permission generation.
+- `pmsName` (?string, default: `null`): Used for permission mapping (e.g. `view:{pmsName}`). If `null` (or `[]`), the table needs no permission: any authenticated user may perform its non-public actions (directly or as a nested child), no permissions are auto-registered, and `viewOwn` does not apply.
 - `table` (?string, default: `null`): Physical database table name. When `null`, the route table name is used as the DB table name.
 - `primaryKey` (?string, default: `'id'`): Primary key column name used by show/update/delete endpoints.
 - `ownerColumn` (?string, default: `null`): Column holding the record owner's user id, used by [`viewOwn:*` scoping](/guide/feature-permission-own-records). When `null`, the column is auto-detected from `record.own_records_owner_columns`. Set this on domain tables where the owner is the record's *subject* (e.g. `user_id`) rather than the audit author (`created_by_id`).
@@ -72,9 +72,10 @@ new RecordTableType(
 - `isAuthWrite` (bool, default: `true`): Auth requirement flag for write endpoints. `true` forces authentication, `false` makes write endpoints public.
 - `public` (RecordTablePublic|bool, **deprecated**): Derived automatically from `isAuthRead`/`isAuthWrite` (public read = `!isAuthRead`, public write = `!isAuthWrite`). Only honored as a legacy override when both auth flags are left at their defaults — new config should set the auth flags directly and never set `public`.
 - `canRead` (bool, default: `true`): Enables/disables read endpoints for this table (list/show). When false, read routes respond as “not found”.
-- `canCreate` (bool, default: `true`): Enables/disables create endpoint.
-- `canUpdate` (bool, default: `true`): Enables/disables update and restore endpoints.
-- `canDelete` (bool, default: `true`): Enables/disables delete and force-delete endpoints.
+- `canCreate` (bool, default: `true`): Enables/disables create endpoint — and nested creates into this table through a parent, which return `422`.
+- `canUpdate` (bool, default: `true`): Enables/disables update and restore endpoints — and nested updates into this table through a parent, which return `422`.
+- `canDelete` (bool, default: `true`): Enables/disables delete and force-delete endpoints — and nested deletes from this table through a parent, which return `422`.
+- The `can*` flags also gate the MCP data tools and the AI SDK record tools: a disabled action's `list_`/`read_`, `create_`, `update_` or `delete_` tool is left out of `tools/list` and refused with `-32601` if called; `RecordTools::for()` leaves it out and `->only()` naming it throws.
 
 #### Soft Deletes
 
@@ -90,7 +91,7 @@ new RecordTableType(
 #### Schema & Search Metadata
 
 - `columns` (?array, default: `[]`): Column metadata map. In normal usage this is populated at runtime from the database schema; leaving it empty is expected. It is used to whitelist payload fields and to detect audit columns like `created_by`, `created_by_id`, `updated_by`, `last_updated_by`, and `last_updated_by_id`.
-- `columnHiddens` (?array, default: `[]`): List of column names to always hide from API responses. This is applied recursively to nested relationships as well. Hidden columns are removed even if their value is `null`.
+- `columnHiddens` (?array, default: `[]`): List of column names to always hide from API responses. This is applied recursively to nested relationships as well. Hidden columns are removed even if their value is `null`. This includes MCP and AI SDK tool results; the MCP schema tools also leave hidden columns out of read schemas, filters and sorts.
 - `columnWriteDisabled` (?array, default: `[]`): List of column names that are not writable via API payloads (create, update, upsert, and nested relationship writes). These columns are stripped from incoming payloads even if provided by the client.
 - `columnIndexes` (?array, default: `[]`): Declares full-text index column sets for search optimization. Format: a list of column name arrays, e.g. `[['name', 'description'], ['content']]`.
 - `searchable` (?array, default: `[]`): Explicit fields used by the `?search=` query param. Supports root columns like `'name'` and one-level relationship fields like `'customer.display_name'` or `'items.description'`.

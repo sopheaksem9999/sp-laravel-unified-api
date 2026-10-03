@@ -69,7 +69,6 @@ class AttachmentUrlEmbedTest extends TestCase
                 hasTenantId: false,
                 softDeletes: false,
                 public: new RecordTablePublic(read: true, write: true),
-                relationships: [],
                 columns: [
                     'id' => ['type' => 'uuid', 'nullable' => false],
                     'folder_id' => ['type' => 'string', 'nullable' => true],
@@ -83,6 +82,7 @@ class AttachmentUrlEmbedTest extends TestCase
                     'visibility' => ['type' => 'string', 'nullable' => false],
                     'temp_timeout' => ['type' => 'datetime', 'nullable' => true],
                 ],
+                relationships: [],
             ),
         ]);
 
@@ -116,7 +116,7 @@ class AttachmentUrlEmbedTest extends TestCase
         $this->assertNotNull($profileImage);
         $profile = is_array($profileImage) ? $profileImage : (array) $profileImage;
         $this->assertSame($attachmentId, $profile['id']);
-        $this->assertStringContainsString('/sp_attachments/'.$attachmentId.'/download', $profile['download_url']);
+        $this->assertStringContainsString('/sp_attachments/' . $attachmentId . '/download', $profile['download_url']);
         $this->assertStringContainsString('/storage/images/poster.jpg', $profile['url']);
         $this->assertStringNotContainsString('/view', $profile['url']);
     }

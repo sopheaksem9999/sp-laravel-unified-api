@@ -39,8 +39,8 @@ When audit records are generated, sensitive attributes configured under `columnH
 
 `audit.queue_enabled` is the only switch that decides whether an audit entry is
 queued — for HTTP CRUD and for `RecordService::executeCreate/Update/Delete`
-(the MCP tools, attachments and your own service calls) alike. With it off,
-every row is written during the request, whatever your `QUEUE_CONNECTION` is.
+(the MCP tools, the AI SDK record tools, attachments and your own service calls) alike. With it off,
+every row is written during the request, whatever your `QUEUE_CONNECTION` is. With it on, `AuditLogJob` is queued only after the surrounding transaction commits, so a write that is rolled back leaves no audit entry.
 
 Each row records who made the request and from where. With
 `audit.queue_enabled`, the row is written later by a queue worker, which has no
@@ -82,6 +82,6 @@ The five arguments are event enum, table, incoming audit payload, nullable actor
 
 Existing custom logger return values are ignored: callable means handled, even for void/null/false. Global filtering does not suppress custom callback invocation. Table/global triggers and broadcasting continue when the built-in submission is rejected. Existing custom-handler early-return behavior is unchanged.
 
-Normal post-write logic and the separate bulk-upsert wrapper both use the policy. Existing bulk upsert also audits through its inner update path; each submission gets its own decision. Authentication and direct low-level processing/trait calls are outside this hook. Queued lifecycle listeners evaluate when they call `log` in the worker, without the originating request actor.
+Normal post-write logic and the separate bulk-upsert wrapper both use the policy. Existing bulk upsert also audits through its inner update path; each submission gets its own decision. Authentication and direct low-level processing/trait calls are outside this hook. The package's record lifecycle listener (`LogRecordAuditListener`, behind `RecordService::executeCreate/Update/Delete`) is not queued: it calls `log` during the request, so the policy sees the originating request and actor. Only `audit.queue_enabled` moves the row write to a worker, and that happens after the policy has decided.
 
 See [audit policy configuration and coverage](/features/audit-logging).

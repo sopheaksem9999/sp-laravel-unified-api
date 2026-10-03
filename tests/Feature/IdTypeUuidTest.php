@@ -126,7 +126,7 @@ class IdTypeUuidTest extends TestCase
     /** @test */
     public function model_has_role_pivot_writes_succeed_with_uuid_keys(): void
     {
-        $role = Role::query()->create(['name' => 'editor', 'guard_name' => 'api']);
+        Role::query()->create(['name' => 'editor', 'guard_name' => 'api']);
         $assignee = TestRoleAssignee::query()->create();
 
         $assignee->assignRole('editor');

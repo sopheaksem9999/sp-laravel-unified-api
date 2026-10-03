@@ -15,7 +15,7 @@ keywords:
 
 The package auto-populates audit-style user columns on create/update when the
 table schema declares them. This is the data source behind own-records scoping
-(see [Own-Records Scoping](/guide/features/feature-permission)).
+(see [Own-Records Scoping](/guide/feature-permission-own-records)).
 
 ## Recommended Convention
 
@@ -162,11 +162,11 @@ row itself. Both can be enabled independently:
 
 - [Audit Module](/features/audit-logging)
 - [Audit in Dynamic Record API](/guide/feature-audit-record-hooks)
-- [Audit Management Endpoints](/guide/api/api-audit-management-endpoints)
+- [Audit Management Endpoints](/guide/api-audit-management-endpoints)
 
 ## Related Docs
 
-- [Built-in Role/Permission](/guide/features/feature-permission)
+- [Built-in Role/Permission](/guide/feature-permission)
 - [Own-Records Scoping](/guide/feature-permission-own-records)
-- [Record Type Reference](/guide/api/api-type-reference-and-examples)
+- [Record Type Reference](/guide/api-type-reference-and-examples)
 - [Record Hooks](/guide/record-hooks)

@@ -87,7 +87,10 @@ class ConfigCacheCommandsTest extends TestCase
         }
     }
 
-    public static function policy(): bool { return false; }
+    public static function policy(): bool
+    {
+        return false;
+    }
 
     /** @test */
     public function config_cache_succeeds_with_the_shipped_record_config_present(): void
@@ -210,7 +213,7 @@ class ConfigCacheCommandsTest extends TestCase
                 // leaf: makeDirectory(recursive: true) creates every missing
                 // ancestor, and tracking only the leaf orphans its parents.
                 $this->created[] = $this->outermostMissingAncestor($dir);
-                File::makeDirectory($dir, 0755, true);
+                File::makeDirectory($dir, 0o755, true);
             }
         }
 
@@ -258,7 +261,7 @@ class ConfigCacheCommandsTest extends TestCase
      */
     private function removeCreatedPaths(): void
     {
-        usort($this->created, static fn (string $a, string $b): int => strlen($b) <=> strlen($a));
+        usort($this->created, static fn(string $a, string $b): int => strlen($b) <=> strlen($a));
 
         foreach ($this->created as $path) {
             if (File::isDirectory($path)) {

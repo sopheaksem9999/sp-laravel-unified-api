@@ -29,6 +29,10 @@ This is the canonical guide for `RecordTableType` lifecycle hooks.
 - `beforeRestore`
 - `afterRestore`
 
+## Where Hooks Run
+
+Hooks run for requests to the HTTP API and for the MCP data tools and the AI SDK record tools (unless `record.mcp.run_record_hooks` is `false`). They do not run for your own `RecordService::execute*` calls — hook code calling those methods would otherwise re-enter itself. Those calls still dispatch `RecordCreated` / `RecordUpdated` / `RecordDeleted` (audit rows, cache invalidation) — listen to those events for logic that must also run for them.
+
 ## Hook Signature
 
 Use static methods with `Request`, `table`, and `context`:
@@ -269,8 +273,8 @@ final class InvoiceHooks
         // Prevent default keyword search from running at the same time.
         $request->query->remove('search');
 
-        // Escape comma because OR parser uses comma as separator.
-        $needle = str_replace(',', '\\,', $search);
+        // The grouped-filter parser splits on commas and has no escape: drop them.
+        $needle = str_replace(',', ' ', $search);
 
         // (ref_number LIKE) OR (customer.display_name LIKE) OR (items.name LIKE) OR (items.description LIKE)
         $request->query->set(
@@ -285,6 +289,8 @@ final class InvoiceHooks
     }
 }
 ```
+
+Change filters with `$request->query->set()` / `remove()` as above (or `merge()` on a plain `GET`): the package carries the hook's changes into the filters it applies, keeping dotted relationship keys. A `select` merged into a JSON request body is ignored; set it with `$request->query->set('select', …)`. Grouped conditions accept one-level relationship columns (`customer.display_name.ilike.*x*`), bound to the request's tenant.
 
 Client request (hook transforms `search` into grouped `or`):
 
@@ -357,7 +363,7 @@ final class InvoiceHooks
         }
 
         $request->query->remove('search');
-        $needle = str_replace(',', '\\,', $search);
+        $needle = str_replace(',', ' ', $search); // no comma escape in grouped filters
 
         $request->query->set(
             'or',
@@ -436,6 +442,8 @@ GET /api/v2/invoices?mode=unpaid&search=acme
 GET /api/v2/invoices?per_page=50&sortby=invoice_date&order=asc
 ```
 
+> **List reads only.** Filters a `beforeRead` hook adds to the query apply to `GET /{table}` only. `GET /{table}/{id}`, update, delete, restore and force-delete do not read query filters, so a user hidden from a row in the list can still reach it by id. For "only mine", use [`viewOwn`](/guide/feature-permission-own-records), which scopes every operation; for team visibility, also check ownership in `beforeUpdate` / `beforeDelete`, and in `beforeRead` when `$context['type'] === 'show'`.
+
 ## Context Quick Map
 
 - `beforeRead` list: context includes `type=index`, `tenant_id`.
@@ -444,6 +452,10 @@ GET /api/v2/invoices?per_page=50&sortby=invoice_date&order=asc
 - `beforeDelete`: context includes `id`, `tenant_id`, `record`.
 - `afterDelete`: adds `soft_deleted` and `response`.
 - `beforeRestore`/`afterRestore`: includes `id`, `tenant_id`, `record`, restore metadata.
+
+## Hooks and Nested Writes
+
+Hook code — table and global triggers (`before*` and `after*`), `customAuditLog`, webhooks, and listeners of `RecordCreated` / `RecordUpdated` / `RecordDeleted` — is trusted app code: nested child writes it makes itself (for example `RecordService::executeCreate('invoices', [..., 'items' => [...]])`) are not checked against the requesting user's child-table permissions. Data a `before*` hook merges into the payload is still checked, because the request's own write runs after the hook returns. `viewOwn` scoping still applies to hook code that reads or writes through `RecordService`, because it follows the authenticated user. See [Nested Writes](/guide/api-nested-and-bulk-operations).
 
 ## Best Practices
 

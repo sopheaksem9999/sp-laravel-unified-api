@@ -18,7 +18,7 @@ class BoostInstallCommandTest extends TestCase
         $this->mcpPath = base_path('.mcp.json');
 
         if (File::exists($this->mcpPath)) {
-            File::copy($this->mcpPath, $this->mcpPath.'.bak');
+            File::copy($this->mcpPath, $this->mcpPath . '.bak');
         }
     }
 
@@ -26,8 +26,8 @@ class BoostInstallCommandTest extends TestCase
     {
         File::delete($this->mcpPath);
 
-        if (File::exists($this->mcpPath.'.bak')) {
-            File::move($this->mcpPath.'.bak', $this->mcpPath);
+        if (File::exists($this->mcpPath . '.bak')) {
+            File::move($this->mcpPath . '.bak', $this->mcpPath);
         }
 
         parent::tearDown();

@@ -160,6 +160,7 @@ class SyncRecordColumnsCommand extends Command
                         $colMeta['enum'] = array_values($config->columns[$colName]['enum']);
                     }
                 }
+
                 unset($colMeta);
 
                 // 5. Update all corresponding config files
