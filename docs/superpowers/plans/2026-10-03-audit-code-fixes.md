@@ -1475,7 +1475,7 @@ The final review's deferred minors, the pre-existing HTTP `beforeRead` bug it su
 
 **Interfaces:** none new.
 
-- [ ] **Step 1: Write the failing tests** — add to `McpHookSpy`: `public static array $captured = [];` (reset in `reset()`), and
+- [x] **Step 1: Write the failing tests** — add to `McpHookSpy`: `public static array $captured = [];` (reset in `reset()`), and
 
 ```php
     public static function beforeUpdateRecordingQuery(Request $request, string $table, array $context): void
@@ -1558,15 +1558,15 @@ Let `registerTables()` take a fourth `array $overrides = []` merged into the `no
     }
 ```
 
-- [ ] **Step 2: Run** `vendor/bin/phpunit --filter McpRecordHooksTest` — Expected: the four new tests FAIL (delete runs; `pets_name`; a memo row with a null body; header null).
-- [ ] **Step 3: Implement** — in `request()`: `Request::create('/', $method, [], [], [], $server, $isRead ? null : json_encode($payload, JSON_THROW_ON_ERROR))`, then `$request->query->replace($queryParams)` and `$request->server->set('QUERY_STRING', http_build_query($queryParams))`; when a tenant resolved, also `$request->headers->set(RecordConfigService::tenantHeader(), (string) $tenantId)`. In `delete()`, after `$query = $request->query->all();` call `$this->refuseTenantScopedIncludes($table, $query, $tenantId);`.
-- [ ] **Step 4: Run** `vendor/bin/phpunit --filter 'McpRecordHooksTest|RecordToolHooksTest|Mcp'` — Expected: PASS.
+- [x] **Step 2: Run** `vendor/bin/phpunit --filter McpRecordHooksTest` — Expected: the four new tests FAIL (delete runs; `pets_name`; a memo row with a null body; header null).
+- [x] **Step 3: Implement** — in `request()`: `Request::create('/', $method, [], [], [], $server, $isRead ? null : json_encode($payload, JSON_THROW_ON_ERROR))`, then `$request->query->replace($queryParams)` and `$request->server->set('QUERY_STRING', http_build_query($queryParams))`; when a tenant resolved, also `$request->headers->set(RecordConfigService::tenantHeader(), (string) $tenantId)`. In `delete()`, after `$query = $request->query->all();` call `$this->refuseTenantScopedIncludes($table, $query, $tenantId);`.
+- [x] **Step 4: Run** `vendor/bin/phpunit --filter 'McpRecordHooksTest|RecordToolHooksTest|Mcp'` — Expected: PASS.
 
 ### Task 6: The HTTP include check uses the controller's table
 
 **Files:** Modify `src/Http/Controllers/Concerns/HasControllerHelpers.php` (`resolveTenantContext()`, `refuseTenantScopedIncludes()`), `HasCrudOperations.php` and `HasBulkOperations.php` (every `resolveTenantContext(` call passes `table: $table`); Test `tests/Feature/TenantScopedIncludesHttpTest.php`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```php
     public function test_a_controller_action_on_a_route_with_another_parameter_name_still_refuses(): void
@@ -1577,9 +1577,9 @@ Let `registerTables()` take a fourth `array $overrides = []` merged into the `no
     }
 ```
 
-- [ ] **Step 2: Run** — Expected: FAIL (200, the check read `route('table')`, which is null there).
-- [ ] **Step 3: Implement** — `resolveTenantContext(Request $request, object $tableSchema, bool $checkIncludes = true, ?string $table = null)`; `refuseTenantScopedIncludes(Request $request, ?string $table)` uses `$table ?? (string) ($request->route('table') ?? '')`; CRUD and bulk callers pass `table: $table`.
-- [ ] **Step 4: Run** `vendor/bin/phpunit --filter 'TenantScoped|Tenant|Bulk|Crud'` — Expected: PASS.
+- [x] **Step 2: Run** — Expected: FAIL (200, the check read `route('table')`, which is null there).
+- [x] **Step 3: Implement** — `resolveTenantContext(Request $request, object $tableSchema, bool $checkIncludes = true, ?string $table = null)`; `refuseTenantScopedIncludes(Request $request, ?string $table)` uses `$table ?? (string) ($request->route('table') ?? '')`; CRUD and bulk callers pass `table: $table`.
+- [x] **Step 4: Run** `vendor/bin/phpunit --filter 'TenantScoped|Tenant|Bulk|Crud'` — Expected: PASS.
 
 ### Task 7: beforeRead query changes take effect over HTTP
 
@@ -1587,10 +1587,10 @@ Let `registerTables()` take a fourth `array $overrides = []` merged into the `no
 
 QueryBuilderFiltersUtils reads filters from the raw `QUERY_STRING` (to keep dotted keys), so a hook's `$request->query->set()` / `remove()` / `merge()` never reached the filters, and a `select` merged into a JSON request body made `apply()` pass `null` to `parseSelectColumns()` (500).
 
-- [ ] **Step 1: Write the failing tests** — a `notes` table (`title`, `team`) with a `comments` hasMany (`note_id`, `body`); rows RED (team red, comment hello), BLUE (team blue, comment hello), RED2 (team red, no comment); a hook class with `viaQuerySet` (`query->set('team', 'eq.red')`), `viaMerge` (`merge(['team' => 'eq.red'])`), `searchToOr` (the guide's pattern: `query->remove('search')`, `query->set('or', '(title.eq.BLUE,team.eq.green)')`), `selectIntoBody` (`merge(['select' => 'id,title'])`). Tests: list with `viaQuerySet` → only RED and RED2; `viaMerge` on a plain GET (`$this->get(...)`, no JSON content type) → only RED and RED2; `searchToOr` with `?search=x` → only BLUE; `/api/notes?comments.body=eq.hello` with `viaQuerySet` → only RED (the dotted filter survives the rewrite); `selectIntoBody` via `getJson` → 200; the same hook registered as the global `beforeRead` (`record.global_triggers`) → only RED and RED2.
-- [ ] **Step 2: Run** `vendor/bin/phpunit --filter BeforeReadQueryChangesTest` — Expected: FAIL (all rows; 500).
-- [ ] **Step 3: Implement** — in `executeTableTrigger()`, after `attachRequestContext()`, snapshot `$request->query->all()`; after the triggers, when `$params[0]` is that same Request and its query bag changed, `syncQueryString()`: re-parse the raw `QUERY_STRING` with `QueryBuilderFiltersUtils::parseQueryStringPreservingDots()`, drop keys whose bag form (`.`/space → `_`) the hook removed, overwrite keys it changed, add keys it added, and write `http_build_query()` back to `QUERY_STRING`. In `apply()`, read `$select = $request->query('select')` and select only when it is a string.
-- [ ] **Step 4: Run** `vendor/bin/phpunit --filter 'BeforeReadQueryChangesTest|Hook|Trigger|Filter|Select'` — Expected: PASS.
+- [x] **Step 1: Write the failing tests** — a `notes` table (`title`, `team`) with a `comments` hasMany (`note_id`, `body`); rows RED (team red, comment hello), BLUE (team blue, comment hello), RED2 (team red, no comment); a hook class with `viaQuerySet` (`query->set('team', 'eq.red')`), `viaMerge` (`merge(['team' => 'eq.red'])`), `searchToOr` (the guide's pattern: `query->remove('search')`, `query->set('or', '(title.eq.BLUE,team.eq.green)')`), `selectIntoBody` (`merge(['select' => 'id,title'])`). Tests: list with `viaQuerySet` → only RED and RED2; `viaMerge` on a plain GET (`$this->get(...)`, no JSON content type) → only RED and RED2; `searchToOr` with `?search=x` → only BLUE; `/api/notes?comments.body=eq.hello` with `viaQuerySet` → only RED (the dotted filter survives the rewrite); `selectIntoBody` via `getJson` → 200; the same hook registered as the global `beforeRead` (`record.global_triggers`) → only RED and RED2.
+- [x] **Step 2: Run** `vendor/bin/phpunit --filter BeforeReadQueryChangesTest` — Expected: FAIL (all rows; 500).
+- [x] **Step 3: Implement** — in `executeTableTrigger()`, after `attachRequestContext()`, snapshot `$request->query->all()`; after the triggers, when `$params[0]` is that same Request and its query bag changed, `syncQueryString()`: re-parse the raw `QUERY_STRING` with `QueryBuilderFiltersUtils::parseQueryStringPreservingDots()`, drop keys whose bag form (`.`/space → `_`) the hook removed, overwrite keys it changed, add keys it added, and write `http_build_query()` back to `QUERY_STRING`. In `apply()`, read `$select = $request->query('select')` and select only when it is a string.
+- [x] **Step 4: Run** `vendor/bin/phpunit --filter 'BeforeReadQueryChangesTest|Hook|Trigger|Filter|Select'` — Expected: PASS.
 
 ### Task 8: Grouped filters accept relationship columns
 
@@ -1598,10 +1598,10 @@ QueryBuilderFiltersUtils reads filters from the raw `QUERY_STRING` (to keep dott
 
 `applyGroupedCondition()` already applies `alias.column` as a tenant-bound relationship filter, but the parser split each condition at its first dot, so `pets.name.eq.x` became column `pets` + an unknown operator `name` and was dropped.
 
-- [ ] **Step 1: Write the failing tests** (tenancy off unless stated): `or=(pets.name.eq.THEIRS,name.eq.Nobody)` → `['Pat']`; `or=(pets.name.eq.NONE,name.eq.Nobody)` → `[]`; tenancy on, no tenant: the first form → 422 naming `pets`; tenancy on, `X-Tenant-ID: t1`: `or=(pets.name.eq.THEIRS,name.eq.Nobody)` → `[]` and `or=(pets.name.eq.MINE,name.eq.Nobody)` → `['Pat']`; MCP `includeForms` gains `'a grouped relationship filter' => [['or' => '(pets.name.eq.THEIRS,name.eq.Pat)']]` (refused) and the "neither embeds nor filters" assertion drops its `or` line.
-- [ ] **Step 2: Run** — Expected: FAIL (`[]`; 200).
-- [ ] **Step 3: Implement** — when the first-dot split yields no operator, retry with a two-segment column (`/^([A-Za-z_]\w*\.[A-Za-z_]\w*)\.(.+)$/`); `groupedFilterColumns()` = every condition column in the `and`/`or` groups (`extractGroupedFilters()` on a copy, walked recursively); `TenantScopedIncludes::requested()` checks the alias of each dotted grouped column like a relationship-filter key.
-- [ ] **Step 4: Run** `vendor/bin/phpunit --filter 'TenantScoped|Tenant|Grouped|Filter|Relationship'` — Expected: PASS.
+- [x] **Step 1: Write the failing tests** (tenancy off unless stated): `or=(pets.name.eq.THEIRS,name.eq.Nobody)` → `['Pat']`; `or=(pets.name.eq.NONE,name.eq.Nobody)` → `[]`; tenancy on, no tenant: the first form → 422 naming `pets`; tenancy on, `X-Tenant-ID: t1`: `or=(pets.name.eq.THEIRS,name.eq.Nobody)` → `[]` and `or=(pets.name.eq.MINE,name.eq.Nobody)` → `['Pat']`; MCP `includeForms` gains `'a grouped relationship filter' => [['or' => '(pets.name.eq.THEIRS,name.eq.Pat)']]` (refused) and the "neither embeds nor filters" assertion drops its `or` line.
+- [x] **Step 2: Run** — Expected: FAIL (`[]`; 200).
+- [x] **Step 3: Implement** — when the first-dot split yields no operator, retry with a two-segment column (`/^([A-Za-z_]\w*\.[A-Za-z_]\w*)\.(.+)$/`); `groupedFilterColumns()` = every condition column in the `and`/`or` groups (`extractGroupedFilters()` on a copy, walked recursively); `TenantScopedIncludes::requested()` checks the alias of each dotted grouped column like a relationship-filter key.
+- [x] **Step 4: Run** `vendor/bin/phpunit --filter 'TenantScoped|Tenant|Grouped|Filter|Relationship'` — Expected: PASS.
 
 ### Task 9: Docs, changelogs and the stale comment
 
@@ -1614,4 +1614,4 @@ QueryBuilderFiltersUtils reads filters from the raw `QUERY_STRING` (to keep dott
 
 ### Task 10: Clear the formatting debt so `composer format-check` passes
 
-- [ ] `vendor/bin/rector process` and `vendor/bin/php-cs-fixer fix` over the repo; review the diff for anything beyond formatting and type/docblock tidy-ups; `vendor/bin/rector process --dry-run` → `[OK] Rector is done!`; php-cs-fixer dry-run → no files; full suite, PHPStan.
+- [x] `vendor/bin/rector process` and `vendor/bin/php-cs-fixer fix` over the repo; review the diff for anything beyond formatting and type/docblock tidy-ups; `vendor/bin/rector process --dry-run` → `[OK] Rector is done!`; php-cs-fixer dry-run → no files; full suite, PHPStan.
