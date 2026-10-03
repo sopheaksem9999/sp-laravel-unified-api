@@ -114,7 +114,7 @@ class ProcessBulkOperationJob implements ShouldQueue
             // Execute Bulk Operation
             // The parent was authorised when the request dispatched this job;
             // its nested children are authorised here, as the restored user.
-            NestedWriteAuthorizer::enforce(fn (): array => $recordService->bulkRecord($request, $this->table, $this->tenantId, $this->operation));
+            NestedWriteAuthorizer::enforce(fn(): array => $recordService->bulkRecord($request, $this->table, $this->tenantId, $this->operation));
         } catch (Throwable $throwable) {
             Log::error("ProcessBulkOperationJob Failed", [
                 'table' => $this->table,

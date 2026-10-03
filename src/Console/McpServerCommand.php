@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Console;
 
+use Laravel\Mcp\Server\Registrar;
 use Sopheak\Core\Services\McpServerService;
 use Sopheak\Core\Mcp\McpDriver;
 use Sopheak\Core\Support\CacheRequestContext;
@@ -55,7 +56,7 @@ class McpServerCommand extends Command
         if (McpDriver::isLaravel()) {
             McpDriver::assertInstalled();
 
-            $server = app(\Laravel\Mcp\Server\Registrar::class)->getLocalServer('sp-laravel-api');
+            $server = app(Registrar::class)->getLocalServer('sp-laravel-api');
             if (null === $server) {
                 $this->error('The MCP server is not registered: enable record.mcp.enabled.');
 

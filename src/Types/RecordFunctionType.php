@@ -155,7 +155,7 @@ class RecordFunctionType
             throw new InvalidArgumentException('httpMethod cannot be empty');
         }
 
-        $validValues = array_map(static fn (RecordFunctionMethodEnum $case): string => $case->value, RecordFunctionMethodEnum::cases());
+        $validValues = array_map(static fn(RecordFunctionMethodEnum $case): string => $case->value, RecordFunctionMethodEnum::cases());
 
         foreach ($methods as $method) {
             if ($method instanceof RecordFunctionMethodEnum) {

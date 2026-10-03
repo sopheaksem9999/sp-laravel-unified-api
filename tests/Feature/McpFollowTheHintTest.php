@@ -110,7 +110,7 @@ class McpFollowTheHintTest extends TestCase
         $first = $this->getJson('/api/invoices?cursor=&direction=next&per_page=2&sortby=id&order=asc')->assertOk();
         $second = $this->getJson('/api/invoices?' . http_build_query(['cursor' => $first->json('meta.cursor'), 'direction' => 'next', 'per_page' => 2, 'sortby' => 'id', 'order' => 'asc']))->assertOk();
 
-        $ids = fn ($response): array => array_column($response->json('data'), 'id');
+        $ids = fn($response): array => array_column($response->json('data'), 'id');
         $this->assertSame([1, 2], $ids($first));
         $this->assertSame([3, 4], $ids($second), 'following meta.cursor returns the next page');
     }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Tests\Feature;
 
+use Sopheak\Core\Services\McpServerService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Auth\User;
@@ -33,6 +34,7 @@ class TestAuditableUser extends Model
     use AuditableTrait;
 
     protected $table = 'users';
+
     protected $guarded = [];
 }
 
@@ -225,12 +227,12 @@ class HiddenColumnSanitizationMutationChannelsTest extends TestCase
             ->first();
 
         $this->assertNotNull($createLog);
-        $newData = json_decode($createLog->new_data, true);
+        $newData = json_decode((string) $createLog->new_data, true);
         $this->assertEquals('Alice', $newData['name']);
         $this->assertArrayNotHasKey('password', $newData);
         $this->assertArrayNotHasKey('remember_token', $newData);
 
-        $meta = json_decode($createLog->metadata, true);
+        $meta = json_decode((string) $createLog->metadata, true);
         if (isset($meta['field_changes'])) {
             $this->assertArrayNotHasKey('password', $meta['field_changes']);
             $this->assertArrayNotHasKey('remember_token', $meta['field_changes']);
@@ -256,15 +258,15 @@ class HiddenColumnSanitizationMutationChannelsTest extends TestCase
             ->first();
 
         $this->assertNotNull($updateLog);
-        $oldData = json_decode($updateLog->old_data, true);
-        $newUpdateData = json_decode($updateLog->new_data, true);
+        $oldData = json_decode((string) $updateLog->old_data, true);
+        $newUpdateData = json_decode((string) $updateLog->new_data, true);
 
         $this->assertArrayNotHasKey('password', $oldData);
         $this->assertArrayNotHasKey('password', $newUpdateData);
         $this->assertArrayNotHasKey('remember_token', $oldData);
         $this->assertArrayNotHasKey('remember_token', $newUpdateData);
 
-        $updateMeta = json_decode($updateLog->metadata, true);
+        $updateMeta = json_decode((string) $updateLog->metadata, true);
         if (isset($updateMeta['field_changes'])) {
             $this->assertArrayHasKey('name', $updateMeta['field_changes']);
             $this->assertArrayNotHasKey('password', $updateMeta['field_changes']);
@@ -311,13 +313,13 @@ class HiddenColumnSanitizationMutationChannelsTest extends TestCase
             ->first();
 
         $this->assertNotNull($passwordUpdateLog, 'An audit log must still be created when sensitive columns are modified');
-        $oldData = json_decode($passwordUpdateLog->old_data, true);
-        $newData = json_decode($passwordUpdateLog->new_data, true);
+        $oldData = json_decode((string) $passwordUpdateLog->old_data, true);
+        $newData = json_decode((string) $passwordUpdateLog->new_data, true);
 
         $this->assertArrayNotHasKey('password', $oldData);
         $this->assertArrayNotHasKey('password', $newData);
 
-        $meta = json_decode($passwordUpdateLog->metadata, true);
+        $meta = json_decode((string) $passwordUpdateLog->metadata, true);
         $this->assertEmpty($meta['field_changes'] ?? []);
     }
 
@@ -400,7 +402,7 @@ class HiddenColumnSanitizationMutationChannelsTest extends TestCase
         Event::assertDispatched(RecordMutated::class, function (RecordMutated $event): bool {
             $this->assertSame('users', $event->table);
             $this->assertSame('created', $event->action);
-            $record = (array) $event->record;
+            $record = $event->record;
             $this->assertArrayNotHasKey('password', $record);
             $this->assertArrayNotHasKey('remember_token', $record);
             $this->assertEquals('Dave', $record['name']);
@@ -465,7 +467,7 @@ class HiddenColumnSanitizationMutationChannelsTest extends TestCase
         $delivery = DB::table('sp_webhook_deliveries')->where('endpoint_id', $endpointId)->first();
         $this->assertNotNull($delivery);
 
-        $payload = json_decode($delivery->payload, true);
+        $payload = json_decode((string) $delivery->payload, true);
         $this->assertEquals('Eve', $payload['name']);
         $this->assertArrayNotHasKey('password', $payload);
         $this->assertArrayNotHasKey('remember_token', $payload);
@@ -490,7 +492,7 @@ class HiddenColumnSanitizationMutationChannelsTest extends TestCase
             ->first();
 
         $this->assertNotNull($audit);
-        $newData = json_decode($audit->new_data, true);
+        $newData = json_decode((string) $audit->new_data, true);
         $this->assertEquals('Frank', $newData['name']);
         $this->assertArrayNotHasKey('password', $newData);
         $this->assertArrayNotHasKey('remember_token', $newData);
@@ -502,7 +504,7 @@ class HiddenColumnSanitizationMutationChannelsTest extends TestCase
         config()->set('record.mcp.enabled', true);
         config()->set('record.mcp.read_only', false);
 
-        $mcp = new \Sopheak\Core\Services\McpServerService();
+        $mcp = new McpServerService();
 
         // 1. Schema MCP: sp_api_get_endpoint
         $response = $mcp->handleRequest([

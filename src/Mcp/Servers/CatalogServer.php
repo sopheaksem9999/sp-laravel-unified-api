@@ -56,11 +56,11 @@ abstract class CatalogServer extends Server
 
         $catalog = new ToolCatalog();
         $this->tools = array_map(
-            fn (ToolDefinition $definition): CatalogTool => new CatalogTool($definition, $this->schemaOnly),
+            fn(ToolDefinition $definition): CatalogTool => new CatalogTool($definition, $this->schemaOnly),
             $catalog->tools($this->schemaOnly)
         );
         $this->resources = array_map(
-            static fn (array $resource): CatalogResource => new CatalogResource($resource['uri'], $resource['name'], $resource['description']),
+            static fn(array $resource): CatalogResource => new CatalogResource($resource['uri'], $resource['name'], $resource['description']),
             $catalog->resources()
         );
     }

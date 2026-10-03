@@ -154,7 +154,7 @@ class PermissionsIndexLengthTest extends TestCase
             'could not read the column list out of: ' . $indexStatement
         );
 
-        return array_map(static fn (string $raw): string => trim($raw, " `"), explode(',', $match[1]));
+        return array_map(static fn(string $raw): string => trim($raw, " `"), explode(',', $match[1]));
     }
 
     /**
@@ -203,7 +203,7 @@ class PermissionsIndexLengthTest extends TestCase
             $migration->up();
         });
 
-        return array_map(static fn (array $query): string => $query['query'], $queries);
+        return array_map(static fn(array $query): string => $query['query'], $queries);
     }
 
     /**

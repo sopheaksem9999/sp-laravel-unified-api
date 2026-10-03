@@ -10,7 +10,9 @@ use Sopheak\Core\Tests\TestCase;
 class AgentSetupCommandTest extends TestCase
 {
     private string $mcpPath;
+
     private string $skillDir;
+
     private string $rulesDir;
 
     protected function setUp(): void

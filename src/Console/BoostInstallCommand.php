@@ -106,7 +106,7 @@ class BoostInstallCommand extends Command
             return false;
         }
 
-        if (File::put($path, $encoded.PHP_EOL) === false) {
+        if (File::put($path, $encoded . PHP_EOL) === false) {
             return false;
         }
 

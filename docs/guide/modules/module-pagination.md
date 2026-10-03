@@ -147,7 +147,7 @@ across page boundaries.
 ::: tip Declare the column you page on
 `cursor_column` and `sortby` are both validated against the table config's
 `columns`. A column missing there cannot be paged on — see
-[CRUD Operations](/guide/api/api-crud-operations) for the sorting rules.
+[CRUD Operations](/guide/api-crud-operations) for the sorting rules.
 :::
 
 ### Navigation

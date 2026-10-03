@@ -325,13 +325,14 @@ class SchemaRegistryUtils
                                 $createSql = '';
                             }
                         }
+
                         if ($createSql !== '') {
                             $escapedCol = preg_quote((string) $column->name, '/');
                             $pattern = '/(?:\b' . $escapedCol . '\b|\"' . $escapedCol . '\")[^,)]*?\bcheck\s*\(\s*(?:' . $escapedCol . '|\"' . $escapedCol . '\")\s+in\s*\(([^)]+)\)/i';
                             if (preg_match($pattern, $createSql, $m)) {
                                 $inside = $m[1];
                                 if (preg_match_all("/'((?:''|\\\\'|[^'])*)'/", $inside, $matches)) {
-                                    $enumValues = array_map(static fn($val): string => str_replace(["''", "\\'"], ["'", "'"], $val), $matches[1]);
+                                    $enumValues = array_map(static fn(string $val): string => str_replace(["''", "\\'"], ["'", "'"], $val), $matches[1]);
                                 }
                             }
                         }
@@ -381,6 +382,7 @@ class SchemaRegistryUtils
                             if (!array_key_exists($cacheKey, $enumCache)) {
                                 $enumCache[$cacheKey] = self::getEnumTypeValues($schemaKey, $typeName);
                             }
+
                             $enumValues = $enumCache[$cacheKey];
                         }
                     }
@@ -617,9 +619,9 @@ class SchemaRegistryUtils
 
         $inside = substr($typeDefinition, 5, -1);
         if (preg_match_all("/'((?:''|\\\\'|[^'])*)'/", $inside, $matches)) {
-            return array_map(static fn($val): string => str_replace(["''", "\\'"], ["'", "'"], $val), $matches[1]);
+            return array_map(static fn(string $val): string => str_replace(["''", "\\'"], ["'", "'"], $val), $matches[1]);
         }
 
-        return array_values(array_filter(array_map(static fn($v): string => trim($v, "'\" "), explode(',', $inside)), fn($v) => $v !== ''));
+        return array_values(array_filter(array_map(static fn($v): string => trim($v, "'\" "), explode(',', $inside)), fn($v): bool => $v !== ''));
     }
 }

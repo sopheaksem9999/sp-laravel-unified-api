@@ -28,7 +28,7 @@ class AuditLogFilterServiceTest extends TestCase
 
     public function test_class_method_is_resolved_with_dependencies(): void
     {
-        $this->app->bind(FilterDependency::class, fn (): FilterDependency => new FilterDependency(false));
+        $this->app->bind(FilterDependency::class, fn(): FilterDependency => new FilterDependency(false));
         config(['audit.filter' => [DependentFilter::class, 'decide']]);
         $this->assertFalse((new AuditLogFilterService())->shouldLog(AuditLogEventEnum::CREATED, 'widgets', [], null));
     }
@@ -41,8 +41,9 @@ class AuditLogFilterServiceTest extends TestCase
             $this->assertTrue((new AuditLogFilterService())->shouldLog(AuditLogEventEnum::CREATED, 'widgets', ['secret' => 'private'], null));
         }
 
-        Log::shouldHaveReceived('warning')->times(4)->withArgs(fn ($message, $context): bool =>
-            array_keys($context) === ['reason', 'filter'] && !str_contains(json_encode($context), 'private')
+        Log::shouldHaveReceived('warning')->times(4)->withArgs(
+            fn($message, $context): bool
+            => array_keys($context) === ['reason', 'filter'] && !str_contains(json_encode($context), 'private')
         );
     }
 
@@ -64,16 +65,28 @@ class DependentFilter
 {
     public function __construct(private readonly FilterDependency $dependency) {}
 
-    public function decide(): bool { return $this->dependency->allow; }
+    public function decide(): bool
+    {
+        return $this->dependency->allow;
+    }
 }
 
 class StaticFilter
 {
-    protected static function hidden(): bool { return false; }
+    protected static function hidden(): bool
+    {
+        return false;
+    }
 
-    public static function invalid(): mixed { return null; }
+    public static function invalid(): mixed
+    {
+        return null;
+    }
 
-    public static function throws(): bool { throw new RuntimeException('private'); }
+    public static function throws(): bool
+    {
+        throw new RuntimeException('private');
+    }
 }
 
 class InterfaceFilter implements AuditLogFilterInterface

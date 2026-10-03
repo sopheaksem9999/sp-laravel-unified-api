@@ -105,13 +105,13 @@ class AgentSetupCommand extends Command
         $destination = $destinationDir . '/SKILL.md';
 
         if (! File::exists($source)) {
-            $this->warn("  ⚠ Agent skill template not found at [{$source}].");
+            $this->warn(sprintf('  ⚠ Agent skill template not found at [%s].', $source));
 
             return;
         }
 
         if (! File::isDirectory($destinationDir)) {
-            File::makeDirectory($destinationDir, 0755, true);
+            File::makeDirectory($destinationDir, 0o755, true);
         }
 
         if (File::exists($destination) && ! $force) {
@@ -134,13 +134,13 @@ class AgentSetupCommand extends Command
         $destination = $destinationDir . '/sp-laravel-api.md';
 
         if (! File::exists($source)) {
-            $this->warn("  ⚠ Agent guidelines template not found at [{$source}].");
+            $this->warn(sprintf('  ⚠ Agent guidelines template not found at [%s].', $source));
 
             return;
         }
 
         if (! File::isDirectory($destinationDir)) {
-            File::makeDirectory($destinationDir, 0755, true);
+            File::makeDirectory($destinationDir, 0o755, true);
         }
 
         if (File::exists($destination) && ! $force) {
@@ -156,8 +156,8 @@ class AgentSetupCommand extends Command
 
         try {
             $contents = Blade::render($contents);
-        } catch (Throwable $e) {
-            $this->warn('  ⚠ Could not render the guidelines template (' . $e->getMessage() . ').');
+        } catch (Throwable $throwable) {
+            $this->warn('  ⚠ Could not render the guidelines template (' . $throwable->getMessage() . ').');
             $this->warn('    Installing it unrendered — Blade directives may appear in the output.');
         }
 

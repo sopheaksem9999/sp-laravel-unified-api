@@ -214,6 +214,7 @@ class RelationshipResolverUtils
 
     /**
      * Determine whether a resolved relationship targets the attachment table.
+     * @param array<string, mixed> $config
      */
     private static function isAttachmentRelation(array $config): bool
     {
@@ -237,7 +238,7 @@ class RelationshipResolverUtils
         $isList = is_array($value) && array_is_list($value);
         $items = $isList ? $value : (null !== $value ? [$value] : []);
 
-        $enriched = array_map(static fn(mixed $item): mixed => self::enrichAttachmentItem($item), $items);
+        $enriched = array_map(self::enrichAttachmentItem(...), $items);
 
         if ($isList) {
             return $enriched;
@@ -248,7 +249,7 @@ class RelationshipResolverUtils
 
     private static function enrichAttachmentItem(mixed $item): mixed
     {
-        if (null === $item || !(is_array($item) || is_object($item))) {
+        if (null === $item || !is_array($item) && !is_object($item)) {
             return $item;
         }
 
@@ -359,7 +360,11 @@ class RelationshipResolverUtils
         );
 
         foreach ($columns as $column) {
-            if ('*' === $column || in_array($column, $validNames, true)) {
+            if ('*' === $column) {
+                continue;
+            }
+
+            if (in_array($column, $validNames, true)) {
                 continue;
             }
 
@@ -401,12 +406,16 @@ class RelationshipResolverUtils
         $columns = array_keys($tableSchema->columns ?? []);
         $relationships = array_keys($tableSchema->relationships ?? []);
 
-        foreach ($payload as $field => $value) {
+        foreach (array_keys($payload) as $field) {
             if (!is_string($field)) {
                 continue;
             }
 
-            if (in_array($field, $columns, true) || in_array($field, $relationships, true)) {
+            if (in_array($field, $columns, true)) {
+                continue;
+            }
+
+            if (in_array($field, $relationships, true)) {
                 continue;
             }
 
@@ -716,7 +725,7 @@ class RelationshipResolverUtils
             }
 
             if ($type === 'hasManyThrough') {
-                self::processHasManyThroughOperation($table, (string) $alias, $relatedData, $recordId, $config, $schema, $tenantId, $allowCreate, $allowUpdate, $allowDelete);
+                self::processHasManyThroughOperation($table, (string) $alias, $relatedData, $recordId, $config, $schema, $tenantId, $allowCreate, $allowDelete);
                 continue;
             }
 
@@ -1132,6 +1141,7 @@ class RelationshipResolverUtils
             if (isset($config['morph_type']) && !array_key_exists($config['morph_type'], $pivotData)) {
                 $pivotData[$config['morph_type']] = $config['relation'] ?? null;
             }
+
             if (($config['with_timestamps'] ?? false)) {
                 $pivotData['created_at'] = TimeUtils::now();
                 $pivotData['updated_at'] = TimeUtils::now();
@@ -1158,7 +1168,7 @@ class RelationshipResolverUtils
     /**
      * @param array<string, mixed> $config
      */
-    private static function processHasManyThroughOperation(string $table, string $alias, array $data, mixed $mainId, array $config, array $schema, mixed $tenantId, bool $allowCreate, bool $allowUpdate, bool $allowDelete): void
+    private static function processHasManyThroughOperation(string $table, string $alias, array $data, mixed $mainId, array $config, array $schema, mixed $tenantId, bool $allowCreate, bool $allowDelete): void
     {
         $throughTable = $config['through_table'];
         $firstKey = $config['first_key'];
@@ -1904,7 +1914,11 @@ class RelationshipResolverUtils
 
         // Validate columns against schema
         foreach ($columns as $column) {
-            if ('*' === $column || isset($schemaColumns[$column])) {
+            if ('*' === $column) {
+                continue;
+            }
+
+            if (isset($schemaColumns[$column])) {
                 continue;
             }
 
@@ -2182,6 +2196,7 @@ class RelationshipResolverUtils
                     if (!$childConfig) {
                         continue;
                     }
+
                     $childType = $childConfig['type'] ?? null;
                     if ('belongsTo' === $childType) {
                         $parentKeys[] = $childConfig['foreign_key'] ?? null;
@@ -2189,6 +2204,7 @@ class RelationshipResolverUtils
                         $parentKeys[] = $childConfig['local_key'] ?? 'id';
                     }
                 }
+
                 foreach (array_filter($parentKeys) as $parentKey) {
                     if (!in_array($parentKey, $columns, true)) {
                         $columns[] = $parentKey;
@@ -2633,7 +2649,7 @@ class RelationshipResolverUtils
         // row would fail grouping, yielding an empty relation).
         if ([] !== $columns && !in_array('*', $columns, true)) {
             $requiredKey = ('belongsTo' === $type) ? $ownerKey : $foreignKey;
-            if (null !== $requiredKey && !in_array($requiredKey, $columns, true)) {
+            if (!in_array($requiredKey, $columns, true)) {
                 $columns[] = $requiredKey;
             }
         }
@@ -2876,7 +2892,11 @@ class RelationshipResolverUtils
         }
 
         foreach ($columns as $column) {
-            if ('*' === $column || isset($schemaColumns[$column])) {
+            if ('*' === $column) {
+                continue;
+            }
+
+            if (isset($schemaColumns[$column])) {
                 continue;
             }
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Tests\Feature;
 
+use Illuminate\Support\Str;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
@@ -81,7 +82,7 @@ class UpsertUuidPrimaryKeyTest extends TestCase
     /** @test */
     public function upsert_updates_the_existing_row_and_keeps_its_original_id(): void
     {
-        $existingId = (string) \Illuminate\Support\Str::uuid();
+        $existingId = (string) Str::uuid();
         DB::table('products')->insert([
             'id' => $existingId,
             'sku' => 'SKU-2',

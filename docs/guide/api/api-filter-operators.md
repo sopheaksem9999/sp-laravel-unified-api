@@ -69,7 +69,7 @@ Examples:
 - `customer_id=eq.18&or=(and(balance_due.gt.0,due_date.lt.2026-03-31),and(id.in.(5,6,9),ref_number.like.BILL-2026))`
   - Interpreted as: `customer_id = 18 AND ((balance_due > 0 AND due_date < '2026-03-31') OR (id IN (5,6,9) AND ref_number LIKE '%BILL-2026%'))`
 - `vendor_id=eq.27&or=(vendor.display_name.like.Acme,items.account_code.in.(4000,4010),items.amount.gt.0)`
-  - Example of grouped logic including relationship filters (`vendor.*`, `items.*`) in the same OR expression.
+  - Example of grouped logic including relationship filters (`vendor.*`, `items.*`) in the same OR expression. A relationship column is one level (`alias.column`) and matches only rows of the request's tenant; with tenancy on and no tenant resolved, a condition on a tenant-scoped relationship answers `422` ([Record Tenancy](/guide/record-tenancy)). A relationship column whose own name is an operator word (`like`, `in`, `is`, …) is not recognised inside a group; filter on it ungrouped (`?pets.like=eq.x`). A value inside a group cannot contain a comma: there is no escape.
 
 Notes:
 

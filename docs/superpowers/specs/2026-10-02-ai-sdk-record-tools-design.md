@@ -12,7 +12,7 @@ keywords:
 
 # AI SDK Record Tools — Design
 
-> **Status:** Draft for review
+> **Status:** Implemented (2026-10-02) — phase 0 spiked against `laravel/ai` v1.0.1; see the phase 0 result and implementation notes in §10
 > **Date:** 2026-10-02
 > **Package:** `sopheak/sp-laravel-api` (0.5.03)
 > **Depends on:** `laravel/ai` ^1.0.1 (optional);
@@ -314,6 +314,62 @@ These must hold, and each is pinned by a test:
    - an approval round trip on a conversational agent, under `AgentFake`.
 
    If any of these fails, stop and revise this spec.
+
+   **Phase 0 result (2026-10-02, laravel/ai v1.0.1, Laravel 13.34, PHP 8.4).**
+   Nothing failed; the findings that shaped the implementation:
+   - **Schemas:** every `ToolCatalog` schema converts through
+     `JsonSchema::fromArray(SchemaNormalizer::normalize(...))` with its property
+     names, `required` list and union `id` type (`["string","integer"]`) intact;
+     `additionalProperties: true` objects become plain `{"type":"object"}`. The
+     normalizer can silently drop keywords and non-array property definitions, so
+     `SchemaConverter` verifies names and `required` after converting and throws
+     (naming the tool) on any difference.
+   - **Tool-name limit:** `laravel/ai` enforces none. The providers it targets cap
+     function names at 64 characters of `[A-Za-z0-9_-]`, which is the build-time
+     rule.
+   - **Approvals:** `needsApproval()` is `protected`. A gated write pauses (the
+     tool does not run; the pending approval carries the real arguments and the
+     reason) and a non-conversational agent throws
+     `ApprovalNotResumableException`. `Ai::fakeAgent()` does not execute a
+     resumed approval; the real-path tests swap the provider's gateway for a
+     scripted `FakeTextGateway` instead. `Decision::edit()` lets an approver
+     change the arguments, and the tool receives the edited ones.
+   - **Queueing:** `InvokeAgent` serialises the agent, and `Promptable` uses
+     `SerializesModels`, which only swaps *direct* model properties; a user held
+     inside a tool is serialised whole. `ToolContext` therefore serialises the
+     user's key and resolves the user lazily through the guard's user provider.
+
+   **Implementation notes.**
+   - `ToolExecutor` gained a second optional constructor argument,
+     `honourReadOnly` (default `true`), and `ToolCatalog::data()` an optional
+     `$readOnly` argument, so the AI tools can ignore `record.mcp.read_only`
+     (Q3) without changing either MCP driver.
+   - A failure *inside* the record operation (a trigger error, a database error)
+     is already returned by `ToolExecutor` as an `isError` result — the text MCP
+     returns — so `RecordTool` hands the model `{"error": {"message": …}}` for it;
+     what escapes the executor (a broken permission hook, an `Error`) is not
+     caught and fails the run (§7.3).
+   - A `ToolContext` that names a user who no longer exists runs the call as
+     nobody, never as whoever the process held.
+   - `RecordToolSet::only()` throws when a named action is unavailable for a table
+     in the set (its `can*` flag); `for()` simply leaves such actions out.
+   - **Final review changes (2026-10-02).** (a) The catalog's free-form `payload` /
+     `queryParams` objects cannot reach a provider: its mapper turns an object with
+     no declared properties into `{"type":"object","additionalProperties":false}`
+     (Gemini rejects it), which reads as "send no keys". `SchemaConverter`
+     therefore declares them as strings holding a JSON object, `RecordTool` decodes
+     them (an object is also accepted) and answers a wrongly-shaped argument with an
+     error string; a free-form object anywhere below the top level, or any property
+     or `required` entry lost at any depth, is a conversion error. (b) `handle()`
+     reports an unexpected `Throwable` and rethrows `RuntimeException("The '<tool>'
+     tool failed unexpectedly…")` with the original attached: `laravel/ai` turns a
+     failure on the approval-resume path into a tool result the model reads, so the
+     message must carry no internals. (c) A `ToolContext` that names a user it
+     cannot resolve refuses to run (`Unauthenticated`) — clearing the guards is not
+     enough because a session or token guard re-resolves the request's own user —
+     and it stores and verifies the user's class as well as key. (d) The shared
+     `ToolExecutor` answers database errors with a generic message and refuses
+     tenant-scoped includes while no tenant is resolved (also fixes MCP).
 1. **Core context.** `ToolContext` and the optional parameter on
    `ToolExecutor::call()`. The MCP suites pass unchanged.
 2. **Tools.** `RecordTools`, `RecordToolSet`, `RecordTool` and

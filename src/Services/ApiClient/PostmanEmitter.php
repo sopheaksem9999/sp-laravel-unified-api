@@ -41,7 +41,7 @@ class PostmanEmitter implements ApiClientEmitterInterface
             return $generated;
         }
 
-        return self::mergeExistingCollection($existing, $generated, $result, $force);
+        return $this->mergeExistingCollection($existing, $generated, $result, $force);
     }
 
     /**
@@ -219,15 +219,11 @@ class PostmanEmitter implements ApiClientEmitterInterface
      * @param array<string, mixed> $generated
      * @return array<string, mixed>
      */
-    private static function mergeExistingCollection(array $existing, array $generated, ExportResult $result, bool $force): array
+    private function mergeExistingCollection(array $existing, array $generated, ExportResult $result, bool $force): array
     {
         $merged = $force ? $generated : $existing;
-        $merged['variable'] = self::mergeVariables(
-            is_array($existing['variable'] ?? null) ? $existing['variable'] : [],
-            $generated['variable'],
-            $force,
-        );
-        $merged['item'] = self::mergeFolders($existing['item'], $generated['item'], $result, $force);
+        $merged['variable'] = $this->mergeVariables(is_array($existing['variable'] ?? null) ? $existing['variable'] : [], $generated['variable'], $force);
+        $merged['item'] = $this->mergeFolders($existing['item'], $generated['item'], $result, $force);
 
         return $merged;
     }
@@ -237,7 +233,7 @@ class PostmanEmitter implements ApiClientEmitterInterface
      * @param array<int, array<string, mixed>> $generated
      * @return array<int, array<string, mixed>>
      */
-    private static function mergeVariables(array $existing, array $generated, bool $force): array
+    private function mergeVariables(array $existing, array $generated, bool $force): array
     {
         $merged = $existing;
         $positions = [];
@@ -268,7 +264,7 @@ class PostmanEmitter implements ApiClientEmitterInterface
      * @param array<int, array<string, mixed>> $generated
      * @return array<int, array<string, mixed>>
      */
-    private static function mergeFolders(array $existing, array $generated, ExportResult $result, bool $force): array
+    private function mergeFolders(array $existing, array $generated, ExportResult $result, bool $force): array
     {
         $merged = $existing;
         $folderPositions = [];

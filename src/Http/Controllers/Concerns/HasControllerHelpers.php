@@ -4,15 +4,9 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Http\Controllers\Concerns;
 
-use Closure;
 use Throwable;
 use Exception;
 use InvalidArgumentException;
-use RuntimeException;
-use ReflectionFunction;
-use ReflectionFunctionAbstract;
-use ReflectionMethod;
-use ReflectionNamedType;
 use Illuminate\Contracts\Validation\Validator as ValidatorContract;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
@@ -26,10 +20,11 @@ use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Utilities\NestedWriteAuthorizer;
 use Sopheak\Core\Types\RecordTableType;
-use Sopheak\Core\Types\RecordValidationType;
 use Sopheak\Core\Utilities\PermissionUtils;
 use Sopheak\Core\Utilities\RecordUtils;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
+use Sopheak\Core\Utilities\TableValidatorRunner;
+use Sopheak\Core\Utilities\TenantScopedIncludes;
 
 /**
  * @property RecordService $recordService
@@ -45,7 +40,7 @@ trait HasControllerHelpers
         try {
             // Nested child writes made by this request are authorised as
             // direct requests on the child table (NestedWriteAuthorizer).
-            $result = NestedWriteAuthorizer::enforce(fn (): mixed => $fn());
+            $result = NestedWriteAuthorizer::enforce(fn(): mixed => $fn());
             DB::commit();
             return $result;
         } catch (Throwable $throwable) {
@@ -72,7 +67,7 @@ trait HasControllerHelpers
      * Returns [$tenantId, ?JsonResponse] — caller returns the JsonResponse if non-null.
      * @return array<int, mixed>
      */
-    private function resolveTenantContext(Request $request, object $tableSchema): array
+    private function resolveTenantContext(Request $request, object $tableSchema, bool $checkIncludes = true, ?string $table = null): array
     {
         $tenantId = $this->recordService->resolveTenantFromRequest($request, $tableSchema);
         $this->recordService->attachRequestContext(
@@ -82,9 +77,29 @@ trait HasControllerHelpers
             tableSchema: $tableSchema,
             tenantId: $tenantId
         );
-        $error = $this->validateTenantIdRequired($tableSchema, $tenantId);
+        $error = $this->validateTenantIdRequired($tableSchema, $tenantId)
+            ?? ($checkIncludes ? $this->refuseTenantScopedIncludes($request, $table) : null);
 
         return [$tenantId, $error];
+    }
+
+    /**
+     * Without a tenant, rows of a tenant-scoped relationship would be embedded
+     * for every tenant (see TenantScopedIncludes). The controller's own tenant
+     * is null for a table that is not tenant-scoped, so the request's tenant —
+     * attribute, record context, then header — decides.
+     */
+    private function refuseTenantScopedIncludes(Request $request, ?string $table): ?JsonResponse
+    {
+        // The caller's table; the route parameter only for a caller that did not pass one.
+        $table ??= (string) ($request->route('table') ?? '');
+        if ('' === $table || !RecordConfigService::enableTenantId() || !RecordUtils::isTenantIdMissing(RecordUtils::resolveTenantIdFromRequest($request))) {
+            return null;
+        }
+
+        $aliases = TenantScopedIncludes::requestedBy($request, $table);
+
+        return [] === $aliases ? null : TenantScopedIncludes::refusal($aliases);
     }
 
     private function resolveRouteAction(Request $request): string
@@ -219,192 +234,10 @@ trait HasControllerHelpers
 
     private function runTableValidators(mixed $validatorConfig, Request $request, ?string $id): ?JsonResponse
     {
-        $validators = $this->resolveValidatorConfigs($validatorConfig);
+        $validator = TableValidatorRunner::firstFailure($validatorConfig, $request, $id);
 
-        foreach ($validators as $index => $validatorItem) {
-            if (is_callable($validatorItem)) {
-                $validator = $this->invokeValidatorCallable($validatorItem, $request, $id);
-                if ($validator->fails()) {
-                    return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $validator->errors()->toArray());
-                }
-
-                continue;
-            }
-
-            $config = $this->resolveValidationType($validatorItem, $index);
-            $validator = $this->invokeValidationType($config, $request, $id);
-            if ($validator->fails()) {
-                return RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $validator->errors()->toArray());
-            }
-        }
-
-        return null;
-    }
-
-    private function resolveValidatorConfigs(mixed $validatorConfig): array
-    {
-        if (null === $validatorConfig) {
-            return [];
-        }
-
-        if ($validatorConfig instanceof RecordValidationType || is_callable($validatorConfig)) {
-            return [$validatorConfig];
-        }
-
-        if (is_array($validatorConfig)) {
-            if (is_callable($validatorConfig)) {
-                return [$validatorConfig];
-            }
-
-            if ($this->isValidatorConfigArray($validatorConfig)) {
-                return [$validatorConfig];
-            }
-
-            return $this->flattenValidatorConfigs($validatorConfig);
-        }
-
-        throw new RuntimeException(sprintf(
-            'Invalid validator configuration. Expected callable, %s, or array, got %s',
-            RecordValidationType::class,
-            get_debug_type($validatorConfig)
-        ));
-    }
-
-    private function flattenValidatorConfigs(array $items): array
-    {
-        $resolved = [];
-
-        foreach ($items as $item) {
-            if (null === $item) {
-                continue;
-            }
-
-            if ($item instanceof RecordValidationType || is_callable($item)) {
-                $resolved[] = $item;
-                continue;
-            }
-
-            if (is_array($item)) {
-                if (is_callable($item) || $this->isValidatorConfigArray($item)) {
-                    $resolved[] = $item;
-                    continue;
-                }
-
-                $resolved = array_merge($resolved, $this->flattenValidatorConfigs($item));
-                continue;
-            }
-
-            throw new RuntimeException(sprintf(
-                'Invalid validator configuration. Expected callable, %s, or array, got %s',
-                RecordValidationType::class,
-                get_debug_type($item)
-            ));
-        }
-
-        return $resolved;
-    }
-
-    /**
-     * @param array<string, mixed> $config
-     */
-    private function isValidatorConfigArray(array $config): bool
-    {
-        return isset($config['class']) || isset($config['functionName']);
-    }
-
-    private function invokeValidatorCallable(callable $callback, Request $request, ?string $id): ValidatorContract
-    {
-        $validator = $callback($request, $this->normalizeValidatorIdForCallable($callback, $id));
-        if (!$validator instanceof ValidatorContract) {
-            throw new RuntimeException('Validator callback must return a Validator instance');
-        }
-
-        return $validator;
-    }
-
-    private function resolveValidationType(mixed $item, int|string $index): RecordValidationType
-    {
-        if ($item instanceof RecordValidationType) {
-            return $item;
-        }
-
-        if (is_array($item) && $this->isValidatorConfigArray($item)) {
-            return RecordValidationType::fromArray($item);
-        }
-
-        throw new RuntimeException(sprintf(
-            'Invalid validator item at index %s. Expected callable, %s, or array, got %s',
-            (string) $index,
-            RecordValidationType::class,
-            get_debug_type($item)
-        ));
-    }
-
-    private function invokeValidationType(RecordValidationType $config, Request $request, ?string $id): ValidatorContract
-    {
-        $className = $config->class;
-        $method = $config->functionName;
-
-        if (!class_exists($className)) {
-            throw new RuntimeException(sprintf("Validator class '%s' does not exist", $className));
-        }
-
-        if (!method_exists($className, $method)) {
-            throw new RuntimeException(sprintf("Validator method '%s::%s' does not exist", $className, $method));
-        }
-
-        $callback = [$className, $method];
-        $validator = call_user_func($callback, $request, $this->normalizeValidatorIdForCallable($callback, $id));
-        if (!$validator instanceof ValidatorContract) {
-            throw new RuntimeException('Validator callback must return a Validator instance');
-        }
-
-        return $validator;
-    }
-
-    private function normalizeValidatorIdForCallable(callable $callback, ?string $id): mixed
-    {
-        if (null === $id) {
-            return null;
-        }
-
-        $reflection = $this->reflectCallable($callback);
-        if (!$reflection instanceof ReflectionFunctionAbstract) {
-            return $id;
-        }
-
-        $parameter = $reflection->getParameters()[1] ?? null;
-        if (null === $parameter) {
-            return $id;
-        }
-
-        $type = $parameter->getType();
-        if (!$type instanceof ReflectionNamedType || !$type->isBuiltin()) {
-            return $id;
-        }
-
-        return match ($type->getName()) {
-            'int' => ctype_digit($id) ? (int) $id : $id,
-            'float' => is_numeric($id) ? (float) $id : $id,
-            'string' => $id,
-            default => $id,
-        };
-    }
-
-    private function reflectCallable(callable $callback): ?ReflectionFunctionAbstract
-    {
-        if ($callback instanceof Closure || is_string($callback)) {
-            return new ReflectionFunction($callback);
-        }
-
-        if (is_array($callback) && isset($callback[0], $callback[1])) {
-            return new ReflectionMethod($callback[0], (string) $callback[1]);
-        }
-
-        if (is_object($callback) && method_exists($callback, '__invoke')) {
-            return new ReflectionMethod($callback, '__invoke');
-        }
-
-        return null;
+        return $validator instanceof ValidatorContract
+            ? RecordApiResponseService::errorWrapped('Validation failed', RecordApiJsonResponseEnum::VALIDATION_ERROR->value, $validator->errors()->toArray())
+            : null;
     }
 }

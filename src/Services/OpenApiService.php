@@ -642,7 +642,7 @@ Accepts an array of IDs or an array of objects with the primary key.
     private static function mapColumnToOpenApi(string $dbType, array $info = []): array
     {
         if (isset($info['enum']) && is_array($info['enum']) && !empty($info['enum'])) {
-            return ['type' => 'string', 'enum' => array_values(array_map('strval', $info['enum']))];
+            return ['type' => 'string', 'enum' => array_values(array_map(strval(...), $info['enum']))];
         }
 
         $type = strtolower($dbType);
@@ -1249,6 +1249,9 @@ Accepts an array of IDs or an array of objects with the primary key.
         return "\n" . implode("\n", $lines);
     }
 
+    /**
+     * @param array<string, RecordTableType> $tables
+     */
     private static function paths(array $tables): array
     {
         $apiPrefix = RecordConfigService::apiPrefix();
@@ -1986,7 +1989,7 @@ Accepts an array of IDs or an array of objects with the primary key.
             $allowedMethods = gettype($functionConfig->httpMethod) === 'string' ? [$functionConfig->httpMethod] : $functionConfig->httpMethod ?? ['GET'];
             $methodName = self::rpcMethodName($functionConfig, $functionName);
             $summary = sprintf('RPC - %s', $methodName);
-            $description = sprintf('%s', $methodName);
+            $description = $methodName;
 
             // Get schemas from config
             $querySchema = $functionConfig->querySchema ?? null;
@@ -2224,7 +2227,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                 $allowedMethods = gettype($functionConfig->httpMethod) === 'string' ? [$functionConfig->httpMethod] : $functionConfig->httpMethod ?? ['GET'];
                 $methodName = self::rpcMethodName($functionConfig, $functionName);
                 $summary = sprintf('RPC - %s', $methodName);
-                $description = sprintf('%s', $methodName);
+                $description = $methodName;
 
                 // Get schemas from config
                 $querySchema = $functionConfig->querySchema ?? null;
@@ -2618,10 +2621,10 @@ Accepts an array of IDs or an array of objects with the primary key.
      */
     private static function queryShapeParameters(array $columns, array $relationships, array $searchable): array
     {
-        $relationAliases = array_values(array_filter(array_keys($relationships), 'is_string'));
+        $relationAliases = array_values(array_filter(array_keys($relationships), is_string(...)));
         $selectExample = [] !== $relationAliases ? '*,' . $relationAliases[0] . '(*)' : '*';
 
-        $sortableColumns = array_values(array_filter(array_keys($columns), 'is_string'));
+        $sortableColumns = array_values(array_filter(array_keys($columns), is_string(...)));
 
         return [
             [
@@ -2653,8 +2656,8 @@ Accepts an array of IDs or an array of objects with the primary key.
                 'in' => 'query',
                 'required' => false,
                 'description' => [] !== $searchable
-                    ? 'Search across this table\'s configured searchable fields: ' . implode(', ', $searchable) . '.'
-                    : 'Search across this table\'s configured searchable fields (none configured).',
+                    ? "Search across this table's configured searchable fields: " . implode(', ', $searchable) . '.'
+                    : "Search across this table's configured searchable fields (none configured).",
                 'schema' => ['type' => 'string'],
             ],
             [

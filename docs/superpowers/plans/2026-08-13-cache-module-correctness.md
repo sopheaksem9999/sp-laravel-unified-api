@@ -1,3 +1,13 @@
+---
+title: "Cache Module Correctness Plan"
+description: "Implementation plan for fixing the records cache invalidation and cache-key defects."
+keywords:
+  - cache
+  - invalidation
+  - cache key
+  - implementation plan
+---
+
 # Cache Module Correctness Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Tests\Feature;
 
+use InvalidArgumentException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
@@ -125,7 +126,7 @@ class SelectParamValidationTest extends TestCase
         $config = new RecordTableType(table: 'authors', pmsName: 'authors');
         $builder = new RecordQueryBuilder('authors', $config);
 
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage("Unknown column 'bogus_field' in select for table 'authors'.");
 
         $builder->applySelectFromParam('bogus_field');

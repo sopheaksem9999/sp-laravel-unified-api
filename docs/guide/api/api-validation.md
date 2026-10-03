@@ -166,7 +166,7 @@ return [
 
 Rules generated:
 
-- **required**: non-nullable columns without defaults (excluding system columns and tenant column)
+- **required**: non-nullable columns without a default that the database does not generate (auto-increment, `nextval(...)` default or primary key), excluding system, write-disabled and tenant columns. The MCP schema tools mark exactly these columns `required` in create payloads.
 - **types**: basic mapping (`uuid`, `integer`, `numeric`, `boolean`, `date`, `string`, `array`)
 - **unique**: single-column unique indexes
 - **foreign_keys**: `exists:{table},{column}` based on DB constraints
@@ -175,6 +175,7 @@ Notes:
 
 - Only applies on **create** and **update** endpoints (including bulk create/update).
 - When `only_when_missing` is `true`, table validators still take priority.
+- Table validators and default validation run in the HTTP CRUD controller and for the MCP / AI SDK tools (`record.mcp.run_record_hooks`). Your own `RecordService::executeCreate/Update` calls skip them; they still reject payload fields that are neither a column nor a relationship.
 
 ## Related Docs
 

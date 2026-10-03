@@ -12,7 +12,7 @@ class AgentAssetsTest extends TestCase
 {
     public function test_agent_guidelines_exist_and_cover_core_conventions(): void
     {
-        $path = __DIR__.'/../../resources/agent/guidelines/core.blade.php';
+        $path = __DIR__ . '/../../resources/agent/guidelines/core.blade.php';
 
         $this->assertFileExists($path);
 
@@ -25,7 +25,7 @@ class AgentAssetsTest extends TestCase
 
     public function test_agent_skill_exists_with_valid_frontmatter_and_debug_workflow(): void
     {
-        $path = __DIR__.'/../../resources/agent/skills/sp-laravel-api-development/SKILL.md';
+        $path = __DIR__ . '/../../resources/agent/skills/sp-laravel-api-development/SKILL.md';
 
         $this->assertFileExists($path);
 

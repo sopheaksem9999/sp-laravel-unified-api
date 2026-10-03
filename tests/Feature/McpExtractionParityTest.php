@@ -96,8 +96,8 @@ class McpExtractionParityTest extends TestCase
     {
         $data = new McpServerService();
         $schema = new McpServerService(schemaOnly: true);
-        $rpc = static fn (McpServerService $service, string $method, array $params = []): ?array => $service->handleRequest(['jsonrpc' => '2.0', 'id' => 1, 'method' => $method, 'params' => $params]);
-        $call = static fn (McpServerService $service, string $tool, array $arguments = []): ?array => $service->handleRequest(['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/call', 'params' => ['name' => $tool, 'arguments' => $arguments]]);
+        $rpc = static fn(McpServerService $service, string $method, array $params = []): ?array => $service->handleRequest(['jsonrpc' => '2.0', 'id' => 1, 'method' => $method, 'params' => $params]);
+        $call = static fn(McpServerService $service, string $tool, array $arguments = []): ?array => $service->handleRequest(['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/call', 'params' => ['name' => $tool, 'arguments' => $arguments]]);
 
         $captures = [
             'initialize' => $rpc($data, 'initialize'),

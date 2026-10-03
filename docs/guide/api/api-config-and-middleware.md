@@ -67,12 +67,15 @@ Record endpoints use table-level access rules from `config/record.php`:
 - If a table/action is configured as public (`RecordTablePublic`), the endpoint is accessible without authentication.
 - Otherwise, the controller requires an authenticated user from the guard configured in `config/sp-laravel-api.php` (`sp-laravel-api.auth.guard`, default: `api`) and checks permissions.
 - Permission checks support a custom authorization handler via `record.authorization`.
+- A user for whom `permissions.super_admin_callback` returns `true` passes every permission check. The same decision (`PermissionUtils::actionDecision()`) authorizes the REST endpoints, the MCP and AI SDK tools, and every nested child write (against the child table).
 
 Custom authorization handler (`record.authorization`) options:
 
-- `null` (default): use `Gate::forUser($user)->allows($permission)`
+- `null` (default): use `Gate::forUser($user)->allows($permission)`; with `permissions.enabled`, the built-in module answers through its `Gate::before` hook (see [Laravel Gate, `@can` and Telescope](/guide/feature-permission#laravel-gate-can-and-telescope)).
 - class-string: resolved from container and called as `handle($user, $permission, $table, $action): bool`
 - closure/callable: called as `fn($user, string $permission, string $table, string $action): bool`
+
+`$action` is the action being authorized (`read`, `create`, `update`, `delete`, `restore`, `force_delete`), or `view_own` when the package asks whether the user holds `viewOwn:{pmsName}`. For a nested child write, `$table` is the child table. A handler that throws for a `viewOwn:*` permission is reported and treated as not granting it.
 
 Example:
 
@@ -95,12 +98,31 @@ final class RecordAuthorization
 }
 ```
 
+### MCP Endpoints
+
+The Data MCP is configured under `record.mcp`, the Schema MCP in `config/sp-api-mcp.php`. See [MCP Support](/guide/module-mcp).
+
+| Key | Env | Default | Effect |
+|---|---|---|---|
+| `record.mcp.enabled` | `SP_MCP_ENABLED` | `false` | Registers the Data MCP routes |
+| `record.mcp.read_only` | `SP_MCP_READ_ONLY` | `true` | Removes the `create_*`, `update_*`, `delete_*` tools (MCP only; the [AI SDK record tools](/guide/module-ai-sdk) ignore it) |
+| `record.mcp.driver` | `SP_MCP_DRIVER` | `legacy` | `legacy` (the package's own JSON-RPC server) or `laravel` (`laravel/mcp`; `composer require laravel/mcp`) |
+| `record.mcp.oauth` | `SP_MCP_OAUTH` | `false` | OAuth discovery routes; `laravel` driver and `laravel/passport` only |
+| `record.mcp.run_record_hooks` | `SP_MCP_RUN_RECORD_HOOKS` | `true` | Run record hooks, validators, after-hooks/webhooks and broadcasts for the MCP and AI SDK tools |
+| `record.mcp.middleware` | — | `['api', 'auth:sanctum']` | Middleware on the Data MCP routes |
+| `record.mcp.route_prefix` | `SP_MCP_ROUTE_PREFIX` | `mcp` | **Deprecated, no effect** — routes are always `/{api_prefix}/mcp/...` |
+| `sp-api-mcp.enabled` | `SP_API_MCP_ENABLED` | `false` | Registers `POST /{api_prefix}/mcp/schema` |
+| `sp-api-mcp.token` | `SP_API_MCP_TOKEN` | `null` | Schema MCP bearer token; required outside `local` |
+
+`record.middleware_map` and the `throttle:api-*` groups do not apply to the Data MCP routes — add tenant middleware, `pgsql.tenant` and any `throttle:` limiter to `record.mcp.middleware`. Tool permission checks read the user from `sp-laravel-api.auth.guard` (default `api`), like the CRUD controller, so that guard must accept the same credential as `record.mcp.middleware`.
+
 ### Middleware Stack
 
 - `api` - API middleware group
 - `request.id` - Request ID tracking for audit trails
 - Rate limiting with different throttles for different operation types
 - `record.route.middleware:{action}` - Dynamic middleware dispatcher resolved from `config/record.php` `middleware_map`
+- Data MCP routes get `api`, `request.id` and `record.mcp.middleware` only (no throttle group, no `record.route.middleware`)
 
 ### Middleware Map (Public / Auth / Auth+Subscription)
 

@@ -21,8 +21,8 @@ class RecordConfigLoaderTest extends TestCase
         RecordConfigLoader::flush();
         $this->dir = sys_get_temp_dir() . '/rcl-' . getmypid();
         $this->cleanup();
-        mkdir($this->dir . '/tables', 0777, true);
-        mkdir($this->dir . '/global-functions', 0777, true);
+        mkdir($this->dir . '/tables', 0o777, true);
+        mkdir($this->dir . '/global-functions', 0o777, true);
     }
 
     protected function tearDown(): void
@@ -112,7 +112,7 @@ class RecordConfigLoaderTest extends TestCase
     /** @test */
     public function it_scans_every_directory_it_is_given(): void
     {
-        mkdir($this->dir . '/globalFunctions', 0777, true);
+        mkdir($this->dir . '/globalFunctions', 0o777, true);
         file_put_contents($this->dir . '/globalFunctions/a.php', '<?php return ["one" => []];');
         file_put_contents($this->dir . '/global-functions/b.php', '<?php return ["two" => []];');
 

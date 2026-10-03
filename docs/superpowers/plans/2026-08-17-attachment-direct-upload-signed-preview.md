@@ -1,3 +1,13 @@
+---
+title: "Direct Upload and Signed Preview Plan"
+description: "Implementation plan for attachment direct uploads (presigned PUT, S3 multipart) and HMAC-signed preview URLs."
+keywords:
+  - attachments
+  - direct upload
+  - signed url
+  - implementation plan
+---
+
 # Attachment Direct Upload + Signed Preview Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

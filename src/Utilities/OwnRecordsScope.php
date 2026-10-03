@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Schema;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
 use Sopheak\Core\Services\RecordApiResponseService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Contracts\Auth\Authenticatable;
+use InvalidArgumentException;
 use Illuminate\Support\Facades\Gate;
 use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Types\RecordTableType;
@@ -46,11 +48,14 @@ final class OwnRecordsScope
         $recordConfig = RecordConfigService::table($table);
         $pmsName = $recordConfig->pmsName ?? null;
 
-        if (!$pmsName || !Auth::check() || '' === RecordConfigService::ownRecordsPermissionPrefix()) {
+        if (!$pmsName || '' === RecordConfigService::ownRecordsPermissionPrefix()) {
             return null;
         }
 
-        $user = Auth::user();
+        $user = self::currentUser();
+        if (!$user instanceof Authenticatable) {
+            return null;
+        }
 
         // A super admin is never restricted to their own rows, however the
         // app's Gate or authorization handler answers viewOwn:*.
@@ -82,6 +87,24 @@ final class OwnRecordsScope
     }
 
     /**
+     * The user the package authorizes as: the configured guard's user, the one
+     * PermissionUtils::actionDecision() reads. Falling back to the default guard
+     * keeps every user who was restricted before restricted — viewOwn only
+     * narrows, so reading one more guard can never widen access.
+     */
+    private static function currentUser(): ?Authenticatable
+    {
+        try {
+            $user = auth(RecordConfigService::authGuard())->user();
+        } catch (InvalidArgumentException) {
+            // The configured guard is not defined in this app.
+            $user = null;
+        }
+
+        return $user ?? Auth::user();
+    }
+
+    /**
      * Restrict $query to the current user's own rows when a restriction
      * applies. $qualifiedTable is the name the column is prefixed with in
      * SQL — the physical table — and defaults to $table.
@@ -93,7 +116,7 @@ final class OwnRecordsScope
             return;
         }
 
-        $query->where(($qualifiedTable ?? $table) . '.' . $ownerColumn, Auth::user()->id);
+        $query->where(($qualifiedTable ?? $table) . '.' . $ownerColumn, self::currentUser()?->id);
     }
 
     /**
@@ -109,7 +132,7 @@ final class OwnRecordsScope
             return ['', []];
         }
 
-        return [sprintf(' AND %s.%s = ?', $qualifier, $ownerColumn), [Auth::user()->id]];
+        return [sprintf(' AND %s.%s = ?', $qualifier, $ownerColumn), [self::currentUser()?->id]];
     }
 
     /**
@@ -134,7 +157,7 @@ final class OwnRecordsScope
             self::collectIncludeTokens($table, RelationshipResolverUtils::parseSelectForIncludes($select), $parts);
         }
 
-        return [] === $parts ? '' : 'own:' . implode(',', $parts) . ':' . Auth::user()->id;
+        return [] === $parts ? '' : 'own:' . implode(',', $parts) . ':' . self::currentUser()?->id;
     }
 
     /**
@@ -196,7 +219,7 @@ final class OwnRecordsScope
         }
 
         $keySets = self::uniqueKeySets($table, $qualifiedTable, $matchOn);
-        $userId = Auth::user()->id;
+        $userId = self::currentUser()?->id;
         $owner = $qualifiedTable . '.' . $ownerColumn;
 
         $tuples = [];

@@ -120,7 +120,7 @@ class McpServerService
     protected function handleToolsList(array $params): array
     {
         return ['tools' => array_map(
-            static fn (ToolDefinition $tool): array => $tool->toWireArray(),
+            static fn(ToolDefinition $tool): array => $tool->toWireArray(),
             (new ToolCatalog())->tools($this->schemaOnly)
         )];
     }

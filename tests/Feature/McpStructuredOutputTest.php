@@ -175,7 +175,8 @@ class McpStructuredOutputTest extends TestCase
         $this->assertSame($legacyResponse, $result['structuredContent']['response']);
     }
 
-    /** @return array<string, mixed> */
+    /** @return array<string, mixed>
+     * @param array<string, string>|array<string, mixed[]> $params */
     private function schemaRequest(string $method, array $params = []): array
     {
         $response = $this->withToken('mcp-structured-output-test-token')->postJson('/api/v1/mcp/schema', [
@@ -190,7 +191,8 @@ class McpStructuredOutputTest extends TestCase
         return $response->json();
     }
 
-    /** @return array<string, mixed> */
+    /** @return array<string, mixed>
+     * @param array<string, string> $arguments */
     private function schemaToolCall(string $name, array $arguments = []): array
     {
         return $this->schemaRequest('tools/call', [

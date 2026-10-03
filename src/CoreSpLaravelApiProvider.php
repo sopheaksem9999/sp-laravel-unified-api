@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Sopheak\Core;
 
+use Laravel\Mcp\Server\McpServiceProvider;
+use Laravel\Mcp\Facades\Mcp;
+use Sopheak\Core\Mcp\Servers\DataServer;
+use Sopheak\Core\Mcp\Servers\SchemaServer;
 use Sopheak\Core\Http\Middleware\SetPostgresTenantContext;
 use Throwable;
 use Sopheak\Core\Console\CacheStatusCommand;
@@ -75,7 +79,7 @@ class CoreSpLaravelApiProvider extends ServiceProvider
         $this->app->booting(function (): void {
             McpDriver::assertInstalled();
             if (McpDriver::isActive()) {
-                $this->app->register(\Laravel\Mcp\Server\McpServiceProvider::class);
+                $this->app->register(McpServiceProvider::class);
             }
         });
 
@@ -133,15 +137,15 @@ class CoreSpLaravelApiProvider extends ServiceProvider
         // stdio servers for `mcp:start` / `mcp:inspector` and the
         // sp-laravel-api:mcp command, when the `laravel` MCP driver is selected.
         if (McpDriver::isActive()) {
-            \Laravel\Mcp\Facades\Mcp::local('sp-laravel-api', \Sopheak\Core\Mcp\Servers\DataServer::class);
-            \Laravel\Mcp\Facades\Mcp::local('sp-laravel-api-schema', \Sopheak\Core\Mcp\Servers\SchemaServer::class);
+            Mcp::local('sp-laravel-api', DataServer::class);
+            Mcp::local('sp-laravel-api-schema', SchemaServer::class);
         }
 
         // Opt-in OAuth 2.1 discovery (protected-resource and authorization-server
         // metadata, dynamic client registration) for connectors that require it.
         if (McpDriver::isActive() && McpDriver::oauthEnabled()) {
             McpDriver::assertOAuthAvailable();
-            \Laravel\Mcp\Facades\Mcp::oauthRoutes();
+            Mcp::oauthRoutes();
         }
 
         $this->commands([

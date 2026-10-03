@@ -170,6 +170,7 @@ class BrunoEmitter implements ApiClientEmitterInterface
             foreach ($req->pathParams as $param) {
                 $lines[] = '  ' . $param . ': 1';
             }
+
             $lines[] = '}';
             $lines[] = '';
         }
@@ -192,6 +193,7 @@ class BrunoEmitter implements ApiClientEmitterInterface
                 $value = (string) ($param['value'] ?? '');
                 $lines[] = '  ' . $prefix . $key . ': ' . $value;
             }
+
             $lines[] = '}';
             $lines[] = '';
         }
@@ -206,6 +208,7 @@ class BrunoEmitter implements ApiClientEmitterInterface
             foreach ($headers as $header) {
                 $lines[] = '  ' . $header['name'] . ': ' . $header['value'];
             }
+
             $lines[] = '}';
             $lines[] = '';
         }
@@ -279,7 +282,7 @@ class BrunoEmitter implements ApiClientEmitterInterface
 
     private function convertUrlParams(string $url): string
     {
-        return (string) preg_replace('/(?<!\{)\{([a-zA-Z0-9_]+)\}(?!\})/', ':$1', $url);
+        return (string) preg_replace('/(?<!\{)\{(\w+)\}(?!\})/', ':$1', $url);
     }
 
     private function sanitizeFilename(string $name): string

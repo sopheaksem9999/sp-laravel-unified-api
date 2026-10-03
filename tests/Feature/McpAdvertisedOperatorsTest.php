@@ -109,7 +109,7 @@ class McpAdvertisedOperatorsTest extends TestCase
             'str_col' => ['eq' => 'alpha', 'neq' => 'alpha', 'in' => 'alpha', 'not_in' => 'alpha', 'like' => 'alph', 'ilike' => 'ALPH', 'is' => 'null', 'is_not' => 'null', 'empty' => 'null', 'not_empty' => 'null'],
             'int_col' => ['gt' => '5', 'gte' => '7', 'lt' => '7', 'lte' => '5', 'between' => '1,5', 'not_between' => '1,5'],
         ];
-        $ids = fn (string $query): array => collect($this->getJson('/api/ks_rows?' . $query)->assertOk()->json('data'))->pluck('id')->sort()->values()->all();
+        $ids = fn(string $query): array => collect($this->getJson('/api/ks_rows?' . $query)->assertOk()->json('data'))->pluck('id')->sort()->values()->all();
         $tested = [];
 
         foreach ($cases as $column => $operators) {

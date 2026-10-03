@@ -94,12 +94,14 @@ final class ToolCatalog
      *
      * @return array<int, ToolDefinition>
      */
-    public function data(): array
+    public function data(?bool $readOnly = null): array
     {
         $tools = [];
 
         SchemaRegistryUtils::refresh();
-        $readOnly = config('record.mcp.read_only', true);
+        // null follows `record.mcp.read_only`; an in-process caller (the AI SDK
+        // tools) passes false to list the write tools regardless of that MCP setting.
+        $readOnly ??= (bool) config('record.mcp.read_only', true);
 
         foreach (SchemaRegistryUtils::get() as $table => $config) {
             if (!($config instanceof RecordTableType)) {
@@ -158,52 +160,52 @@ final class ToolCatalog
                     . '(fields[]/includes[]) — an invented or misspelled key is rejected with an error naming it, not silently dropped.';
 
                 if ($config->canCreate) {
-                $tools[] = $this->define([
-                    'name' => 'create_' . $table,
-                    'description' => 'Create a new record in ' . $table . '.' . $relationshipHint . $unknownFieldHint,
-                    'inputSchema' => [
-                        'type' => 'object',
-                        'properties' => [
-                            'payload' => ['type' => 'object', 'additionalProperties' => true],
-                            'queryParams' => ['type' => 'object', 'additionalProperties' => true],
+                    $tools[] = $this->define([
+                        'name' => 'create_' . $table,
+                        'description' => 'Create a new record in ' . $table . '.' . $relationshipHint . $unknownFieldHint,
+                        'inputSchema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'payload' => ['type' => 'object', 'additionalProperties' => true],
+                                'queryParams' => ['type' => 'object', 'additionalProperties' => true],
+                            ],
+                            'required' => ['payload'],
                         ],
-                        'required' => ['payload'],
-                    ],
-                    'outputSchema' => $this->dataToolOutputSchema(),
-                ], 'create', $table);
+                        'outputSchema' => $this->dataToolOutputSchema(),
+                    ], 'create', $table);
                 }
 
                 if ($config->canUpdate) {
-                $tools[] = $this->define([
-                    'name' => 'update_' . $table,
-                    'description' => 'Update an existing record in ' . $table . '.' . $relationshipHint . $unknownFieldHint,
-                    'inputSchema' => [
-                        'type' => 'object',
-                        'properties' => [
-                            'id' => ['type' => ['string', 'integer']],
-                            'payload' => ['type' => 'object', 'additionalProperties' => true],
-                            'queryParams' => ['type' => 'object', 'additionalProperties' => true],
+                    $tools[] = $this->define([
+                        'name' => 'update_' . $table,
+                        'description' => 'Update an existing record in ' . $table . '.' . $relationshipHint . $unknownFieldHint,
+                        'inputSchema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'id' => ['type' => ['string', 'integer']],
+                                'payload' => ['type' => 'object', 'additionalProperties' => true],
+                                'queryParams' => ['type' => 'object', 'additionalProperties' => true],
+                            ],
+                            'required' => ['id', 'payload'],
                         ],
-                        'required' => ['id', 'payload'],
-                    ],
-                    'outputSchema' => $this->dataToolOutputSchema(),
-                ], 'update', $table);
+                        'outputSchema' => $this->dataToolOutputSchema(),
+                    ], 'update', $table);
                 }
 
                 if ($config->canDelete) {
-                $tools[] = $this->define([
-                    'name' => 'delete_' . $table,
-                    'description' => 'Delete a record from ' . $table,
-                    'inputSchema' => [
-                        'type' => 'object',
-                        'properties' => [
-                            'id' => ['type' => ['string', 'integer']],
-                            'queryParams' => ['type' => 'object', 'additionalProperties' => true],
+                    $tools[] = $this->define([
+                        'name' => 'delete_' . $table,
+                        'description' => 'Delete a record from ' . $table,
+                        'inputSchema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'id' => ['type' => ['string', 'integer']],
+                                'queryParams' => ['type' => 'object', 'additionalProperties' => true],
+                            ],
+                            'required' => ['id'],
                         ],
-                        'required' => ['id'],
-                    ],
-                    'outputSchema' => $this->dataToolOutputSchema(),
-                ], 'delete', $table);
+                        'outputSchema' => $this->dataToolOutputSchema(),
+                    ], 'delete', $table);
                 }
             }
         }

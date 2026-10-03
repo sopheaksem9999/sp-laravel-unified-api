@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sopheak\Core\Services;
 
 use Sopheak\Core\Utilities\OwnRecordsScope;
+use Sopheak\Core\Utilities\TenantScopedIncludes;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
 use Sopheak\Core\Types\RecordTableType;
@@ -142,9 +143,33 @@ class RecordCacheService
             if ('' !== $ownScope) {
                 $query['__own_scope'] = $ownScope;
             }
+
+            // Rows embedded or filtered from a tenant-scoped relationship are bound to
+            // the request's tenant even when $table itself is not tenant-scoped, so
+            // its tenant-less key would hand one tenant's rows to the next. Only such
+            // requests carry the tenant; every other key stays as it was.
+            $relationshipTenant = $this->relationshipTenantToken($request, $table);
+            if ('' !== $relationshipTenant) {
+                $query['__relationship_tenant'] = $relationshipTenant;
+            }
         }
 
         return md5(serialize($query));
+    }
+
+    private function relationshipTenantToken(Request $request, string $table): string
+    {
+        if (!RecordConfigService::enableTenantId()) {
+            return '';
+        }
+
+        if ([] === TenantScopedIncludes::requestedBy($request, $table)) {
+            return '';
+        }
+
+        $tenant = RecordUtils::resolveTenantIdFromRequest($request);
+
+        return RecordUtils::isTenantIdMissing($tenant) ? '' : (string) $tenant;
     }
 
     private function passesAdmissionRules(Request $request, string $table, ?string $schemaTableName): bool

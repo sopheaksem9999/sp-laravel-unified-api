@@ -50,7 +50,7 @@ class McpDriverTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('composer require laravel/mcp');
 
-        McpDriver::assertInstalled(static fn (): bool => false);
+        McpDriver::assertInstalled(static fn(): bool => false);
     }
 
     /** @test */
@@ -58,7 +58,7 @@ class McpDriverTest extends TestCase
     {
         config(['record.mcp.driver' => 'legacy', 'record.mcp.enabled' => true]);
 
-        McpDriver::assertInstalled(static fn (): bool => false);
+        McpDriver::assertInstalled(static fn(): bool => false);
 
         $this->assertTrue(true);
     }
@@ -67,7 +67,7 @@ class McpDriverTest extends TestCase
     public function the_legacy_driver_loads_no_laravel_mcp_server_method_class(): void
     {
         $this->skipOnLaravelMcpDriver('this asserts the default (legacy) driver, which the matrix run replaces');
-        $count = static fn (): int => count(array_filter(get_declared_classes(), static fn (string $c): bool => str_starts_with($c, 'Sopheak\\Core\\Mcp\\Servers')));
+        $count = static fn(): int => count(array_filter(get_declared_classes(), static fn(string $c): bool => str_starts_with($c, 'Sopheak\\Core\\Mcp\\Servers')));
 
         $before = $count();
         $this->postJson('/api/mcp/message', ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'initialize']);
@@ -97,7 +97,7 @@ class McpDriverTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('record.mcp.oauth requires laravel/passport');
 
-        McpDriver::assertOAuthAvailable(static fn (): bool => false);
+        McpDriver::assertOAuthAvailable(static fn(): bool => false);
     }
 
     /** @test */
@@ -105,7 +105,7 @@ class McpDriverTest extends TestCase
     {
         config(['record.mcp.driver' => 'laravel', 'record.mcp.oauth' => true, 'record.mcp.enabled' => true]);
 
-        McpDriver::assertOAuthAvailable(static fn (): bool => true);
+        McpDriver::assertOAuthAvailable(static fn(): bool => true);
 
         $this->assertTrue(true);
     }

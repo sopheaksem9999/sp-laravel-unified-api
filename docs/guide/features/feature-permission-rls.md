@@ -209,6 +209,14 @@ For maximum safety, apply the middleware to **all** route groups that access ten
 
 ---
 
+## MCP and AI SDK Tools
+
+`pgsql.tenant` runs only where you attach it, and `record.middleware_map` is not applied to the Data MCP routes:
+
+- **HTTP MCP:** add it to `record.mcp.middleware` after the middleware that resolves the tenant: `'middleware' => ['api', 'auth:sanctum', \App\Http\Middleware\ResolveTenantContext::class, 'pgsql.tenant']`.
+- **stdio (`sp-laravel-api:mcp --tenant=…`) and queued AI agents (`->forTenant()`):** no HTTP middleware runs. The application-level tenant filter applies, but `app.tenant_id` is whatever the connection holds — unset means RLS does not filter (`OR … IS NULL`). Set it in your command or job if you need the database layer too.
+- **AI SDK tools inside a request** share that request's connection, so they inherit what `pgsql.tenant` set for the route that prompted the agent.
+
 ## Limitations
 
 | Concern | Handled By | Why Not RLS |
@@ -272,6 +280,6 @@ Fix: update `config('record.tenant_column_type')` to match the actual column typ
 
 ## Related Docs
 
-- `/guide/features/feature-permission` — built-in role/permission system
-- `/guide/records/record-tenancy` — tenant configuration and resolution
-- `/core-concepts/relationships` — polymorphic relationship handling
+- [Built-in Role/Permission System](/guide/feature-permission) — built-in role/permission system
+- [Record Tenancy](/guide/record-tenancy) — tenant configuration and resolution
+- [Relationships](/core-concepts/relationships) — polymorphic relationship handling

@@ -324,7 +324,7 @@ class ConfigNamespaceBridgeTest extends TestCase
     private function makeTemporaryConfigDirectory(): string
     {
         $directory = sys_get_temp_dir() . '/sp-config-bridge-' . bin2hex(random_bytes(8));
-        mkdir($directory, 0777, true);
+        mkdir($directory, 0o777, true);
 
         return $directory;
     }

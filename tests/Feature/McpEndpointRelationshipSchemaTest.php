@@ -79,6 +79,9 @@ class McpEndpointRelationshipSchemaTest extends TestCase
         SchemaRegistryUtils::refresh();
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function getEndpointSchema(string $endpoint): array
     {
         $response = $this->postJson('/api/mcp/message', [

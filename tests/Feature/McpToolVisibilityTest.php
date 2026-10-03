@@ -149,7 +149,7 @@ class McpToolVisibilityTest extends TestCase
     /** @test */
     public function a_super_admin_sees_every_tool(): void
     {
-        Config::set('permissions.super_admin_callback', static fn ($user): bool => 1 === (int) $user->id);
+        Config::set('permissions.super_admin_callback', static fn($user): bool => 1 === (int) $user->id);
         $this->actingAs($this->user(1), 'api');
 
         $names = array_column($this->listTools(), 'name');
@@ -184,7 +184,7 @@ class McpToolVisibilityTest extends TestCase
         $this->listTools();
         $few = count(DB::getQueryLog());
 
-        $extra = array_map(static fn (int $i): string => 'extra_' . $i, range(1, 30));
+        $extra = array_map(static fn(int $i): string => 'extra_' . $i, range(1, 30));
         $this->registerTables(array_merge(['widgets', 'gadgets'], $extra));
         $this->listTools(); // warm again for the new tables
 

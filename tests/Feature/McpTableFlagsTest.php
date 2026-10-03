@@ -60,7 +60,7 @@ class McpTableFlagsTest extends TestCase
     /** @return array<int, string> */
     private function toolNames(): array
     {
-        return array_map(static fn (ToolDefinition $tool): string => $tool->name, (new ToolCatalog())->data());
+        return array_map(static fn(ToolDefinition $tool): string => $tool->name, (new ToolCatalog())->data());
     }
 
     public function test_only_the_actions_a_table_allows_are_offered(): void
