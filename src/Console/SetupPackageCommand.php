@@ -664,14 +664,23 @@ class SetupPackageCommand extends Command
                 | Configuration for the AI agent MCP integration.
                 | - enabled: Toggle the MCP feature entirely (default: false).
                 | - read_only: Globally disable MCP write tools (create, update, delete).
-                | - route_prefix: The prefix for HTTP/SSE MCP endpoints.
-                | - middleware: The middleware applied to the HTTP/SSE endpoints.
+                | - route_prefix: Deprecated, no effect. The MCP routes are always /{api_prefix}/mcp/...; kept for compatibility.
+                | - middleware: The middleware applied to the HTTP endpoints.
+                | - driver: 'legacy' (default) serves MCP from the package's own JSON-RPC
+                |   server. 'laravel' serves it through laravel/mcp (Streamable HTTP, current
+                |   protocol versions, OAuth, the Inspector); install it with
+                |   `composer require laravel/mcp`.
+                | - oauth: With the 'laravel' driver, publish OAuth discovery routes
+                |   (requires laravel/passport). Default: false.
                 */
                 'mcp' => [
                     'enabled' => env('SP_MCP_ENABLED', false),
                     'read_only' => env('SP_MCP_READ_ONLY', true),
                     'route_prefix' => env('SP_MCP_ROUTE_PREFIX', 'mcp'),
                     'middleware' => ['api', 'auth:sanctum'],
+                    'driver' => env('SP_MCP_DRIVER', 'legacy'),
+                    'oauth' => env('SP_MCP_OAUTH', false),
+                    'run_record_hooks' => env('SP_MCP_RUN_RECORD_HOOKS', true),
                 ],
 
                 /*
@@ -771,7 +780,7 @@ class SetupPackageCommand extends Command
 
                 // permission 
                 'permission_separator' => ':', // separator for permission ex: view:invoice
-                'restrict_to_own_records' => false, // limit queries to records created by the authenticated user
+                'restrict_to_own_records' => false, // DEPRECATED — has no effect. Use the viewOwn:{pmsName} permission (see own_records_permission_prefix).
                 'own_records_permission_prefix' => 'viewOwn', // example: viewOwn_invoice
                 // Owner-column resolution order for viewOwn scoping (first declared column wins).
                 // Prepend 'user_id' when domain tables track the record owner there.

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Services;
 
+use Sopheak\Core\Utilities\OwnRecordsScope;
+use Sopheak\Core\Utilities\TenantScopedIncludes;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
 use Sopheak\Core\Types\RecordTableType;
@@ -127,12 +129,47 @@ class RecordCacheService
      * list one can only split a cache entry, never merge two that should
      * differ.
      */
-    public function queryFingerprint(Request $request): string
+    public function queryFingerprint(Request $request, ?string $table = null): string
     {
         $query = $request->json()->all() + $request->query();
         $this->recursiveKsort($query);
 
+        // Own-records scoping makes an identical query return different rows
+        // for different users. Without the scope in the key, whoever warmed the
+        // cache first decided what every later caller saw. The token is empty
+        // for unrestricted callers, so their keys are byte-identical to before.
+        if (null !== $table) {
+            $ownScope = OwnRecordsScope::cacheToken($table, RecordService::getCombinedSelectParam($request));
+            if ('' !== $ownScope) {
+                $query['__own_scope'] = $ownScope;
+            }
+
+            // Rows embedded or filtered from a tenant-scoped relationship are bound to
+            // the request's tenant even when $table itself is not tenant-scoped, so
+            // its tenant-less key would hand one tenant's rows to the next. Only such
+            // requests carry the tenant; every other key stays as it was.
+            $relationshipTenant = $this->relationshipTenantToken($request, $table);
+            if ('' !== $relationshipTenant) {
+                $query['__relationship_tenant'] = $relationshipTenant;
+            }
+        }
+
         return md5(serialize($query));
+    }
+
+    private function relationshipTenantToken(Request $request, string $table): string
+    {
+        if (!RecordConfigService::enableTenantId()) {
+            return '';
+        }
+
+        if ([] === TenantScopedIncludes::requestedBy($request, $table)) {
+            return '';
+        }
+
+        $tenant = RecordUtils::resolveTenantIdFromRequest($request);
+
+        return RecordUtils::isTenantIdMissing($tenant) ? '' : (string) $tenant;
     }
 
     private function passesAdmissionRules(Request $request, string $table, ?string $schemaTableName): bool

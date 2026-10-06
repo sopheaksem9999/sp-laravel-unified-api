@@ -1,0 +1,13 @@
+{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+        "contents": [
+            {
+                "uri": "schema://invoices",
+                "mimeType": "application/json",
+                "text": "{\n    \"table\": \"invoices\",\n    \"primaryKey\": \"id\",\n    \"softDeletes\": true,\n    \"hasTenantId\": true,\n    \"isAuthRead\": false,\n    \"isAuthWrite\": false,\n    \"canRead\": true,\n    \"canCreate\": true,\n    \"canUpdate\": true,\n    \"canDelete\": true,\n    \"canUpsert\": true\n}"
+            }
+        ]
+    }
+}

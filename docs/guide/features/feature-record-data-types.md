@@ -86,7 +86,7 @@ Enum columns can specify an array of permitted values via `'enum' => [...]`.
 - **PostgreSQL**: extracted from user-defined enum types (`typtype = 'e'`).
 - **SQLite**: parsed from table check constraints (`CHECK (column_name IN (...))`).
 
-The `'enum'` array is used by OpenAPI generation (`OpenApiService`) to document permitted string values, by MCP tool schemas (`McpServerService`), and can be validated against.
+The `'enum'` array is used by OpenAPI generation (`OpenApiService`) to document permitted string values, by the MCP schema tools (`sp_api_get_endpoint` → `fields[].enum` and the create/update payload schemas; `Sopheak\Core\Mcp\SchemaTools`), and can be validated against.
 :::
 
 ## 2) Default Validation Type Mapping (`DefaultValidationUtils`)

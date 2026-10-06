@@ -438,10 +438,10 @@ For `POST` / `PUT` / `PATCH`, relationship input is type-driven and should follo
 | Enum type (`RecordRelationshipsEnum`) | Payload support | Payload shape |
 |---|---|---|
 | `BELONGS_TO` | ✅ FK scalar only | `customer_id: 10` |
-| `HAS_MANY` | ✅ alias array | `items: [1, {"id": 2}, {"name": "Line A"}]` |
+| `HAS_MANY` | ✅ alias array | `items: [{"id": 2}, {"name": "Line A"}]` |
 | `BELONGS_TO_MANY` | ✅ alias array | `roles: [1, {"id": 2}]` |
 | `HAS_MANY_THROUGH` | ✅ alias array | `tasks: [3, {"id": 4}]` |
-| `MORPH_MANY` | ✅ alias array | `comments: [1, {"id": 2}]` |
+| `MORPH_MANY` | ✅ alias array | `comments: [{"id": 2}, {"body": "…"}]` |
 | `MORPH_TO_MANY` | ✅ alias array | `roles: [1, {"id": 2}]` |
 | `MORPH_BY_MANY` | ✅ alias array | `tags: [1, {"id": 2}]` |
 | `SPATIE_PERMISSION` | ✅ alias array | `roles: [1, {"id": 2}]` |
@@ -472,13 +472,14 @@ Do not send:
 ```json
 {
   "items": [
-    1,
     { "id": 2 },
     { "name": "Line A", "qty": 1 },
     { "id": 5, "_delete": true }
   ]
 }
 ```
+
+A bare id is accepted only in many-to-many and has-many-through arrays, where it attaches; in a has-many or morph-many array it is a `422`.
 
 #### Pivot-style examples (`BELONGS_TO_MANY`, `MORPH_TO_MANY`, `SPATIE_PERMISSION`)
 

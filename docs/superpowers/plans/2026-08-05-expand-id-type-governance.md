@@ -1,3 +1,13 @@
+---
+title: "Expand ID Type Governance Plan"
+description: "Implementation plan for making record.id_type govern attachment, webhook, pivot and audit log primary keys."
+keywords:
+  - id type
+  - uuid
+  - primary key
+  - implementation plan
+---
+
 # Expand record.id_type Governance Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

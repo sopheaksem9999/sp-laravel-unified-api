@@ -297,7 +297,5 @@ class FakeMultipartDriver implements AttachmentMultipartDriver
         ];
     }
 
-    public function abortMultipart(FilesystemAdapter $disk, string $path, string $uploadId): void
-    {
-    }
+    public function abortMultipart(FilesystemAdapter $disk, string $path, string $uploadId): void {}
 }

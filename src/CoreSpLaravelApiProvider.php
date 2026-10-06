@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Sopheak\Core;
 
+use Laravel\Mcp\Server\McpServiceProvider;
+use Laravel\Mcp\Facades\Mcp;
+use Sopheak\Core\Mcp\Servers\DataServer;
+use Sopheak\Core\Mcp\Servers\SchemaServer;
 use Sopheak\Core\Http\Middleware\SetPostgresTenantContext;
 use Throwable;
 use Sopheak\Core\Console\CacheStatusCommand;
@@ -47,6 +51,7 @@ use Sopheak\Core\Contracts\Attachment\AttachmentMultipartDriver;
 use Sopheak\Core\Services\AttachmentMultipart\S3MultipartDriver;
 use Sopheak\Core\Listeners\InvalidateRecordCacheListener;
 use Sopheak\Core\Listeners\LogRecordAuditListener;
+use Sopheak\Core\Mcp\McpDriver;
 
 class CoreSpLaravelApiProvider extends ServiceProvider
 {
@@ -63,6 +68,20 @@ class CoreSpLaravelApiProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__ . '/../config/sp-audit.php', 'audit');
         $this->mergeConfigFrom(__DIR__ . '/../config/sp-permissions.php', 'permissions');
         $this->mergeConfigFrom(__DIR__ . '/../config/sp-api-mcp.php', 'sp-api-mcp');
+
+        // The `laravel` MCP driver needs laravel/mcp's own provider: its container
+        // callback populates a tool's arguments and it adds the global middleware
+        // that puts the OAuth discovery hint on a 401. Package auto-discovery
+        // provides it, but an app with discovery off would not get it; registering a
+        // provider twice is harmless. Done in a booting callback so the app's
+        // configuration is final (a bare Testbench app applies its config after
+        // register()), and so the provider still boots with the rest.
+        $this->app->booting(function (): void {
+            McpDriver::assertInstalled();
+            if (McpDriver::isActive()) {
+                $this->app->register(McpServiceProvider::class);
+            }
+        });
 
 
         $this->app->singleton('api.response', fn(): RecordApiResponseService => new RecordApiResponseService());
@@ -115,6 +134,20 @@ class CoreSpLaravelApiProvider extends ServiceProvider
         $this->loadRoutesFrom(__DIR__ . '/../routes/api.php');
         $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
 
+        // stdio servers for `mcp:start` / `mcp:inspector` and the
+        // sp-laravel-api:mcp command, when the `laravel` MCP driver is selected.
+        if (McpDriver::isActive()) {
+            Mcp::local('sp-laravel-api', DataServer::class);
+            Mcp::local('sp-laravel-api-schema', SchemaServer::class);
+        }
+
+        // Opt-in OAuth 2.1 discovery (protected-resource and authorization-server
+        // metadata, dynamic client registration) for connectors that require it.
+        if (McpDriver::isActive() && McpDriver::oauthEnabled()) {
+            McpDriver::assertOAuthAvailable();
+            Mcp::oauthRoutes();
+        }
+
         $this->commands([
             McpServerCommand::class,
         ]);
@@ -164,8 +197,10 @@ class CoreSpLaravelApiProvider extends ServiceProvider
             $this->app->booted(function (): void {
                 try {
                     $registrar = app(PermissionRegistrar::class);
-                    $registrar->autoRegisterFromConfig();
+                    // Needs no database, so it runs before auto-registration,
+                    // which fails until the permission tables are migrated.
                     $registrar->registerPermissions();
+                    $registrar->autoRegisterFromConfig();
                 } catch (Throwable) {
                     // Permission tables may not exist yet (pre-migration)
                     // Silently skip — auto-registration will happen on next boot

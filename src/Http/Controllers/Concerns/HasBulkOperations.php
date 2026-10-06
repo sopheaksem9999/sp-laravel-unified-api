@@ -18,6 +18,7 @@ use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Utilities\DefaultValidationUtils;
+use Sopheak\Core\Utilities\NestedWriteAuthorizer;
 
 /**
  * @property RecordService $recordService
@@ -96,12 +97,12 @@ trait HasBulkOperations
             $this->authorizeAction($table, 'update');
             $this->authorizeAction($table, 'delete');
 
-            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
+            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema, table: $table);
             if ($tenantError instanceof JsonResponse) {
                 return $tenantError;
             }
 
-            $result = $this->recordService->bulkRecord($request, $table, $tenantId, $legacyAction);
+            $result = NestedWriteAuthorizer::enforce(fn(): array => $this->recordService->bulkRecord($request, $table, $tenantId, $legacyAction));
 
             return RecordApiResponseService::successWrapped($result['data'], $result['meta']);
         } catch (RecordNotFoundException $e) {
@@ -135,7 +136,7 @@ trait HasBulkOperations
             $this->authorizeAction($table, 'create');
             $this->authorizeAction($table, 'update');
 
-            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
+            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema, table: $table);
             if ($tenantError instanceof JsonResponse) {
                 return $tenantError;
             }
@@ -222,7 +223,7 @@ trait HasBulkOperations
                 throw new ValidationException($validator);
             }
 
-            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
+            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema, table: $table);
             if ($tenantError instanceof JsonResponse) {
                 return $tenantError;
             }
@@ -344,7 +345,7 @@ trait HasBulkOperations
                 throw new ValidationException($validator);
             }
 
-            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
+            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema, table: $table);
             if ($tenantError instanceof JsonResponse) {
                 return $tenantError;
             }
@@ -476,7 +477,7 @@ trait HasBulkOperations
                 throw new ValidationException($validator);
             }
 
-            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
+            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema, table: $table);
             if ($tenantError instanceof JsonResponse) {
                 return $tenantError;
             }

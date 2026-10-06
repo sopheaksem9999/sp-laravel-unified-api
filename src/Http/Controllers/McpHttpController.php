@@ -7,7 +7,7 @@ namespace Sopheak\Core\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Sopheak\Core\Services\McpServerService;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\Response;
 
 class McpHttpController extends Controller
 {
@@ -25,28 +25,15 @@ class McpHttpController extends Controller
         return response()->json($response);
     }
 
-    public function handleSse(Request $request): StreamedResponse
+    /**
+     * The legacy SSE transport. It advertised a message URL that did not exist,
+     * never delivered a response on the stream, and held a PHP worker open for
+     * as long as the client stayed connected. The route and its name stay so
+     * existing references resolve; it now answers like Streamable HTTP does for
+     * a GET: not allowed, POST only.
+     */
+    public function handleSse(Request $request): Response
     {
-        $response = new StreamedResponse(function (): void {
-            $sessionId = uniqid('mcp_', true);
-            $postUrl = url(config('record.mcp.route_prefix', 'mcp') . '/message?session_id=' . $sessionId);
-            echo "event: endpoint\n";
-            echo "data: " . $postUrl . "\n\n";
-            ob_flush();
-            flush();
-            // Just keep connection open. Real implementation would use Redis/broadcast to send messages.
-            while (true) {
-                echo ": keepalive\n\n";
-                ob_flush();
-                flush();
-                sleep(15);
-            }
-        });
-
-        $response->headers->set('Content-Type', 'text/event-stream');
-        $response->headers->set('Cache-Control', 'no-cache');
-        $response->headers->set('Connection', 'keep-alive');
-
-        return $response;
+        return response('', 405)->header('Allow', 'POST');
     }
 }

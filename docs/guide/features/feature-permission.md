@@ -19,7 +19,7 @@ keywords:
 
 The package ships an **optional** built-in role/permission system at `Sopheak\Core\Authorization`. It is disabled by default — existing apps see zero change.
 
-When enabled, it replaces the default `Gate::forUser()->allows()` flow with an integrated system that auto-registers permissions from `config/record.php`, caches resolved permissions per user via a version-based cache key, and provides a Spatie-compatible developer API.
+When enabled, it answers permissions through Laravel's Gate — so `$user->can()`, `@can`, `authorize()` and Telescope's Gate watcher all see the same decisions the API makes — and it auto-registers permissions from `config/record.php`, caches resolved permissions per user via a version-based cache key, and provides a Spatie-compatible developer API. See [Laravel Gate, `@can` and Telescope](#laravel-gate-can-and-telescope).
 
 ```mermaid
 flowchart TB
@@ -44,7 +44,7 @@ flowchart TB
 
     subgraph Integration["Integration Points"]
         HCH["HasControllerHelpers<br/>auth flow"]
-        MSS["McpServerService<br/>auth flow"]
+        MSS["Mcp\\ToolExecutor<br/>auth flow (MCP + AI SDK)"]
     end
 
     subgraph Storage["Data Store"]
@@ -57,7 +57,7 @@ flowchart TB
 
     RP -->|"singleton"| PR
     RR -->|"autoRegisterFromConfig()"| PR
-    PR -->|"define()"| Gate
+    PR -->|"before() hook"| Gate
     PR -->|"cache version key"| Cache
     PM -->|"saved/deleted"| PR
     RM -->|"saved/deleted"| PR
@@ -68,9 +68,9 @@ flowchart TB
     HR -->|"getAllPermissions()"| PR
     PR -->|"getPermissions()"| Cache
     PR -->|"query"| Storage
-    HCH -->|"authorizeAction()"| PS
-    MSS -->|"authorizeAction()"| PS
-    PS -->|"userHasPermission()"| HR
+    HCH -->|"authorizeAction() → PermissionUtils::actionDecision()"| Gate
+    MSS -->|"authorizeAction() → PermissionUtils::actionDecision()"| Gate
+    Gate -->|"answerAbility() → hasPermissionTo()"| HR
 ```
 
 ## Configuration
@@ -138,32 +138,34 @@ Custom `permissions` maps on `RecordTableType` are also registered (e.g., `'read
 sequenceDiagram
     participant C as Controller
     participant HCH as HasControllerHelpers
-    participant PS as PermissionService
+    participant PU as PermissionUtils
+    participant Gate
     participant PR as PermissionRegistrar
     participant Cache
     participant DB
 
-    C->>HCH: authorizeAction(action, table)
-    HCH->>HCH: check table public/auth
-    HCH->>HCH: resolve user from guard
-    HCH->>HCH: check config('record.authorization') custom authorizer
-    alt permission.enabled = true
-        HCH->>PS: userHasPermission(user, perm)
-        PS->>PR: getPermissions(user)
-        PR->>Cache: remember(cacheKey, ttl)
-        alt cache miss
-            PR->>DB: query sp_model_has_roles + sp_role_permissions<br/>query sp_model_permissions (direct)
-            DB-->>PR: merged permission collection
-            PR->>Cache: store result
+    C->>HCH: authorizeAction(table, action)
+    HCH->>PU: actionDecision(user, table, action)
+    PU->>PU: public table/action → allowed
+    PU->>PU: no user → unauthenticated (401)
+    PU->>PU: no pmsName → allowed
+    PU->>PU: super_admin_callback(user) → allowed
+    alt record.authorization set
+        PU->>PU: handler(user, perm, table, action)
+    else default
+        PU->>Gate: forUser(user)->allows(perm)
+        opt permissions.enabled = true
+            Gate->>PR: before hook: answerAbility(user, perm)
+            PR->>Cache: getPermissions(user) — remember(cacheKey, ttl)
+            alt cache miss
+                PR->>DB: sp_model_has_roles + sp_role_permissions<br/>+ sp_model_permissions
+            end
+            PR-->>Gate: true, or null (app abilities/policies decide)
         end
-        Cache-->>PR: cached permissions
-        PR-->>PS: Collection
-        PS-->>HCH: bool
-    else permission.enabled = false (default)
-        HCH->>Gate: forUser(user)->allows(perm)
-        Gate-->>HCH: bool
+        Gate-->>PU: bool
     end
-    HCH-->>C: abort 403 or continue
+    PU-->>HCH: allowed / unauthenticated / forbidden
+    HCH-->>C: 401 / 403 or continue
 ```
 
 ### Cache Invalidation Flow
@@ -216,7 +218,7 @@ Configure a callback in `config/permissions.php`:
 'super_admin_callback' => fn ($user) => $user->tokenCan('super-admin') || $user->is_admin,
 ```
 
-The callback receives the authenticated user and **must return `bool`**. When `true`, `authorizeAction()` returns immediately — no DB queries for roles/permissions are executed.
+The callback receives the authenticated user and **must return `bool`**. When `true`, `authorizeAction()` returns immediately — no DB queries for roles/permissions are executed. The same bypass applies to the MCP and AI SDK tools and to nested child writes, and a super admin is never restricted by `viewOwn:*`.
 
 ```php
 // Default: null — all users must have explicit permissions
@@ -258,6 +260,25 @@ use Sopheak\Core\Authorization\Models\Role;
 
 > **Note:** The role-based example above queries the DB every request — it partially defeats the purpose of the bypass. Prefer scope/attribute-based checks when possible.
 
+`$user->can()` and `@can` honour the callback too, for the package's own permissions (names in `sp_permissions`) only. Your app's other abilities and policies are not bypassed — add your own `Gate::before` if you want that.
+
+## Laravel Gate, `@can` and Telescope
+
+With `permissions.enabled`, the package registers one `Gate::before` hook once the app has booted. It answers every check at the moment it runs:
+
+- **true** when the user holds the permission — directly or through a role — or is a `super_admin_callback` super admin and the ability is a package permission.
+- **null** otherwise, so your own `Gate::define()` abilities, policies and Gate callbacks decide. An ability nobody defines is denied.
+
+The package's API, MCP, AI SDK and `viewOwn` checks go through the same Gate, so:
+
+- Telescope's **Gate** tab records every API permission check (`view:invoice`, `viewOwn:invoice`, …) with its result.
+- `$user->can('view:invoice')` and `@can('view:invoice')` always agree with the API, including for a permission created after boot — no restart of Octane, queue or Horizon workers needed.
+- An ability your app defines under a package permission name is no longer overwritten at boot.
+
+Your app's Gate callbacks apply to API decisions. A `Gate::before` registered in `AuthServiceProvider::boot()` runs ahead of the package's hook, so it can grant or deny a package permission (return `true` / `false`, or `null` to leave it to the package). A `Gate::after` sees the final result.
+
+Package permissions are answered by the hook, not defined one by one, so `Gate::has('view:invoice')` is `false` for them. A custom `record.authorization` handler replaces Gate for API decisions entirely; those checks do not appear in Telescope's Gate tab.
+
 ## Tables
 
 Five tables are created by the migration `2026_05_13_000000_create_sp_permissions_tables.php`:
@@ -290,6 +311,6 @@ The validation command checks for:
 ## Related Docs
 
 - [Permission API Reference](/guide/feature-permission-api-reference) — PermissionRegistrar / PermissionService / HasRoles, cache, tenant scoping, legacy migration, usage
-- [Own-Records Scoping (viewOwn)](/guide/feature-permission-own-records) — restrict list queries to own rows
+- [Own-Records Scoping (viewOwn)](/guide/feature-permission-own-records) — restrict every read and write to the user's own rows
 - [PostgreSQL Row-Level Security](/guide/feature-permission-rls) — RLS defense-in-depth
 - [Userstamps](/guide/feature-userstamps) — the `created_by_id`/`last_updated_by_id` audit columns own-records scoping reads

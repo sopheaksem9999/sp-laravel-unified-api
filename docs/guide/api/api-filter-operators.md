@@ -33,9 +33,19 @@ value-less shorthand form for `null`.
   - On non-text columns (e.g. integers), `empty` ⇔ `IS NULL`, `not_empty` ⇔ `IS NOT NULL`.
 - Negated style is also supported using expression syntax:
   - `not.eq.5`, `not.in.(1,2,3)`, `not.like.ACME`, `not.fts.invoice`
+  - Only operators with a negated form accept `not.` (`eq`, `neq`, `in`, `like`, `ilike`, `is`, `gt`/`gte`/`lt`/`lte`, `between`, `empty`, `regex`/`match`/`imatch` and the PostgreSQL families). `contains`, `starts_with`, `ends_with` and `date_*` have none, and a `not.` prefix on them is ignored — use another operator (for example `not_like`) instead.
 - `any` / `all` modifiers are supported in expression syntax:
   - `name=like(any).{ACME,SHOP}`
   - `name=ilike(all).{spx,admin}`
+
+::: tip One operator map
+The operator names, the databases each one needs (`regex`/`match` family on
+MySQL, MariaDB and PostgreSQL; `fts` and the array/range operators on
+PostgreSQL only) and the column types each one suits live in a single class,
+`FilterOperatorCatalog`. The filter engine and the MCP schema tools both read
+it, so the operators an agent is told about are exactly the ones this driver
+accepts.
+:::
 
 ## Grouped Logic
 
@@ -59,7 +69,7 @@ Examples:
 - `customer_id=eq.18&or=(and(balance_due.gt.0,due_date.lt.2026-03-31),and(id.in.(5,6,9),ref_number.like.BILL-2026))`
   - Interpreted as: `customer_id = 18 AND ((balance_due > 0 AND due_date < '2026-03-31') OR (id IN (5,6,9) AND ref_number LIKE '%BILL-2026%'))`
 - `vendor_id=eq.27&or=(vendor.display_name.like.Acme,items.account_code.in.(4000,4010),items.amount.gt.0)`
-  - Example of grouped logic including relationship filters (`vendor.*`, `items.*`) in the same OR expression.
+  - Example of grouped logic including relationship filters (`vendor.*`, `items.*`) in the same OR expression. A relationship column is one level (`alias.column`) and matches only rows of the request's tenant; with tenancy on and no tenant resolved, a condition on a tenant-scoped relationship answers `422` ([Record Tenancy](/guide/record-tenancy)). A relationship column whose own name is an operator word (`like`, `in`, `is`, …) is not recognised inside a group; filter on it ungrouped (`?pets.like=eq.x`). A value inside a group cannot contain a comma: there is no escape.
 
 Notes:
 

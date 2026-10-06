@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Console;
 
+use RecursiveIteratorIterator;
+use RecursiveDirectoryIterator;
 use Illuminate\Console\Command;
 use Sopheak\Core\Services\ApiClient\ApiClientEmitterInterface;
 use Sopheak\Core\Services\ApiClient\ExportResult;
@@ -107,10 +109,10 @@ abstract class AbstractExportCommand extends Command
     private function loadExistingDirectory(string $outputPath): ?array
     {
         $files = [];
-        $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($outputPath));
+        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($outputPath));
         foreach ($iterator as $file) {
             if ($file->isFile() && ($file->getExtension() === 'bru' || $file->getFilename() === 'bruno.json')) {
-                $relativePath = ltrim(substr($file->getPathname(), strlen($outputPath)), '/\\');
+                $relativePath = ltrim(substr((string) $file->getPathname(), strlen($outputPath)), '/\\');
                 $files[$relativePath] = (string) file_get_contents($file->getPathname());
             }
         }

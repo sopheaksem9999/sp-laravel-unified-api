@@ -58,8 +58,12 @@ class AuditLogFilterTest extends TestCase
         });
         DB::table('widgets')->insert([['id' => 1, 'name' => 'one'], ['id' => 2, 'name' => 'two']]);
         config(['audit.filter' => self::SECOND_FILTER, 'audit.queue_enabled' => true,
-            'record.tables' => ['widgets' => new RecordTableType(table: 'widgets', hasTenantId: false, softDeletes: false,
-                columns: ['id' => ['type' => 'integer'], 'name' => ['type' => 'string']])],
+            'record.tables' => ['widgets' => new RecordTableType(
+                table: 'widgets',
+                hasTenantId: false,
+                softDeletes: false,
+                columns: ['id' => ['type' => 'integer'], 'name' => ['type' => 'string']]
+            )],
         ]);
         SchemaRegistryUtils::refresh();
         Queue::fake();
@@ -70,7 +74,7 @@ class AuditLogFilterTest extends TestCase
         app(RecordService::class)->bulkRecord($request, 'widgets', null);
         // Existing bulk upsert submits once in its inner update and once in its wrapper.
         $this->assertCount(4, FilterProbe::$calls);
-        $this->assertSame(['update', 'upsert', 'update', 'upsert'], array_map(fn (array $call) => $call[4]['operation'], FilterProbe::$calls));
+        $this->assertSame(['update', 'upsert', 'update', 'upsert'], array_map(fn(array $call) => $call[4]['operation'], FilterProbe::$calls));
         Queue::assertPushed(AuditLogJob::class, 2);
         $this->assertSame('changed one', DB::table('widgets')->where('id', 1)->value('name'));
     }
@@ -117,7 +121,7 @@ class AuditLogFilterTest extends TestCase
         Queue::fake();
         config(['audit.filter' => self::ACTOR_FILTER, 'audit.queue_enabled' => true, 'audit.audit_log_job' => CustomFilterAuditJob::class]);
         AuditLogService::insertAuditLogWithContext(Event::CREATED, 'widgets', ['id' => 1], 'subject', 'recap', 'tenant-a', ['actor' => null]);
-        Queue::assertPushed(CustomFilterAuditJob::class, fn ($job): bool => $job->event === Event::CREATED
+        Queue::assertPushed(CustomFilterAuditJob::class, fn($job): bool => $job->event === Event::CREATED
             && $job->entityType === 'widgets' && $job->queryData === ['id' => 1]
             && $job->subject === 'subject' && $job->recap === 'recap' && $job->tenantId === 'tenant-a');
         $this->assertCount(1, FilterProbe::$calls);
@@ -130,12 +134,12 @@ class AuditLogFilterTest extends TestCase
         foreach ([7, null, 9] as $id) {
             $request = Request::create('/');
             $actor = $id === null ? null : new GenericUser(['id' => $id]);
-            $request->setUserResolver(fn (): ?GenericUser => $actor);
+            $request->setUserResolver(fn(): ?GenericUser => $actor);
             AuditLogService::insertAuditLogWithContext(Event::CREATED, 'widgets', ['id' => 1], tenantId: $id, context: ['request' => $request]);
         }
 
-        $this->assertSame([7, null, 9], array_map(fn (array $call) => $call[3]?->getAuthIdentifier(), FilterProbe::$calls));
-        $this->assertSame([7, null, 9], array_map(fn (array $call) => $call[4]['tenant_id'], FilterProbe::$calls));
+        $this->assertSame([7, null, 9], array_map(fn(array $call) => $call[3]?->getAuthIdentifier(), FilterProbe::$calls));
+        $this->assertSame([7, null, 9], array_map(fn(array $call) => $call[4]['tenant_id'], FilterProbe::$calls));
         $this->assertSame(self::ACTOR_FILTER, config('audit.filter'));
         Queue::assertPushed(AuditLogJob::class, 1);
     }
@@ -147,7 +151,7 @@ class AuditLogFilterTest extends TestCase
         Queue::fake();
         config(['audit.queue_enabled' => true]);
         AuditLogService::insertAuditLog(Event::CREATED, 'widgets', ['id' => 2]);
-        Queue::assertPushed(AuditLogJob::class, fn ($job): bool => $job->queryData === ['id' => 2]);
+        Queue::assertPushed(AuditLogJob::class, fn($job): bool => $job->queryData === ['id' => 2]);
     }
 
     public function test_denial_skips_history_queries_and_dispatch(): void
@@ -175,7 +179,7 @@ class AuditLogFilterTest extends TestCase
         Queue::fake();
         $request = Request::create('/widgets');
         $actor = new GenericUser(['id' => 7]);
-        $request->setUserResolver(fn (): GenericUser => $actor);
+        $request->setUserResolver(fn(): GenericUser => $actor);
         foreach ([$actor, null] as $user) {
             AuditLogService::insertAuditLogWithContext(Event::CREATED, 'widgets', ['id' => 1], tenantId: 'tenant-a', context: [
                 'request' => $request, 'actor' => $user, 'tenant_id' => 'untrusted',
@@ -196,7 +200,7 @@ class AuditLogFilterTest extends TestCase
         SchemaRegistryUtils::refresh();
         $request = Request::create('/widgets');
         $actor = new GenericUser(['id' => 9]);
-        $request->setUserResolver(fn (): GenericUser => $actor);
+        $request->setUserResolver(fn(): GenericUser => $actor);
         app(RecordService::class)->processPostWriteLogic($request, 'widgets', 'restore', ['id' => 1]);
         $this->assertCount(1, FilterProbe::$calls);
         [$event, $table, $data, $user, $context] = FilterProbe::$calls[0];
@@ -237,7 +241,10 @@ class FilterProbe
 
     public static int $triggers = 0;
 
-    public static function trigger(): void { ++self::$triggers; }
+    public static function trigger(): void
+    {
+        ++self::$triggers;
+    }
 
     public static function secondOnly(...$args): bool
     {
@@ -260,11 +267,20 @@ class FilterProbe
 
     public static function voidHandler(): void {}
 
-    public static function nullHandler(): mixed { return null; }
+    public static function nullHandler(): mixed
+    {
+        return null;
+    }
 
-    public static function falseHandler(): bool { return false; }
+    public static function falseHandler(): bool
+    {
+        return false;
+    }
 
-    public static function trueHandler(): bool { return true; }
+    public static function trueHandler(): bool
+    {
+        return true;
+    }
 }
 
 class LegacyAuditSubclass extends AuditLogService

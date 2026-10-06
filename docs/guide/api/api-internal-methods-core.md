@@ -76,7 +76,7 @@ public static function executeDelete(
 
 ### Write Side-Effects (Record Lifecycle Events)
 
-Internal write methods (`executeCreate`, `executeUpdate`, `executeDelete`) trigger the same side-effects as the HTTP API.
+Internal write methods (`executeCreate`, `executeUpdate`, `executeDelete`) do **not** run the HTTP pipeline: no `before*`/`after*` hooks (so no webhooks delivered through them), no table or default validators and no `RecordMutated` broadcast. They reject unknown payload fields, process nested relationships, invalidate caches and dispatch the lifecycle events below. The MCP data tools and the AI SDK record tools call these methods inside the hook pipeline (`record.mcp.run_record_hooks`), so hooks, validators and broadcasts do run for them.
 
 After a successful write, the package dispatches these events:
 - `Sopheak\Core\Events\RecordCreated`
@@ -88,6 +88,8 @@ These events are **Laravel 13 safe** (they do not carry the full `Illuminate\Htt
 **What happens via listeners:**
 - Cache invalidation is handled by `InvalidateRecordCacheListener`
 - Audit insertion is handled by `LogRecordAuditListener` (queued when audit queue is enabled)
+
+These methods run as the authenticated user: `viewOwn` scoping applies to them when a restricted user is logged in (not in console or queue code with no user). An update or delete that matches nothing in scope dispatches no `RecordUpdated` / `RecordDeleted` event, so no audit row is written. Nested child writes made through these methods are trusted and not permission-checked; the MCP and AI SDK tools wrap them in that check themselves.
 
 ### Detailed Examples
 

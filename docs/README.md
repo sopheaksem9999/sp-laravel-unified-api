@@ -43,7 +43,7 @@ This metadata is required for consistent indexing and retrieval by AI agents.
 
 - [Attachment Module](/features/attachments)
 - [Audit Module](/features/audit-logging)
-- [AI SDK Integration](/guide/modules/module-ai-sdk)
+- [AI SDK Integration](/guide/module-ai-sdk)
 - [Pagination Module](/guide/module-pagination)
 - [MCP Module](/guide/module-mcp)
 - [Record Config Module](/core-concepts/record-table-types)

@@ -103,7 +103,7 @@ class ApiClientExportService
         $orderedFolders = [];
         $rpcFolders = [];
         foreach ($folderOrder as $name) {
-            if (str_starts_with($name, 'RPC')) {
+            if (str_starts_with((string) $name, 'RPC')) {
                 $rpcFolders[] = new ExportFolder($name, $foldersAccumulator[$name]);
             } else {
                 $orderedFolders[] = new ExportFolder($name, $foldersAccumulator[$name]);

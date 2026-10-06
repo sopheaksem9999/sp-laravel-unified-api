@@ -35,6 +35,10 @@ Configure in `config/record.php`:
 
 This map is used by `record.route.middleware:{action}`.
 
+### Not Applied to MCP or AI SDK Tools
+
+`record.route.middleware` is attached to the CRUD and function routes only. The Data MCP routes (`/{api_prefix}/mcp/...`) use `record.mcp.middleware` instead, the stdio server (`sp-laravel-api:mcp`) runs no HTTP middleware, and the AI SDK record tools run inside whatever request or queued job prompts the agent. Middleware you rely on for tenancy (`resolved_tenant_id`), `pgsql.tenant`, subscriptions or rate limits must be added to `record.mcp.middleware` as well.
+
 ## Resolution Order (Priority)
 
 For each request, middleware is merged in this exact order:

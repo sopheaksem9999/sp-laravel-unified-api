@@ -214,6 +214,7 @@ class RelationshipResolverUtils
 
     /**
      * Determine whether a resolved relationship targets the attachment table.
+     * @param array<string, mixed> $config
      */
     private static function isAttachmentRelation(array $config): bool
     {
@@ -237,7 +238,7 @@ class RelationshipResolverUtils
         $isList = is_array($value) && array_is_list($value);
         $items = $isList ? $value : (null !== $value ? [$value] : []);
 
-        $enriched = array_map(static fn(mixed $item): mixed => self::enrichAttachmentItem($item), $items);
+        $enriched = array_map(self::enrichAttachmentItem(...), $items);
 
         if ($isList) {
             return $enriched;
@@ -248,7 +249,7 @@ class RelationshipResolverUtils
 
     private static function enrichAttachmentItem(mixed $item): mixed
     {
-        if (null === $item || !(is_array($item) || is_object($item))) {
+        if (null === $item || !is_array($item) && !is_object($item)) {
             return $item;
         }
 
@@ -359,7 +360,11 @@ class RelationshipResolverUtils
         );
 
         foreach ($columns as $column) {
-            if ('*' === $column || in_array($column, $validNames, true)) {
+            if ('*' === $column) {
+                continue;
+            }
+
+            if (in_array($column, $validNames, true)) {
                 continue;
             }
 
@@ -401,12 +406,16 @@ class RelationshipResolverUtils
         $columns = array_keys($tableSchema->columns ?? []);
         $relationships = array_keys($tableSchema->relationships ?? []);
 
-        foreach ($payload as $field => $value) {
+        foreach (array_keys($payload) as $field) {
             if (!is_string($field)) {
                 continue;
             }
 
-            if (in_array($field, $columns, true) || in_array($field, $relationships, true)) {
+            if (in_array($field, $columns, true)) {
+                continue;
+            }
+
+            if (in_array($field, $relationships, true)) {
                 continue;
             }
 
@@ -716,7 +725,7 @@ class RelationshipResolverUtils
             }
 
             if ($type === 'hasManyThrough') {
-                self::processHasManyThroughOperation($table, (string) $alias, $relatedData, $recordId, $config, $schema, $tenantId, $allowCreate, $allowUpdate, $allowDelete);
+                self::processHasManyThroughOperation($table, (string) $alias, $relatedData, $recordId, $config, $schema, $tenantId, $allowCreate, $allowDelete);
                 continue;
             }
 
@@ -731,6 +740,12 @@ class RelationshipResolverUtils
                 abort((int) RecordApiJsonResponseEnum::VALIDATION_ERROR->value, 'Missing main record identifier for nested update');
             }
 
+            // The child table's own tenant, not the parent's: a non-tenant
+            // parent passes no tenant, and its tenant-scoped children were
+            // written unscoped.
+            $childTenant = self::childTenant($tenantId);
+            $childHasTenant = RecordConfigService::enableTenantId() && isset($relatedSchema->columns[RecordConfigService::tenantColumn()]);
+
             // Allowed columns
             $allowedCols = array_keys($schema[$relatedTable]->columns ?? []);
 
@@ -739,10 +754,19 @@ class RelationshipResolverUtils
                 $allowedCols = array_values(array_diff($allowedCols, $writeDisabled));
             }
 
+            // Only hasMany / morphMany arrays are strict. Any other type reaching this branch
+            // (a belongsTo object echoed back from a `select=*,rel(*)` read) keeps ignoring
+            // what it cannot write, so a GET -> PUT round trip still works.
+            $strictItems = in_array($type, ['hasMany', 'morphMany'], true);
+
             foreach ($relatedData as $item) {
-                if (!is_array($item)) {
+                if (!$strictItems && !is_array($item)) {
                     continue;
                 }
+
+                $item = self::normalizeNestedItem($item, $table, (string) $alias, $relatedPk, false);
+
+                self::assertChildTenantResolved($table, (string) $alias, $relatedSchema, $childTenant);
 
                 // Determine intended action before sanitization
                 $hasPk = isset($item[$relatedPk]);
@@ -760,14 +784,15 @@ class RelationshipResolverUtils
                     }
 
                     self::assertRelationshipOperationAllowed($table, (string) $alias, 'delete', $allowDelete);
+                    NestedWriteAuthorizer::authorizeChild($table, (string) $alias, $relatedTable, 'delete');
 
-                    $deleteQuery = self::scopeToParent(
+                    $deleteQuery = self::scopeChildRow(self::scopeToParent(
                         DB::table($actualRelatedTableName)->where($relatedPk, $idVal),
                         $foreignKey,
                         $recordId,
                         $type,
                         $config,
-                    );
+                    ), $relatedTable, $actualRelatedTableName, $childTenant, $schema);
 
                     if ($relatedSchema->softDeletes ?? false) {
                         $deleteQuery->update(['deleted_at' => TimeUtils::now()]);
@@ -784,11 +809,12 @@ class RelationshipResolverUtils
                     $hasPk ? 'update' : 'create',
                     $hasPk ? $allowUpdate : $allowCreate
                 );
+                NestedWriteAuthorizer::authorizeChild($table, (string) $alias, $relatedTable, $hasPk ? 'update' : 'create');
 
                 // Sanitize payload: only allowed columns; drop system/protected fields
                 $item = array_intersect_key($item, array_flip($allowedCols));
                 unset($item['id'], $item['created_at'], $item['updated_at'], $item['deleted_at']);
-                if ($hasTenant) {
+                if ($hasTenant || $childHasTenant) {
                     unset($item[RecordConfigService::tenantColumn()]);
                 }
 
@@ -799,36 +825,24 @@ class RelationshipResolverUtils
                     $item[$config['morph_type']] = $config['morph_class'];
                 }
 
-                if ($tenantId && $hasTenant) {
+                if ($childHasTenant && !RecordUtils::isTenantIdMissing($childTenant)) {
+                    $item[RecordConfigService::tenantColumn()] = $childTenant;
+                } elseif ($tenantId && $hasTenant && isset($relatedSchema->columns[RecordConfigService::tenantColumn()])) {
                     $item[RecordConfigService::tenantColumn()] = $tenantId;
                 }
 
                 $item = RecordUtils::applyCompositeTypes($item, $relatedSchema->columns ?? []);
 
-                // Permission check per related action
-                // $action = ($hasPk && $allowUpdate) ? 'update' : 'create';
-                // if (!PermissionUtils::isPublicAction($relatedTable, $action)) {
-                //     $user = auth('api')->user();
-                //     if (!$user) {
-                //         abort(401, 'Unauthenticated');
-                //     }
-
-                //     $perm = PermissionUtils::mapPermission($relatedTable, $action);
-                //     if (!$user->can($perm)) {
-                //         abort(RecordApiJsonResponseEnum::FORBIDDEN->value, 'Forbidden');
-                //     }
-                // }
-
                 if ($hasPk) {
                     // Update path (already asserted allowUpdate above)
                     unset($item[$relatedPk]);
-                    self::scopeToParent(
+                    self::scopeChildRow(self::scopeToParent(
                         DB::table($actualRelatedTableName)->where($relatedPk, $idVal),
                         $foreignKey,
                         $recordId,
                         $type,
                         $config,
-                    )->update($item);
+                    ), $relatedTable, $actualRelatedTableName, $childTenant, $schema)->update($item);
                 } else {
                     // Create path (already asserted allowCreate above)
                     unset($item['id']);
@@ -863,6 +877,94 @@ class RelationshipResolverUtils
     }
 
     /**
+     * The tenant a nested write's child rows belong to: the parent's tenant when
+     * it has one, otherwise the request's. A non-tenant parent passes null, and
+     * without this its tenant-scoped children were written unscoped.
+     */
+    private static function childTenant(mixed $tenantId): mixed
+    {
+        if (!RecordConfigService::enableTenantId()) {
+            return null;
+        }
+
+        return RecordUtils::isTenantIdMissing($tenantId)
+            ? RecordUtils::resolveTenantIdFromRequest(request())
+            : $tenantId;
+    }
+
+    /**
+     * Confine a nested write's child query to rows the caller could write
+     * directly: the child table's own tenant, and its own-records scope.
+     *
+     * @param array<string, mixed> $schema
+     */
+    private static function scopeChildRow(Builder $query, string $relatedTable, string $qualifiedTable, mixed $childTenant, array $schema): Builder
+    {
+        $tenantCol = RecordConfigService::tenantColumn();
+        if (RecordConfigService::enableTenantId() && !RecordUtils::isTenantIdMissing($childTenant) && isset($schema[$relatedTable]->columns[$tenantCol])) {
+            $query->where($qualifiedTable . '.' . $tenantCol, $childTenant);
+        }
+
+        OwnRecordsScope::apply($query, $relatedTable, $qualifiedTable);
+
+        return $query;
+    }
+
+    /**
+     * Refuse a nested write to a tenant-scoped child when no tenant resolves.
+     * The child table's own endpoint refuses such a write; without this the
+     * nested path skipped the tenant filter and reached every tenant's rows.
+     */
+    private static function assertChildTenantResolved(string $table, string $alias, ?object $relatedSchema, mixed $childTenant): void
+    {
+        if (null === $relatedSchema || !RecordUtils::shouldApplyTenantId($relatedSchema) || !RecordUtils::isTenantIdMissing($childTenant)) {
+            return;
+        }
+
+        throw new InvalidArgumentException(sprintf(
+            "Header %s is required to write relationship '%s' on table '%s'.",
+            RecordConfigService::tenantHeader(),
+            $alias,
+            $table
+        ));
+    }
+
+    /**
+     * Refuse to link an existing related row the caller could not read
+     * directly — another tenant's, or another user's under viewOwn. A no-op
+     * when the related table carries neither restriction.
+     *
+     * @param array<string, mixed> $schema
+     */
+    private static function assertRelatedRowVisible(string $table, string $alias, string $relatedTable, string $qualifiedTable, string $relatedPk, mixed $relatedId, mixed $childTenant, array $schema): void
+    {
+        $tenantApplies = RecordConfigService::enableTenantId()
+            && !RecordUtils::isTenantIdMissing($childTenant)
+            && isset($schema[$relatedTable]->columns[RecordConfigService::tenantColumn()]);
+
+        if (!$tenantApplies && null === OwnRecordsScope::ownerColumn($relatedTable)) {
+            return;
+        }
+
+        $visible = self::scopeChildRow(
+            DB::table($qualifiedTable)->where($qualifiedTable . '.' . $relatedPk, $relatedId),
+            $relatedTable,
+            $qualifiedTable,
+            $childTenant,
+            $schema
+        )->exists();
+
+        if (!$visible) {
+            throw new InvalidArgumentException(sprintf(
+                "Related record '%s' not found for relationship '%s' on table '%s'.",
+                (string) $relatedId,
+                $alias,
+                $table
+            ));
+        }
+    }
+
+    /**
      * Reject a nested relationship write outright when the relationship's
      * allowCreate/allowUpdate/allowDelete config disallows the action the payload is
      * asking for, instead of silently dropping that item and returning as if it had
@@ -884,6 +986,39 @@ class RelationshipResolverUtils
     }
 
     /**
+     * A bare id in a many-to-many / hasManyThrough array means "attach this
+     * record" and is rewritten to {pk: id}. Everywhere else a non-object item
+     * used to be dropped silently, which hid client mistakes; it is a 422 now.
+     *
+     * @return array<string, mixed>
+     */
+    private static function normalizeNestedItem(mixed $item, string $table, string $alias, string $primaryKey, bool $attachable): array
+    {
+        if (is_array($item)) {
+            return $item;
+        }
+
+        if (is_int($item) || is_string($item)) {
+            if ('' === $item || 0 === $item || '0' === $item) {
+                throw new InvalidArgumentException(sprintf("Relationship '%s' on table '%s' got an empty value; send a record id or an object.", $alias, $table));
+            }
+
+            if ($attachable) {
+                return [$primaryKey => $item];
+            }
+
+            throw new InvalidArgumentException(sprintf(
+                "Relationship '%s' on table '%s' expects objects, got scalar %s. Send {\"id\": ...} to update a child or {...fields} to create one.",
+                $alias,
+                $table,
+                $item
+            ));
+        }
+
+        throw new InvalidArgumentException(sprintf("Relationship '%s' on table '%s' got an empty value; send a record id or an object.", $alias, $table));
+    }
+
+    /**
      * @param array<string, mixed> $config
      */
     private static function processBelongsToManyOperation(string $table, string $alias, array $data, mixed $mainId, array $config, array $schema, mixed $tenantId, bool $allowCreate, bool $allowUpdate, bool $allowDelete): void
@@ -902,10 +1037,10 @@ class RelationshipResolverUtils
             $allowedRelatedCols = array_values(array_diff($allowedRelatedCols, $writeDisabled));
         }
 
+        $childTenant = self::childTenant($tenantId);
+
         foreach ($data as $item) {
-            if (!is_array($item)) {
-                continue;
-            }
+            $item = self::normalizeNestedItem($item, $table, $alias, $relatedPk, true);
 
             $isDelete = ($item['_delete'] ?? false) || ($item['_destroy'] ?? false);
             $relatedId = $item[$relatedPk] ?? null;
@@ -930,14 +1065,19 @@ class RelationshipResolverUtils
                 continue;
             }
 
+            self::assertChildTenantResolved($table, $alias, $relatedSchema, $childTenant);
+
             if (!$relatedId) {
                 self::assertRelationshipOperationAllowed($table, $alias, 'create', $allowCreate);
+                NestedWriteAuthorizer::authorizeChild($table, $alias, $relatedTable, 'create');
 
                 // Create new related record
                 $relatedFields = array_intersect_key($item, array_flip($allowedRelatedCols));
                 unset($relatedFields['id'], $relatedFields['created_at'], $relatedFields['updated_at'], $relatedFields['deleted_at']);
 
-                if ($tenantId && isset($relatedSchema->columns[RecordConfigService::tenantColumn()])) {
+                if (!RecordUtils::isTenantIdMissing($childTenant) && isset($relatedSchema->columns[RecordConfigService::tenantColumn()])) {
+                    $relatedFields[RecordConfigService::tenantColumn()] = $childTenant;
+                } elseif ($tenantId && isset($relatedSchema->columns[RecordConfigService::tenantColumn()])) {
                     $relatedFields[RecordConfigService::tenantColumn()] = $tenantId;
                 }
 
@@ -950,6 +1090,8 @@ class RelationshipResolverUtils
                 }
 
                 $relatedId = DB::table($actualRelatedTableName)->insertGetId($relatedFields);
+            } else {
+                self::assertRelatedRowVisible($table, $alias, $relatedTable, $actualRelatedTableName, $relatedPk, $relatedId, $childTenant, $schema);
             }
 
             $pivotData = [];
@@ -999,6 +1141,7 @@ class RelationshipResolverUtils
             if (isset($config['morph_type']) && !array_key_exists($config['morph_type'], $pivotData)) {
                 $pivotData[$config['morph_type']] = $config['relation'] ?? null;
             }
+
             if (($config['with_timestamps'] ?? false)) {
                 $pivotData['created_at'] = TimeUtils::now();
                 $pivotData['updated_at'] = TimeUtils::now();
@@ -1025,7 +1168,7 @@ class RelationshipResolverUtils
     /**
      * @param array<string, mixed> $config
      */
-    private static function processHasManyThroughOperation(string $table, string $alias, array $data, mixed $mainId, array $config, array $schema, mixed $tenantId, bool $allowCreate, bool $allowUpdate, bool $allowDelete): void
+    private static function processHasManyThroughOperation(string $table, string $alias, array $data, mixed $mainId, array $config, array $schema, mixed $tenantId, bool $allowCreate, bool $allowDelete): void
     {
         $throughTable = $config['through_table'];
         $firstKey = $config['first_key'];
@@ -1038,11 +1181,10 @@ class RelationshipResolverUtils
         $targetSchema = $schema[$targetTable] ?? null;
         $targetPk = $targetSchema->primaryKey ?? 'id';
         $actualTargetTableName = $schema[$targetTable]->table ?? $targetTable;
+        $childTenant = self::childTenant($tenantId);
 
         foreach ($data as $item) {
-            if (!is_array($item)) {
-                continue;
-            }
+            $item = self::normalizeNestedItem($item, $table, $alias, $targetPk, true);
 
             $isDelete = ($item['_delete'] ?? false) || ($item['_destroy'] ?? false);
             $targetId = $item[$targetPk] ?? null;
@@ -1076,8 +1218,11 @@ class RelationshipResolverUtils
                 continue;
             }
 
+            self::assertChildTenantResolved($table, $alias, $targetSchema, $childTenant);
+
             if (!$targetId) {
                 self::assertRelationshipOperationAllowed($table, $alias, 'create', $allowCreate);
+                NestedWriteAuthorizer::authorizeChild($table, $alias, $targetTable, 'create');
 
                 $targetFields = array_intersect_key($item, array_flip(array_keys($targetSchema->columns ?? [])));
                 $writeDisabled = is_array($targetSchema->columnWriteDisabled ?? null) ? $targetSchema->columnWriteDisabled : [];
@@ -1087,7 +1232,9 @@ class RelationshipResolverUtils
 
                 unset($targetFields['id'], $targetFields['created_at'], $targetFields['updated_at'], $targetFields['deleted_at']);
 
-                if ($tenantId && isset($targetSchema->columns[RecordConfigService::tenantColumn()])) {
+                if (!RecordUtils::isTenantIdMissing($childTenant) && isset($targetSchema->columns[RecordConfigService::tenantColumn()])) {
+                    $targetFields[RecordConfigService::tenantColumn()] = $childTenant;
+                } elseif ($tenantId && isset($targetSchema->columns[RecordConfigService::tenantColumn()])) {
                     $targetFields[RecordConfigService::tenantColumn()] = $tenantId;
                 }
 
@@ -1100,6 +1247,8 @@ class RelationshipResolverUtils
                 }
 
                 $targetId = DB::table($actualTargetTableName)->insertGetId($targetFields);
+            } else {
+                self::assertRelatedRowVisible($table, $alias, $targetTable, $actualTargetTableName, $targetPk, $targetId, $childTenant, $schema);
             }
 
             $existsQuery = DB::table($throughTable)
@@ -1335,10 +1484,21 @@ class RelationshipResolverUtils
         $innerSql = sprintf('SELECT %s FROM %s AS %s', $innerSelect, $actualRelatedTableName, $subAlias)
                    . sprintf(' WHERE %s.%s = %s.%s', $subAlias, $ownerKey, $actualMainTableName, $foreignKey);
 
+        $scopeSql = '';
+        $scopeBindings = [];
         $tenantCol = RecordConfigService::tenantColumn();
         if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
-            $innerSql .= sprintf(' AND %s.%s = ', $subAlias, $tenantCol) . (int) $tenantId;
+            $scopeSql .= sprintf(' AND %s.%s = ?', $subAlias, $tenantCol);
+            $scopeBindings[] = $tenantId;
         }
+
+        // Own-records scope on the related table: a viewOwn user must not see
+        // another user's row just because it is embedded in a child.
+        [$ownSql, $ownBindings] = OwnRecordsScope::sqlCondition($relatedTable, $subAlias);
+        $scopeSql .= $ownSql;
+        array_push($scopeBindings, ...$ownBindings);
+
+        $innerSql .= $scopeSql;
 
         if ($schema[$relatedTable]->softDeletes ?? false) {
             $innerSql .= sprintf(' AND %s.deleted_at IS NULL', $subAlias);
@@ -1358,9 +1518,7 @@ class RelationshipResolverUtils
             $rawSql = "(SELECT json_object(" . implode(', ', $jsonPairs) . sprintf(') FROM %s AS %s', $actualRelatedTableName, $subAlias)
                     . sprintf(' WHERE %s.%s = %s.%s', $subAlias, $ownerKey, $actualMainTableName, $foreignKey);
 
-            if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
-                $rawSql .= sprintf(' AND %s.%s = ', $subAlias, $tenantCol) . (int) $tenantId;
-            }
+            $rawSql .= $scopeSql;
 
             if ($schema[$relatedTable]->softDeletes ?? false) {
                 $rawSql .= sprintf(' AND %s.deleted_at IS NULL', $subAlias);
@@ -1376,9 +1534,7 @@ class RelationshipResolverUtils
             $rawSql = "(SELECT JSON_OBJECT(" . implode(', ', $jsonPairs) . sprintf(') FROM %s AS %s', $actualRelatedTableName, $subAlias)
                     . sprintf(' WHERE %s.%s = %s.%s', $subAlias, $ownerKey, $actualMainTableName, $foreignKey);
 
-            if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
-                $rawSql .= sprintf(' AND %s.%s = ', $subAlias, $tenantCol) . (int) $tenantId;
-            }
+            $rawSql .= $scopeSql;
 
             if ($schema[$relatedTable]->softDeletes ?? false) {
                 $rawSql .= sprintf(' AND %s.deleted_at IS NULL', $subAlias);
@@ -1387,7 +1543,7 @@ class RelationshipResolverUtils
             $rawSql .= sprintf(' LIMIT 1) AS "%s"', $alias);
         }
 
-        $builder->selectRaw($rawSql);
+        $builder->selectRaw($rawSql, $scopeBindings);
 
         return $builder;
     }
@@ -1398,6 +1554,7 @@ class RelationshipResolverUtils
      */
     private static function addHasManySubquery(Builder $builder, string $table, string $alias, array $config, array $columns, mixed $tenantId, array $schema): Builder
     {
+        $bindings = [];
         $relatedTable = $config['table'];
         $foreignKey = $config['foreign_key'];
         $localKey = $config['local_key'] ?? 'id';
@@ -1419,8 +1576,15 @@ class RelationshipResolverUtils
         // Add tenant filtering if enabled
         $tenantCol = RecordConfigService::tenantColumn();
         if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
-            $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualRelatedTableName, $tenantId);
+            $subqueryRaw .= sprintf(' AND %s.%s = ?', $actualRelatedTableName, $tenantCol);
+            $bindings[] = $tenantId;
         }
+
+        // Own-records scope on the related table: a viewOwn user must not see
+        // another user's row just because it is embedded in a parent.
+        [$ownSql, $ownBindings] = OwnRecordsScope::sqlCondition($relatedTable, $actualRelatedTableName);
+        $subqueryRaw .= $ownSql;
+        array_push($bindings, ...$ownBindings);
 
         // Add soft delete filtering
         if ($schema[$relatedTable]->softDeletes ?? false) {
@@ -1430,7 +1594,7 @@ class RelationshipResolverUtils
         $subqueryRaw .= '
         )';
 
-        $builder->addSelect([DB::raw(sprintf('%s as %s', $subqueryRaw, $alias))]);
+        $builder->selectRaw(sprintf('%s as %s', $subqueryRaw, $alias), $bindings);
 
         return $builder;
     }
@@ -1440,6 +1604,7 @@ class RelationshipResolverUtils
      */
     private static function addMorphManySubquery(Builder $builder, string $table, string $alias, array $config, array $columns, mixed $tenantId, array $schema): Builder
     {
+        $bindings = [];
         $relatedTable = $config['table'];
         $morphType = $config['morph_type'];
         $morphId = $config['morph_id'];
@@ -1464,8 +1629,15 @@ class RelationshipResolverUtils
         // Add tenant filtering if enabled
         $tenantCol = RecordConfigService::tenantColumn();
         if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
-            $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualRelatedTableName, $tenantId);
+            $subqueryRaw .= sprintf(' AND %s.%s = ?', $actualRelatedTableName, $tenantCol);
+            $bindings[] = $tenantId;
         }
+
+        // Own-records scope on the related table: a viewOwn user must not see
+        // another user's row just because it is embedded in a parent.
+        [$ownSql, $ownBindings] = OwnRecordsScope::sqlCondition($relatedTable, $actualRelatedTableName);
+        $subqueryRaw .= $ownSql;
+        array_push($bindings, ...$ownBindings);
 
         // Add soft delete filtering
         if ($schema[$relatedTable]->softDeletes ?? false) {
@@ -1475,7 +1647,7 @@ class RelationshipResolverUtils
         $subqueryRaw .= '
         )';
 
-        $builder->addSelect([DB::raw(sprintf('%s as %s', $subqueryRaw, $alias))]);
+        $builder->selectRaw(sprintf('%s as %s', $subqueryRaw, $alias), $bindings);
 
         return $builder;
     }
@@ -1487,6 +1659,7 @@ class RelationshipResolverUtils
      */
     private static function addBelongsToManySubquery(Builder $builder, string $table, string $alias, array $config, array $columns, mixed $tenantId, array $schema): Builder
     {
+        $bindings = [];
         $relatedTable = $config['table'];
         $pivotTable = $config['pivot_table'];
         $foreignPivotKey = $config['foreign_pivot_key'];
@@ -1531,15 +1704,24 @@ class RelationshipResolverUtils
         if ($enableTenantId && $tenantId) {
             $tenantCol = RecordConfigService::tenantColumn();
             if (isset($schema[$relatedTable]->columns[$tenantCol])) {
-                $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualRelatedTableName, $tenantId);
+                $subqueryRaw .= sprintf(' AND %s.%s = ?', $actualRelatedTableName, $tenantCol);
+                $bindings[] = $tenantId;
             }
 
             if (isset($schema[$pivotTable]->columns[$tenantCol])) {
-                $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualPivotTableName, $tenantId);
+                $subqueryRaw .= sprintf(' AND %s.%s = ?', $actualPivotTableName, $tenantCol);
+                $bindings[] = $tenantId;
             } elseif (Schema::hasColumn($actualPivotTableName, $tenantCol)) {
-                $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualPivotTableName, $tenantId);
+                $subqueryRaw .= sprintf(' AND %s.%s = ?', $actualPivotTableName, $tenantCol);
+                $bindings[] = $tenantId;
             }
         }
+
+        // Own-records scope on the related table: a viewOwn user must not see
+        // another user's row just because it is embedded in a parent.
+        [$ownSql, $ownBindings] = OwnRecordsScope::sqlCondition($relatedTable, $actualRelatedTableName);
+        $subqueryRaw .= $ownSql;
+        array_push($bindings, ...$ownBindings);
 
         // Add soft delete filtering
         if ($schema[$relatedTable]->softDeletes ?? false) {
@@ -1553,7 +1735,7 @@ class RelationshipResolverUtils
         $subqueryRaw .= '
         )';
 
-        $builder->addSelect([DB::raw(sprintf('%s as %s', $subqueryRaw, $alias))]);
+        $builder->selectRaw(sprintf('%s as %s', $subqueryRaw, $alias), $bindings);
 
         return $builder;
     }
@@ -1564,6 +1746,7 @@ class RelationshipResolverUtils
      */
     private static function addMorphToManySubquery(Builder $builder, string $table, string $alias, array $config, array $columns, mixed $tenantId, array $schema): Builder
     {
+        $bindings = [];
         $relatedTable = $config['table'];
         $pivotTable = $config['pivot_table'];
         $foreignPivotKey = $config['foreign_pivot_key']; // e.g., model_id
@@ -1612,15 +1795,24 @@ class RelationshipResolverUtils
         if ($enableTenantId && $tenantId) {
             $tenantCol = RecordConfigService::tenantColumn();
             if (isset($schema[$relatedTable]->columns[$tenantCol])) {
-                $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualRelatedTableName, $tenantId);
+                $subqueryRaw .= sprintf(' AND %s.%s = ?', $actualRelatedTableName, $tenantCol);
+                $bindings[] = $tenantId;
             }
 
             if (isset($schema[$pivotTable]->columns[$tenantCol])) {
-                $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualPivotTableName, $tenantId);
+                $subqueryRaw .= sprintf(' AND %s.%s = ?', $actualPivotTableName, $tenantCol);
+                $bindings[] = $tenantId;
             } elseif (Schema::hasColumn($actualPivotTableName, $tenantCol)) {
-                $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualPivotTableName, $tenantId);
+                $subqueryRaw .= sprintf(' AND %s.%s = ?', $actualPivotTableName, $tenantCol);
+                $bindings[] = $tenantId;
             }
         }
+
+        // Own-records scope on the related table: a viewOwn user must not see
+        // another user's row just because it is embedded in a parent.
+        [$ownSql, $ownBindings] = OwnRecordsScope::sqlCondition($relatedTable, $actualRelatedTableName);
+        $subqueryRaw .= $ownSql;
+        array_push($bindings, ...$ownBindings);
 
         // Add soft delete filtering
         if ($schema[$relatedTable]->softDeletes ?? false) {
@@ -1634,7 +1826,7 @@ class RelationshipResolverUtils
         $subqueryRaw .= '
         )';
 
-        $builder->addSelect([DB::raw(sprintf('%s as %s', $subqueryRaw, $alias))]);
+        $builder->selectRaw(sprintf('%s as %s', $subqueryRaw, $alias), $bindings);
 
         return $builder;
     }
@@ -1645,6 +1837,7 @@ class RelationshipResolverUtils
      */
     private static function addHasManyThroughSubquery(Builder $builder, string $table, string $alias, array $config, array $columns, mixed $tenantId, array $schema): Builder
     {
+        $bindings = [];
         $relatedTable = $config['table'];
         $throughTable = $config['through_table'];
         $firstKey = $config['first_key'];
@@ -1672,13 +1865,21 @@ class RelationshipResolverUtils
         if ($enableTenantId && $tenantId) {
             $tenantCol = RecordConfigService::tenantColumn();
             if (isset($schema[$relatedTable]->columns[$tenantCol])) {
-                $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualRelatedTableName, $tenantId);
+                $subqueryRaw .= sprintf(' AND %s.%s = ?', $actualRelatedTableName, $tenantCol);
+                $bindings[] = $tenantId;
             }
 
             if (isset($schema[$throughTable]->columns[$tenantCol])) {
-                $subqueryRaw .= sprintf(' AND %s.' . $tenantCol . ' = %s', $actualThroughTableName, $tenantId);
+                $subqueryRaw .= sprintf(' AND %s.%s = ?', $actualThroughTableName, $tenantCol);
+                $bindings[] = $tenantId;
             }
         }
+
+        // Own-records scope on the related table: a viewOwn user must not see
+        // another user's row just because it is embedded in a parent.
+        [$ownSql, $ownBindings] = OwnRecordsScope::sqlCondition($relatedTable, $actualRelatedTableName);
+        $subqueryRaw .= $ownSql;
+        array_push($bindings, ...$ownBindings);
 
         // Add soft delete filtering
         if ($schema[$relatedTable]->softDeletes ?? false) {
@@ -1692,7 +1893,7 @@ class RelationshipResolverUtils
         $subqueryRaw .= '
         )';
 
-        $builder->addSelect([DB::raw(sprintf('%s as %s', $subqueryRaw, $alias))]);
+        $builder->selectRaw(sprintf('%s as %s', $subqueryRaw, $alias), $bindings);
 
         return $builder;
     }
@@ -1713,7 +1914,11 @@ class RelationshipResolverUtils
 
         // Validate columns against schema
         foreach ($columns as $column) {
-            if ('*' === $column || isset($schemaColumns[$column])) {
+            if ('*' === $column) {
+                continue;
+            }
+
+            if (isset($schemaColumns[$column])) {
                 continue;
             }
 
@@ -1991,6 +2196,7 @@ class RelationshipResolverUtils
                     if (!$childConfig) {
                         continue;
                     }
+
                     $childType = $childConfig['type'] ?? null;
                     if ('belongsTo' === $childType) {
                         $parentKeys[] = $childConfig['foreign_key'] ?? null;
@@ -1998,6 +2204,7 @@ class RelationshipResolverUtils
                         $parentKeys[] = $childConfig['local_key'] ?? 'id';
                     }
                 }
+
                 foreach (array_filter($parentKeys) as $parentKey) {
                     if (!in_array($parentKey, $columns, true)) {
                         $columns[] = $parentKey;
@@ -2293,6 +2500,8 @@ class RelationshipResolverUtils
             $relatedBuilder->where($tenantCol, $tenantId);
         }
 
+        OwnRecordsScope::apply($relatedBuilder, $relatedTable, $actualRelatedTableName);
+
         // Apply soft delete filtering
         if ($schema[$relatedTable]->softDeletes ?? false) {
             $relatedBuilder->whereNull('deleted_at');
@@ -2440,7 +2649,7 @@ class RelationshipResolverUtils
         // row would fail grouping, yielding an empty relation).
         if ([] !== $columns && !in_array('*', $columns, true)) {
             $requiredKey = ('belongsTo' === $type) ? $ownerKey : $foreignKey;
-            if (null !== $requiredKey && !in_array($requiredKey, $columns, true)) {
+            if (!in_array($requiredKey, $columns, true)) {
                 $columns[] = $requiredKey;
             }
         }
@@ -2458,6 +2667,8 @@ class RelationshipResolverUtils
         if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
             $builder->where($actualRelatedTableName . '.' . $tenantCol, $tenantId);
         }
+
+        OwnRecordsScope::apply($builder, $relatedTable, $actualRelatedTableName);
 
         // Apply soft delete filtering
         if ($schema[$relatedTable]->softDeletes ?? false) {
@@ -2497,6 +2708,8 @@ class RelationshipResolverUtils
             if ($enableTenantId && $tenantId && isset($schema[$relatedTable]->columns[$tenantCol])) {
                 $builder->where($relatedTableName . '.' . $tenantCol, $tenantId);
             }
+
+            OwnRecordsScope::apply($builder, $relatedTable, $relatedTableName);
 
             // Apply soft delete filtering
             if ($schema[$relatedTable]->softDeletes ?? false) {
@@ -2679,7 +2892,11 @@ class RelationshipResolverUtils
         }
 
         foreach ($columns as $column) {
-            if ('*' === $column || isset($schemaColumns[$column])) {
+            if ('*' === $column) {
+                continue;
+            }
+
+            if (isset($schemaColumns[$column])) {
                 continue;
             }
 

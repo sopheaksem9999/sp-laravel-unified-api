@@ -39,7 +39,7 @@ trait HasCrudOperations
 
             $this->authorizeAction($table, 'read');
 
-            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
+            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema, table: $table);
             if ($tenantError instanceof JsonResponse) {
                 return $tenantError;
             }
@@ -123,7 +123,7 @@ trait HasCrudOperations
 
             $this->authorizeAction($table, 'read');
 
-            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
+            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema, table: $table);
             if ($tenantError instanceof JsonResponse) {
                 return $tenantError;
             }
@@ -207,7 +207,7 @@ trait HasCrudOperations
             $this->authorizeAction($table, 'create');
             $this->resolveActualTableName($table);
 
-            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
+            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema, table: $table);
             if ($tenantError instanceof JsonResponse) {
                 return $tenantError;
             }
@@ -304,7 +304,7 @@ trait HasCrudOperations
             $this->authorizeAction($table, 'update');
             $this->resolveActualTableName($table);
 
-            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
+            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema, table: $table);
             if ($tenantError instanceof JsonResponse) {
                 return $tenantError;
             }
@@ -410,7 +410,7 @@ trait HasCrudOperations
             $this->authorizeAction($table, 'delete');
             $this->resolveActualTableName($table);
 
-            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
+            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema, table: $table);
             if ($tenantError instanceof JsonResponse) {
                 return $tenantError;
             }
@@ -497,7 +497,7 @@ trait HasCrudOperations
             $this->authorizeAction($table, 'restore');
             $this->resolveActualTableName($table);
 
-            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
+            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema, table: $table);
             if ($tenantError instanceof JsonResponse) {
                 return $tenantError;
             }
@@ -571,7 +571,7 @@ trait HasCrudOperations
             $this->authorizeAction($table, 'force_delete');
             $this->resolveActualTableName($table);
 
-            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
+            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema, table: $table);
             if ($tenantError instanceof JsonResponse) {
                 return $tenantError;
             }
@@ -648,7 +648,7 @@ trait HasCrudOperations
             $this->authorizeAction($table, 'update');
             $this->resolveActualTableName($table);
 
-            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema);
+            [$tenantId, $tenantError] = $this->resolveTenantContext($request, $tableSchema, table: $table);
             if ($tenantError instanceof JsonResponse) {
                 return $tenantError;
             }

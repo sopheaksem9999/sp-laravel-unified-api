@@ -9,6 +9,7 @@ use Sopheak\Core\Enums\AuditLogEventEnum;
 use Sopheak\Core\Jobs\AuditLogJob;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Sopheak\Core\Services\RecordConfigService;
@@ -19,6 +20,55 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
  */
 class AuditLogService
 {
+    /**
+     * Hidden Context key carrying the request that caused a queued audit entry.
+     */
+    private const REQUEST_CONTEXT_KEY = 'sp_audit.request_context';
+
+    /**
+     * Remember who made the current request and from where, for an audit entry
+     * a queue worker will write later.
+     *
+     * The worker has no HTTP request and no authenticated user, so reading them
+     * there stored a NULL user_id and the worker's own address and agent.
+     * Laravel's Context travels with every queued job — including a custom
+     * `audit.job_class` — so no job signature has to change.
+     */
+    public static function rememberRequestContext(): void
+    {
+        Context::addHidden(self::REQUEST_CONTEXT_KEY, self::currentRequestContext());
+    }
+
+    /**
+     * The request an audit entry belongs to: the one captured at dispatch when
+     * a worker is writing a queued entry, otherwise the current one.
+     *
+     * @return array<string, mixed>
+     */
+    private static function requestContext(): array
+    {
+        $captured = Context::getHidden(self::REQUEST_CONTEXT_KEY);
+
+        return is_array($captured) ? $captured + self::currentRequestContext() : self::currentRequestContext();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function currentRequestContext(): array
+    {
+        $guard = RecordConfigService::authGuard();
+
+        return [
+            'user_id' => auth($guard)->id(),
+            'user_name' => auth($guard)->user()?->name,
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+            'request_id' => request()->attributes->get('request_id') ?? request()->header('X-Request-ID'),
+            'session_id' => session()->getId(),
+        ];
+    }
+
     /**
      * Build and persist an audit log entry for the given event.
      *
@@ -146,6 +196,8 @@ class AuditLogService
             newData: $sanitizedNewData,
         );
 
+        $requestContext = self::requestContext();
+
         // Prepare the audit log data
         $auditData = [
             'title' => $title,
@@ -153,15 +205,15 @@ class AuditLogService
             'new_data' => is_array($sanitizedNewData) ? json_encode($sanitizedNewData, JSON_PRETTY_PRINT) : $sanitizedNewData,
             'recap' => $recap,
             'subject' => $subject,
-            'user_id' => $data['user_id'] ?? auth(RecordConfigService::authGuard())->id(),
+            'user_id' => $data['user_id'] ?? $requestContext['user_id'],
             'entity_type' => $tableName,
             'entity_id' => $data['entity_id'] ?? null,
             'entity_name' => $tableName,
             'event' => $data['event'],
             'metadata' => isset($sanitizedMetadata) ? (is_array($sanitizedMetadata) ? json_encode($sanitizedMetadata) : $sanitizedMetadata) : null,
-            'ip_address' => request()->ip(),
-            'user_agent' => request()->userAgent(),
-            'request_id' => request()->attributes->get('request_id') ?? request()->header('X-Request-ID'),
+            'ip_address' => $requestContext['ip_address'],
+            'user_agent' => $requestContext['user_agent'],
+            'request_id' => $requestContext['request_id'],
             'created_at' => now()->toDateTimeString(),
             'updated_at' => now()->toDateTimeString(),
         ];
@@ -231,9 +283,9 @@ class AuditLogService
     public static function getAuditMetadata(array $changedFields = [], array $oldData = [], array $newData = [], ?string $entityType = null, mixed $entityId = null, ?string $event = null, int|string|null $tenantId = null): array
     {
         $currentTime = now()->toISOString();
-        $guard = RecordConfigService::authGuard();
-        $userId = auth($guard)->id();
-        $userName = auth($guard)->user()?->name ?? 'Unknown';
+        $requestContext = self::requestContext();
+        $userId = $requestContext['user_id'];
+        $userName = $requestContext['user_name'] ?? 'Unknown';
         $isCreateEvent = strtolower((string) $event) === AuditLogEventEnum::CREATED->value;
         $tableName = null !== $entityType ? static::getTableNameFromEntityType($entityType) : null;
         $lookupEntityType = $tableName ?? $entityType;
@@ -265,9 +317,9 @@ class AuditLogService
             'change_summary' => [
                 'total_fields_changed' => count($changedFields),
                 'change_type' => strtolower((string) $event) ?: 'update',
-                'user_agent' => request()->userAgent() ?? 'unknown',
-                'ip_address' => request()->ip() ?? 'unknown',
-                'session_id' => session()->getId() ?? null,
+                'user_agent' => $requestContext['user_agent'] ?? 'unknown',
+                'ip_address' => $requestContext['ip_address'] ?? 'unknown',
+                'session_id' => $requestContext['session_id'] ?? null,
             ],
             'user_id' => $userId,
             'user_name' => $userName,
@@ -326,6 +378,7 @@ class AuditLogService
         $entityName = static::getTableNameFromEntityType(entityType: $userModel);
 
         if (static::isAuditQueueEnabled() && class_exists($auditLogJobClass) && method_exists($auditLogJobClass, 'dispatch')) {
+            static::rememberRequestContext();
             $auditLogJobClass::dispatch(
                 event: $event,
                 entityName: $entityName,
@@ -498,6 +551,7 @@ class AuditLogService
                 return;
             }
 
+            static::rememberRequestContext();
             $auditLogJobClass::dispatch(
                 event: $auditLogEventEnum,
                 entityName: $entityName,

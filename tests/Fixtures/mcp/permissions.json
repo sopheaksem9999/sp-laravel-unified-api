@@ -1,0 +1,266 @@
+{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+        "content": [
+            {
+                "type": "text",
+                "text": "[{\"name\":\"view:webhook\",\"guard\":\"api\",\"table\":\"sp_webhook_endpoints\"},{\"name\":\"update:webhook\",\"guard\":\"api\",\"table\":\"sp_webhook_endpoints\"},{\"name\":\"create:webhook\",\"guard\":\"api\",\"table\":\"sp_webhook_endpoints\"},{\"name\":\"delete:webhook\",\"guard\":\"api\",\"table\":\"sp_webhook_endpoints\"},{\"name\":\"force_delete:webhook\",\"guard\":\"api\",\"table\":\"sp_webhook_endpoints\"},{\"name\":\"view:sp_attachments\",\"guard\":\"api\",\"table\":\"sp_attachments\"},{\"name\":\"view:attachment\",\"guard\":\"api\",\"table\":\"sp_attachments\"},{\"name\":\"update:sp_attachments\",\"guard\":\"api\",\"table\":\"sp_attachments\"},{\"name\":\"update:attachment\",\"guard\":\"api\",\"table\":\"sp_attachments\"},{\"name\":\"create:sp_attachments\",\"guard\":\"api\",\"table\":\"sp_attachments\"},{\"name\":\"create:attachment\",\"guard\":\"api\",\"table\":\"sp_attachments\"},{\"name\":\"delete:sp_attachments\",\"guard\":\"api\",\"table\":\"sp_attachments\"},{\"name\":\"delete:attachment\",\"guard\":\"api\",\"table\":\"sp_attachments\"},{\"name\":\"force_delete:sp_attachments\",\"guard\":\"api\",\"table\":\"sp_attachments\"},{\"name\":\"force_delete:attachment\",\"guard\":\"api\",\"table\":\"sp_attachments\"},{\"name\":\"view:audit_log\",\"guard\":\"api\",\"table\":\"sp_audit_logs\"},{\"name\":\"update:audit_log\",\"guard\":\"api\",\"table\":\"sp_audit_logs\"},{\"name\":\"create:audit_log\",\"guard\":\"api\",\"table\":\"sp_audit_logs\"},{\"name\":\"delete:audit_log\",\"guard\":\"api\",\"table\":\"sp_audit_logs\"},{\"name\":\"force_delete:audit_log\",\"guard\":\"api\",\"table\":\"sp_audit_logs\"},{\"name\":\"view:permission\",\"guard\":\"api\",\"table\":\"sp_permissions\"},{\"name\":\"update:permission\",\"guard\":\"api\",\"table\":\"sp_permissions\"},{\"name\":\"create:permission\",\"guard\":\"api\",\"table\":\"sp_permissions\"},{\"name\":\"delete:permission\",\"guard\":\"api\",\"table\":\"sp_permissions\"},{\"name\":\"force_delete:permission\",\"guard\":\"api\",\"table\":\"sp_permissions\"},{\"name\":\"view:role\",\"guard\":\"api\",\"table\":\"sp_roles\"},{\"name\":\"update:role\",\"guard\":\"api\",\"table\":\"sp_roles\"},{\"name\":\"create:role\",\"guard\":\"api\",\"table\":\"sp_roles\"},{\"name\":\"delete:role\",\"guard\":\"api\",\"table\":\"sp_roles\"},{\"name\":\"force_delete:role\",\"guard\":\"api\",\"table\":\"sp_roles\"},{\"name\":\"view:invoice\",\"guard\":\"api\",\"table\":\"invoices\"},{\"name\":\"update:invoice\",\"guard\":\"api\",\"table\":\"invoices\"},{\"name\":\"create:invoice\",\"guard\":\"api\",\"table\":\"invoices\"},{\"name\":\"delete:invoice\",\"guard\":\"api\",\"table\":\"invoices\"},{\"name\":\"force_delete:invoice\",\"guard\":\"api\",\"table\":\"invoices\"},{\"name\":\"view:customer\",\"guard\":\"api\",\"table\":\"customers\"},{\"name\":\"update:customer\",\"guard\":\"api\",\"table\":\"customers\"},{\"name\":\"create:customer\",\"guard\":\"api\",\"table\":\"customers\"},{\"name\":\"delete:customer\",\"guard\":\"api\",\"table\":\"customers\"},{\"name\":\"force_delete:customer\",\"guard\":\"api\",\"table\":\"customers\"},{\"name\":\"view:invoice_item\",\"guard\":\"api\",\"table\":\"invoice_items\"},{\"name\":\"update:invoice_item\",\"guard\":\"api\",\"table\":\"invoice_items\"},{\"name\":\"create:invoice_item\",\"guard\":\"api\",\"table\":\"invoice_items\"},{\"name\":\"delete:invoice_item\",\"guard\":\"api\",\"table\":\"invoice_items\"},{\"name\":\"force_delete:invoice_item\",\"guard\":\"api\",\"table\":\"invoice_items\"},{\"name\":\"view:tag\",\"guard\":\"api\",\"table\":\"tags\"},{\"name\":\"update:tag\",\"guard\":\"api\",\"table\":\"tags\"},{\"name\":\"create:tag\",\"guard\":\"api\",\"table\":\"tags\"},{\"name\":\"delete:tag\",\"guard\":\"api\",\"table\":\"tags\"},{\"name\":\"force_delete:tag\",\"guard\":\"api\",\"table\":\"tags\"}]"
+            }
+        ],
+        "structuredContent": {
+            "permissions": [
+                {
+                    "name": "view:webhook",
+                    "guard": "api",
+                    "table": "sp_webhook_endpoints"
+                },
+                {
+                    "name": "update:webhook",
+                    "guard": "api",
+                    "table": "sp_webhook_endpoints"
+                },
+                {
+                    "name": "create:webhook",
+                    "guard": "api",
+                    "table": "sp_webhook_endpoints"
+                },
+                {
+                    "name": "delete:webhook",
+                    "guard": "api",
+                    "table": "sp_webhook_endpoints"
+                },
+                {
+                    "name": "force_delete:webhook",
+                    "guard": "api",
+                    "table": "sp_webhook_endpoints"
+                },
+                {
+                    "name": "view:sp_attachments",
+                    "guard": "api",
+                    "table": "sp_attachments"
+                },
+                {
+                    "name": "view:attachment",
+                    "guard": "api",
+                    "table": "sp_attachments"
+                },
+                {
+                    "name": "update:sp_attachments",
+                    "guard": "api",
+                    "table": "sp_attachments"
+                },
+                {
+                    "name": "update:attachment",
+                    "guard": "api",
+                    "table": "sp_attachments"
+                },
+                {
+                    "name": "create:sp_attachments",
+                    "guard": "api",
+                    "table": "sp_attachments"
+                },
+                {
+                    "name": "create:attachment",
+                    "guard": "api",
+                    "table": "sp_attachments"
+                },
+                {
+                    "name": "delete:sp_attachments",
+                    "guard": "api",
+                    "table": "sp_attachments"
+                },
+                {
+                    "name": "delete:attachment",
+                    "guard": "api",
+                    "table": "sp_attachments"
+                },
+                {
+                    "name": "force_delete:sp_attachments",
+                    "guard": "api",
+                    "table": "sp_attachments"
+                },
+                {
+                    "name": "force_delete:attachment",
+                    "guard": "api",
+                    "table": "sp_attachments"
+                },
+                {
+                    "name": "view:audit_log",
+                    "guard": "api",
+                    "table": "sp_audit_logs"
+                },
+                {
+                    "name": "update:audit_log",
+                    "guard": "api",
+                    "table": "sp_audit_logs"
+                },
+                {
+                    "name": "create:audit_log",
+                    "guard": "api",
+                    "table": "sp_audit_logs"
+                },
+                {
+                    "name": "delete:audit_log",
+                    "guard": "api",
+                    "table": "sp_audit_logs"
+                },
+                {
+                    "name": "force_delete:audit_log",
+                    "guard": "api",
+                    "table": "sp_audit_logs"
+                },
+                {
+                    "name": "view:permission",
+                    "guard": "api",
+                    "table": "sp_permissions"
+                },
+                {
+                    "name": "update:permission",
+                    "guard": "api",
+                    "table": "sp_permissions"
+                },
+                {
+                    "name": "create:permission",
+                    "guard": "api",
+                    "table": "sp_permissions"
+                },
+                {
+                    "name": "delete:permission",
+                    "guard": "api",
+                    "table": "sp_permissions"
+                },
+                {
+                    "name": "force_delete:permission",
+                    "guard": "api",
+                    "table": "sp_permissions"
+                },
+                {
+                    "name": "view:role",
+                    "guard": "api",
+                    "table": "sp_roles"
+                },
+                {
+                    "name": "update:role",
+                    "guard": "api",
+                    "table": "sp_roles"
+                },
+                {
+                    "name": "create:role",
+                    "guard": "api",
+                    "table": "sp_roles"
+                },
+                {
+                    "name": "delete:role",
+                    "guard": "api",
+                    "table": "sp_roles"
+                },
+                {
+                    "name": "force_delete:role",
+                    "guard": "api",
+                    "table": "sp_roles"
+                },
+                {
+                    "name": "view:invoice",
+                    "guard": "api",
+                    "table": "invoices"
+                },
+                {
+                    "name": "update:invoice",
+                    "guard": "api",
+                    "table": "invoices"
+                },
+                {
+                    "name": "create:invoice",
+                    "guard": "api",
+                    "table": "invoices"
+                },
+                {
+                    "name": "delete:invoice",
+                    "guard": "api",
+                    "table": "invoices"
+                },
+                {
+                    "name": "force_delete:invoice",
+                    "guard": "api",
+                    "table": "invoices"
+                },
+                {
+                    "name": "view:customer",
+                    "guard": "api",
+                    "table": "customers"
+                },
+                {
+                    "name": "update:customer",
+                    "guard": "api",
+                    "table": "customers"
+                },
+                {
+                    "name": "create:customer",
+                    "guard": "api",
+                    "table": "customers"
+                },
+                {
+                    "name": "delete:customer",
+                    "guard": "api",
+                    "table": "customers"
+                },
+                {
+                    "name": "force_delete:customer",
+                    "guard": "api",
+                    "table": "customers"
+                },
+                {
+                    "name": "view:invoice_item",
+                    "guard": "api",
+                    "table": "invoice_items"
+                },
+                {
+                    "name": "update:invoice_item",
+                    "guard": "api",
+                    "table": "invoice_items"
+                },
+                {
+                    "name": "create:invoice_item",
+                    "guard": "api",
+                    "table": "invoice_items"
+                },
+                {
+                    "name": "delete:invoice_item",
+                    "guard": "api",
+                    "table": "invoice_items"
+                },
+                {
+                    "name": "force_delete:invoice_item",
+                    "guard": "api",
+                    "table": "invoice_items"
+                },
+                {
+                    "name": "view:tag",
+                    "guard": "api",
+                    "table": "tags"
+                },
+                {
+                    "name": "update:tag",
+                    "guard": "api",
+                    "table": "tags"
+                },
+                {
+                    "name": "create:tag",
+                    "guard": "api",
+                    "table": "tags"
+                },
+                {
+                    "name": "delete:tag",
+                    "guard": "api",
+                    "table": "tags"
+                },
+                {
+                    "name": "force_delete:tag",
+                    "guard": "api",
+                    "table": "tags"
+                }
+            ]
+        }
+    }
+}

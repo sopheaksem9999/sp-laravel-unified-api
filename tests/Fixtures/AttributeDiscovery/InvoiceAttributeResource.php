@@ -42,7 +42,7 @@ class InvoiceAttributeResource
     /**
      * @return array<string, bool>
      */
-    #[RecordFunction(name: 'archive', displayName: 'Archive Invoice', httpMethod: ['POST'], pmsName: 'invoice.archive')]
+    #[RecordFunction(name: 'archive', httpMethod: ['POST'], pmsName: 'invoice.archive', displayName: 'Archive Invoice')]
     public static function archive(Request $request): array
     {
         return ['ok' => true];

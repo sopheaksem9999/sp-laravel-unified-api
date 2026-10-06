@@ -49,4 +49,4 @@ Explicit null actor never falls back to ambient authentication. The tenant argum
 
 Only mutation events are filtered. False skips, true continues existing no-change/diff processing; errors retain the audit with a sanitized warning. Null/missing config preserves existing behavior. No automatic interface binding discovery occurs when config is null.
 
-Direct processing methods, trait auditing, and direct job dispatch bypass admission. A queued lifecycle listener invoking `log` evaluates in its worker; use the context-aware submission API directly when the decision must happen with the originating actor before queueing. See [full policy contract](/features/audit-logging).
+Direct processing methods, trait auditing, and direct job dispatch bypass admission. The package's lifecycle listener calls `log` during the request, so it is evaluated with the originating actor. Only your own `ShouldQueue` listeners that call `log` evaluate in a worker with no request; there, call `insertAuditLogWithContext()` with an explicit `actor` in its `$context` array. See [full policy contract](/features/audit-logging).

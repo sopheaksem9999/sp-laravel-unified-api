@@ -254,6 +254,8 @@ Authorization: Bearer {access_token}
 - `404` - Not found (table not configured/disabled or record not found)
 - `500` - Server error
 
+> **Rows outside the caller's scope.** Under tenant scoping and [`viewOwn`](/guide/feature-permission-own-records), a by-id read, update, delete, restore or force-delete of a row outside the caller's tenant or own records returns `404`, exactly like a nonexistent id.
+
 #### Create Record
 
 ```http
@@ -382,6 +384,9 @@ JSON object with field values:
 #### Status Codes
 
 - `200` - Success
+- `401` - Unauthorized
+- `403` - Forbidden (needs both the `create` and `update` permission; under [`viewOwn`](/guide/feature-permission-own-records), also when the item would overwrite another user's row through `match_on`, the primary key or any other unique key)
+- `404` - Resource not available (table not configured, or `canUpsert` not enabled)
 - `422` - Validation error (missing `match_on` or invalid payload)
 
 #### Update Record

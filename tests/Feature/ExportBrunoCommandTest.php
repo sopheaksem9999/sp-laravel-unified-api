@@ -212,7 +212,11 @@ class ExportBrunoCommandTest extends TestCase
         }
 
         foreach ($files as $file) {
-            if ($file === '.' || $file === '..') {
+            if ($file === '.') {
+                continue;
+            }
+
+            if ($file === '..') {
                 continue;
             }
 

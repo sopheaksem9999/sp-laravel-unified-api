@@ -78,6 +78,55 @@ Update a parent record and manage its relationships simultaneously. You can:
 - **Create** new children (omit `id`).
 - **Delete** existing children (provide `id` and `_delete: true` or `_destroy: true`).
 
+Children are scoped to what the caller could write on the child table directly:
+
+- Every child create, update or delete needs the permission a direct request on
+  the child table needs (by default `create:` / `update:` / `delete:` + its
+  `pmsName`, or that action's entry in its `permissions` map; a public child
+  table, one without a `pmsName`, or a `super_admin_callback` super admin needs
+  none) and its `canCreate` /
+  `canUpdate` / `canDelete` flag, exactly as a direct request would. A missing
+  permission fails the whole request with `403`, and a disabled flag with
+  `422`; nothing is written. Attaching or detaching an existing related record
+  needs only the parent's update permission.
+  Your own triggers, hooks and record event listeners are trusted app code:
+  nested writes they make themselves are not checked against the requesting
+  user. The same rule applies to every item of a bulk create or update and to
+  the legacy `/bulk` dispatcher. With `?async=true` (or `X-Async-Process`), the
+  queued job checks children as the requesting user; a refusal fails the job
+  (logged) and rolls back the batch.
+- An update or delete only touches a child that belongs to this parent, to the
+  caller's tenant (the child table's own tenant column, even when the parent is
+  not tenant-scoped), and — under [`viewOwn`](/guide/feature-permission-own-records)
+  — to the caller. Any other `id` is silently skipped, exactly as if it did not exist.
+- A created child is stamped with the caller's tenant; a `tenant_id` in the payload
+  is ignored.
+- A write to a tenant-scoped child (`hasTenantId: true`) with no resolvable tenant
+  returns `422`, as the child's own endpoint does — even when the parent is not
+  tenant-scoped.
+- Attaching an existing record by `id` to a many-to-many or has-many-through
+  relationship returns `422` (`Related record '…' not found for relationship …`)
+  when the caller could not read that record directly.
+
+#### Bare ids in a relationship array
+
+A relationship array normally holds objects, but a many-to-many or
+has-many-through array also accepts a bare id, which attaches that record
+exactly like `{"id": <id>}`:
+
+```json
+{ "tags": [1, 2, {"id": 3, "note": "primary"}, {"id": 5, "_delete": true}] }
+```
+
+Links you leave out of the array are kept. Everywhere else a non-object item is
+refused instead of being dropped silently:
+
+| Item | Relationship | Result |
+|---|---|---|
+| `5`, `"5"` | many-to-many, has-many-through | attaches record `5` |
+| `5`, `"5"` | has-many, morph-many | `422` — `Relationship 'items' on table 'invoices' expects objects, got scalar 5. Send {"id": ...} to update a child or {...fields} to create one.` |
+| `0`, `""`, `"0"`, `null`, `false` | has-many, morph-many, many-to-many, has-many-through | `422` — empty value; nothing is created |
+
 #### Request Body
 
 ```json
@@ -256,6 +305,8 @@ Update multiple records by ID.
 }
 ```
 
+An `id` outside the caller's tenant or [`viewOwn`](/guide/feature-permission-own-records) scope is treated as missing: the request fails with `422` (`Record with id '…' not found or no changes detected`) and no item is written.
+
 ### Bulk Delete
 
 ```http
@@ -272,6 +323,8 @@ Delete multiple records by ID.
 }
 ```
 
+An `id` outside the caller's tenant or `viewOwn` scope is skipped like a missing id — it is left out of `data` and `meta.affected`.
+
 ### Bulk Upsert
 
 ```http
@@ -279,6 +332,8 @@ POST /{api_prefix}/{table}/bulk/upsert
 ```
 
 Bulk create or update records based on matching columns.
+
+Under [`viewOwn`](/guide/feature-permission-own-records), a batch in which any item would overwrite another user's row — through `match_on`, the primary key or any other unique key — is refused with `403` and nothing is written.
 
 #### Query Parameters
 

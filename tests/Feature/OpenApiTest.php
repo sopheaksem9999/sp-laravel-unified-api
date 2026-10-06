@@ -358,7 +358,7 @@ class OpenApiTest extends TestCase
         ], $operation['externalDocs']);
 
         foreach (['id', 'status', 'total', 'created_at'] as $column) {
-            $this->assertTrue($byName->has($column), "Expected a '{$column}' filter parameter on the list operation");
+            $this->assertTrue($byName->has($column), sprintf("Expected a '%s' filter parameter on the list operation", $column));
             $param = $byName->get($column);
             $this->assertSame('query', $param['in']);
             $this->assertSame('string', $param['schema']['type']);
@@ -383,10 +383,10 @@ class OpenApiTest extends TestCase
                     'id' => ['type' => 'bigint', 'nullable' => false],
                     'ref_number' => ['type' => 'varchar', 'nullable' => true],
                 ],
+                searchable: ['ref_number'],
                 relationships: [
                     'customer' => new RecordBelongsToType(table: 'customers', foreignKey: 'customer_id'),
                 ],
-                searchable: ['ref_number'],
             ),
             'customers' => new RecordTableType(
                 table: 'customers',
@@ -450,14 +450,14 @@ class OpenApiTest extends TestCase
         Config::set('record.tables', [
             'products' => new RecordTableType(
                 table: 'products',
+                hasTenantId: true,
                 isAuthRead: true,
                 isAuthWrite: true,
-                hasTenantId: true,
+                columns: ['id' => ['type' => 'bigint', 'nullable' => false]],
                 permissions: [
                     'read' => ['products:view'],
                     'create' => ['products:create', 'admin:inventory'],
                 ],
-                columns: ['id' => ['type' => 'bigint', 'nullable' => false]],
             ),
         ]);
 
@@ -576,6 +576,7 @@ class OpenApiTest extends TestCase
         Config::set('record.tables', [
             'invoices' => new RecordTableType(
                 table: 'invoices',
+                columns: ['id' => ['type' => 'bigint', 'nullable' => false]],
                 functions: [
                     'send' => [
                         'httpMethod' => ['POST'],
@@ -585,7 +586,6 @@ class OpenApiTest extends TestCase
                         'isPublic' => true,
                     ],
                 ],
-                columns: ['id' => ['type' => 'bigint', 'nullable' => false]],
             ),
         ]);
 
@@ -649,12 +649,12 @@ class OpenApiTest extends TestCase
         Config::set('record.tables', [
             'users' => new RecordTableType(
                 table: 'users',
-                columnHiddens: ['password'],
                 columns: [
                     'id' => ['type' => 'bigint', 'nullable' => false],
                     'email' => ['type' => 'string', 'nullable' => false],
                     'password' => ['type' => 'string', 'nullable' => false],
                 ],
+                columnHiddens: ['password'],
             ),
         ]);
 
@@ -674,11 +674,11 @@ class OpenApiTest extends TestCase
         Config::set('record.tables', [
             'invoices' => new RecordTableType(
                 table: 'invoices',
-                columnWriteDisabled: ['total'],
                 columns: [
                     'id' => ['type' => 'bigint', 'nullable' => false],
                     'total' => ['type' => 'decimal', 'nullable' => false],
                 ],
+                columnWriteDisabled: ['total'],
             ),
         ]);
 

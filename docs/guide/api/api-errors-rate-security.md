@@ -81,6 +81,16 @@ The package uses a fixed set of numeric `error_code` values to make client-side 
 - `429` - Rate Limited (throttle middleware)
 - `500` - Server Error
 
+#### MCP and AI SDK Tool Errors
+
+The MCP data tools and the AI SDK record tools do not use the HTTP envelope. A refusal is a JSON-RPC error (the AI SDK tools hand the model `{"error": {"code": …, "message": …}}`):
+
+- `-32001` – unauthenticated, unknown table, no tenant resolved, or a `tenantId` argument that does not match the resolved tenant
+- `-32002` – forbidden (the same permission decision as the HTTP API)
+- `-32601` – unknown tool, a write tool while `record.mcp.read_only` is on, or an action the table's `can*` flag disables
+
+A failed record operation is a tool result with `isError: true` and the message. A database error is never passed through: the client gets `The database rejected the operation.` and the original exception goes to your exception handler (`report()`), so the SQL and its bound values stay in your log.
+
 ### Rate Limiting
 
 Different endpoints have different rate limits:
@@ -90,6 +100,8 @@ Different endpoints have different rate limits:
 - **API Functions** (`throttle:api-functions`) - Custom function calls
 
 Rate limits are configurable in your Laravel application's rate limiting configuration.
+
+The Data MCP routes are not in these groups; add a `throttle:` entry to `record.mcp.middleware` to limit them. The Schema MCP route uses `throttle:api-reads`.
 
 #### Per-Table Rate Limits
 
@@ -118,9 +130,10 @@ These limits override the global API write limits for the specified table operat
 
 ### Authorization
 
-- Permission-based access control using Spatie Laravel Permission
-- Automatic tenant isolation when `tenant_id` column is present
-- Special permissions for restricted access patterns
+- Every non-public table action needs a permission — by default `{action}:{pmsName}` (`view:invoice`, `create:invoice`, …); a table without a `pmsName` needs only an authenticated user. A `permissions.super_admin_callback` super admin passes; otherwise a custom `record.authorization` handler decides when configured, else Laravel's Gate, which the [built-in permission module](/guide/feature-permission) answers when `permissions.enabled`. REST, MCP, the AI SDK tools and nested child writes share this decision.
+- Tenant isolation on tables with `hasTenantId: true` when `record.enable_tenant_id` is on ([Record Tenancy](/guide/record-tenancy)).
+- `viewOwn:{pmsName}` restricts a user to their own rows on every read and write ([Own-Records Scoping](/guide/feature-permission-own-records)).
+- Nested child writes need the child table's own permission ([Nested Writes](/guide/api-nested-and-bulk-operations)).
 
 ### Data Protection
 
