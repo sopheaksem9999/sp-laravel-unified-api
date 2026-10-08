@@ -11,9 +11,9 @@
 The package owns API infrastructure, dynamic endpoint resolution, query filtering, and audit logging. Your application defines the table schemas, business rules, custom functions, and authorization policies.
 
 Public package links:
+- **Documentation:** [sp-laravel-api-docs.vercel.app](https://sp-laravel-api-docs.vercel.app/)
 - **Packagist:** [packagist.org/packages/sopheak/sp-laravel-api](https://packagist.org/packages/sopheak/sp-laravel-api)
 - **Canonical Repository:** [github.com/sopheaksem9999/sp-laravel-unified-api](https://github.com/sopheaksem9999/sp-laravel-unified-api)
-- **Documentation:** [Full Documentation & Guide](https://github.com/sopheaksem9999/sp-laravel-api-docs)
 
 ---
 
@@ -21,21 +21,21 @@ Public package links:
 
 | Feature | What it provides | Default | Guide |
 |---|---|---|---|
-| **Config-Driven Dynamic CRUD** | Declarative `RecordTableType` schema; automatic `GET`, `POST`, `PUT`, `DELETE`, and atomic `upsert` endpoints | Enabled | [CRUD Operations](docs/guide/api/api-crud-operations.md) |
-| **Standardized API Envelope** | Consistent JSON response format (`{ success, error_code, data, meta }`), request IDs, and microsecond execution timing | Enabled | [API Responses](docs/guide/api/api-errors-rate-security.md) |
-| **Multi-Tenant Isolation** | Automatic tenant scoping via `X-Tenant-ID` header across queries, includes, bulk operations, and cache namespaces | Enabled | [Tenant Isolation](docs/guide/records/record-tenancy.md) |
-| **Advanced Query Filtering** | PostgREST-style operators (`eq`, `neq`, `like`, `in`, `gt`, `gte`, `between`, `is_null`), sorting, and field projection | Enabled | [Query Filters](docs/guide/api/api-apply-request-filters.md) |
-| **Relational Includes** | Subquery loading and JOIN resolution via `select=` query syntax (`RecordHasManyType`, `RecordBelongsToType`, etc.) | Enabled | [Relationships](docs/core-concepts/relationships.md) |
-| **Pagination Engine** | Offset-based (`page`/`per_page`) and cursor-based pagination for high-volume datasets | Enabled | [Pagination](docs/guide/modules/module-pagination.md) |
-| **Bulk Operations** | High-throughput batch create, update, delete, and upsert with queue support | Enabled | [Bulk Operations](docs/guide/api/api-nested-and-bulk-operations.md) |
-| **Permissions & RLS Scoping** | Column hidden lists (`columnHiddens`), operation guards (`canRead`, `canCreate`), `viewOwn` scoping, and Laravel Gate integration | Enabled | [Permissions](docs/guide/features/feature-permission.md) |
-| **Transactional Audit Logging** | Comprehensive change tracking (old/new diffs, actor ID, client IP, user agent, tenant ID) with queue buffering | Enabled | [Audit Logging](docs/features/audit-logging.md) |
-| **Attachments & Direct Upload** | S3/Cloudflare R2 direct uploads, multipart upload, presigned private preview URLs, and image resizing | Configurable | [Attachments](docs/features/attachments.md) |
-| **Real-time OpenAPI Generator** | Dynamic OpenAPI 3.0 specification auto-generated from active table types and custom function attributes | Enabled | [OpenAPI Docs](docs/core-concepts/api-documentation.md) |
-| **API Client Exporters** | Instant export to Bruno (`.bru`) and Postman collection files with auth header management | Enabled | [API Clients](docs/guide/modules/module-api-clients.md) |
-| **Table Triggers & Hooks** | Lifecycle hooks (`beforeCreate`, `afterUpdate`, etc.) and database triggers for custom domain rules | Configurable | [Record Hooks](docs/guide/records/record-hooks.md) |
-| **AI SDK & MCP Record Tools** | First-class AI tools and Model Context Protocol (MCP) server driver (`laravel/mcp`, `laravel/ai`) for agentic workflows | Optional | [AI & MCP](docs/guide/modules/module-mcp.md) |
-| **Cache Management** | High-performance per-table and query caching with automatic cache invalidation on writes | Optional (Opt-in) | [Cache Guide](docs/guide/records/record-cache.md) |
+| **Config-Driven Dynamic CRUD** | Declarative `RecordTableType` schema; automatic `GET`, `POST`, `PUT`, `DELETE`, and atomic `upsert` endpoints | Enabled | [CRUD Operations](https://sp-laravel-api-docs.vercel.app/guide/api-crud-operations.html) |
+| **Standardized API Envelope** | Consistent JSON response format (`{ success, error_code, data, meta }`), request IDs, and microsecond execution timing | Enabled | [API Responses](https://sp-laravel-api-docs.vercel.app/guide/api-errors-rate-security.html) |
+| **Multi-Tenant Isolation** | Automatic tenant scoping via `X-Tenant-ID` header across queries, includes, bulk operations, and cache namespaces | Enabled | [Tenant Isolation](https://sp-laravel-api-docs.vercel.app/guide/record-tenancy.html) |
+| **Advanced Query Filtering** | PostgREST-style operators (`eq`, `neq`, `like`, `in`, `gt`, `gte`, `between`, `is_null`), sorting, and field projection | Enabled | [Query Filters](https://sp-laravel-api-docs.vercel.app/guide/api-apply-request-filters.html) |
+| **Relational Includes** | Subquery loading and JOIN resolution via `select=` query syntax (`RecordHasManyType`, `RecordBelongsToType`, etc.) | Enabled | [Relationships](https://sp-laravel-api-docs.vercel.app/core-concepts/relationships.html) |
+| **Pagination Engine** | Offset-based (`page`/`per_page`) and cursor-based pagination for high-volume datasets | Enabled | [Pagination](https://sp-laravel-api-docs.vercel.app/guide/module-pagination.html) |
+| **Bulk Operations** | High-throughput batch create, update, delete, and upsert with queue support | Enabled | [Bulk Operations](https://sp-laravel-api-docs.vercel.app/guide/api-nested-and-bulk-operations.html) |
+| **Permissions & RLS Scoping** | Column hidden lists (`columnHiddens`), operation guards (`canRead`, `canCreate`), `viewOwn` scoping, and Laravel Gate integration | Enabled | [Permissions](https://sp-laravel-api-docs.vercel.app/guide/feature-permission.html) |
+| **Transactional Audit Logging** | Comprehensive change tracking (old/new diffs, actor ID, client IP, user agent, tenant ID) with queue buffering | Enabled | [Audit Logging](https://sp-laravel-api-docs.vercel.app/features/audit-logging.html) |
+| **Attachments & Direct Upload** | S3/Cloudflare R2 direct uploads, multipart upload, presigned private preview URLs, and image resizing | Configurable | [Attachments](https://sp-laravel-api-docs.vercel.app/features/attachments.html) |
+| **Real-time OpenAPI Generator** | Dynamic OpenAPI 3.0 specification auto-generated from active table types and custom function attributes | Enabled | [OpenAPI Docs](https://sp-laravel-api-docs.vercel.app/core-concepts/api-documentation.html) |
+| **API Client Exporters** | Instant export to Bruno (`.bru`) and Postman collection files with auth header management | Enabled | [API Clients](https://sp-laravel-api-docs.vercel.app/guide/module-api-clients.html) |
+| **Table Triggers & Hooks** | Lifecycle hooks (`beforeCreate`, `afterUpdate`, etc.) and database triggers for custom domain rules | Configurable | [Record Hooks](https://sp-laravel-api-docs.vercel.app/guide/record-hooks.html) |
+| **AI SDK & MCP Record Tools** | First-class AI tools and Model Context Protocol (MCP) server driver (`laravel/mcp`, `laravel/ai`) for agentic workflows | Optional | [AI & MCP](https://sp-laravel-api-docs.vercel.app/guide/module-mcp.html) |
+| **Cache Management** | High-performance per-table and query caching with automatic cache invalidation on writes | Optional (Opt-in) | [Cache Guide](https://sp-laravel-api-docs.vercel.app/guide/record-cache.html) |
 
 ---
 
@@ -197,8 +197,9 @@ The package provides Artisan commands for developer workflows:
 
 ## 📚 Documentation
 
-For full documentation, architecture guides, and advanced features, visit:
-- **[Official Documentation Guide](https://github.com/sopheaksem9999/sp-laravel-api-docs)**
+For complete guides, interactive examples, architecture overviews, and API references, visit:
+- **Official Documentation Website:** [https://sp-laravel-api-docs.vercel.app/](https://sp-laravel-api-docs.vercel.app/)
+- **Documentation Repository:** [github.com/sopheaksem9999/sp-laravel-api-docs](https://github.com/sopheaksem9999/sp-laravel-api-docs)
 - **[Contributing Guidelines](CONTRIBUTING.md)**
 
 ---
