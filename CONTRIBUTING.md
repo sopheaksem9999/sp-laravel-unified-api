@@ -1,22 +1,28 @@
 # Contributing to SP Laravel Unified API
 
-Thank you for considering contributing to SP Laravel Unified API! This document provides guidelines and information for contributors.
+Thank you for contributing to **SP Laravel Unified API** (`sopheak/sp-laravel-api`)! This guide details our development workflow, coding standards, CI/CD automation, and release publishing process.
+
+---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
-- PHP 8.1 or higher
-- Composer
-- Laravel 10.x / 11.x / 12.x (package compatibility)
-- MySQL 8.0+ or PostgreSQL 13+ (SQLite for testing)
-- Redis (optional, for caching and queues)
+- **PHP**: `^8.2`, `^8.3`, `^8.4`, or `^8.5` (PHP 8.3+ is required for the AI SDK record tools)
+- **Laravel Framework**: `^12.0` or `^13.0`
+- **Composer**: `2.2` or higher
+- **Databases**: MySQL 8.0+, PostgreSQL 13+, or SQLite (in-memory SQLite `:memory:` is used for PHPUnit test suites)
+- **Optional Dependencies**:
+  - `aws/aws-sdk-php` & `league/flysystem-aws-s3-v3`: Required for S3/Cloudflare R2 presigned and multipart uploads.
+  - `laravel/ai` (^1.0.1): Required for AI SDK record tools.
+  - `laravel/mcp` (^1.0.1): Required for the opt-in Laravel MCP driver (`record.mcp.driver = 'laravel'`).
+  - `redis`: Optional, for caching and queue workers.
 
 ### Development Setup
 
-1. **Fork and Clone**
+1. **Clone the Repository**
    ```bash
-   git clone https://github.com/your-username/sp-laravel-api.git
+   git clone git@github.com:sopheaksem9999/sp-laravel-unified-api.git
    cd sp-laravel-api
    ```
 
@@ -25,12 +31,16 @@ Thank you for considering contributing to SP Laravel Unified API! This document 
    composer install
    ```
 
-3. **Run Tests**
+3. **Verify Tests & Quality Pipeline**
    ```bash
-   composer test
+   composer quality
    ```
 
+---
+
 ## 🧪 Testing
+
+We use **PHPUnit 10/11** along with **Orchestra Testbench 10/11** against an in-memory SQLite database (`:memory:`) with randomized test order.
 
 ### Running Tests
 
@@ -42,309 +52,305 @@ composer test
 vendor/bin/phpunit tests/Unit
 vendor/bin/phpunit tests/Feature
 
-# Run with coverage
+# Run a single test file or filter
+vendor/bin/phpunit tests/Feature/RecordCrudTest.php
+vendor/bin/phpunit --filter=test_record_can_be_created
+
+# Generate HTML coverage report (output to ./coverage)
 composer test-coverage
 ```
 
 ### Writing Tests
 
-- **Unit Tests**: Test individual classes and methods in isolation
-- **Feature Tests**: Test complete functionality including HTTP requests
-- **Integration Tests**: Test interactions between components
+- **Unit Tests (`tests/Unit/`)**: Test individual classes, helpers, converters, and types in isolation.
+- **Feature Tests (`tests/Feature/`)**: Test end-to-end API requests, database interactions, authorization, audit logging, and tenant isolation.
+- **Always add tests for core behavior changes**: Any updates to tenancy, authentication, filters, field-level permissions, triggers, or API envelope formatting must have regression tests.
 
-Example test structure:
+Example test:
 ```php
 <?php
 
-namespace Sopheak\Core\Tests\Unit;
+declare(strict_types=1);
+
+namespace Sopheak\Core\Tests\Feature;
 
 use Sopheak\Core\Tests\TestCase;
 
-class ExampleTest extends TestCase
+final class ExampleFeatureTest extends TestCase
 {
-    public function test_example_functionality(): void
+    public function test_record_endpoint_respects_tenant_scoping(): void
     {
-        // Arrange
-        $service = new ExampleService();
-        
-        // Act
-        $result = $service->doSomething();
-        
+        // Arrange & Act
+        $response = $this->withHeaders([
+            'X-Tenant-ID' => 'tenant-123',
+        ])->getJson('/api/records/orders');
+
         // Assert
-        $this->assertTrue($result);
+        $response->assertOk()
+            ->assertJsonPath('status', 'success');
     }
 }
 ```
 
-## 🔧 Code Quality
+---
 
-### Code Style
+## 🔧 Code Quality & Analysis
 
-We use Rector for automated refactors and formatting:
+We maintain strict static analysis and automated code formatting. Always run the quality suite before submitting a pull request.
+
+### Quality Pipeline
 
 ```bash
-# Check (dry-run)
-composer format-check
-
-# Apply changes
-composer format
+# Run the full quality check: format-check -> analyse -> test
+composer quality
 ```
 
-### Static Analysis
+### Static Analysis (PHPStan + Larastan)
 
-We use PHPStan for static analysis:
+We use PHPStan 2.x with Larastan 3.x:
 
 ```bash
 # Run static analysis
 composer analyse
+
+# Run with increased memory for large inspections
+vendor/bin/phpstan analyse src tests --memory-limit=1G
 ```
 
-### Pre-commit Checks
+### Code Formatting & Refactoring (Rector)
 
-Before committing, ensure:
-
-1. All tests pass
-2. Code style is correct
-3. Static analysis passes
-4. No linting errors
+We use Rector 2.0 to enforce automated refactoring, type declarations, and code cleanliness:
 
 ```bash
-# Run all checks
-composer quality
+# Check code style (dry-run without modifying files)
+composer format-check
+
+# Automatically fix code style and apply refactors
+composer format
 ```
 
-## 📝 Coding Standards
+### Documentation Validation
 
-### PHP Standards
+Documentation integrity is strictly enforced to prevent drift:
 
-- Follow PSR-12 coding standards
-- Use strict types: `declare(strict_types=1);`
-- Use type hints for all parameters and return types
-- Write descriptive variable and method names
-
-### Laravel Conventions
-
-- Use Laravel naming conventions
-- Follow repository pattern for data access
-- Use service classes for business logic
-- Implement proper error handling
-
-### Documentation
-
-- Add PHPDoc blocks for all public methods
-- Include parameter and return type documentation
-- Provide usage examples for complex functionality
-
-Example:
-```php
-/**
- * Retrieve paginated records with optional filtering
- *
- * @param string $table The table name to query
- * @param array<string, mixed> $filters Optional filters to apply
- * @param int $perPage Number of records per page
- * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator
- * 
- * @throws \InvalidArgumentException When table is not configured
- * @throws \Illuminate\Database\QueryException When query fails
- */
-public function getPaginatedRecords(string $table, array $filters = [], int $perPage = 15): LengthAwarePaginator
-{
-    // Implementation
-}
+```bash
+# Validate markdown files, cross-links, and code blocks in docs/
+composer docs:validate
+# Or directly:
+php bin/validate-docs.php
 ```
-
-## 🐛 Bug Reports
-
-When reporting bugs, please include:
-
-1. **Clear Description**: What happened vs. what you expected
-2. **Steps to Reproduce**: Detailed steps to reproduce the issue
-3. **Environment**: PHP version, Laravel version, database type
-4. **Code Examples**: Minimal code that demonstrates the issue
-5. **Error Messages**: Full error messages and stack traces
-
-Use the bug report template:
-
-```markdown
-## Bug Description
-Brief description of the bug
-
-## Steps to Reproduce
-1. Step one
-2. Step two
-3. Step three
-
-## Expected Behavior
-What should happen
-
-## Actual Behavior
-What actually happens
-
-## Environment
-- PHP Version: 8.2
-- Laravel Version: 10.x
-- Package Version: 2.x
-- Database: MySQL 8.0
-
-## Additional Context
-Any additional information
-```
-
-## 💡 Feature Requests
-
-For new features:
-
-1. **Check Existing Issues**: Ensure the feature hasn't been requested
-2. **Describe Use Case**: Explain why this feature is needed
-3. **Provide Examples**: Show how the feature would be used
-4. **Consider Alternatives**: Discuss alternative solutions
-
-## 🔄 Pull Request Process
-
-### Before Submitting
-
-1. **Create an Issue**: Discuss the change before implementing
-2. **Fork the Repository**: Work on your own fork
-3. **Create Feature Branch**: Use descriptive branch names
-4. **Write Tests**: Ensure new functionality is tested
-5. **Update Documentation**: Update README and docs as needed
-
-### Pull Request Guidelines
-
-1. **Clear Title**: Descriptive title explaining the change
-2. **Detailed Description**: Explain what changed and why
-3. **Link Issues**: Reference related issues
-4. **Test Coverage**: Ensure tests cover new functionality
-5. **Documentation**: Update relevant documentation
-
-### PR Template
-
-```markdown
-## Description
-Brief description of changes
-
-## Type of Change
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Breaking change
-- [ ] Documentation update
-
-## Testing
-- [ ] Tests pass locally
-- [ ] New tests added for new functionality
-- [ ] Manual testing completed
-
-## Checklist
-- [ ] Code follows project style guidelines
-- [ ] Self-review completed
-- [ ] Documentation updated
-- [ ] No breaking changes (or clearly documented)
-```
-
-## 🏗️ Architecture Guidelines
-
-### Package Structure
-
-```
-src/
-├── Console/          # Artisan commands
-├── Enums/           # Enumeration classes
-├── Http/            # Controllers, middleware, requests
-├── Interfaces/      # Contracts and interfaces
-├── Jobs/            # Queue jobs
-├── Models/          # Eloquent models
-├── Services/        # Business logic services
-├── Support/         # Helper classes and utilities
-├── Traits/          # Reusable traits
-└── Types/           # Type classes for configuration
-```
-
-### Design Principles
-
-1. **Single Responsibility**: Each class should have one reason to change
-2. **Open/Closed**: Open for extension, closed for modification
-3. **Dependency Injection**: Use Laravel's container for dependencies
-4. **Interface Segregation**: Create focused interfaces
-5. **Composition over Inheritance**: Prefer composition when possible
-
-### Service Layer Pattern
-
-```php
-<?php
-
-namespace Sopheak\Core\Services;
-
-use Sopheak\Core\Interfaces\RecordServiceInterface;
-
-class RecordService implements RecordServiceInterface
-{
-    public function __construct(
-        private readonly SchemaRegistry $schemaRegistry,
-        private readonly CacheService $cacheService
-    ) {}
-
-    public function getRecord(string $table, int $id): array
-    {
-        // Implementation
-    }
-}
-```
-
-## 🔒 Security Guidelines
-
-### Security Best Practices
-
-1. **Input Validation**: Validate all user inputs
-2. **SQL Injection Prevention**: Use parameterized queries
-3. **XSS Prevention**: Escape output appropriately
-4. **Authentication**: Implement proper authentication
-5. **Authorization**: Check permissions before actions
-
-### Reporting Security Issues
-
-For security vulnerabilities:
-
-1. **Do NOT** create public issues
-2. Email security issues to: security@example.com
-3. Include detailed description and reproduction steps
-4. Allow time for fix before public disclosure
-
-## 📚 Resources
-
-### Documentation
-
-- [Laravel Documentation](https://laravel.com/docs)
-- [PHPUnit Documentation](https://phpunit.de/documentation.html)
-- [PSR Standards](https://www.php-fig.org/psr/)
-
-### Tools
-
-- [Rector](https://getrector.com/)
-- [PHPStan](https://phpstan.org/)
-- [Composer](https://getcomposer.org/)
-
-## 🤝 Community
-
-### Communication
-
-- **GitHub Issues**: Bug reports and feature requests
-- **GitHub Discussions**: General questions and discussions
-- **Pull Requests**: Code contributions
-
-### Code of Conduct
-
-We are committed to providing a welcoming and inclusive environment. Please:
-
-1. Be respectful and inclusive
-2. Welcome newcomers and help them learn
-3. Focus on constructive feedback
-4. Respect different viewpoints and experiences
-
-## 📄 License
-
-By contributing to SP Laravel API, you agree that your contributions will be licensed under the project's proprietary license.
 
 ---
 
-Thank you for contributing to SP Laravel API!
+## 📝 Coding Standards & Architecture
+
+### PHP & Laravel Standards
+
+- **Strict Types**: Every PHP file must declare strict types: `declare(strict_types=1);`.
+- **PSR-12**: Adhere strictly to PSR-12 code style conventions.
+- **Type Safety**: Use explicit scalar, object, and return types for all properties, parameters, and methods.
+- **Namespace**: Core classes live in `Sopheak\Core\` (`src/`), and test classes in `Sopheak\Core\Tests\` (`tests/`).
+
+### Config-Driven CRUD Architecture
+
+- **`RecordTableType`**: Use named arguments for `RecordTableType` and all relationship type constructors (`RecordHasManyType`, `RecordBelongsToType`, etc.).
+- **Auth Flags**: Use `isAuthRead` and `isAuthWrite` (primary). The legacy `public` attribute is deprecated.
+- **Availability Flags**: Explicitly control operations with `canRead`, `canCreate`, `canUpdate`, `canDelete`, and `canUpsert`.
+- **Multi-Database Compatibility**: Must remain compatible across MySQL, PostgreSQL, and SQLite. Avoid database-specific SQL functions unless wrapped in database-agnostic abstractions.
+- **Backward Compatibility**: Preserve existing API contracts and public method signatures unless a breaking change is explicitly agreed upon.
+
+### Package Directory Map
+
+```
+src/
+├── Attributes/       # Discovery and metadata attributes
+├── Authorization/    # Gates, permission providers, and scoping
+├── Config/           # Package configuration loaders
+├── Console/          # 16 Artisan CLI commands (setup, agent, record, export, etc.)
+├── Constants/        # Package-wide constants
+├── Enums/            # PHP 8.2+ enumerations
+├── Events/           # Domain events
+├── Exceptions/       # Package exceptions and API error handlers
+├── Http/             # Controllers, middlewares, requests
+├── Interfaces/       # Public contracts and service interfaces
+├── Jobs/             # Asynchronous queue jobs (bulk actions, audit sync)
+├── Listeners/        # Event listeners
+├── Models/           # Core Eloquent models (AuditLog, Attachment, etc.)
+├── Resources/        # API transformers and response serializers
+├── Services/         # Core business logic services
+├── Support/          # Internal utilities and helpers
+├── Traits/           # Reusable traits (e.g., HasControllerHelpers)
+├── Triggers/         # Record lifecycle triggers
+├── Types/            # RecordTableType and relationship definition classes
+└── Utilities/        # Query building, sorting, and filter utilities
+```
+
+### Documentation Strategy (`docs/` and `docs/guide/*`)
+
+1. **AI-Facing Chunked Guides (`docs/guide/*`)**:
+   - Split into `api/`, `features/`, `modules/`, and `records/`.
+   - **Mandatory**: Whenever you add a feature, modify core behavior (CRUD, auth, tenancy, hooks, OpenAPI), or alter config keys, you **must update the corresponding page in `docs/guide/*`**.
+2. **User-Facing Documentation (`docs/`)**:
+   - Built with VitePress, Mermaid diagrams, and OpenAPI specifications.
+   - Do **NOT** edit `sp-laravel-api-docs/` directly (it is an automated export synchronized by build scripts). Edit only `docs/`.
+   - Always run `php bin/validate-docs.php` before committing doc changes.
+
+---
+
+## 🔄 Git Branching & Contribution Workflow
+
+We follow a GitFlow-style development model:
+
+| Branch | Purpose | Stability |
+|---|---|---|
+| `develop` | Default integration branch for features, fixes, and beta pre-releases | In development / Beta |
+| `main` | Production branch reflecting official stable releases | Production / Stable |
+| `feature/*` | Feature development branches (branched from and merged into `develop`) | Work in progress |
+| `fix/*` | Bug fixes (branched from and merged into `develop`) | Work in progress |
+
+### Pull Request Process
+
+1. **Branch off `develop`**:
+   ```bash
+   git checkout develop
+   git pull origin develop
+   git checkout -b feature/your-feature-name
+   ```
+2. **Implement Changes & Tests**:
+   - Write clean, well-tested code.
+   - Update matching documentation under `docs/` and `docs/guide/*`.
+3. **Run Pre-Commit Verification**:
+   ```bash
+   composer quality
+   php bin/validate-docs.php
+   ```
+4. **Submit PR**:
+   - Target the **`develop`** branch.
+   - Fill out the PR template with a description of the change, test coverage evidence, and links to any related issues.
+
+---
+
+## 📦 Automated Release & Publishing Plan
+
+Our release pipeline is fully automated via GitHub Actions with a mandatory security gate preceding any release.
+
+### Workflow Pipeline Overview
+
+```
+Push to branch (develop or main)
+             │
+             ▼
+      ┌─────────────┐
+      │ security.yml │   ← Secrets, CVEs, Semgrep SAST, File Audit
+      └──────┬──────┘
+             │ All security checks passed?
+      ┌──────┴──────┐
+      │             │
+     Yes            No
+      │             │
+      ▼             ▼
+ ┌─────────────┐   Release aborted
+ │ release.yml │
+ └─────────────┘
+```
+
+### 1. Automated Security Gate (`security.yml`)
+
+Runs on every push and pull request to `main` and `develop`. All four jobs must pass:
+- **`scan-secrets`**: Gitleaks deep git history scanning for private keys, AWS credentials, and API tokens.
+- **`scan-dependencies`**: Audit of `composer.lock` against the PHP Security Advisories database.
+- **`scan-sast`**: Semgrep static analysis for OWASP Top 10, unsafe PHP functions, and Laravel vulnerabilities.
+- **`scan-files`**: File audit detecting suspicious scripts, webshell signatures, or unauthorized executables.
+
+### 2. Automated Release Workflow (`release.yml`)
+
+Triggers automatically via `workflow_run` once `security.yml` passes:
+
+- **Beta Pre-Releases (`develop` branch)**:
+  - Triggered on every merge/push to `develop`.
+  - Creates a pre-release tag: `{version}-beta.{github_run_number}` (e.g. `0.5.04-beta.207`).
+  - Publishes a **GitHub Pre-Release** with automatically generated release notes.
+
+- **Stable Releases (`main` branch)**:
+  - Triggered when changes are merged into `main`.
+  - Reads the version from `composer.json` (`"version": "X.Y.Z"`).
+  - Validates strict SemVer format (`X.Y.Z`).
+  - Generates the git tag `X.Y.Z` and publishes an official **GitHub Release**.
+
+### 3. Publishing to Packagist (Release Plan)
+
+To publish and distribute new versions of `sopheak/sp-laravel-api`:
+
+#### For Public Packagist ([packagist.org](https://packagist.org))
+1. The repository is connected to Packagist with the package name `sopheak/sp-laravel-api`.
+2. A GitHub Webhook (`Packagist` service integration) automatically notifies Packagist upon every new git tag push.
+3. Packagist immediately ingests the new tag (`X.Y.Z` or `{version}-beta.*`), making it installable via:
+   ```bash
+   composer require sopheak/sp-laravel-api
+   ```
+
+#### For Private / Internal Distribution
+If the package is distributed privately or as proprietary software, consuming Laravel applications can reference the repository directly:
+```json
+"repositories": [
+  {
+    "type": "vcs",
+    "url": "git@github.com:sopheaksem9999/sp-laravel-unified-api.git"
+  }
+],
+"require": {
+  "sopheak/sp-laravel-api": "^0.5.04"
+}
+```
+
+#### Step-by-Step Stable Publishing Checklist
+
+When preparing to publish a new stable release:
+
+1. **Prepare Release on `develop`**:
+   - Ensure all features and fixes are merged into `develop`.
+   - Bump `"version"` in `composer.json` to the new SemVer (e.g., `"version": "0.5.05"`).
+   - Document changes in `docs/changelog.md` and update `docs/versions.md`.
+2. **Run Local Verification**:
+   ```bash
+   composer quality
+   php bin/validate-docs.php
+   ```
+3. **Create Release PR (`develop` → `main`)**:
+   - Open a PR from `develop` into `main`.
+   - Confirm CI security and quality checks pass.
+   - Review and merge the pull request into `main`.
+4. **Automated Publishing**:
+   - The push to `main` triggers `security.yml`.
+   - Upon successful scan, `release.yml` triggers `release-stable`.
+   - Git tag `X.Y.Z` and GitHub Release are automatically created.
+   - Packagist webhook triggers and updates the package registry.
+
+---
+
+## 🔒 Security Guidelines
+
+### Best Practices
+
+1. **Tenant Isolation**: Always verify that database queries and relationship queries are scoped by `X-Tenant-ID`.
+2. **Authorization**: Use Laravel Gates and explicit permission checks (`isAuthRead`, `isAuthWrite`, `viewOwn`).
+3. **SQL Injection**: Always use parameterized queries or Eloquent/Query Builder bindings. Never interpolate raw user inputs into query strings.
+4. **Input Sanitization**: Validate all inputs using request validation or `RecordTableType` schema validation.
+
+### Reporting Vulnerabilities
+
+If you discover a security vulnerability in this package:
+- **Do NOT** file a public GitHub issue.
+- Please email details and reproduction steps to: `security@example.com` (or contact the maintainers directly).
+- Maintainers will investigate, prepare a patch, and coordinate release before public disclosure.
+
+---
+
+## 📄 License
+
+This package is licensed as proprietary software as designated in `composer.json`. All contributions remain subject to this license.
+
+---
+
+Thank you for helping build and maintain **SP Laravel Unified API**!
+
