@@ -1,0 +1,24 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allowlist false positives in cache files, test fixtures, and documentation examples"
+paths = [
+    '''(^|/)\.php-cs-fixer\.cache$''',
+    '''(^|/)\.phpunit\.result\.cache$''',
+    '''(^|/)\.phpunit\.cache/''',
+    '''(^|/)composer\.lock$''',
+]
+regexes = [
+    '''your-jwt-token''',
+    '''your-access-token''',
+    '''your-api-key''',
+    '''example-token''',
+    '''sk-mcp-prod-abc123xyz''',
+    '''SP_API_MCP_TOKEN=sk-.*''',
+]
+stopwords = [
+    "your-jwt-token",
+    "your-access-token",
+    "sk-mcp-prod-abc123xyz",
+]
