@@ -42,6 +42,8 @@ build
 .php-cs-fixer.cache
 /Docs/bug-reports/
 /Docs/feature-requests/
+docs/superpowers/
+docs/qa/
 /.commandcode
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
