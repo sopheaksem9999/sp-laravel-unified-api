@@ -13,6 +13,14 @@ All notable changes to `sp-laravel-api` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.05] - 2026-10-24
+
+### Fixed
+- **Cursor pagination: `select=`, `direction=prev` and `last_cursor`** (bug report 2026-10-24): a `select=` that left out the paging column or the key returned no `meta.cursor`, so the list never left page 1; `direction=prev` returned the first page instead of the rows before the cursor; and `meta.last_cursor` pointed at the newest rows on newest-first lists and, being a bare value, skipped rows sharing the boundary timestamp. All three are fixed, on integer and UUID keys, and every page now also returns `meta.prev_cursor` (its first row) and `meta.next_cursor` (its last row). `RecordQueryBuilder::cursorPaginate()` uses the same code, which also fixes its tie-break comparing the key against the cursor value. A paging column that is not declared in the table config is treated as a UUID column only when its values look like UUIDs.
+
+### Notes
+- **Upgrade note — cursor Previous and Last**: `meta.cursor` is unchanged. For a Previous button send `cursor=<meta.prev_cursor>&direction=prev` (the old guide said `meta.cursor`, which never worked). `meta.last_cursor` is now an opaque `c1.` token like the other cursors; send it back, don't parse it. Cursors saved by clients keep working.
+
 ## [0.5.04] - 2026-10-03
 
 ### Security
