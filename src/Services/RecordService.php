@@ -26,6 +26,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Sopheak\Core\Utilities\TimeUtils;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
+use Sopheak\Core\Services\Queries\CursorPaginator;
 use Sopheak\Core\Utilities\QueryBuilderFiltersUtils;
 use Sopheak\Core\Utilities\RelationshipResolverUtils;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
@@ -2025,144 +2026,28 @@ class RecordService
      */
     private function executeCursorPagination(Builder $builder, Request $request, string $primaryKey): array
     {
-        $headers = [];
-        $meta = [];
-
         $maxPerPage = RecordConfigService::perPageMax();
         $perPage = max(1, min((int) $request->input('per_page', RecordConfigService::limitMax()), $maxPerPage));
 
-        $direction = $request->input('direction', 'next');
-
         $sortColumn = $this->resolveSortColumnForCursor($builder, $request);
         $cursorColumn = $this->resolveCursorColumn($request, $sortColumn);
-        $isUuidColumn = $this->detectUuidCursorColumn($builder, $cursorColumn);
 
-        // A composite cursor only means anything when the paging column is not
-        // already unique — on the primary key the simple comparison is exact.
-        $useComposite = RecordConfigService::cursorCompositeEnabled() && $cursorColumn !== $primaryKey;
-
-        // A cursor issued for a composite page carries both components; a plain
-        // scalar (a legacy token, or one of the boundary cursors below) yields a
-        // null key and falls back to the simple comparison.
-        [$cursor, $cursorKey] = $this->decodeCursor($request->input('cursor'));
-
-        // First page has no cursor filter — use null so frontend sends cursor=
-        $firstCursorDefault = null;
-
-        // Normalize cursor: cast numeric strings to int so PostgreSQL uses index-friendly comparisons (skip UUID columns)
-        if (!$isUuidColumn && null !== $cursor && '' !== $cursor && ctype_digit((string) $cursor)) {
-            $cursor = (int) $cursor;
-        }
-
-        // Count total matching records before cursor filtering
-        $skipTotal = $this->shouldSkipTotal($request);
-        $total = 0;
-        $firstCursor = $firstCursorDefault;
-        $lastCursor = null;
-
-        if (!$skipTotal) {
-            $total = (clone $builder)->count();
-
-            if ($total > $perPage && RecordConfigService::cursorBoundaryEnabled()) {
-
-                $lastPageSize = $total % $perPage;
-                $lastPageSize = 0 === $lastPageSize ? $perPage : $lastPageSize;
-
-                // Get the cursor at the start of the last page using O(per_page) query:
-                // ORDER BY id DESC LIMIT last_page_size + 1, then pick the MIN
-                $boundaryRows = (clone $builder)
-                    ->select($cursorColumn)
-                    ->reorder()
-                    ->orderBy($cursorColumn, 'desc')
-                    ->limit($lastPageSize + 1)
-                    ->get();
-
-                $boundaryMin = $boundaryRows->min($cursorColumn);
-                $lastCursor = $boundaryMin ?? null;
-            }
-        }
-
-        $hasCursor = null !== $cursor && '' !== $cursor && 0 !== $cursor;
-
-        // For UUID columns, only apply cursor filter when the cursor is a valid UUID
-        if ($isUuidColumn && $hasCursor && (!is_string($cursor) || !preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $cursor))) {
-            $hasCursor = false;
-            $cursor = null;
-            $cursorKey = null;
-        }
-
-        // Default sort: created_at DESC (matches applySort behavior)
-        $sortOrder = $request->input('order', 'desc');
-        $sortOrder = in_array(strtolower((string) $sortOrder), ['asc', 'desc'], true) ? strtolower((string) $sortOrder) : 'desc';
-
-        // Whatever decides the paging column also has to decide the order, or
-        // page 1 is sorted one way and continued another. applySort() has
-        // already ordered by $sortColumn, so the ordering only needs rebuilding
-        // when the cursor pages on something else, or when a cursor filter is
-        // being applied on top of it.
-        if ($hasCursor || $cursorColumn !== $sortColumn) {
-            $builder->reorder()->orderBy($cursorColumn, $sortOrder);
-        }
-
-        if ($hasCursor) {
-            // Cursor operator depends on sort direction:
-            // ASC + next → >  |  ASC + prev → <
-            // DESC + next → <  |  DESC + prev → >
-            $cursorOperator = match (true) {
-                'asc' === $sortOrder && 'next' === $direction => '>',
-                'asc' === $sortOrder && 'prev' === $direction => '<',
-                'desc' === $sortOrder && 'next' === $direction => '<',
-                'desc' === $sortOrder && 'prev' === $direction => '>',
-                default => '>',
-            };
-
-            if ($useComposite && null !== $cursorKey) {
-                // The tie-break compares the key against the *key* component of
-                // the cursor, and does so strictly: an inclusive >=/<= re-serves
-                // the row that ended the previous page.
-                $builder->where(function ($q) use ($cursorColumn, $primaryKey, $cursor, $cursorKey, $cursorOperator): void {
-                    $q->where($cursorColumn, $cursorOperator, $cursor)
-                        ->orWhere(function ($q2) use ($cursorColumn, $primaryKey, $cursor, $cursorKey, $cursorOperator): void {
-                            $q2->where($cursorColumn, '=', $cursor)
-                                ->where($primaryKey, $cursorOperator, $cursorKey);
-                        });
-                });
-            } else {
-                $builder->where($cursorColumn, $cursorOperator, $cursor);
-            }
-        }
-
-        // Keyset paging needs a total order. Without the key as a tie-break,
-        // rows sharing a cursor value are ordered arbitrarily by the database
-        // and can be skipped or repeated across pages.
-        if ($useComposite) {
-            $builder->orderBy($primaryKey, $sortOrder);
-        }
-
-        $data = $builder->limit($perPage)->get()->all();
-
-        $nextCursor = null;
-        if (count($data) > 0) {
-            $lastRow = $data[count($data) - 1];
-            $cursorValue = $lastRow->{$cursorColumn} ?? null;
-            $keyValue = $lastRow->{$primaryKey} ?? null;
-
-            $nextCursor = $useComposite && null !== $cursorValue && null !== $keyValue
-                ? $this->encodeCursor($cursorValue, $keyValue)
-                : $cursorValue;
-        }
-
-        $headers['X-Cursor'] = (string) ($nextCursor ?? '');
-        $meta = [
-            'cursor' => $nextCursor,
-            'direction' => $direction,
-            'cursor_column' => $cursorColumn,
-            'total' => $total,
-            'first_cursor' => $firstCursor,
-            'last_cursor' => $lastCursor,
-        ];
-
-        return [$data, $meta, $headers, $total];
+        // Default sort: created_at DESC (matches applySort behavior). Whatever
+        // decides the paging column also decides the order, or page 1 is sorted
+        // one way and continued another; applySort() has already ordered by
+        // $sortColumn, so only a different paging column needs a reorder.
+        return CursorPaginator::paginate(
+            builder: $builder,
+            rawCursor: $request->input('cursor'),
+            direction: $request->input('direction', 'next'),
+            cursorColumn: $cursorColumn,
+            primaryKey: $primaryKey,
+            sortOrder: $request->input('order', 'desc'),
+            perPage: $perPage,
+            skipTotal: $this->shouldSkipTotal($request),
+            isUuidColumn: $this->detectUuidCursorColumn($builder, $cursorColumn),
+            keepExistingOrder: $cursorColumn === $sortColumn,
+        );
     }
 
     /**
@@ -2212,61 +2097,6 @@ class RecordService
         }
 
         return $sortColumn;
-    }
-
-    /**
-     * Marks a cursor that carries both a sort value and a tie-breaking key.
-     *
-     * Versioned so the encoding can change without silently misreading tokens
-     * already held by clients.
-     */
-    private const CURSOR_COMPOUND_PREFIX = 'c1.';
-
-    /**
-     * Encode a cursor value together with its tie-breaking key.
-     *
-     * A composite cursor needs both components, and the single scalar the API
-     * used to return could not carry them — which is why the tie-break ended up
-     * comparing the primary key against a timestamp.
-     */
-    private function encodeCursor(mixed $cursorValue, mixed $keyValue): string
-    {
-        $json = json_encode(['v' => $cursorValue, 'k' => $keyValue]);
-        if (!is_string($json)) {
-            return (string) $cursorValue;
-        }
-
-        return self::CURSOR_COMPOUND_PREFIX . rtrim(strtr(base64_encode($json), '+/', '-_'), '=');
-    }
-
-    /**
-     * Split a cursor into its value and key components.
-     *
-     * Anything that is not a compound token — a cursor issued by an older
-     * version, a boundary cursor, or a hand-written one — comes back with a null
-     * key, which routes the caller to the simple exclusive comparison rather
-     * than the composite branch.
-     *
-     * @return array{0: mixed, 1: mixed}
-     */
-    private function decodeCursor(mixed $cursor): array
-    {
-        if (!is_string($cursor) || !str_starts_with($cursor, self::CURSOR_COMPOUND_PREFIX)) {
-            return [$cursor, null];
-        }
-
-        $encoded = substr($cursor, strlen(self::CURSOR_COMPOUND_PREFIX));
-        $binary = base64_decode(strtr($encoded, '-_', '+/'), true);
-        if (false === $binary) {
-            return [$cursor, null];
-        }
-
-        $decoded = json_decode($binary, true);
-        if (!is_array($decoded) || !array_key_exists('v', $decoded) || !array_key_exists('k', $decoded)) {
-            return [$cursor, null];
-        }
-
-        return [$decoded['v'], $decoded['k']];
     }
 
     /**
@@ -3817,8 +3647,10 @@ class RecordService
         if (is_string($table)) {
             try {
                 $sample = (clone $builder)->select($column)->limit(1)->first();
+                // Only a value shaped like a UUID makes this a UUID column: treating
+                // any non-numeric text (a name, a code) as one ignored every cursor.
                 if ($sample && isset($sample->{$column}) && is_string($sample->{$column})) {
-                    return !ctype_digit((string) $sample->{$column});
+                    return 1 === preg_match(CursorPaginator::UUID_PATTERN, $sample->{$column});
                 }
             } catch (Throwable) {
             }

@@ -148,99 +148,27 @@ class RecordQueryBuilder
         return null;
     }
 
+    /**
+     * @return array<string, int|array<int|string, mixed>>
+     */
     public function cursorPaginate(?string $cursor, string $direction = 'next', ?string $cursorColumn = null, int $perPage = 25, bool $skipTotal = false, string $sortOrder = 'desc'): array
     {
         $cursorColumn ??= RecordConfigService::cursorDefaultColumn();
-        $maxPerPage = RecordConfigService::perPageMax();
-        $perPage = max(1, min($perPage, $maxPerPage));
+        $perPage = max(1, min($perPage, RecordConfigService::perPageMax()));
 
-        $isUuidColumn = $this->isUuidColumn($this->config, $cursorColumn);
+        [$data, $meta, $headers, $total] = CursorPaginator::paginate(
+            builder: $this->builder,
+            rawCursor: $cursor,
+            direction: $direction,
+            cursorColumn: $cursorColumn,
+            primaryKey: $this->primaryKey,
+            sortOrder: $sortOrder,
+            perPage: $perPage,
+            skipTotal: $skipTotal,
+            isUuidColumn: $this->isUuidColumn($this->config, $cursorColumn),
+        );
 
-        // Normalize cursor: cast numeric strings to int for index-friendly comparisons (skip UUID columns)
-        if (!$isUuidColumn && null !== $cursor && '' !== $cursor && ctype_digit($cursor)) {
-            $cursor = (int) $cursor;
-        }
-
-        // Count total matching records before cursor filtering
-        $total = 0;
-        $firstCursor = null;
-        $lastCursor = null;
-
-        if (!$skipTotal) {
-            $total = (clone $this->builder)->count();
-
-            if ($total > $perPage && RecordConfigService::cursorBoundaryEnabled()) {
-                $lastPageSize = $total % $perPage;
-                $lastPageSize = 0 === $lastPageSize ? $perPage : $lastPageSize;
-
-                // Get the cursor at the start of the last page using O(per_page) query
-                $boundaryRows = (clone $this->builder)
-                    ->select($cursorColumn)
-                    ->reorder()
-                    ->orderBy($cursorColumn, 'desc')
-                    ->limit($lastPageSize + 1)
-                    ->get();
-
-                $boundaryMin = $boundaryRows->min($cursorColumn);
-                $lastCursor = $boundaryMin ?? null;
-            }
-        }
-
-        $hasCursor = null !== $cursor && '' !== $cursor && 0 !== $cursor;
-
-        // For UUID columns, only apply cursor filter when the cursor is a valid UUID
-        if ($isUuidColumn && $hasCursor && (!is_string($cursor) || !preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $cursor))) {
-            $hasCursor = false;
-            $cursor = null;
-        }
-
-        if ($hasCursor) {
-            $this->builder->reorder();
-
-            $sortOrder = in_array(strtolower($sortOrder), ['asc', 'desc'], true) ? strtolower($sortOrder) : 'desc';
-
-            $cursorOperator = match (true) {
-                'asc' === $sortOrder && 'next' === $direction => '>',
-                'asc' === $sortOrder && 'prev' === $direction => '<',
-                'desc' === $sortOrder && 'next' === $direction => '<',
-                'desc' === $sortOrder && 'prev' === $direction => '>',
-                default => '>',
-            };
-
-            if (RecordConfigService::cursorCompositeEnabled() && $cursorColumn !== $this->primaryKey) {
-                $this->builder->where(function ($q) use ($cursorColumn, $cursor, $cursorOperator): void {
-                    $q->where($cursorColumn, $cursorOperator, $cursor)
-                      ->orWhere(function ($q2) use ($cursorColumn, $cursor, $cursorOperator): void {
-                          $q2->where($cursorColumn, '=', $cursor)
-                             ->where($this->primaryKey, $cursorOperator === '>' ? '>=' : '<=', $cursor);
-                      });
-                });
-                $this->builder->orderBy($cursorColumn, $sortOrder)
-                              ->orderBy($this->primaryKey, $sortOrder);
-            } else {
-                $this->builder->where($cursorColumn, $cursorOperator, $cursor)
-                              ->orderBy($cursorColumn, $sortOrder);
-            }
-        }
-
-        $data = $this->builder->limit($perPage)->get()->all();
-        $nextCursor = count($data) > 0
-            ? $data[count($data) - 1]->{$cursorColumn} ?? null
-            : null;
-
-        return [
-            'data' => $data,
-            'meta' => [
-                'cursor' => $nextCursor,
-                'direction' => $direction,
-                'cursor_column' => $cursorColumn,
-                'total' => $total,
-                'first_cursor' => $firstCursor,
-                'last_cursor' => $lastCursor,
-            ],
-            'headers' => ['X-Cursor' => (string) ($nextCursor ?? '')],
-            'total' => $total,
-        ];
+        return ['data' => $data, 'meta' => $meta, 'headers' => $headers, 'total' => $total];
     }
 
     public function offsetPaginate(int $page = 1, int $perPage = 25, bool $skipTotal = false): array
