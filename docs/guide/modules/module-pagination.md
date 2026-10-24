@@ -73,14 +73,29 @@ by hand. Paging on the primary key still returns the plain key value, and a bare
 scalar cursor from an older release is still accepted.
 :::
 
-### Sort vs Operator
+### Direction
 
-| Sort | Direction | Operator |
-|---|---|---|
-| ASC | next | `>` |
-| ASC | prev | `<` |
-| DESC | next | `<` |
-| DESC | prev | `>` |
+- `direction=next` returns the `per_page` rows **after** the cursor, in list order.
+- `direction=prev` returns the `per_page` rows **before** the cursor, in list
+  order. The query reads backwards from the cursor (the opposite order, so the
+  rows nearest the cursor are kept) and the rows are put back in list order.
+
+| Sort | Direction | Operator | Query order |
+|---|---|---|---|
+| ASC | next | `>` | ASC |
+| ASC | prev | `<` | DESC, then reversed |
+| DESC | next | `<` | DESC |
+| DESC | prev | `>` | ASC, then reversed |
+
+Every page returns both of its ends: `meta.prev_cursor` (its first row) and
+`meta.next_cursor` (its last row, the same value as `meta.cursor`). Send
+`prev_cursor` with `direction=prev` for the previous page, and keep following
+`prev_cursor` to go further back.
+
+`select=` does not need to include the paging column or the key: the package
+loads them to build the cursors and removes them from the rows again, so the
+response contains only what you asked for. (A `distinct=true` list with an
+explicit `select=` is left as it is; include the paging column there.)
 
 ### Response Meta
 
@@ -88,18 +103,21 @@ scalar cursor from an older release is still accepted.
 {
   "meta": {
     "cursor": "c1.eyJ2IjoiMjAyNi0wNS0xNSAxMDozMDowMCIsImsiOjEwMjV9",
+    "next_cursor": "c1.eyJ2IjoiMjAyNi0wNS0xNSAxMDozMDowMCIsImsiOjEwMjV9",
+    "prev_cursor": "c1.eyJ2IjoiMjAyNi0wNS0xNSAxMDo1NDoxMiIsImsiOjEwNDl9",
     "direction": "next",
     "cursor_column": "created_at",
     "total": 1240,
     "first_cursor": null,
-    "last_cursor": "99985"
+    "last_cursor": "c1.eyJ2IjoiMjAyNC0wMS0wMiAwODowMDowMCIsImsiOjE1fQ"
   }
 }
 ```
 
-- `cursor` — pass back verbatim. A token when paging on a non-key column, the plain key value when paging on the primary key
+- `cursor` / `next_cursor` — the page's last row; send with `direction=next` for the next page. A token when paging on a non-key column, the plain key value when paging on the primary key
+- `prev_cursor` — the page's first row; send with `direction=prev` for the previous page
 - `first_cursor` — `null`; send `cursor=` for the first page
-- `last_cursor` — computed via O(per_page) query; sends you to the final page. Omitted when `total=false`, `skip_total=true`, or `boundary_cursors=false`
+- `last_cursor` — the row just before the last page, computed with one O(per_page) query, so `cursor=<last_cursor>&direction=next` returns exactly the last page (`total % per_page` rows, or `per_page`), for either sort order. A token like the others. `null` when `total=false`, `skip_total=true`, or `boundary_cursors=false`
 - `total` — full matching count. Omitted with `total=false` or `skip_total=true`
 
 `total` reflects the full matching record count before cursor filtering. Add `total=false` to omit it and avoid the `COUNT(*)` query:
@@ -156,7 +174,7 @@ across page boundaries.
 |---|---|
 | Load page 1 | `?cursor=&direction=next` |
 | Click Next | `?cursor={meta.cursor}&direction=next` |
-| Click Prev | `?cursor={meta.cursor}&direction=prev` |
+| Click Prev | `?cursor={meta.prev_cursor}&direction=prev` |
 | Click First | `?cursor=&direction=next` |
 | Click Last | `?cursor={meta.last_cursor}&direction=next` |
 
