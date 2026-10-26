@@ -68,7 +68,12 @@ class AttachmentUrlService
     {
         $attachmentPrefix = (string) config('attachments.route_prefix', 'attachments');
 
-        return url(RecordConfigService::apiPrefix() . '/' . $attachmentPrefix . '/' . $id);
+        $rpcPrefix = RecordConfigService::rpcPrefix();
+
+        // '{id}' functions only route as '{table}/{rpc_prefix}/{id}/…'; the bare
+        // '{table}/{id}/…' form resolves only when the rpc prefix is empty.
+        return url(RecordConfigService::apiPrefix() . '/' . $attachmentPrefix
+            . ('' === $rpcPrefix ? '' : '/' . $rpcPrefix) . '/' . $id);
     }
 
     private function canUseDirectUrl(string $visibility): bool

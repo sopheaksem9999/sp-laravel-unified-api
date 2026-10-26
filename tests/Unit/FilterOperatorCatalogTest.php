@@ -58,7 +58,7 @@ class FilterOperatorCatalogTest extends TestCase
         foreach (FilterOperatorCatalog::NAMES as $name) {
             $base = str_starts_with($name, 'not_') ? substr($name, 4) : $name;
             $this->assertTrue(
-                in_array($name, $described, true) || in_array($base, $described, true),
+                in_array($name, $described, true) || in_array($base, $described, true) || in_array(FilterOperatorCatalog::negation($name), $described, true),
                 sprintf("operator '%s' is accepted by the engine but undocumented", $name),
             );
         }
@@ -119,18 +119,23 @@ class FilterOperatorCatalogTest extends TestCase
         $this->assertSame('neq', FilterOperatorCatalog::negation('eq'));
         $this->assertSame('lte', FilterOperatorCatalog::negation('gt'));
         $this->assertSame('not_regex', FilterOperatorCatalog::negation('regex'));
-        $this->assertNull(FilterOperatorCatalog::negation('contains'));
+        $this->assertSame('not_like', FilterOperatorCatalog::negation('contains'));
+        $this->assertSame('not_starts_with', FilterOperatorCatalog::negation('starts_with'));
+        $this->assertSame('not_ends_with', FilterOperatorCatalog::negation('ends_with'));
+        $this->assertSame('date_neq', FilterOperatorCatalog::negation('date_eq'));
+        $this->assertSame('date_lt', FilterOperatorCatalog::negation('date_gte'));
+        $this->assertNull(FilterOperatorCatalog::negation('not_like'));
     }
 
     public function test_only_operators_with_a_negated_form_are_negatable(): void
     {
         $negatable = FilterOperatorCatalog::negatable('sqlite');
 
-        foreach (['eq', 'in', 'like', 'ilike', 'between', 'gt', 'is', 'empty'] as $operator) {
+        foreach (['eq', 'in', 'like', 'ilike', 'between', 'gt', 'is', 'empty', 'contains', 'starts_with', 'ends_with', 'date_eq', 'date_gte'] as $operator) {
             $this->assertContains($operator, $negatable, $operator);
         }
 
-        foreach (['contains', 'starts_with', 'ends_with', 'date_eq', 'date_gte', 'not_like'] as $operator) {
+        foreach (['not_like'] as $operator) {
             $this->assertNotContains($operator, $negatable, $operator . ' has no not. form');
         }
 

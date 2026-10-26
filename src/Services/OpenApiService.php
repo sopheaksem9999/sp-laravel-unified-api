@@ -183,7 +183,7 @@ Every API response includes an integer `error_code` that provides a stable, mach
 Common values:
 - `0` (**SUCCESS**) – Request processed successfully.
 - `10000` (**GENERAL_ERROR**) – Unclassified error when no more specific code applies.
-- `10001` (**INVALID_TENANT_ID**) – Tenant header is missing or invalid.
+- `10001` (**INVALID_TENANT_ID**) – Reserved; not currently returned. A missing tenant header answers `422` with `10004`.
 - `10002` (**INVALID_ACCESS**) – Authentication failed or access token is invalid.
 - `10003` (**INVALID_TOKEN**) – Token is malformed, expired, or not accepted.
 - `10004` (**INVALID_REQUEST**) – Request payload or parameters are invalid (validation errors).
@@ -285,7 +285,7 @@ You can configure route middleware stacks per action and per table in `config/sp
 
 ## 🚦 Rate Limits
 
-Routes are throttled via the `throttle:api-reads`, `throttle:api-writes`, and `throttle:api-functions` buckets (defined in the host application\'s `AppServiceProvider`). Per-table overrides can be configured in `config/sp-record.php` under `record.rate_limits`:
+Routes are throttled via the `throttle:api-reads`, `throttle:api-writes`, and `throttle:api-functions` buckets (defined in the host application\'s `AppServiceProvider`). `record.rate_limits` in `config/sp-record.php` is a declaration only: the package reads it for `sp-laravel-api:validate` and does **not** enforce it. Set the limits of the three buckets in your application\'s `RateLimiter`. An over-limit request answers `429` in the standard error envelope with `Retry-After`. Declared shape:
 
 ```php
 "rate_limits" => [
@@ -295,7 +295,7 @@ Routes are throttled via the `throttle:api-reads`, `throttle:api-writes`, and `t
 ],
 ```
 
-Configured overrides for this API:' . self::rateLimitsSummary() . '
+Declared (not enforced) overrides for this API:' . self::rateLimitsSummary() . '
 
 ## 🔧 Key Features
 
@@ -1280,7 +1280,7 @@ Accepts an array of IDs or an array of objects with the primary key.
             $maxPerPage = RecordConfigService::perPageMax();
             $defaultPaginationMode = RecordConfigService::paginationDefaultMode();
             $compositeCursorsEnabled = RecordConfigService::cursorCompositeEnabled();
-            $defaultPerPage = 25;
+            $defaultPerPage = RecordConfigService::defaultPerPage();
             $defaultMode = RecordConfigService::paginationDefaultMode();
             $skipTotalDefault = RecordConfigService::skipTotalDefault();
             $defaultCursorColumn = RecordConfigService::cursorDefaultColumn();
@@ -1516,7 +1516,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                                 'success' => ['type' => 'boolean', 'example' => false],
                                                 'error_code' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::INVALID_REQUEST],
                                                 'message' => ['type' => 'string', 'example' => 'Validation failed'],
-                                                'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
+                                                'errors' => ['type' => 'object', 'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']]],
                                                 'meta' => [
                                                     'type' => 'object',
                                                     'properties' => [
@@ -1602,7 +1602,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                                 'success' => ['type' => 'boolean', 'example' => false],
                                                 'error_code' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::INVALID_REQUEST],
                                                 'message' => ['type' => 'string', 'example' => 'Validation failed'],
-                                                'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
+                                                'errors' => ['type' => 'object', 'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']]],
                                                 'meta' => [
                                                     'type' => 'object',
                                                     'properties' => [
@@ -1698,7 +1698,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                             'success' => ['type' => 'boolean', 'example' => false],
                                             'error_code' => ['type' => 'integer', 'example' => HttpErrorCodeConstant::RESOURCE_NOT_FOUND],
                                             'message' => ['type' => 'string', 'example' => 'Record not found'],
-                                            'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
+                                            'errors' => ['type' => 'object', 'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']]],
                                             'meta' => [
                                                 'type' => 'object',
                                                 'properties' => [
@@ -1757,7 +1757,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                         'properties' => [
                                             'success' => ['type' => 'boolean', 'example' => false],
                                             'message' => ['type' => 'string', 'example' => 'Record not found'],
-                                            'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
+                                            'errors' => ['type' => 'object', 'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']]],
                                             'meta' => [
                                                 'type' => 'object',
                                                 'properties' => [
@@ -1813,7 +1813,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                         'properties' => [
                                             'success' => ['type' => 'boolean', 'example' => false],
                                             'message' => ['type' => 'string', 'example' => 'Record not found'],
-                                            'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
+                                            'errors' => ['type' => 'object', 'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']]],
                                             'meta' => [
                                                 'type' => 'object',
                                                 'properties' => [
@@ -1837,6 +1837,12 @@ Accepts an array of IDs or an array of objects with the primary key.
 
             if (isset($paths[$idPath]['put'])) {
                 $paths[$idPath]['put'] = self::tableOperationDocs($paths[$idPath]['put'], $config, $recordName, 'update', false, $tableConfigSource, $tenantScoped);
+
+                // The route accepts PATCH too (routes/api.php); both verbs run the same update.
+                $paths[$idPath]['patch'] = $paths[$idPath]['put'];
+                if (isset($paths[$idPath]['patch']['summary']) && is_string($paths[$idPath]['patch']['summary'])) {
+                    $paths[$idPath]['patch']['summary'] .= ' (partial)';
+                }
             }
 
             if (isset($paths[$idPath]['delete'])) {
@@ -1879,7 +1885,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                             'properties' => [
                                                 'success' => ['type' => 'boolean', 'example' => false],
                                                 'message' => ['type' => 'string', 'example' => 'Record not found'],
-                                                'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
+                                                'errors' => ['type' => 'object', 'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']]],
                                                 'meta' => [
                                                     'type' => 'object',
                                                     'properties' => [
@@ -2047,7 +2053,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                         'properties' => [
                                             'success' => ['type' => 'boolean', 'example' => false],
                                             'message' => ['type' => 'string', 'example' => 'Bad request'],
-                                            'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
+                                            'errors' => ['type' => 'object', 'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']]],
                                             'meta' => [
                                                 'type' => 'object',
                                                 'properties' => [
@@ -2069,7 +2075,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                         'properties' => [
                                             'success' => ['type' => 'boolean', 'example' => false],
                                             'message' => ['type' => 'string', 'example' => 'Unauthorized'],
-                                            'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
+                                            'errors' => ['type' => 'object', 'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']]],
                                             'meta' => [
                                                 'type' => 'object',
                                                 'properties' => [
@@ -2091,7 +2097,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                         'properties' => [
                                             'success' => ['type' => 'boolean', 'example' => false],
                                             'message' => ['type' => 'string', 'example' => 'Forbidden'],
-                                            'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
+                                            'errors' => ['type' => 'object', 'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']]],
                                             'meta' => [
                                                 'type' => 'object',
                                                 'properties' => [
@@ -2113,7 +2119,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                         'properties' => [
                                             'success' => ['type' => 'boolean', 'example' => false],
                                             'message' => ['type' => 'string', 'example' => 'Function not found'],
-                                            'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
+                                            'errors' => ['type' => 'object', 'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']]],
                                             'meta' => [
                                                 'type' => 'object',
                                                 'properties' => [
@@ -2135,7 +2141,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                         'properties' => [
                                             'success' => ['type' => 'boolean', 'example' => false],
                                             'message' => ['type' => 'string', 'example' => 'Internal server error'],
-                                            'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
+                                            'errors' => ['type' => 'object', 'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']]],
                                             'meta' => [
                                                 'type' => 'object',
                                                 'properties' => [
@@ -2300,7 +2306,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                             'properties' => [
                                                 'success' => ['type' => 'boolean', 'example' => false],
                                                 'message' => ['type' => 'string', 'example' => 'Bad request'],
-                                                'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
+                                                'errors' => ['type' => 'object', 'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']]],
                                                 'meta' => [
                                                     'type' => 'object',
                                                     'properties' => [
@@ -2322,7 +2328,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                             'properties' => [
                                                 'success' => ['type' => 'boolean', 'example' => false],
                                                 'message' => ['type' => 'string', 'example' => 'Unauthorized'],
-                                                'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
+                                                'errors' => ['type' => 'object', 'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']]],
                                                 'meta' => [
                                                     'type' => 'object',
                                                     'properties' => [
@@ -2344,7 +2350,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                             'properties' => [
                                                 'success' => ['type' => 'boolean', 'example' => false],
                                                 'message' => ['type' => 'string', 'example' => 'Forbidden'],
-                                                'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
+                                                'errors' => ['type' => 'object', 'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']]],
                                                 'meta' => [
                                                     'type' => 'object',
                                                     'properties' => [
@@ -2366,7 +2372,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                             'properties' => [
                                                 'success' => ['type' => 'boolean', 'example' => false],
                                                 'message' => ['type' => 'string', 'example' => 'Function not found'],
-                                                'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
+                                                'errors' => ['type' => 'object', 'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']]],
                                                 'meta' => [
                                                     'type' => 'object',
                                                     'properties' => [
@@ -2388,7 +2394,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                                             'properties' => [
                                                 'success' => ['type' => 'boolean', 'example' => false],
                                                 'message' => ['type' => 'string', 'example' => 'Internal server error'],
-                                                'errors' => ['type' => 'array', 'items' => ['type' => 'string']],
+                                                'errors' => ['type' => 'object', 'additionalProperties' => ['type' => 'array', 'items' => ['type' => 'string']]],
                                                 'meta' => [
                                                     'type' => 'object',
                                                     'properties' => [

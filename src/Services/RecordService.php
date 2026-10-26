@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Services;
 
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\ConnectionInterface;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use RuntimeException;
 use Sopheak\Core\Events\RecordMutated;
 use Sopheak\Core\Events\RecordCreated;
@@ -444,8 +448,21 @@ class RecordService
 
         $this->invalidateTableCache($table, $cacheTenantId, $tenantEnabled);
 
-        // We can't easily invalidate individual record caches or fire individual triggers for bulk upsert
-        // without querying them all back. This is a trade-off for bulk performance.
+        // Per-record caches, triggers and audit rows are not produced for bulk upsert: that would
+        // need every row queried back. This is a trade-off for bulk performance. Realtime clients
+        // still hear about it through one batched `upserted` event carrying the match keys.
+        $keys = array_map(
+            static fn(array $item): array => array_intersect_key($item, array_flip($matchOn)),
+            $preparedItems
+        );
+        $this->fireBroadcastEvent($table, 'upsert', [
+            'payload' => [
+                'count' => $affected,
+                'match_on' => $matchOn,
+                'keys' => self::stripHiddenColumns($keys, $tableSchema),
+            ],
+            RecordConfigService::tenantColumn() => $cacheTenantId,
+        ], $tableSchema);
 
         return [
             'data' => [
@@ -633,6 +650,7 @@ class RecordService
             'update'  => 'updated',
             'delete'  => 'deleted',
             'restore' => 'restored',
+            'upsert'  => 'upserted',
             default   => $operation,
         };
 
@@ -1977,7 +1995,7 @@ class RecordService
         $meta = [];
 
         $maxPerPage = RecordConfigService::perPageMax();
-        $perPage = max(1, min((int) $request->input('per_page', RecordConfigService::limitMax()), $maxPerPage));
+        $perPage = max(1, min((int) $request->input('per_page', RecordConfigService::defaultPerPage()), $maxPerPage));
         $page = max((int) $request->input('page', 1), 1);
 
         $skipTotal = $this->shouldSkipTotal($request);
@@ -2027,7 +2045,7 @@ class RecordService
     private function executeCursorPagination(Builder $builder, Request $request, string $primaryKey): array
     {
         $maxPerPage = RecordConfigService::perPageMax();
-        $perPage = max(1, min((int) $request->input('per_page', RecordConfigService::limitMax()), $maxPerPage));
+        $perPage = max(1, min((int) $request->input('per_page', RecordConfigService::defaultPerPage()), $maxPerPage));
 
         $sortColumn = $this->resolveSortColumnForCursor($builder, $request);
         $cursorColumn = $this->resolveCursorColumn($request, $sortColumn);
@@ -2205,7 +2223,7 @@ class RecordService
         $includes = $effectiveSelectParam !== '' ? explode(',', $effectiveSelectParam) : [];
 
         $page = max((int) $request->input('page', 1), 1);
-        $perPage = $request->has('per_page') ? max(1, min((int) $request->input('per_page', 25), RecordConfigService::perPageMax())) : null;
+        $perPage = $request->has('per_page') ? max(1, min((int) $request->input('per_page', RecordConfigService::defaultPerPage()), RecordConfigService::perPageMax())) : null;
         $limit = $request->has('limit') ? max(1, min((int) $request->input('limit'), RecordConfigService::limitMax())) : RecordConfigService::limitMax();
 
         $isCacheable = $this->isCacheableRequest(request: $request, table: $table);
@@ -2408,8 +2426,13 @@ class RecordService
 
                     $this->applyTenantFilter($optimizedBuilder, $actualTableName, $tenantId);
 
+                    // Same trashed handling as the main list query above.
                     if ($tableSchema->softDeletes) {
-                        $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
+                        if ($request->boolean('only_trashed')) {
+                            $optimizedBuilder->whereNotNull($actualTableName . '.deleted_at');
+                        } elseif (!$request->boolean('with_trashed')) {
+                            $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
+                        }
                     }
 
                     RelationshipResolverUtils::applySubqueryRelationships(
@@ -2881,7 +2904,7 @@ class RecordService
         }
 
         $page = max((int) $request->input('page', 1), 1);
-        $perPage = $request->has('per_page') ? max(1, min((int) $request->input('per_page', 25), RecordConfigService::perPageMax())) : null;
+        $perPage = $request->has('per_page') ? max(1, min((int) $request->input('per_page', RecordConfigService::defaultPerPage()), RecordConfigService::perPageMax())) : null;
         $limit = $request->has('limit') ? max(1, min((int) $request->input('limit'), RecordConfigService::limitMax())) : RecordConfigService::limitMax();
         $isCursor = $service->shouldUseCursorPagination($request);
 
@@ -3286,7 +3309,7 @@ class RecordService
 
                 $this->applyTenantFilter($optimizedBuilder, $actualTableName, $tenantId);
 
-                if ($tableSchema->softDeletes) {
+                if ($tableSchema->softDeletes && !$request->boolean('with_trashed')) {
                     $optimizedBuilder->whereNull($actualTableName . '.deleted_at');
                 }
 
@@ -3468,7 +3491,12 @@ class RecordService
                 }
 
                 if ($statusCode > 204) {
-                    $wrapped = RecordApiResponseService::errorWrapped(message: 'string' === gettype($records) ? $records : '', status: $statusCode, errors: 'object' === gettype($responseData) ? (array) $responseData : [], error_code: $errorCode);
+                    $errorMessage = match (true) {
+                        'string' === gettype($records) => $records,
+                        is_object($responseData) && property_exists($responseData, 'message') && is_string($responseData->message) => $responseData->message,
+                        default => '',
+                    };
+                    $wrapped = RecordApiResponseService::errorWrapped(message: $errorMessage, status: $statusCode, errors: 'object' === gettype($responseData) ? (array) $responseData : [], error_code: $errorCode);
                 } else {
                     $wrapped = RecordApiResponseService::successWrapped($records, $meta, $result->getStatusCode());
                 }
@@ -3495,11 +3523,38 @@ class RecordService
             }
 
             return RecordApiResponseService::successWrapped($result);
-        } catch (Exception $exception) {
+        } catch (ValidationException $exception) {
             return RecordApiResponseService::errorFromException(
                 exception: $exception,
                 message: $exception->getMessage(),
-                status: RecordApiJsonResponseEnum::SERVER_ERROR->value
+                status: RecordApiJsonResponseEnum::VALIDATION_ERROR->value,
+                errors: $exception->errors()
+            );
+        } catch (AuthenticationException $exception) {
+            return RecordApiResponseService::errorFromException(
+                exception: $exception,
+                message: $exception->getMessage(),
+                status: RecordApiJsonResponseEnum::UNAUTHORIZED->value
+            );
+        } catch (AuthorizationException $exception) {
+            return RecordApiResponseService::errorFromException(
+                exception: $exception,
+                message: $exception->getMessage(),
+                status: RecordApiJsonResponseEnum::FORBIDDEN->value
+            );
+        } catch (HttpExceptionInterface $exception) {
+            return RecordApiResponseService::errorFromException(
+                exception: $exception,
+                message: $exception->getMessage(),
+                status: $exception->getStatusCode()
+            );
+        } catch (Exception $exception) {
+            $code = (int) $exception->getCode();
+
+            return RecordApiResponseService::errorFromException(
+                exception: $exception,
+                message: $exception->getMessage(),
+                status: $code >= 400 && $code <= 499 ? $code : RecordApiJsonResponseEnum::SERVER_ERROR->value
             );
         }
     }

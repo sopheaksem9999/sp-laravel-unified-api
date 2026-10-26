@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace Sopheak\Core;
 
+use Illuminate\Http\JsonResponse;
+use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Laravel\Mcp\Server\McpServiceProvider;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Laravel\Mcp\Facades\Mcp;
 use Sopheak\Core\Mcp\Servers\DataServer;
 use Sopheak\Core\Mcp\Servers\SchemaServer;
@@ -95,6 +99,48 @@ class CoreSpLaravelApiProvider extends ServiceProvider
         if (class_exists(S3MultipartDriver::class)) {
             $this->app->bind(AttachmentMultipartDriver::class, S3MultipartDriver::class);
         }
+    }
+
+    /**
+     * Keep errors Laravel raises outside the controllers inside the package's
+     * `{success, error_code, message, errors, meta}` envelope: the unknown-table
+     * 404 from the `{table}` route binding and the `throttle` middleware's 429.
+     * Requests that did not match a package route keep Laravel's own rendering.
+     */
+    private function registerEnvelopeRenderers(): void
+    {
+        $handler = $this->app->make(ExceptionHandler::class);
+        if (!method_exists($handler, 'renderable')) {
+            return;
+        }
+
+        $isPackageRoute = static function (Request $request): bool {
+            $route = $request->route();
+
+            return is_object($route) && method_exists($route, 'gatherMiddleware')
+                && in_array('request.id', $route->gatherMiddleware(), true);
+        };
+
+        $handler->renderable(static function (NotFoundHttpException $exception, Request $request) use ($isPackageRoute): ?JsonResponse {
+            if (!$isPackageRoute($request) || !str_starts_with($exception->getMessage(), 'Dynamic Table [')) {
+                return null;
+            }
+
+            return RecordApiResponseService::errorWrapped($exception->getMessage(), 404);
+        });
+
+        $handler->renderable(static function (ThrottleRequestsException $exception, Request $request) use ($isPackageRoute): ?JsonResponse {
+            if (!$isPackageRoute($request)) {
+                return null;
+            }
+
+            $response = RecordApiResponseService::errorWrapped('Too Many Requests', 429);
+            foreach ($exception->getHeaders() as $name => $value) {
+                $response->headers->set($name, is_array($value) ? $value : (string) $value);
+            }
+
+            return $response;
+        });
     }
 
     public function boot(): void
@@ -207,6 +253,8 @@ class CoreSpLaravelApiProvider extends ServiceProvider
                 }
             });
         }
+
+        $this->registerEnvelopeRenderers();
 
         Route::bind('table', function (string $value): string {
             $tableConfig = RecordConfigService::getTableConfig($value);

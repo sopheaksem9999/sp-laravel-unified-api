@@ -1018,7 +1018,8 @@ class RecordApiResponseService
             'success' => false,
             'error_code' => $resolvedErrorCode,
             'message' => $message,
-            'errors' => $errors,
+            // An empty array would serialise as `[]`; clients get an object either way.
+            'errors' => [] === $errors ? new stdClass() : $errors,
             'meta' => $meta,
         ], $httpStatus);
     }

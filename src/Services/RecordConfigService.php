@@ -98,6 +98,14 @@ class RecordConfigService
         return (int) config('record.per_page_max', 10000);
     }
 
+    /**
+     * Page size used when a paginated request omits `per_page`; capped by per_page_max.
+     */
+    public static function defaultPerPage(): int
+    {
+        return max(1, min((int) config('record.default_per_page', 25), self::perPageMax()));
+    }
+
     public static function limitMax(): int
     {
         return (int) config('record.limit_max', 10000);

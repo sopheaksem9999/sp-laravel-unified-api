@@ -4,6 +4,35 @@ All notable changes to `sp-laravel-api` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.06] - 2026-10-26
+
+### Security
+
+- **Audit stats, field timeline and field stats are pinned to the request's tenant** (bug report 2026-10-26): `sp_audit_logs/rpc/stats` aggregated every tenant unless the caller sent `tenant_id`. With tenancy on, all three audit functions now resolve the tenant like table reads (`resolved_tenant_id`, then the tenant header) and always apply it; a `tenant_id` parameter that differs is `403`, and a missing tenant is `422`.
+- **The webhook endpoint `secret` is write-only**: `GET /sp_webhook_endpoints` returned the HMAC signing secret to anyone who could read endpoints. It is now a hidden column; `WebhookTrigger` reads it straight from the database to sign deliveries. Clients already supply the secret on create/update, so nothing needs to change on write.
+
+### Fixed
+
+- **Attachment `url` / `download_url` carry the `rpc` segment**: they were `…/{route_prefix}/{id}/view`, which 404s with the default `rpc_prefix`. They are now `…/{route_prefix}/{rpc_prefix}/{id}/view|download`, like `preview_url` (no segment when `rpc_prefix` is empty). Hosts that cached or hard-coded the old shape must update it.
+- **Linking attachments takes `attachment_ids[]`**: `POST …/record/{table}/{record_id}` accepts the `attachment_ids` array the OpenAPI schema and docs describe (idempotent per id, nothing linked if one id is unknown) and still accepts the single `attachment_id`.
+- **Errors thrown inside functions keep their status**: every exception in a table/global function was `500`. `ValidationException` is now `422` with `errors`, `AuthenticationException` `401`, `AuthorizationException` `403`, HTTP exceptions their own status, and an exception with a `4xx` code that code. A function's raw JSON error keeps its `message` at the top level. `AuditLogController` throws `AuthenticationException` / `AuthorizationException`.
+- **Audit field timeline and field stats accept UUID ids**: `entityId` was cast to `int`, so UUID-keyed tables always returned nothing.
+- **`with_trashed` / `only_trashed` apply to the embed fast path**: lists with `select=…,relation(*)` and `show` re-queried by id with `deleted_at IS NULL` regardless of the flags.
+- **A paginated list without `per_page` returns 25 rows, not `limit_max`**: offset and cursor modes now default to the new `record.default_per_page` (25, capped by `per_page_max`), as the docs and OpenAPI already said.
+- **Values with commas can be filtered exactly**: `eq` / `neq` compare the whole value (`eq.Acme, Inc.`); a list is the explicit `eq.(a,b)`. Items in `in`, `not_in`, `eq`/`neq` lists and in `or=(…)` / `and=(…)` groups can be double-quoted (`in.("Acme, Inc.",B)`, escapes `\"` and `\\`).
+- **`not.` no longer silently drops filters**: `not.contains`, `not.starts_with`, `not.ends_with` and `not.date_*` work (new operators `not_starts_with`, `not_ends_with`, `date_neq`); a `not.` on an operator with no negated form, and an unknown aggregate function, column or missing column, answer `422`.
+- **Error envelope**: an unknown `{table}` (`404`) and a throttled request (`429`, `Retry-After` kept) use the `{success, error_code, message, errors, meta}` envelope, and an empty `errors` is `{}` instead of `[]`.
+- **Bulk upsert broadcasts**: `POST {table}/bulk/upsert` sends one batched `RecordMutated` (`upserted`, with `count`, `match_on` and the submitted `keys`). It still skips per-row hooks and audit rows (one raw upsert); the docs now say so. The documented action list matches what is sent: `force_deleted` was never sent (force delete broadcasts `deleted`) and is no longer listed.
+- **Docs and OpenAPI aligned with the code**: `{table}/{id}` documents `PATCH`, `errors` is an object, `10001` is marked reserved, `record.rate_limits` is described as not enforced, the audit endpoint pages use `sp_audit_logs` and the real response shapes, and the webhook page no longer names a missing `WebhookService`.
+
+### Notes
+
+- **Upgrade note — `eq` / `neq` no longer split on commas**: `eq.a,b` is now the single value `a,b`. Use `eq.(a,b)` or `in.a,b` for a list. Review saved queries and clients that relied on the old list form.
+- **Upgrade note — default page size**: a request with `page=` / `cursor=` and no `per_page` returned up to `limit_max` rows before; set `record.default_per_page` (or send `per_page`) if a client relied on that. Requests without any paging parameter still use `limit` / `limit_max`.
+- **Upgrade note — attachment URLs**: embedded `url` / `download_url` now include the `rpc` segment; the old form never resolved with the default config.
+- The shipped `llms.txt` and the `sp-laravel-api-docs` site (outside this repository) still list the dead links `api-documentation.md`, `audit-interface.md` and `cursor-pagination.md`; fix them there.
+
+
 ## [0.5.05] - 2026-10-24
 
 ### Fixed

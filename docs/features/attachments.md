@@ -35,9 +35,11 @@ The attachment module provides dynamic endpoints for file management using `Reco
 
 - `POST /{api_prefix}/{attachment_prefix}/upload`
 - `POST /{api_prefix}/{attachment_prefix}/clone-temp`
-- `GET /{api_prefix}/{attachment_prefix}/{id}/view` (optional read-time resizing)
-- `GET /{api_prefix}/{attachment_prefix}/{id}/download`
-- `GET|POST /{api_prefix}/{attachment_prefix}/record/{table}/{record_id}`
+- `GET /{api_prefix}/{attachment_prefix}/{rpc_prefix}/{id}/view` (optional read-time resizing)
+- `GET /{api_prefix}/{attachment_prefix}/{rpc_prefix}/{id}/download`
+
+With the default `rpc_prefix` (`rpc`) the `url` and `download_url` fields on an attachment carry the `rpc` segment (`…/sp_attachments/rpc/{id}/view`), like `preview_url`. With an empty `rpc_prefix` the segment is omitted.
+- `GET|POST /{api_prefix}/{attachment_prefix}/record/{table}/{record_id}` (POST body: `attachment_ids` array, or the legacy single `attachment_id`)
 - `DELETE /{api_prefix}/{attachment_prefix}/record/{table}/{record_id}/{attachment_id}`
 - `GET|POST /{api_prefix}/{attachment_prefix}/folders`
 - `PUT|PATCH|DELETE /{api_prefix}/{attachment_prefix}/folders/{id}`

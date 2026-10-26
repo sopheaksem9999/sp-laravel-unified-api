@@ -657,21 +657,21 @@ class QueryBuilderFiltersUtils
 
         switch ($operator) {
             case 'eq':
-                $value = self::normalizePostgrestListValue($value);
-                if (str_contains((string) $value, ',')) {
-                    $subquery->whereIn($fullColumn, array_map(trim(...), explode(',', (string) $value)));
+                $operand = self::equalityOperand($value);
+                if (is_array($operand)) {
+                    $subquery->whereIn($fullColumn, $operand);
                 } else {
-                    $subquery->where($fullColumn, '=', $value);
+                    $subquery->where($fullColumn, '=', $operand);
                 }
 
                 break;
 
             case 'neq':
-                $value = self::normalizePostgrestListValue($value);
-                if (str_contains((string) $value, ',')) {
-                    $subquery->whereNotIn($fullColumn, array_map(trim(...), explode(',', (string) $value)));
+                $operand = self::equalityOperand($value);
+                if (is_array($operand)) {
+                    $subquery->whereNotIn($fullColumn, $operand);
                 } else {
-                    $subquery->where($fullColumn, '!=', $value);
+                    $subquery->where($fullColumn, '!=', $operand);
                 }
 
                 break;
@@ -712,16 +712,12 @@ class QueryBuilderFiltersUtils
                 break;
 
             case 'in':
-                $value = self::normalizePostgrestListValue($value);
-                $values = array_map(trim(...), explode(',', (string) $value));
-                $subquery->whereIn($fullColumn, $values);
+                $subquery->whereIn($fullColumn, self::listItems($value));
 
                 break;
 
             case 'not_in':
-                $value = self::normalizePostgrestListValue($value);
-                $values = array_map(trim(...), explode(',', (string) $value));
-                $subquery->whereNotIn($fullColumn, $values);
+                $subquery->whereNotIn($fullColumn, self::listItems($value));
 
                 break;
 
@@ -745,6 +741,16 @@ class QueryBuilderFiltersUtils
 
                 break;
 
+            case 'not_starts_with':
+                $subquery->where($fullColumn, 'not like', $value . '%');
+
+                break;
+
+            case 'not_ends_with':
+                $subquery->where($fullColumn, 'not like', '%' . $value);
+
+                break;
+
             case 'between':
                 $values = array_map(trim(...), explode(',', (string) $value));
                 if (2 === count($values)) {
@@ -763,6 +769,11 @@ class QueryBuilderFiltersUtils
 
             case 'date_eq':
                 $subquery->whereDate($fullColumn, $value);
+
+                break;
+
+            case 'date_neq':
+                $subquery->whereDate($fullColumn, '!=', $value);
 
                 break;
 
@@ -933,46 +944,46 @@ class QueryBuilderFiltersUtils
                 break;
 
             case 'eq':
-                $value = self::normalizePostgrestListValue($value);
+                $operand = self::equalityOperand($value);
                 if ($isMultiple) {
-                    $builder->where(function ($q) use ($columns, $value, $table): void {
+                    $builder->where(function ($q) use ($columns, $operand, $table): void {
                         foreach ($columns as $column) {
-                            if (str_contains((string) $value, ',')) {
-                                $q->orWhereIn($table . '.' . $column, array_map(trim(...), explode(',', (string) $value)));
+                            if (is_array($operand)) {
+                                $q->orWhereIn($table . '.' . $column, $operand);
                             } else {
-                                $q->orWhere($table . '.' . $column, '=', $value);
+                                $q->orWhere($table . '.' . $column, '=', $operand);
                             }
                         }
                     });
                 } else {
                     $keyCol = $columns[0];
-                    if (str_contains((string) $value, ',')) {
-                        $builder->whereIn($table . '.' . $keyCol, array_map(trim(...), explode(',', (string) $value)));
+                    if (is_array($operand)) {
+                        $builder->whereIn($table . '.' . $keyCol, $operand);
                     } else {
-                        $builder->where($table . '.' . $keyCol, '=', $value);
+                        $builder->where($table . '.' . $keyCol, '=', $operand);
                     }
                 }
 
                 break;
 
             case 'neq':
-                $value = self::normalizePostgrestListValue($value);
+                $operand = self::equalityOperand($value);
                 if ($isMultiple) {
-                    $builder->where(function ($q) use ($columns, $value, $table): void {
+                    $builder->where(function ($q) use ($columns, $operand, $table): void {
                         foreach ($columns as $column) {
-                            if (str_contains((string) $value, ',')) {
-                                $q->orWhereNotIn($table . '.' . $column, array_map(trim(...), explode(',', (string) $value)));
+                            if (is_array($operand)) {
+                                $q->orWhereNotIn($table . '.' . $column, $operand);
                             } else {
-                                $q->orWhere($table . '.' . $column, '!=', $value);
+                                $q->orWhere($table . '.' . $column, '!=', $operand);
                             }
                         }
                     });
                 } else {
                     $keyCol = $columns[0];
-                    if (str_contains((string) $value, ',')) {
-                        $builder->whereNotIn($table . '.' . $keyCol, array_map(trim(...), explode(',', (string) $value)));
+                    if (is_array($operand)) {
+                        $builder->whereNotIn($table . '.' . $keyCol, $operand);
                     } else {
-                        $builder->where($table . '.' . $keyCol, '!=', $value);
+                        $builder->where($table . '.' . $keyCol, '!=', $operand);
                     }
                 }
 
@@ -1073,8 +1084,7 @@ class QueryBuilderFiltersUtils
                 break;
 
             case 'in':
-                $value = self::normalizePostgrestListValue($value);
-                $vals = array_map(trim(...), explode(',', (string) $value));
+                $vals = self::listItems($value);
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $vals, $table): void {
                         foreach ($columns as $column) {
@@ -1113,6 +1123,32 @@ class QueryBuilderFiltersUtils
 
                 break;
 
+            case 'not_starts_with':
+                if ($isMultiple) {
+                    $builder->where(function ($q) use ($columns, $value, $table): void {
+                        foreach ($columns as $column) {
+                            $q->orWhere($table . '.' . $column, 'not like', $value . '%');
+                        }
+                    });
+                } else {
+                    $builder->where($table . '.' . $columns[0], 'not like', $value . '%');
+                }
+
+                break;
+
+            case 'not_ends_with':
+                if ($isMultiple) {
+                    $builder->where(function ($q) use ($columns, $value, $table): void {
+                        foreach ($columns as $column) {
+                            $q->orWhere($table . '.' . $column, 'not like', '%' . $value);
+                        }
+                    });
+                } else {
+                    $builder->where($table . '.' . $columns[0], 'not like', '%' . $value);
+                }
+
+                break;
+
             case 'not_like':
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $value, $table): void {
@@ -1127,8 +1163,7 @@ class QueryBuilderFiltersUtils
                 break;
 
             case 'not_in':
-                $value = self::normalizePostgrestListValue($value);
-                $vals = array_map(trim(...), explode(',', (string) $value));
+                $vals = self::listItems($value);
                 if ($isMultiple) {
                     $builder->where(function ($q) use ($columns, $vals, $table): void {
                         foreach ($columns as $column) {
@@ -1227,6 +1262,19 @@ class QueryBuilderFiltersUtils
                     });
                 } else {
                     $builder->whereDate($table . '.' . $columns[0], '=', $value);
+                }
+
+                break;
+
+            case 'date_neq':
+                if ($isMultiple) {
+                    $builder->where(function ($q) use ($columns, $value, $table): void {
+                        foreach ($columns as $column) {
+                            $q->orWhereDate($table . '.' . $column, '!=', $value);
+                        }
+                    });
+                } else {
+                    $builder->whereDate($table . '.' . $columns[0], '!=', $value);
                 }
 
                 break;
@@ -1644,7 +1692,7 @@ class QueryBuilderFiltersUtils
             $column = null !== $column ? trim($column) : null;
 
             if (!in_array($func, ['count', 'sum', 'avg', 'min', 'max'], true)) {
-                continue;
+                throw new InvalidArgumentException(sprintf("Unsupported aggregate function '%s' in '%s'. Use count, sum, avg, min or max.", $func, $token));
             }
 
             $colName = $column;
@@ -1654,11 +1702,11 @@ class QueryBuilderFiltersUtils
             }
 
             if ($colName && !in_array($colName, $allowedCols, true)) {
-                continue;
+                throw new InvalidArgumentException(sprintf("Unknown column '%s' in aggregate '%s'.", $colName, $token));
             }
 
             if ('count' !== $func && !$colName) {
-                continue;
+                throw new InvalidArgumentException(sprintf("Aggregate '%s' needs a column, e.g. '%s:column'.", $token, $func));
             }
 
             $alias = $func . ($colName ? '_' . $colName : '');
@@ -2258,8 +2306,30 @@ class QueryBuilderFiltersUtils
         $depth = 0;
         $length = strlen($value);
 
+        $inQuotes = false;
+
         for ($i = 0; $i < $length; ++$i) {
             $char = $value[$i];
+
+            // A double-quoted item (`"Acme, Inc."`) keeps its commas and parentheses.
+            if ($inQuotes) {
+                $buffer .= $char;
+                if ('\\' === $char && $i + 1 < $length) {
+                    $buffer .= $value[++$i];
+                } elseif ('"' === $char) {
+                    $inQuotes = false;
+                }
+
+                continue;
+            }
+
+            if ('"' === $char) {
+                $inQuotes = true;
+                $buffer .= $char;
+
+                continue;
+            }
+
             if ('(' === $char) {
                 ++$depth;
             } elseif (')' === $char && $depth > 0) {
@@ -2371,6 +2441,95 @@ class QueryBuilderFiltersUtils
         }
 
         return $trimmed;
+    }
+
+    /**
+     * Items of an `in` / `not_in` list, with or without the surrounding parentheses.
+     *
+     * @return string[]
+     */
+    private static function listItems(?string $value): array
+    {
+        return self::splitList((string) self::normalizePostgrestListValue($value));
+    }
+
+    /**
+     * The operand of `eq` / `neq`: the whole value as one string, or a list of
+     * items only for an explicit parenthesised list (`eq.(a,b)`). Commas in a
+     * bare value are data (`eq.Acme, Inc.`), and a double-quoted value keeps its
+     * commas and parentheses (`eq."(draft)"`). A one-item list is a plain value.
+     *
+     * @return string|string[]|null
+     */
+    private static function equalityOperand(?string $value): string|array|null
+    {
+        if (!is_string($value)) {
+            return $value;
+        }
+
+        $trimmed = trim($value);
+        if (str_starts_with($trimmed, '(') && str_ends_with($trimmed, ')') && strlen($trimmed) >= 2) {
+            $items = self::splitList(substr($trimmed, 1, -1));
+
+            return 1 === count($items) ? $items[0] : $items;
+        }
+
+        if (str_starts_with($trimmed, '"')) {
+            $items = self::splitList($trimmed);
+
+            return 1 === count($items) ? $items[0] : $items;
+        }
+
+        return $trimmed;
+    }
+
+    /**
+     * Split a comma-separated list. Items are trimmed; an item wrapped in double
+     * quotes keeps commas and parentheses, with `\"` and `\\` as escapes
+     * (PostgREST syntax: `"Acme, Inc.",B`).
+     *
+     * @return string[]
+     */
+    public static function splitList(string $value): array
+    {
+        $items = [];
+        $current = '';
+        $quoted = false;
+        $inQuotes = false;
+        $length = strlen($value);
+
+        for ($i = 0; $i < $length; ++$i) {
+            $char = $value[$i];
+
+            if ($inQuotes) {
+                if ('\\' === $char && $i + 1 < $length && ('"' === $value[$i + 1] || '\\' === $value[$i + 1])) {
+                    $current .= $value[++$i];
+                } elseif ('"' === $char) {
+                    $inQuotes = false;
+                } else {
+                    $current .= $char;
+                }
+
+                continue;
+            }
+
+            if ('"' === $char && '' === trim($current) && !$quoted) {
+                $current = '';
+                $quoted = true;
+                $inQuotes = true;
+            } elseif (',' === $char) {
+                $items[] = $quoted ? $current : trim($current);
+                $current = '';
+                $quoted = false;
+            } elseif (!$quoted || '' !== trim($char)) {
+                // Text after a closing quote is kept as typed.
+                $current .= $char;
+            }
+        }
+
+        $items[] = $quoted ? $current : trim($current);
+
+        return $items;
     }
 
     /**
@@ -2488,7 +2647,7 @@ class QueryBuilderFiltersUtils
 
             $mappedOperator = self::mapNegatedOperator($parsed['operator']);
             if (null === $mappedOperator) {
-                return null;
+                throw new InvalidArgumentException(sprintf("Operator '%s' has no negated form; 'not.%s' is not supported.", $parsed['operator'], $parsed['operator']));
             }
 
             return [

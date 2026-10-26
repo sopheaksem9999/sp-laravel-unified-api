@@ -1,6 +1,6 @@
 ---
 title: "Audit Management Endpoints"
-description: "Audit logs, statistics, field timeline, field statistics, create audit log, and cleanup endpoints."
+description: "Audit logs, statistics, field timeline and field statistics endpoints."
 keywords:
   - audit endpoints
   - audit logs
@@ -25,7 +25,7 @@ Audit title, subject, and recap labels are configurable via `config/audit.php`:
 ### Get Audit Logs
 
 ```http
-GET /{api_prefix}/audit_logs
+GET /{api_prefix}/sp_audit_logs
 ```
 
 Retrieve audit logs using the standard dynamic CRUD API. You can use standard filters.
@@ -43,7 +43,7 @@ Filters use the standard `{column}={operator}.{value}` syntax described in the "
 #### Example Request
 
 ```http
-GET /api/v1/audit_logs?entity_type=eq.invoices&entity_id=eq.123&per_page=20
+GET /api/v1/sp_audit_logs?entity_type=eq.invoices&entity_id=eq.123&per_page=20
 Authorization: Bearer {access_token}
 ```
 
@@ -77,15 +77,14 @@ Authorization: Bearer {access_token}
 ### Get Audit Statistics
 
 ```http
-GET /{api_prefix}/audit_logs/rpc/stats
+GET /{api_prefix}/sp_audit_logs/rpc/stats
 ```
 
-Get audit statistics and metrics.
+Get audit statistics and metrics. Stats, field timeline and field stats are always scoped to the request's tenant (the tenant header, resolved like table reads) when tenancy is on; a `tenant_id` parameter may repeat that tenant but a different one is rejected with `403`. A caller without the `manage-audit-logs` gate gets `403` (`401` when unauthenticated).
 
 #### Query Parameters
 
 - `entity_type` (string) - Filter by entity type (table name)
-- `entity_id` (integer) - Filter by specific entity ID
 - `start_date` (date: Y-m-d) - Filter from date
 - `end_date` (date: Y-m-d) - Filter to date (must be >= start_date)
 - `event` (string) - Filter by event type (`created`, `updated`, `deleted`, `login`, `logout`, `failed_login`)
@@ -97,16 +96,10 @@ Get audit statistics and metrics.
   "success": true,
   "error_code": 0,
   "data": {
-    "total_logs": 45,
-    "actions_breakdown": {
-      "created": 10,
-      "updated": 30,
-      "deleted": 5
-    },
-    "top_users": [{ "user_name": "John Admin", "count": 20 }],
-    "entity_types": {
-      "invoices": 45
-    }
+    "total": 45,
+    "by_event": { "created": 10, "updated": 30, "deleted": 5 },
+    "by_user": { "5": 20, "7": 25 },
+    "by_entity": { "invoices": 45 }
   }
 }
 ```
@@ -114,7 +107,7 @@ Get audit statistics and metrics.
 ### Get Field Timeline
 
 ```http
-GET /{api_prefix}/audit_logs/rpc/field-timeline/{entityType}/{entityId}/{field}
+GET /{api_prefix}/sp_audit_logs/rpc/field-timeline/{entityType}/{entityId}/{field}
 ```
 
 Get timeline of changes for a specific field.
@@ -122,7 +115,7 @@ Get timeline of changes for a specific field.
 #### Path Parameters (Required)
 
 - `entityType` (string) - Entity type (e.g., `invoices`)
-- `entityId` (integer) - Entity ID
+- `entityId` (string) - Entity ID, as stored in `entity_id` (integer or UUID)
 - `field` (string) - Field name (e.g., `status`)
 
 #### Optional Parameters
@@ -137,24 +130,20 @@ Get timeline of changes for a specific field.
   "error_code": 0,
   "data": [
     {
-      "id": 1001,
-      "changed_at": "2024-01-15T11:30:00Z",
+      "audit_log_id": 1001,
+      "event": "updated",
+      "user_id": 5,
+      "created_at": "2024-01-15T11:30:00Z",
       "old_value": "draft",
-      "new_value": "sent",
-      "change_type": "updated",
-      "data_type": "string",
-      "user_name": "John Admin",
-      "event": "updated"
+      "new_value": "sent"
     },
     {
-      "id": 990,
-      "changed_at": "2024-01-10T09:15:00Z",
+      "audit_log_id": 990,
+      "event": "created",
+      "user_id": 7,
+      "created_at": "2024-01-10T09:15:00Z",
       "old_value": null,
-      "new_value": "draft",
-      "change_type": "created",
-      "data_type": "string",
-      "user_name": "Jane User",
-      "event": "created"
+      "new_value": "draft"
     }
   ]
 }
@@ -163,7 +152,7 @@ Get timeline of changes for a specific field.
 ### Get Field Statistics
 
 ```http
-GET /{api_prefix}/audit_logs/rpc/field-stats/{entityType}/{entityId}/{field}
+GET /{api_prefix}/sp_audit_logs/rpc/field-stats/{entityType}/{entityId}/{field}
 ```
 
 Get statistics for a specific field across an entity.
@@ -171,7 +160,7 @@ Get statistics for a specific field across an entity.
 #### Path Parameters (Required)
 
 - `entityType` (string) - Entity type
-- `entityId` (integer) - Entity ID
+- `entityId` (string) - Entity ID, as stored in `entity_id` (integer or UUID)
 - `field` (string) - Field name
 
 #### Response Format
@@ -182,13 +171,11 @@ Get statistics for a specific field across an entity.
   "error_code": 0,
   "data": {
     "total_changes": 150,
+    "changed_by_users": { "5": 80, "7": 70 },
+    "value_frequency": { "sent": 90, "draft": 60 },
+    "current_value": "sent",
     "first_changed_at": "2024-01-01T08:00:00Z",
-    "last_changed_at": "2024-01-15T11:30:00Z",
-    "changes_by_user": {
-      "John Admin": 80,
-      "Jane User": 70
-    },
-    "field_name": "status"
+    "last_changed_at": "2024-01-15T11:30:00Z"
   }
 }
 ```
@@ -196,7 +183,7 @@ Get statistics for a specific field across an entity.
 ### Get Specific Audit Log
 
 ```http
-GET /{api_prefix}/audit_logs/{id}
+GET /{api_prefix}/sp_audit_logs/{id}
 ```
 
 Retrieve a specific audit log by ID. This uses the standard read endpoint since read access is allowed (`canRead: true`).

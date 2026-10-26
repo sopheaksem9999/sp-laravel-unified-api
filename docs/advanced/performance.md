@@ -56,7 +56,7 @@ Response meta:
 | `cursor` | — | The cursor value (usually the last record's ID from previous page) |
 | `direction` | `next` | `next` or `prev` |
 | `cursor_column` | `id` | Column to cursor on. Composite cursors auto-enable when this differs from the primary key |
-| `per_page` | 25 | Page size (capped at `per_page_max`) |
+| `per_page` | 25 (`record.default_per_page`) | Page size (capped at `per_page_max`) |
 
 Composite cursors (`cursor_column` != primary key) generate stable ordering via `WHERE (cursor_col, id) > (?, ?)` to handle non-unique sort values.
 

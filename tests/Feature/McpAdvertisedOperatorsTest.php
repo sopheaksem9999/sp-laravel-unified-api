@@ -127,7 +127,7 @@ class McpAdvertisedOperatorsTest extends TestCase
         }
 
         $this->assertGreaterThan(10, count($tested));
-        $this->assertNotContains('contains', $negatable);
+        $this->assertContains('contains', $negatable);
     }
 
     public function test_an_operator_the_driver_cannot_run_is_rejected(): void

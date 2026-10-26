@@ -139,6 +139,9 @@ return [
     // Maximum items returned per page for list endpoints
     'per_page_max' => 10000,
 
+    // Page size when a paginated request (page=, cursor=) omits per_page (capped by per_page_max)
+    'default_per_page' => 25,
+
     // Maximum items returned for limit parameter (non-paginated requests)
     'limit_max' => 10000,
 

@@ -139,7 +139,7 @@ X-Cursor: 1025
 | `cursor` | — | The opaque cursor token returned as `meta.cursor` by the previous page |
 | `direction` | `next` | `next` or `prev` |
 | `cursor_column` | the sorted column | Column to cursor on. Defaults to whatever `sortby` resolved to — `created_at` when the table has one, otherwise the primary key. Automatically uses composite cursors when the column differs from the primary key |
-| `per_page` | 25 | Page size (capped at `per_page_max`) |
+| `per_page` | 25 (`record.default_per_page`) | Page size (capped at `per_page_max`) |
 
 ### Composite Cursors
 

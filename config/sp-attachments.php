@@ -432,10 +432,11 @@ return [
                     payloadSchema: [
                         'type' => 'object',
                         'properties' => [
-                            'attachment_ids' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'Array of attachment IDs to link (required for POST)'],
+                            'attachment_ids' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'Array of attachment IDs to link (idempotent per id); required for POST unless attachment_id is sent'],
+                            'attachment_id' => ['type' => 'string', 'description' => 'Single attachment ID to link (legacy form; use attachment_ids)'],
                             'collection_name' => ['type' => 'string', 'description' => 'Collection name for the link'],
                         ],
-                        'required' => ['attachment_ids'],
+                        'anyOf' => [['required' => ['attachment_ids']], ['required' => ['attachment_id']]],
                     ]
                 ),
                 'record/{table}/{record_id}/{attachment_id}' => new RecordFunctionType(

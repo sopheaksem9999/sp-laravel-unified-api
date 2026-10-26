@@ -11,7 +11,7 @@ keywords:
 
 ### Broadcast Events (Real-Time Mutations)
 
-When `record.broadcast_events` is enabled, the package fires a `RecordMutated` event over Laravel's broadcasting system after every successful mutation made through the HTTP API (create, update, upsert, delete, restore, force-delete, bulk) or the MCP / AI SDK tools (`record.mcp.run_record_hooks`). Your own `RecordService::execute*` calls do not broadcast.
+When `record.broadcast_events` is enabled, the package fires a `RecordMutated` event over Laravel's broadcasting system after every successful mutation made through the HTTP API (create, update, upsert, delete, restore, force-delete, bulk; bulk upsert sends one batched `upserted` event) or the MCP / AI SDK tools (`record.mcp.run_record_hooks`). Your own `RecordService::execute*` calls do not broadcast.
 
 #### Enabling Broadcasting
 
@@ -46,7 +46,11 @@ Set `SP_BROADCAST_EVENTS=true` in your `.env`. Configure your broadcast driver (
 }
 ```
 
-`action` is one of: `created`, `updated`, `upserted`, `deleted`, `restored`, `force_deleted`.
+`action` is one of: `created`, `updated`, `upserted`, `deleted`, `restored`.
+
+- `upserted` is sent only by `POST {table}/bulk/upsert`, as **one batched event** per request. Its `record` is `{ count, match_on, keys }`, where `keys` lists the `match_on` values of every submitted row (hidden columns removed). A single `POST {table}/upsert` broadcasts `created` or `updated` instead.
+- A force delete (`DELETE {table}/{id}/force`) broadcasts `deleted`.
+- Bulk upsert writes with one raw database upsert, so it does **not** run per-row hooks or write audit rows, and it invalidates the table cache, not individual record caches.
 
 #### Per-Table Opt-Out
 

@@ -41,6 +41,10 @@ keywords:
 }
 ```
 
+`errors` is always an object (`{}` when there are no field errors), and every API error uses this envelope — including an unknown `{table}` (`404`, `10009`) and a throttled request (`429`, with `Retry-After`).
+
+Exceptions thrown inside a table or global function map to their own status: a failed `$request->validate()` / `ValidationException` is `422` with `errors`, `AuthenticationException` is `401`, `AuthorizationException` is `403`, an HTTP exception keeps its status, and an exception whose code is a `4xx` uses it. Anything else is `500`. A function that returns its own `response()->json(['message' => …], 4xx)` keeps `message` at the top level.
+
 `error_code` is a stable, machine-friendly code that complements the HTTP status:
 
 - On success responses it is always the success code.
@@ -52,7 +56,7 @@ The package uses a fixed set of numeric `error_code` values to make client-side 
 
 - `0` – **SUCCESS**: Request completed successfully.
 - `10000` – **GENERAL_ERROR**: Generic error when no more specific category applies.
-- `10001` – **INVALID_TENANT_ID**: Tenant identifier is missing, malformed, or does not match the current context.
+- `10001` – **INVALID_TENANT_ID**: Reserved, not currently returned. A missing tenant header answers `422` with `10004`.
 - `10002` – **INVALID_ACCESS**: Unauthorized access (typically HTTP 401) – missing or invalid authentication for the requested resource.
 - `10003` – **INVALID_TOKEN**: Authentication token is invalid (bad signature, malformed, or otherwise unusable).
 - `10004` – **INVALID_REQUEST**: Request payload or query parameters are invalid (commonly used for validation errors / HTTP 422).
@@ -105,7 +109,7 @@ The Data MCP routes are not in these groups; add a `throttle:` entry to `record.
 
 #### Per-Table Rate Limits
 
-For dynamic CRUD writes, you can specify custom rate limits on a per-table basis directly in `config/record.php`. This allows you to define stricter or more lenient limits depending on the table.
+`config/record.php` accepts a `rate_limits` declaration per table:
 
 ```php
 'rate_limits' => [
@@ -119,7 +123,7 @@ For dynamic CRUD writes, you can specify custom rate limits on a per-table basis
 ],
 ```
 
-These limits override the global API write limits for the specified table operations.
+`record.rate_limits` is only read by `sp-laravel-api:validate`; the package does **not** enforce it. Set limits through the `api-reads`, `api-writes` and `api-functions` rate limiters in your application.
 
 ### Security Considerations
 

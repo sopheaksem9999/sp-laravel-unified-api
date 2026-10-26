@@ -80,6 +80,8 @@ curl -X POST "http://your-api.test/{api_prefix}/{attachment_prefix}/record/invoi
   }'
 ```
 
+`attachment_ids` links many attachments in one call and is idempotent per id (an existing link is returned, not duplicated); the response `data` is the list of links. If any id does not exist the call answers `404` (`Attachment not found`) and links none. The single-id body `{"attachment_id": "a_id"}` is still accepted and answers with one link.
+
 ### Option B: Upload and Auto-Link Per File
 
 Upload each file and include `record_type`, `record_id`, and optionally `collection_name`:

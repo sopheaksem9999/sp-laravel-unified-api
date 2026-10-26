@@ -12,7 +12,7 @@ keywords:
 
 The package follows [Semantic Versioning](https://semver.org) (MAJOR.MINOR.PATCH).
 
-- **Current version:** `0.5.05` (2026-10-24)
+- **Current version:** `0.5.06` (2026-10-26)
 - **Installation:** `composer require sopheak/sp-laravel-api`
 - **Full details:** see the [Changelog](/changelog)
 
@@ -20,6 +20,7 @@ The package follows [Semantic Versioning](https://semver.org) (MAJOR.MINOR.PATCH
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [0.5.06](/changelog#0506---2026-10-26) | 2026-10-26 | Audit stats/timeline pinned to the request tenant, webhook secret write-only, function errors keep their status (422/403/404), attachment URLs carry `rpc`, `attachment_ids[]` linking, exact `eq` with commas and quoted list items, `not.` on contains/starts_with/ends_with/date_*, default page size 25, error envelope for unknown table and 429 |
 | [0.5.05](/changelog#0505---2026-10-24) | 2026-10-24 | Cursor pagination: `select=` without the paging column, `direction=prev`, and `last_cursor` fixed; new `meta.prev_cursor` / `meta.next_cursor` |
 | [0.5.04](/changelog#0504---2026-10-03) | 2026-10-03 | AI SDK record tools, opt-in `laravel/mcp` driver, MCP/AI tools run record hooks and validators; security: nested child writes need the child permission, tenant-bound relationship filters, includes and cache, viewOwn in queued bulk jobs, permission checks through Laravel Gate |
 | [0.5.03](/changelog#0503---2026-09-30) | 2026-09-30 | SQL injection via X-Tenant-ID in relationship includes, viewOwn enforced on by-id reads/writes/relationships/cache, nested writes scoped by child tenant and owner, audit rows keep actor/IP/agent (queued and service-level CRUD) |
