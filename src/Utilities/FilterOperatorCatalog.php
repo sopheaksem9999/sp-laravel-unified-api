@@ -20,9 +20,9 @@ final class FilterOperatorCatalog
     /** Every operator token the engine understands, negated forms included. */
     public const NAMES = [
         'is', 'eq', 'neq', 'like', 'ilike', 'gt', 'lt', 'gte', 'lte', 'in', 'contains',
-        'between', 'not_between', 'starts_with', 'ends_with', 'not_like', 'not_in', 'is_not',
+        'between', 'not_between', 'starts_with', 'ends_with', 'not_starts_with', 'not_ends_with', 'not_like', 'not_in', 'is_not',
         'regex', 'not_regex', 'match', 'not_match', 'imatch', 'not_imatch', 'not_ilike',
-        'date_eq', 'date_gt', 'date_lt', 'date_gte', 'date_lte', 'empty', 'not_empty',
+        'date_eq', 'date_neq', 'date_gt', 'date_lt', 'date_gte', 'date_lte', 'empty', 'not_empty',
         'fts', 'not_fts', 'plfts', 'not_plfts', 'phfts', 'not_phfts', 'wfts', 'not_wfts',
         'cs', 'not_cs', 'cd', 'not_cd', 'ov', 'not_ov', 'sl', 'not_sl', 'sr', 'not_sr',
         'nxl', 'not_nxl', 'nxr', 'not_nxr', 'adj', 'not_adj',
@@ -56,7 +56,7 @@ final class FilterOperatorCatalog
 
     /**
      * What `not.{operator}.{value}` turns an operator into. An operator with no
-     * entry has no negated form: the engine drops a `not.` filter on it.
+     * entry has no negated form: the engine rejects a `not.` filter on it with 422.
      */
     private const NEGATIONS = [
         'eq' => 'neq',
@@ -64,6 +64,17 @@ final class FilterOperatorCatalog
         'in' => 'not_in',
         'not_in' => 'in',
         'like' => 'not_like',
+        'contains' => 'not_like',
+        'starts_with' => 'not_starts_with',
+        'not_starts_with' => 'starts_with',
+        'ends_with' => 'not_ends_with',
+        'not_ends_with' => 'ends_with',
+        'date_eq' => 'date_neq',
+        'date_neq' => 'date_eq',
+        'date_gt' => 'date_lte',
+        'date_gte' => 'date_lt',
+        'date_lt' => 'date_gte',
+        'date_lte' => 'date_gt',
         'ilike' => 'not_ilike',
         'is' => 'is_not',
         'is_not' => 'is',
@@ -121,9 +132,9 @@ final class FilterOperatorCatalog
      * Negated forms are not listed; "not." / "not_" negates any of them.
      */
     private const CATALOGUE = [
-        ['eq', 'eq.{value}', 'status=eq.open', 'Equal. A comma-separated list means IN', [self::T, self::N, self::D, self::B, self::J, self::A, self::U, self::R, self::O]],
-        ['neq', 'neq.{value}', 'status=neq.void', 'Not equal. A comma-separated list means NOT IN', [self::T, self::N, self::D, self::B, self::J, self::A, self::U, self::R, self::O]],
-        ['in', 'in.{a,b,c}', 'status=in.open,paid', 'Value is in the list', [self::T, self::N, self::D, self::U, self::O]],
+        ['eq', 'eq.{value}', 'status=eq.open', 'Equal to the whole value (commas included); an explicit list eq.(a,b) means IN', [self::T, self::N, self::D, self::B, self::J, self::A, self::U, self::R, self::O]],
+        ['neq', 'neq.{value}', 'status=neq.void', 'Not equal to the whole value; an explicit list neq.(a,b) means NOT IN', [self::T, self::N, self::D, self::B, self::J, self::A, self::U, self::R, self::O]],
+        ['in', 'in.{a,b,c}', 'status=in.open,paid', 'Value is in the list; double-quote items containing commas or parentheses: in.("Acme, Inc.",B)', [self::T, self::N, self::D, self::U, self::O]],
         ['not_in', 'not_in.{a,b,c}', 'status=not_in.void,draft', 'Value is not in the list', [self::T, self::N, self::D, self::U, self::O]],
         ['gt', 'gt.{value}', 'total=gt.100', 'Greater than', [self::N, self::D]],
         ['gte', 'gte.{value}', 'total=gte.100', 'Greater than or equal', [self::N, self::D]],

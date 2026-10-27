@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Services;
 
+use Sopheak\Core\Utilities\RecordUtils;
 use Throwable;
 use Sopheak\Core\Enums\AuditLogEventEnum;
 use Sopheak\Core\Jobs\AuditLogJob;
@@ -1439,14 +1440,16 @@ class AuditLogService
      * @param array<string, mixed> $filters Filters for querying stats (e.g. tenant_id, start_date, end_date, user_id, entity_type, event)
      * @return array<string, int|mixed[]>
      */
-    public static function getAuditStats(array $filters = []): array
+    public static function getAuditStats(array $filters = [], mixed $tenantId = null): array
     {
         $query = DB::table(RecordConfigService::auditLogModel());
 
         if (RecordConfigService::enableTenantId()) {
             $tenantColumn = RecordConfigService::tenantColumn();
-            if (!empty($filters[$tenantColumn])) {
-                $query->where($tenantColumn, $filters[$tenantColumn]);
+            // A resolved tenant always wins over a caller-supplied filter.
+            $tenantId ??= $filters[$tenantColumn] ?? null;
+            if (!RecordUtils::isTenantIdMissing($tenantId)) {
+                $query->where($tenantColumn, $tenantId);
             }
         }
 
@@ -1508,7 +1511,7 @@ class AuditLogService
      * @param string $field The field name to track.
      * @param int $limit Maximum number of history entries to return.
      */
-    public static function getFieldTimeline(string $entityType, int $entityId, string $field, int $limit = 50): array
+    public static function getFieldTimeline(string $entityType, string|int $entityId, string $field, int $limit = 50, mixed $tenantId = null): array
     {
         $hiddenCols = static::getHiddenColumnsForEntity($entityType);
         $excludedAttrs = RecordConfigService::auditExcludedAttributes();
@@ -1520,11 +1523,15 @@ class AuditLogService
 
         $query = DB::table(RecordConfigService::auditLogModel())
             ->where('entity_type', $tableName)
-            ->where('entity_id', $entityId)
+            ->where('entity_id', (string) $entityId)
             ->orderBy('created_at', 'desc');
 
-        if (RecordConfigService::enableTenantId() && request()->has(RecordConfigService::tenantColumn())) {
-            $query->where(RecordConfigService::tenantColumn(), request()->input(RecordConfigService::tenantColumn()));
+        if (RecordConfigService::enableTenantId()) {
+            $tenantColumn = RecordConfigService::tenantColumn();
+            $tenantId ??= request()->input($tenantColumn);
+            if (!RecordUtils::isTenantIdMissing($tenantId)) {
+                $query->where($tenantColumn, $tenantId);
+            }
         }
 
         // We fetch logs and filter them in memory because old_data/new_data are JSON and we want to ensure accuracy
@@ -1569,7 +1576,7 @@ class AuditLogService
      * @param string $field The field name to aggregate stats for.
      * @return array<string, mixed>
      */
-    public static function getFieldStats(string $entityType, int $entityId, string $field): array
+    public static function getFieldStats(string $entityType, string|int $entityId, string $field, mixed $tenantId = null): array
     {
         $hiddenCols = static::getHiddenColumnsForEntity($entityType);
         $excludedAttrs = RecordConfigService::auditExcludedAttributes();
@@ -1584,7 +1591,7 @@ class AuditLogService
             ];
         }
 
-        $timeline = self::getFieldTimeline($entityType, $entityId, $field, 10000);
+        $timeline = self::getFieldTimeline($entityType, $entityId, $field, 10000, $tenantId);
 
         $totalChanges = count($timeline);
         $users = [];

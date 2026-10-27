@@ -20,12 +20,12 @@ value-less shorthand form for `null`.
 ## Operators
 
 - `is.null`, `is_not.null` or simply `is`, `is_not` (equivalent to `IS NULL` / `IS NOT NULL`)
-- `eq.{value}`, `neq.{value}`, `in.{a,b,c}`, `not_in.{a,b,c}`
-- `like.{value}`, `contains.{value}`, `not_like.{value}`, `starts_with.{value}`, `ends_with.{value}`, `regex.{pattern}`
+- `eq.{value}`, `neq.{value}`, `in.{a,b,c}`, `not_in.{a,b,c}` (see [Values with commas](#values-with-commas-quotes-and-parentheses))
+- `like.{value}`, `contains.{value}`, `not_like.{value}`, `starts_with.{value}`, `not_starts_with.{value}`, `ends_with.{value}`, `not_ends_with.{value}`, `regex.{pattern}`
 - `ilike.{value}`, `match.{pattern}`, `imatch.{pattern}`
 - `gt.{value}`, `gte.{value}`, `lt.{value}`, `lte.{value}`
 - `between.{start,end}`, `not_between.{start,end}`
-- `date_eq.{YYYY-MM-DD}`, `date_gt.{YYYY-MM-DD}`, `date_gte.{YYYY-MM-DD}`, `date_lt.{YYYY-MM-DD}`, `date_lte.{YYYY-MM-DD}`
+- `date_eq.{YYYY-MM-DD}`, `date_neq.{YYYY-MM-DD}`, `date_gt.{YYYY-MM-DD}`, `date_gte.{YYYY-MM-DD}`, `date_lt.{YYYY-MM-DD}`, `date_lte.{YYYY-MM-DD}`
 - Full-text operators: `fts.{query}`, `plfts.{query}`, `phfts.{query}`, `wfts.{query}`
 - Native Postgres operators: `cs.{value}`, `cd.{value}`, `ov.{value}`, `sl.{value}`, `sr.{value}`, `nxl.{value}`, `nxr.{value}`, `adj.{value}`
 - `empty.null`, `not_empty.null` or simply `empty`, `not_empty`:
@@ -33,7 +33,8 @@ value-less shorthand form for `null`.
   - On non-text columns (e.g. integers), `empty` ⇔ `IS NULL`, `not_empty` ⇔ `IS NOT NULL`.
 - Negated style is also supported using expression syntax:
   - `not.eq.5`, `not.in.(1,2,3)`, `not.like.ACME`, `not.fts.invoice`
-  - Only operators with a negated form accept `not.` (`eq`, `neq`, `in`, `like`, `ilike`, `is`, `gt`/`gte`/`lt`/`lte`, `between`, `empty`, `regex`/`match`/`imatch` and the PostgreSQL families). `contains`, `starts_with`, `ends_with` and `date_*` have none, and a `not.` prefix on them is ignored — use another operator (for example `not_like`) instead.
+  - Negated forms: `not.contains` = `not_like`, `not.starts_with` = `not_starts_with`, `not.ends_with` = `not_ends_with`, `not.date_eq` = `date_neq`, and `not.date_gt`/`date_gte`/`date_lt`/`date_lte` flip to `date_lte`/`date_lt`/`date_gte`/`date_gt`. `eq`, `neq`, `in`, `like`, `ilike`, `is`, `gt`/`gte`/`lt`/`lte`, `between`, `empty`, `regex`/`match`/`imatch` and the PostgreSQL families negate too.
+  - A `not.` prefix on an operator with no negated form (for example `not.not_like`) is rejected with `422` naming the operator; it is never silently dropped.
 - `any` / `all` modifiers are supported in expression syntax:
   - `name=like(any).{ACME,SHOP}`
   - `name=ilike(all).{spx,admin}`
@@ -46,6 +47,16 @@ PostgreSQL only) and the column types each one suits live in a single class,
 it, so the operators an agent is told about are exactly the ones this driver
 accepts.
 :::
+
+## Values with commas, quotes and parentheses
+
+- `eq.{value}` and `neq.{value}` compare the **whole** value: `display_name=eq.Acme, Inc.` matches exactly `Acme, Inc.`.
+- A list is explicit: `eq.(a,b)` / `neq.(a,b)` mean `IN` / `NOT IN`, and `in.a,b` / `in.(a,b)` split on commas. A one-item list `eq.(draft)` is the plain value `draft`.
+- Wrap an item in double quotes to keep commas and parentheses inside it, with `\"` and `\\` as escapes (PostgREST syntax): `in.("Acme, Inc.",B)`, `not_in.("a,b",c)`, `eq."(draft)"`. The same quoting works inside `or=(…)` / `and=(…)`: `or=(name.eq."Acme, Inc.",id.eq.5)`.
+
+## Rejected input
+
+A `not.` prefix on an operator without a negated form, an unknown aggregate function (`aggregate=median:total`), an unknown aggregate column (`sum:no_such_col`) or an aggregate that needs a column but has none (`sum`) answers `422` instead of being ignored.
 
 ## Grouped Logic
 
@@ -63,13 +74,13 @@ Examples:
   - Interpreted as: `vendor_id = 27 AND (balance_due > 0 OR id = 5)`
 - `vendor_id=eq.27&and=(or(balance_due.gt.0,id.eq.5),id.neq.2)`
   - Interpreted as: `vendor_id = 27 AND ((balance_due > 0 OR id = 5) AND id != 2)`
-- `id=in.(5,6,9)` and `id=not_in.(5,6,9)` are supported in addition to legacy list style (`id=in.5,6,9`).
+- `id=in.(5,6,9)` and `id=not_in.(5,6,9)` are supported in addition to the list style `id=in.5,6,9`.
 - `status=eq.open&and=(or(total_amount.gte.1000,total_amount.is.null),or(currency.eq.USD,currency.eq.KHR),issued_at.date_gte.2026-01-01,issued_at.date_lte.2026-12-31)`
   - Interpreted as: `status = 'open' AND ((total_amount >= 1000 OR total_amount IS NULL) AND (currency = 'USD' OR currency = 'KHR') AND issued_at >= '2026-01-01' AND issued_at <= '2026-12-31')`
 - `customer_id=eq.18&or=(and(balance_due.gt.0,due_date.lt.2026-03-31),and(id.in.(5,6,9),ref_number.like.BILL-2026))`
   - Interpreted as: `customer_id = 18 AND ((balance_due > 0 AND due_date < '2026-03-31') OR (id IN (5,6,9) AND ref_number LIKE '%BILL-2026%'))`
 - `vendor_id=eq.27&or=(vendor.display_name.like.Acme,items.account_code.in.(4000,4010),items.amount.gt.0)`
-  - Example of grouped logic including relationship filters (`vendor.*`, `items.*`) in the same OR expression. A relationship column is one level (`alias.column`) and matches only rows of the request's tenant; with tenancy on and no tenant resolved, a condition on a tenant-scoped relationship answers `422` ([Record Tenancy](/guide/record-tenancy)). A relationship column whose own name is an operator word (`like`, `in`, `is`, …) is not recognised inside a group; filter on it ungrouped (`?pets.like=eq.x`). A value inside a group cannot contain a comma: there is no escape.
+  - Example of grouped logic including relationship filters (`vendor.*`, `items.*`) in the same OR expression. A relationship column is one level (`alias.column`) and matches only rows of the request's tenant; with tenancy on and no tenant resolved, a condition on a tenant-scoped relationship answers `422` ([Record Tenancy](/guide/record-tenancy)). A relationship column whose own name is an operator word (`like`, `in`, `is`, …) is not recognised inside a group; filter on it ungrouped (`?pets.like=eq.x`). A value inside a group that contains a comma or parenthesis must be double-quoted (`name.eq."Acme, Inc."`).
 
 Notes:
 

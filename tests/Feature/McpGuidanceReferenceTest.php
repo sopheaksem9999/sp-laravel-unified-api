@@ -98,12 +98,13 @@ class McpGuidanceReferenceTest extends TestCase
         $catalogue = array_column($operators['catalogue'], 'name');
 
         $this->assertContains('eq', $operators['negatable']);
-        $this->assertContains('contains', $operators['notNegatable']);
-        $this->assertContains('starts_with', $operators['notNegatable']);
+        $this->assertContains('contains', $operators['negatable']);
+        $this->assertContains('starts_with', $operators['negatable']);
+        $this->assertContains('not_like', $operators['notNegatable']);
         $this->assertSame([], array_intersect($operators['negatable'], $operators['notNegatable']));
         $this->assertEqualsCanonicalizing($catalogue, [...$operators['negatable'], ...$operators['notNegatable']]);
         $this->assertStringContainsString('not.', $operators['negation']);
-        $this->assertStringContainsString('ignored', $operators['negation'], 'a not. prefix on an operator without one is dropped by the API');
+        $this->assertStringContainsString('rejected', $operators['negation'], 'a not. prefix on an operator without one is rejected by the API');
     }
 
     public function test_pagination_reports_live_limits_and_options(): void

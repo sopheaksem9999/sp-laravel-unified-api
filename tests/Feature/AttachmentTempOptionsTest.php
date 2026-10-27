@@ -266,7 +266,7 @@ class AttachmentTempOptionsTest extends TestCase
         $payload = $response->getData(true);
         $data = $payload['data'] ?? $payload;
         $this->assertSame('temp_public', $data['visibility']);
-        $this->assertStringContainsString('/api/' . config('attachments.route_prefix', 'attachments') . '/' . $data['id'] . '/view', (string) $data['url']);
+        $this->assertStringContainsString('/api/' . config('attachments.route_prefix', 'attachments') . '/rpc/' . $data['id'] . '/view', (string) $data['url']);
 
         Carbon::setTestNow();
     }

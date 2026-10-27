@@ -79,7 +79,7 @@ final readonly class ApiReference
 
         return [
             'driver' => $driver,
-            'negation' => 'Prefix an operator listed under negatable with "not." (not.eq.5, not.in.(1,2)) to negate it. An operator under notNegatable has no negated form, and a not. prefix on it is ignored by the API, so the filter would silently not apply: do not use it.',
+            'negation' => 'Prefix an operator listed under negatable with "not." (not.eq.5, not.in.(1,2)) to negate it. An operator under notNegatable has no negated form, and a not. prefix on it is rejected with 422.',
             'negatable' => $negatable,
             'notNegatable' => array_values(array_diff($names, $negatable)),
             'catalogue' => $catalogue,

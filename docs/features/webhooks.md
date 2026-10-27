@@ -29,9 +29,10 @@ The Webhook module will be fully integrated into the `sp-laravel-api` core engin
 
 *   **Configuration:** `config/webhooks.php` (Defines tables using `RecordTableType` for instant CRUD APIs).
 *   **Migrations:** `database/migrations/xxxx_create_sp_webhooks_tables.php`
-*   **Service:** `src/Services/WebhookService.php` (Handles payload formatting, HMAC signature generation, and dispatching).
+*   **Signing:** HMAC generation and delivery live in `src/Jobs/DispatchWebhookJob.php`; there is no separate `WebhookService`.
 *   **Jobs:** `src/Jobs/DispatchWebhookJob.php` (Asynchronous queue processing to prevent API blocking).
-*   **Triggers:** `src/Triggers/WebhookTrigger.php` (Global listener using `#[RecordTrigger]` for `afterCreate`, `afterUpdate`, and `afterDelete`).
+*   **Triggers:** `src/Triggers/WebhookTrigger.php` (listener using `#[RecordTrigger]` for `afterCreate`, `afterUpdate`, and `afterDelete`). The host application must register `WebhookTrigger::class` in `record.global_triggers`; it is not registered automatically.
+*   **Secret:** `sp_webhook_endpoints.secret` is write-only. Send it on create or update; no read ever returns it (it is in `columnHiddens`), and the trigger reads it from the database when signing. Rotate by updating the endpoint with a new secret.
 
 ---
 

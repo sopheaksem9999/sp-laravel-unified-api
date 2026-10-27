@@ -6,6 +6,7 @@ namespace Sopheak\Core\Triggers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Sopheak\Core\Attributes\RecordTrigger;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Jobs\DispatchWebhookJob;
@@ -117,7 +118,8 @@ class WebhookTrigger extends RecordTriggerBase
         foreach ($endpoints['data'] as $endpoint) {
             $endpointId = (string) (is_object($endpoint) ? $endpoint->id : $endpoint['id']);
             $endpointUrl = (string) (is_object($endpoint) ? $endpoint->url : $endpoint['url']);
-            $endpointSecret = (string) (is_object($endpoint) ? $endpoint->secret : $endpoint['secret']);
+            // `secret` is a hidden column, so the API-layer read above omits it.
+            $endpointSecret = (string) DB::table('sp_webhook_endpoints')->where('id', $endpointId)->value('secret');
 
             // Create delivery record
             $deliveryPayload = [

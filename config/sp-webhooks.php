@@ -56,6 +56,10 @@ return [
                 'created_at' => ['type' => 'datetime', 'nullable' => true],
                 'updated_at' => ['type' => 'datetime', 'nullable' => true],
             ],
+            // Write-only: the HMAC signing secret is chosen by the client on
+            // create/update and never returned. WebhookTrigger reads it from
+            // the database directly.
+            columnHiddens: ['secret'],
         ),
         'sp_webhook_subscriptions' => new RecordTableType(
             table: 'sp_webhook_subscriptions',

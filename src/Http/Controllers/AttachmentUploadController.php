@@ -595,7 +595,9 @@ class AttachmentUploadController extends Controller
     public function linkToRecord(Request $request, string $table, string $recordId): JsonResponse
     {
         $request->validate([
-            'attachment_id' => 'required|string',
+            'attachment_id' => 'required_without:attachment_ids|nullable|string',
+            'attachment_ids' => 'required_without:attachment_id|nullable|array|min:1',
+            'attachment_ids.*' => 'required|string',
             'collection_name' => 'nullable|string',
         ]);
 
@@ -608,10 +610,36 @@ class AttachmentUploadController extends Controller
             return response()->json(['message' => 'Target record not found'], 404);
         }
 
-        $attachmentId = $request->input('attachment_id');
         $collectionName = $request->input('collection_name', 'default');
 
-        // Check if attachment exists
+        // Legacy single-id form keeps its single-link response shape.
+        if (!$request->has('attachment_ids')) {
+            $result = $this->linkAttachment((string) $request->input('attachment_id'), $table, $recordId, $collectionName, $tenantId);
+
+            return null === $result
+                ? response()->json(['message' => 'Attachment not found'], 404)
+                : RecordApiResponseService::success($result);
+        }
+
+        $attachmentIds = array_values(array_unique(array_map(strval(...), $request->input('attachment_ids', []))));
+
+        // Validate every id first so a bad id never leaves a partial batch linked.
+        foreach ($attachmentIds as $attachmentId) {
+            if (!$this->attachmentExists($attachmentId, $tenantId)) {
+                return response()->json(['message' => 'Attachment not found', 'attachment_id' => $attachmentId], 404);
+            }
+        }
+
+        $links = [];
+        foreach ($attachmentIds as $attachmentId) {
+            $links[] = $this->linkAttachment($attachmentId, $table, $recordId, $collectionName, $tenantId);
+        }
+
+        return RecordApiResponseService::success($links);
+    }
+
+    private function attachmentExists(string $attachmentId, mixed $tenantId): bool
+    {
         try {
             $attachmentResult = RecordService::executeGetById(
                 table: 'sp_attachments',
@@ -619,15 +647,24 @@ class AttachmentUploadController extends Controller
                 queryParams: [],
                 tenantId: $tenantId
             );
-            $attachment = $this->extractRecordPayload($attachmentResult);
-            if (empty($attachment)) {
-                return response()->json(['message' => 'Attachment not found'], 404);
-            }
+
+            return !empty($this->extractRecordPayload($attachmentResult));
         } catch (Exception) {
-            return response()->json(['message' => 'Attachment not found'], 404);
+            return false;
+        }
+    }
+
+    /**
+     * Idempotently link one attachment to a record; null when the attachment does not exist.
+     *
+     * @return array<string, mixed>|object|null
+     */
+    private function linkAttachment(string $attachmentId, string $table, string $recordId, string $collectionName, mixed $tenantId): array|object|null
+    {
+        if (!$this->attachmentExists($attachmentId, $tenantId)) {
+            return null;
         }
 
-        // Check if link already exists
         $existingLinks = RecordService::executeGetByFilter('sp_attachment_links', [
             'attachment_id' => 'eq.' . $attachmentId,
             'record_type' => 'eq.' . $table,
@@ -636,7 +673,7 @@ class AttachmentUploadController extends Controller
         ], $tenantId);
 
         if (!empty($existingLinks['data'])) {
-            return RecordApiResponseService::success($existingLinks['data'][0]);
+            return $existingLinks['data'][0];
         }
 
         $linkPayload = [
@@ -652,8 +689,8 @@ class AttachmentUploadController extends Controller
         }
 
         $link = RecordService::executeCreate('sp_attachment_links', $linkPayload, [], $tenantId);
-        $link = $this->extractRecordPayload($link);
-        return RecordApiResponseService::success($link);
+
+        return $this->extractRecordPayload($link);
     }
 
     public function unlinkFromRecord(Request $request, string $table, string $recordId, string $attachmentId): JsonResponse

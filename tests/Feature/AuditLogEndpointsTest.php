@@ -199,4 +199,62 @@ class AuditLogEndpointsTest extends TestCase
         $response->assertStatus(200);
         $this->assertEquals(2, $response->json('data.total_changes'));
     }
+
+    /** @test */
+    public function function_authorization_failures_are_403_not_500(): void
+    {
+        $other = new User();
+        $other->id = 2;
+        $other->name = 'Normal User';
+        $other->email = 'normal2@example.com';
+
+        $this->actingAs($other, 'api')->getJson('/api/sp_audit_logs/rpc/stats')->assertStatus(403);
+    }
+
+    /** @test */
+    public function field_timeline_and_stats_accept_uuid_entity_ids(): void
+    {
+        $uuid = '3f2504e0-4f89-11d3-9a0c-0305e82c3301';
+        DB::table('sp_audit_logs')->insert([
+            ['entity_type' => 'sp_attachments', 'entity_id' => $uuid, 'event' => 'updated', 'old_data' => json_encode(['title' => 'a']), 'new_data' => json_encode(['title' => 'b']), 'created_at' => now(), 'updated_at' => now()],
+            ['entity_type' => 'sp_attachments', 'entity_id' => '0', 'event' => 'updated', 'old_data' => json_encode(['title' => 'x']), 'new_data' => json_encode(['title' => 'y']), 'created_at' => now(), 'updated_at' => now()],
+        ]);
+
+        $timeline = $this->actingAs($this->user, 'api')->getJson('/api/sp_audit_logs/rpc/field-timeline/sp_attachments/' . $uuid . '/title');
+        $timeline->assertStatus(200);
+        $this->assertCount(1, $timeline->json('data'));
+        $this->assertSame('b', $timeline->json('data.0.new_value'));
+
+        $stats = $this->actingAs($this->user, 'api')->getJson('/api/sp_audit_logs/rpc/field-stats/sp_attachments/' . $uuid . '/title');
+        $stats->assertStatus(200);
+        $this->assertSame(1, $stats->json('data.total_changes'));
+    }
+
+    /** @test */
+    public function stats_timeline_and_field_stats_are_pinned_to_the_request_tenant(): void
+    {
+        config()->set('record.enable_tenant_id', true);
+        $header = ['X-Tenant-ID' => 'A'];
+        DB::table('sp_audit_logs')->insert([
+            ['entity_type' => 'invoices', 'entity_id' => '1', 'event' => 'updated', 'tenant_id' => 'A', 'old_data' => json_encode(['status' => 'draft']), 'new_data' => json_encode(['status' => 'paid']), 'created_at' => now(), 'updated_at' => now()],
+            ['entity_type' => 'invoices', 'entity_id' => '1', 'event' => 'updated', 'tenant_id' => 'B', 'old_data' => json_encode(['status' => 'paid']), 'new_data' => json_encode(['status' => 'void']), 'created_at' => now(), 'updated_at' => now()],
+            ['entity_type' => 'invoices', 'entity_id' => '2', 'event' => 'created', 'tenant_id' => 'B', 'old_data' => null, 'new_data' => null, 'created_at' => now(), 'updated_at' => now()],
+        ]);
+
+        $stats = $this->actingAs($this->user, 'api')->getJson('/api/sp_audit_logs/rpc/stats', $header);
+        $stats->assertStatus(200);
+        $this->assertSame(1, $stats->json('data.total'));
+
+        $timeline = $this->actingAs($this->user, 'api')->getJson('/api/sp_audit_logs/rpc/field-timeline/invoices/1/status', $header);
+        $this->assertCount(1, $timeline->json('data'));
+
+        $fieldStats = $this->actingAs($this->user, 'api')->getJson('/api/sp_audit_logs/rpc/field-stats/invoices/1/status', $header);
+        $this->assertSame(1, $fieldStats->json('data.total_changes'));
+
+        // The same tenant repeated is fine; another one can neither widen nor switch it.
+        $this->actingAs($this->user, 'api')->getJson('/api/sp_audit_logs/rpc/stats?tenant_id=A', $header)->assertStatus(200);
+        foreach (['stats', 'field-timeline/invoices/1/status', 'field-stats/invoices/1/status'] as $path) {
+            $this->actingAs($this->user, 'api')->getJson('/api/sp_audit_logs/rpc/' . $path . '?tenant_id=B', $header)->assertStatus(403);
+        }
+    }
 }

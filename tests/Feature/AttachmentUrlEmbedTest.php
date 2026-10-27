@@ -116,7 +116,7 @@ class AttachmentUrlEmbedTest extends TestCase
         $this->assertNotNull($profileImage);
         $profile = is_array($profileImage) ? $profileImage : (array) $profileImage;
         $this->assertSame($attachmentId, $profile['id']);
-        $this->assertStringContainsString('/sp_attachments/' . $attachmentId . '/download', $profile['download_url']);
+        $this->assertStringContainsString('/sp_attachments/rpc/' . $attachmentId . '/download', $profile['download_url']);
         $this->assertStringContainsString('/storage/images/poster.jpg', $profile['url']);
         $this->assertStringNotContainsString('/view', $profile['url']);
     }
@@ -147,7 +147,7 @@ class AttachmentUrlEmbedTest extends TestCase
         $profileImage = $data[0]->profile_image;
         $this->assertNotNull($profileImage);
         $profile = is_array($profileImage) ? $profileImage : (array) $profileImage;
-        $this->assertStringContainsString('/sp_attachments/' . $attachmentId . '/view', $profile['url']);
+        $this->assertStringContainsString('/sp_attachments/rpc/' . $attachmentId . '/view', $profile['url']);
     }
 
     public function test_embedded_attachment_gets_urls_via_recursive_include_path(): void
@@ -172,7 +172,7 @@ class AttachmentUrlEmbedTest extends TestCase
 
         $this->assertCount(1, $data);
         $this->assertNotNull($data[0]->profile_image);
-        $this->assertStringContainsString('/sp_attachments/' . $attachmentId . '/download', $data[0]->profile_image->download_url);
+        $this->assertStringContainsString('/sp_attachments/rpc/' . $attachmentId . '/download', $data[0]->profile_image->download_url);
         $this->assertStringContainsString('/storage/images/banner.jpg', $data[0]->profile_image->url);
     }
 
@@ -240,7 +240,7 @@ class AttachmentUrlEmbedTest extends TestCase
         $this->assertCount(1, $data);
         $profile = (array) $data[0]->profile_image;
         $this->assertStringContainsString('/storage/' . $uploaded['path'], $profile['url']);
-        $this->assertStringContainsString('/sp_attachments/' . $attachmentId . '/download', $profile['download_url']);
+        $this->assertStringContainsString('/sp_attachments/rpc/' . $attachmentId . '/download', $profile['download_url']);
     }
 
     public function test_non_attachment_embeds_are_unchanged(): void

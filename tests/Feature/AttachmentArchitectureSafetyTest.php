@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Tests\Feature;
 
+use Illuminate\Http\JsonResponse;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
@@ -63,8 +65,8 @@ class AttachmentArchitectureSafetyTest extends TestCase
             'visibility' => 'public',
         ]);
 
-        $this->assertSame('http://localhost/api/sp_attachments/att-1/view', $attachment['url']);
-        $this->assertSame('http://localhost/api/sp_attachments/att-1/download', $attachment['download_url']);
+        $this->assertSame('http://localhost/api/sp_attachments/rpc/att-1/view', $attachment['url']);
+        $this->assertSame('http://localhost/api/sp_attachments/rpc/att-1/download', $attachment['download_url']);
     }
 
     /** @test */
@@ -243,6 +245,81 @@ class AttachmentArchitectureSafetyTest extends TestCase
 
         $this->assertSame(403, $response->getStatusCode());
         $this->assertSame('Attachment access denied', data_get($response->getData(true), 'message'));
+    }
+
+    /** @test */
+    public function link_to_record_accepts_attachment_ids_and_the_legacy_attachment_id(): void
+    {
+        $ids = [Str::uuid()->toString(), Str::uuid()->toString()];
+        foreach ($ids as $id) {
+            DB::table('sp_attachments')->insert($this->attachmentRow(['id' => $id]));
+        }
+
+        $link = static fn(array $body): JsonResponse => (new AttachmentUploadController())->linkToRecord(
+            Request::create('/attachments/record/users/user-1', 'POST', $body),
+            'users',
+            'user-1'
+        );
+
+        // Many in one call, idempotent per id.
+        $many = $link(['attachment_ids' => [$ids[0], $ids[1], $ids[0]]]);
+        $this->assertSame(200, $many->getStatusCode());
+        $this->assertCount(2, data_get($many->getData(true), 'data'));
+        $this->assertSame(2, DB::table('sp_attachment_links')->count());
+
+        $again = $link(['attachment_ids' => $ids]);
+        $this->assertSame(200, $again->getStatusCode());
+        $this->assertSame(2, DB::table('sp_attachment_links')->count());
+
+        // The legacy single id keeps its single-link response.
+        DB::table('sp_attachment_links')->delete();
+        $single = $link(['attachment_id' => $ids[0]]);
+        $this->assertSame(200, $single->getStatusCode());
+        $this->assertSame($ids[0], data_get($single->getData(true), 'data.attachment_id'));
+        $this->assertSame(1, DB::table('sp_attachment_links')->count());
+    }
+
+    /** @test */
+    public function link_to_record_links_nothing_when_one_id_is_unknown(): void
+    {
+        $known = Str::uuid()->toString();
+        DB::table('sp_attachments')->insert($this->attachmentRow(['id' => $known]));
+
+        $response = (new AttachmentUploadController())->linkToRecord(
+            Request::create('/attachments/record/users/user-1', 'POST', ['attachment_ids' => [$known, 'missing']]),
+            'users',
+            'user-1'
+        );
+
+        $this->assertSame(404, $response->getStatusCode());
+        $this->assertSame('Attachment not found', data_get($response->getData(true), 'message'));
+        $this->assertSame(0, DB::table('sp_attachment_links')->count());
+    }
+
+    /** @test */
+    public function link_to_record_requires_one_of_the_id_forms(): void
+    {
+        $this->expectException(ValidationException::class);
+
+        (new AttachmentUploadController())->linkToRecord(
+            Request::create('/attachments/record/users/user-1', 'POST', []),
+            'users',
+            'user-1'
+        );
+    }
+
+    /** @test */
+    public function embedded_urls_drop_the_rpc_segment_only_when_the_prefix_is_empty(): void
+    {
+        Config::set('attachments.url_strategy', 'api');
+        $urls = static fn(): array => app(AttachmentUrlService::class)->appendUrls(['id' => 'att-1', 'visibility' => 'private', 'disk' => 'local', 'path' => 'p/f.txt']);
+
+        $this->assertStringEndsWith('/api/sp_attachments/rpc/att-1/view', $urls()['url']);
+        $this->assertStringEndsWith('/api/sp_attachments/rpc/att-1/download', $urls()['download_url']);
+
+        Config::set('record.rpc_prefix', '');
+        $this->assertStringEndsWith('/api/sp_attachments/att-1/view', $urls()['url']);
+        $this->assertStringEndsWith('/api/sp_attachments/att-1/download', $urls()['download_url']);
     }
 
     private function createAttachmentTables(): void
