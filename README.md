@@ -5,6 +5,8 @@
 [![PHP Version](https://img.shields.io/packagist/dependency-v/sopheak/sp-laravel-api/php.svg)](https://packagist.org/packages/sopheak/sp-laravel-api)
 [![License](https://img.shields.io/packagist/l/sopheak/sp-laravel-api.svg)](https://packagist.org/packages/sopheak/sp-laravel-api)
 [![Security](https://github.com/sopheaksem9999/sp-laravel-unified-api/actions/workflows/security.yml/badge.svg)](https://github.com/sopheaksem9999/sp-laravel-unified-api/actions/workflows/security.yml)
+[![pub package](https://img.shields.io/pub/v/sp_laravel_api.svg?label=pub.dev&color=0175C2)](https://pub.dev/packages/sp_laravel_api)
+[![npm version](https://img.shields.io/npm/v/@sokpheak/sp-laravel-api.svg?label=npm&color=CB3837)](https://www.npmjs.com/package/@sokpheak/sp-laravel-api)
 
 `sopheak/sp-laravel-api` is a comprehensive, config-driven REST API package for Laravel applications. It replaces repetitive controllers, boilerplate query builders, and manual CRUD endpoints with declarative schema definitions while providing standardized API responses, multi-tenant isolation, granular field permissions, transactional audit trails, file attachment workflows, and AI/MCP tool integrations.
 
@@ -86,80 +88,23 @@ The enabled-by-default core provides enterprise SaaS applications with a unified
 
 ---
 
-## 📱 Client SDKs & Libraries
+## Client SDKs & Libraries
 
-Official client SDKs are available to connect your frontend, web, and mobile client projects directly to your `sp-laravel-api` backend:
+First-party frontend and mobile applications can use official client packages that pair directly with `sopheak/sp-laravel-api`:
 
-### 1. Flutter & Dart (`pub.dev`)
+| Platform | Package | Install | Links |
+| --- | --- | --- | --- |
+| **Flutter / Dart** | `sp_laravel_api` | `flutter pub add sp_laravel_api` | [![pub package](https://img.shields.io/pub/v/sp_laravel_api.svg)](https://pub.dev/packages/sp_laravel_api) · [Documentation](https://pub.dev/packages/sp_laravel_api) |
+| **JavaScript / TypeScript** | `@sokpheak/sp-laravel-api` | `npm install @sokpheak/sp-laravel-api` | [![npm version](https://img.shields.io/npm/v/@sokpheak/sp-laravel-api.svg)](https://www.npmjs.com/package/@sokpheak/sp-laravel-api) · [Documentation](https://www.npmjs.com/package/@sokpheak/sp-laravel-api) |
 
-Install the official Flutter/Dart client:
+### Features provided by client SDKs:
+- **Type-safe CRUD Operations:** Fluent methods for querying, creating, updating, and deleting records with full TypeScript & Dart typing.
+- **Advanced Query & Filter Builder:** Parameter building for PostgREST-style operators (`eq`, `like`, `in`, `gt`, `or=(...)`) matching backend API capabilities.
+- **Tenant & Authentication Handling:** Automatic injection for `Authorization: Bearer <token>` and `X-Tenant-ID` scoping headers.
+- **Relational Includes & Deep Embedding:** Eager load relationships directly via `select` projections (`select=*,customer(*),items(*)`).
+- **Pagination & File Uploads:** Native support for cursor and offset pagination models, plus multipart file attachments.
 
-```bash
-flutter pub add sp_laravel_api
-# or for plain Dart
-dart pub add sp_laravel_api
-```
-
-- **Package URL:** [https://pub.dev/packages/sp_laravel_api](https://pub.dev/packages/sp_laravel_api)
-- **Features:** Type-safe CRUD operations, built-in filter builder (`eq`, `like`, `in`, `gt`), tenant header injection (`X-Tenant-ID`), relationship eager loading (`select=`), pagination models, and attachment upload support.
-
-```dart
-import 'package:sp_laravel_api/sp_laravel_api.dart';
-
-final client = SpLaravelApiClient(
-  baseUrl: 'https://api.example.com',
-  bearerToken: '<token>',
-  tenantId: 'tenant-123',
-);
-
-// Query records with filters and relationships
-final response = await client.records('orders').get(
-  filter: {'status': 'completed'},
-  select: ['customer', 'items'],
-  page: 1,
-  perPage: 15,
-);
-
-print(response.data); // parsed data list
-print(response.meta.total); // pagination meta
-```
-
----
-
-### 2. JavaScript & TypeScript (`npm`)
-
-Install the official JavaScript/TypeScript client for React, Vue, Next.js, Node.js, and mobile web:
-
-```bash
-npm install @sokpheak/sp-laravel-api
-# or using pnpm / yarn / bun
-pnpm add @sokpheak/sp-laravel-api
-yarn add @sokpheak/sp-laravel-api
-bun add @sokpheak/sp-laravel-api
-```
-
-- **Package URL:** [https://www.npmjs.com/package/@sokpheak/sp-laravel-api](https://www.npmjs.com/package/@sokpheak/sp-laravel-api)
-- **Features:** Full TypeScript definitions, Axios/Fetch-based HTTP client, automatic response envelope unwrapping, reactive pagination helpers, and multi-tenant header management.
-
-```typescript
-import { SpLaravelApiClient } from '@sokpheak/sp-laravel-api';
-
-const client = new SpLaravelApiClient({
-  baseUrl: 'https://api.example.com',
-  token: '<token>',
-  tenantId: 'tenant-123',
-});
-
-// Fetch filtered orders with eager relationships
-const { data, meta } = await client.records('orders').list({
-  filter: { status: 'completed' },
-  select: ['customer', 'items'],
-  page: 1,
-  perPage: 15,
-});
-
-console.log(data, meta);
-```
+For full client usage guides and code examples, see the [Client SDKs Documentation](docs/guide/modules/module-api-clients.md).
 
 ---
 
