@@ -165,7 +165,7 @@ class QueryBuilderFiltersUtils
      */
     public static function apply(Builder $builder, Request $request, string $table, string $defaultOrderBy = 'id'): Builder
     {
-        $allowedCols = self::getAllowedColumns($table);
+        $allowedCols = self::getFilterableColumns($table);
 
         // Basic search across columns (only allowed columns) - optimized for performance
         if ($request->has('s') && [] !== $allowedCols) {
@@ -1511,7 +1511,7 @@ class QueryBuilderFiltersUtils
      */
     public static function resolveSort(Request $request, string $table, string $defaultOrderBy = 'id'): array
     {
-        $allowedCols = self::getAllowedColumns($table);
+        $allowedCols = self::getFilterableColumns($table);
 
         $sortByParam = $request->query('sortby');
 
@@ -1549,6 +1549,23 @@ class QueryBuilderFiltersUtils
         $sort = self::resolveSort($request, $table, $defaultOrderBy);
 
         $builder->orderBy($table . '.' . $sort['column'], $sort['direction']);
+    }
+
+    /**
+     * Get filterable columns for a table (allowed columns excluding hidden columns).
+     */
+    public static function getFilterableColumns(string $table): array
+    {
+        $allowed = self::getAllowedColumns($table);
+        $schema = SchemaRegistryUtils::resolveTableSchema($table);
+        if ($schema !== null) {
+            $hidden = (array) ($schema->columnHiddens ?? []);
+            if (!empty($hidden)) {
+                $allowed = array_values(array_diff($allowed, $hidden));
+            }
+        }
+
+        return $allowed;
     }
 
     /**
@@ -1644,7 +1661,7 @@ class QueryBuilderFiltersUtils
         $builder->columns = null;
 
         $groupByParam = $request->query('group_by');
-        $allowedCols = QueryBuilderFiltersUtils::getAllowedColumns($table);
+        $allowedCols = QueryBuilderFiltersUtils::getFilterableColumns($table);
 
         $groupByCols = [];
         if ($groupByParam) {
