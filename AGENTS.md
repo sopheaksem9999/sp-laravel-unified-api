@@ -6,6 +6,7 @@ This file is the entrypoint. The single source of truth for project context live
 - `.agents/rules/architecture.md` — config-driven CRUD, MCP, exporters
 - `.agents/rules/commands.md` — test / analyse / format / artisan commands
 - `.agents/rules/coding-standards.md` — conventions, testing, tooling quirks
+- `.agents/rules/clef-auto-triage.md` — automated error triage and severity classification (P0–P3) via Clef
 
 ## Working Rules
 - Follow existing patterns in the repo; prefer minimal changes and small diffs.
