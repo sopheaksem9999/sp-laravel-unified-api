@@ -1902,6 +1902,14 @@ class RecordService
 
     public function shouldIncludeDebug(Request $request): bool
     {
+        if (RecordConfigService::debugEnabled()) {
+            return true;
+        }
+
+        if (!app()->environment('local')) {
+            return false;
+        }
+
         $headerValue = $request->headers->get('X-Debug') ?? $request->headers->get('x-debug');
         if (null === $headerValue) {
             return false;
