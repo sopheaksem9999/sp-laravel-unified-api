@@ -12,7 +12,9 @@ The package owns API infrastructure, dynamic endpoint resolution, query filterin
 
 Public package links:
 - **Documentation:** [sp-laravel-api-docs.vercel.app](https://sp-laravel-api-docs.vercel.app/)
-- **Packagist:** [packagist.org/packages/sopheak/sp-laravel-api](https://packagist.org/packages/sopheak/sp-laravel-api)
+- **Packagist (Backend):** [packagist.org/packages/sopheak/sp-laravel-api](https://packagist.org/packages/sopheak/sp-laravel-api)
+- **Dart / Flutter SDK (pub.dev):** [pub.dev/packages/sp_laravel_api](https://pub.dev/packages/sp_laravel_api)
+- **JavaScript / TypeScript SDK (npm):** [npmjs.com/package/@sokpheak/sp-laravel-api](https://www.npmjs.com/package/@sokpheak/sp-laravel-api)
 - **Canonical Repository:** [github.com/sopheaksem9999/sp-laravel-unified-api](https://github.com/sopheaksem9999/sp-laravel-unified-api)
 
 ---
@@ -81,6 +83,83 @@ The enabled-by-default core provides enterprise SaaS applications with a unified
    ```bash
    php artisan sp-laravel-api:validate
    ```
+
+---
+
+## 📱 Client SDKs & Libraries
+
+Official client SDKs are available to connect your frontend, web, and mobile client projects directly to your `sp-laravel-api` backend:
+
+### 1. Flutter & Dart (`pub.dev`)
+
+Install the official Flutter/Dart client:
+
+```bash
+flutter pub add sp_laravel_api
+# or for plain Dart
+dart pub add sp_laravel_api
+```
+
+- **Package URL:** [https://pub.dev/packages/sp_laravel_api](https://pub.dev/packages/sp_laravel_api)
+- **Features:** Type-safe CRUD operations, built-in filter builder (`eq`, `like`, `in`, `gt`), tenant header injection (`X-Tenant-ID`), relationship eager loading (`select=`), pagination models, and attachment upload support.
+
+```dart
+import 'package:sp_laravel_api/sp_laravel_api.dart';
+
+final client = SpLaravelApiClient(
+  baseUrl: 'https://api.example.com',
+  bearerToken: '<token>',
+  tenantId: 'tenant-123',
+);
+
+// Query records with filters and relationships
+final response = await client.records('orders').get(
+  filter: {'status': 'completed'},
+  select: ['customer', 'items'],
+  page: 1,
+  perPage: 15,
+);
+
+print(response.data); // parsed data list
+print(response.meta.total); // pagination meta
+```
+
+---
+
+### 2. JavaScript & TypeScript (`npm`)
+
+Install the official JavaScript/TypeScript client for React, Vue, Next.js, Node.js, and mobile web:
+
+```bash
+npm install @sokpheak/sp-laravel-api
+# or using pnpm / yarn / bun
+pnpm add @sokpheak/sp-laravel-api
+yarn add @sokpheak/sp-laravel-api
+bun add @sokpheak/sp-laravel-api
+```
+
+- **Package URL:** [https://www.npmjs.com/package/@sokpheak/sp-laravel-api](https://www.npmjs.com/package/@sokpheak/sp-laravel-api)
+- **Features:** Full TypeScript definitions, Axios/Fetch-based HTTP client, automatic response envelope unwrapping, reactive pagination helpers, and multi-tenant header management.
+
+```typescript
+import { SpLaravelApiClient } from '@sokpheak/sp-laravel-api';
+
+const client = new SpLaravelApiClient({
+  baseUrl: 'https://api.example.com',
+  token: '<token>',
+  tenantId: 'tenant-123',
+});
+
+// Fetch filtered orders with eager relationships
+const { data, meta } = await client.records('orders').list({
+  filter: { status: 'completed' },
+  select: ['customer', 'items'],
+  page: 1,
+  perPage: 15,
+});
+
+console.log(data, meta);
+```
 
 ---
 

@@ -46,6 +46,13 @@ in under five minutes.
 
 </div>
 
+## Official Client SDKs
+
+Connect client applications directly to your `sp-laravel-api` backend with first-class SDKs:
+
+- 🎯 **Flutter / Dart:** [`sp_laravel_api` on pub.dev](https://pub.dev/packages/sp_laravel_api) — `flutter pub add sp_laravel_api`
+- 🌐 **TypeScript / JavaScript:** [`@sokpheak/sp-laravel-api` on npm](https://www.npmjs.com/package/@sokpheak/sp-laravel-api) — `npm i @sokpheak/sp-laravel-api`
+
 <style>
 .cta-actions {
   display: flex;
