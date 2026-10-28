@@ -1064,7 +1064,7 @@ class RecordApiResponseService
             return true;
         }
 
-        if (!app()->environment('local')) {
+        if (!app()->environment(['local', 'testing'])) {
             return false;
         }
 

@@ -1932,7 +1932,7 @@ class RecordService
             return true;
         }
 
-        if (!app()->environment('local')) {
+        if (!app()->environment(['local', 'testing'])) {
             return false;
         }
 
