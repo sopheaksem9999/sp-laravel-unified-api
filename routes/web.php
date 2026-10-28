@@ -25,7 +25,27 @@ use Sopheak\Core\Utilities\SchemaRegistryUtils;
 Route::get('/api-docs', fn(): View|Factory => view('sp-laravel-api::scalar'));
 
 Route::post('/api-docs/auth/login', function (Request $request) {
-    $endpoint = (string) $request->input('endpoint', (string) config('record.api_docs.login_api', '/api/login'));
+    $configuredEndpoint = trim((string) config('record.api_docs.login_api', '/api/login'));
+    if ($configuredEndpoint === '') {
+        return response()->json(['message' => 'Login endpoint is required'], 422);
+    }
+
+    // Prevent SSRF: reject requests attempting to target external endpoints
+    $clientEndpoint = trim((string) $request->input('endpoint', ''));
+    if ($clientEndpoint !== '') {
+        $cleanClient = parse_url($clientEndpoint, PHP_URL_PATH) ?? $clientEndpoint;
+        $cleanConfig = parse_url($configuredEndpoint, PHP_URL_PATH) ?? $configuredEndpoint;
+        if (str_starts_with($clientEndpoint, 'http://') || str_starts_with($clientEndpoint, 'https://')) {
+            $clientHost = parse_url($clientEndpoint, PHP_URL_HOST);
+            $appHost = parse_url((string) config('app.url'), PHP_URL_HOST);
+            if ($clientHost !== $appHost) {
+                return response()->json(['message' => 'Custom login endpoint is not allowed'], 422);
+            }
+        } elseif (ltrim((string) $cleanClient, '/') !== ltrim((string) $cleanConfig, '/')) {
+            return response()->json(['message' => 'Custom login endpoint is not allowed'], 422);
+        }
+    }
+
     $username = (string) $request->input('username', '');
     $password = (string) $request->input('password', '');
     $requiredEmail = trim((string) config('record.api_docs.email', ''));
@@ -38,12 +58,10 @@ Route::post('/api-docs/auth/login', function (Request $request) {
         $username = $requiredEmail;
     }
 
-    $endpoint = trim($endpoint);
-    if ($endpoint === '') {
-        return response()->json(['message' => 'Login endpoint is required'], 422);
-    }
-    if (!str_starts_with($endpoint, 'http://') && !str_starts_with($endpoint, 'https://')) {
-        $endpoint = url('/' . ltrim($endpoint, '/'));
+    if (!str_starts_with($configuredEndpoint, 'http://') && !str_starts_with($configuredEndpoint, 'https://')) {
+        $endpoint = url('/' . ltrim($configuredEndpoint, '/'));
+    } else {
+        $endpoint = $configuredEndpoint;
     }
 
     /** @var \Illuminate\Http\Client\Response $response */
