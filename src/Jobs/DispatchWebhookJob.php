@@ -13,6 +13,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
 use Sopheak\Core\Services\RecordService;
+use Sopheak\Core\Utilities\UrlSecurityValidator;
 use Exception;
 
 class DispatchWebhookJob implements ShouldQueue
@@ -70,6 +71,15 @@ class DispatchWebhookJob implements ShouldQueue
             RecordService::executeUpdate('sp_webhook_deliveries', $this->deliveryId, [
                 'response_status' => 413,
                 'response_body' => 'Payload too large',
+                'status' => 'failed',
+            ], [], $this->tenantId);
+            return;
+        }
+
+        if (!UrlSecurityValidator::isPublicHttpUrl($this->url)) {
+            RecordService::executeUpdate('sp_webhook_deliveries', $this->deliveryId, [
+                'response_status' => 400,
+                'response_body' => 'Webhook URL failed security validation (SSRF protection)',
                 'status' => 'failed',
             ], [], $this->tenantId);
             return;
