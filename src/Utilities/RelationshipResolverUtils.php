@@ -1687,16 +1687,19 @@ class RelationshipResolverUtils
 
         // Handle morph relationships
         if ($relation) {
-            $subqueryRaw .= sprintf(" AND %s.model_type = '%s'", $actualPivotTableName, $relation);
+            $subqueryRaw .= sprintf(' AND %s.model_type = ?', $actualPivotTableName);
+            $bindings[] = (string) $relation;
         }
 
         // Apply pivot where conditions
         foreach ($wherePivot as $condition) {
             if (is_array($condition) && isset($condition['column'], $condition['operator'], $condition['value'])) {
-                $column = $condition['column'];
-                $operator = $condition['operator'];
-                $value = is_string($condition['value']) ? sprintf("'%s'", $condition['value']) : $condition['value'];
-                $subqueryRaw .= sprintf(' AND %s.%s %s %s', $actualPivotTableName, $column, $operator, $value);
+                $column = preg_replace('/[^a-zA-Z0-9_]/', '', (string) $condition['column']);
+                $operator = in_array(strtoupper((string) $condition['operator']), ['=', '!=', '<>', '<', '<=', '>', '>=', 'LIKE', 'ILIKE'], true)
+                    ? $condition['operator']
+                    : '=';
+                $subqueryRaw .= sprintf(' AND %s.%s %s ?', $actualPivotTableName, $column, $operator);
+                $bindings[] = $condition['value'];
             }
         }
 
@@ -1779,15 +1782,18 @@ class RelationshipResolverUtils
             FROM {$actualRelatedTableName}
             INNER JOIN {$actualPivotTableName} ON {$actualPivotTableName}.{$relatedPivotKey} = {$actualRelatedTableName}.{$relatedKey}
             WHERE {$actualPivotTableName}.{$foreignPivotKey} = {$actualMainTableName}.{$parentKey}
-              AND {$actualPivotTableName}.{$morphTypeColumn} = '" . addslashes((string) $relation) . "'";
+              AND {$actualPivotTableName}.{$morphTypeColumn} = ?";
+        $bindings[] = (string) $relation;
 
         // Apply pivot where conditions (e.g., team scoping, guards)
         foreach ($wherePivot as $condition) {
             if (is_array($condition) && isset($condition['column'], $condition['operator'], $condition['value'])) {
-                $column = $condition['column'];
-                $operator = $condition['operator'];
-                $value = is_string($condition['value']) ? sprintf("'%s'", $condition['value']) : $condition['value'];
-                $subqueryRaw .= sprintf(' AND %s.%s %s %s', $actualPivotTableName, $column, $operator, $value);
+                $column = preg_replace('/[^a-zA-Z0-9_]/', '', (string) $condition['column']);
+                $operator = in_array(strtoupper((string) $condition['operator']), ['=', '!=', '<>', '<', '<=', '>', '>=', 'LIKE', 'ILIKE'], true)
+                    ? $condition['operator']
+                    : '=';
+                $subqueryRaw .= sprintf(' AND %s.%s %s ?', $actualPivotTableName, $column, $operator);
+                $bindings[] = $condition['value'];
             }
         }
 
