@@ -77,6 +77,21 @@ jobs:
           git tag "$VERSION"
           git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$VERSION"
 
+      - name: Extract release notes from CHANGELOG.md
+        if: steps.check.outputs.exists == 'false'
+        env:
+          VERSION: ${{ steps.read.outputs.version }}
+        run: |
+          php -r '
+            $version = $argv[1];
+            $content = file_exists("CHANGELOG.md") ? file_get_contents("CHANGELOG.md") : "";
+            if (preg_match("/##\s*\[\s*" . preg_quote($version, "/") . "\s*\][^\n]*\n(.*?)(?=\n##\s*\[|\z)/s", $content, $matches)) {
+                file_put_contents("release-notes.md", trim($matches[1]));
+            } else {
+                file_put_contents("release-notes.md", "Release notes for version {$version}");
+            }
+          ' "$VERSION"
+
       - name: Create GitHub Release
         if: steps.check.outputs.exists == 'false'
         env:
@@ -86,6 +101,7 @@ jobs:
           gh release create "$VERSION" \
             --repo "${GITHUB_REPOSITORY}" \
             --title "$VERSION" \
+            --notes-file release-notes.md \
             --generate-notes
 
   # ─────────────────────────────────────────────
@@ -142,6 +158,20 @@ jobs:
           git tag "$BETA_TAG"
           git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$BETA_TAG"
 
+      - name: Extract release notes from CHANGELOG.md
+        env:
+          VERSION: ${{ steps.read.outputs.version }}
+        run: |
+          php -r '
+            $version = $argv[1];
+            $content = file_exists("CHANGELOG.md") ? file_get_contents("CHANGELOG.md") : "";
+            if (preg_match("/##\s*\[\s*" . preg_quote($version, "/") . "\s*\][^\n]*\n(.*?)(?=\n##\s*\[|\z)/s", $content, $matches)) {
+                file_put_contents("beta-notes.md", trim($matches[1]));
+            } else {
+                file_put_contents("beta-notes.md", "Beta pre-release for version {$version}");
+            }
+          ' "$VERSION"
+
       - name: Create GitHub Pre-Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -150,5 +180,6 @@ jobs:
           gh release create "$BETA_TAG" \
             --repo "${GITHUB_REPOSITORY}" \
             --title "$BETA_TAG" \
+            --notes-file beta-notes.md \
             --generate-notes \
             --prerelease
