@@ -12,7 +12,7 @@ keywords:
 
 The package follows [Semantic Versioning](https://semver.org) (MAJOR.MINOR.PATCH).
 
-- **Current version:** `0.5.07` (2026-10-28)
+- **Current version:** `0.5.08` (2026-10-28)
 - **Installation:** `composer require sopheak/sp-laravel-api`
 - **Full details:** see the [Changelog](/changelog)
 
@@ -20,6 +20,7 @@ The package follows [Semantic Versioning](https://semver.org) (MAJOR.MINOR.PATCH
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [0.5.08](/changelog#0508---2026-10-28) | 2026-10-28 | Automated CHANGELOG notes extraction in GitHub Release workflow (`--notes-file` + `--generate-notes`), compact Client SDK table in README |
 | [0.5.07](/changelog#0507---2026-10-28) | 2026-10-28 | Security hardening (SSRF guard on webhooks and scalar login, tenant upsert scoping, hidden column filter isolation, PDO pivot bindings, attachment upload allowlist, RPC fail-closed auth, symfony/yaml CVE fix), official client SDKs (Flutter pub.dev & TypeScript npm), Trail code graph & Clef auto-triage |
 | [0.5.06](/changelog#0506---2026-10-26) | 2026-10-26 | Audit stats/timeline pinned to the request tenant, webhook secret write-only, function errors keep their status (422/403/404), attachment URLs carry `rpc`, `attachment_ids[]` linking, exact `eq` with commas and quoted list items, `not.` on contains/starts_with/ends_with/date_*, default page size 25, error envelope for unknown table and 429 |
 | [0.5.05](/changelog#0505---2026-10-24) | 2026-10-24 | Cursor pagination: `select=` without the paging column, `direction=prev`, and `last_cursor` fixed; new `meta.prev_cursor` / `meta.next_cursor` |

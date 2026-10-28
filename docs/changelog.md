@@ -13,6 +13,13 @@ All notable changes to `sp-laravel-api` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.08] - 2026-10-28
+
+### Changed
+
+- **Automated GitHub Release notes extraction**: Upgraded `.github/workflows/release.yml` for stable and beta releases to automatically extract formatted version notes, highlights, and upgrade instructions from `CHANGELOG.md` via PHP regex parsing, appending GitHub's auto-generated commit log and contributors list (`--notes-file` + `--generate-notes`).
+- **Compact Client SDKs section in README**: Reformatted the Client SDKs documentation in `README.md` into a streamlined Markdown table with live pub.dev and npm shield badges and concise capability highlights.
+
 ## [0.5.07] - 2026-10-28
 
 ### Security
