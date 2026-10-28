@@ -14,6 +14,10 @@ keywords:
 
 The package ships two Artisan commands that turn the auto-generated OpenAPI spec into ready-to-use API client collections: **Bruno v3** and **Postman v2.1**. Both commands are diff-aware: they preserve requests you hand-edited and only add or regenerate what the spec changed.
 
+For client application development (mobile, web, frontend), official client SDKs are also available:
+- **Dart / Flutter (pub.dev):** [`sp_laravel_api`](https://pub.dev/packages/sp_laravel_api) — `flutter pub add sp_laravel_api`
+- **TypeScript / JavaScript (npm):** [`@sokpheak/sp-laravel-api`](https://www.npmjs.com/package/@sokpheak/sp-laravel-api) — `npm i @sokpheak/sp-laravel-api`
+
 ## Table of Contents
 - [Module: API Client Exporters (Bruno / Postman)](#module-api-client-exporters-bruno--postman)
   - [Table of Contents](#table-of-contents)

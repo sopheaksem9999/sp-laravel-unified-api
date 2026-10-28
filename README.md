@@ -5,6 +5,8 @@
 [![PHP Version](https://img.shields.io/packagist/dependency-v/sopheak/sp-laravel-api/php.svg)](https://packagist.org/packages/sopheak/sp-laravel-api)
 [![License](https://img.shields.io/packagist/l/sopheak/sp-laravel-api.svg)](https://packagist.org/packages/sopheak/sp-laravel-api)
 [![Security](https://github.com/sopheaksem9999/sp-laravel-unified-api/actions/workflows/security.yml/badge.svg)](https://github.com/sopheaksem9999/sp-laravel-unified-api/actions/workflows/security.yml)
+[![pub package](https://img.shields.io/pub/v/sp_laravel_api.svg?label=pub.dev&color=0175C2)](https://pub.dev/packages/sp_laravel_api)
+[![npm version](https://img.shields.io/npm/v/@sokpheak/sp-laravel-api.svg?label=npm&color=CB3837)](https://www.npmjs.com/package/@sokpheak/sp-laravel-api)
 
 `sopheak/sp-laravel-api` is a comprehensive, config-driven REST API package for Laravel applications. It replaces repetitive controllers, boilerplate query builders, and manual CRUD endpoints with declarative schema definitions while providing standardized API responses, multi-tenant isolation, granular field permissions, transactional audit trails, file attachment workflows, and AI/MCP tool integrations.
 
@@ -12,7 +14,9 @@ The package owns API infrastructure, dynamic endpoint resolution, query filterin
 
 Public package links:
 - **Documentation:** [sp-laravel-api-docs.vercel.app](https://sp-laravel-api-docs.vercel.app/)
-- **Packagist:** [packagist.org/packages/sopheak/sp-laravel-api](https://packagist.org/packages/sopheak/sp-laravel-api)
+- **Packagist (Backend):** [packagist.org/packages/sopheak/sp-laravel-api](https://packagist.org/packages/sopheak/sp-laravel-api)
+- **Dart / Flutter SDK (pub.dev):** [pub.dev/packages/sp_laravel_api](https://pub.dev/packages/sp_laravel_api)
+- **JavaScript / TypeScript SDK (npm):** [npmjs.com/package/@sokpheak/sp-laravel-api](https://www.npmjs.com/package/@sokpheak/sp-laravel-api)
 - **Canonical Repository:** [github.com/sopheaksem9999/sp-laravel-unified-api](https://github.com/sopheaksem9999/sp-laravel-unified-api)
 
 ---
@@ -81,6 +85,26 @@ The enabled-by-default core provides enterprise SaaS applications with a unified
    ```bash
    php artisan sp-laravel-api:validate
    ```
+
+---
+
+## Client SDKs & Libraries
+
+First-party frontend and mobile applications can use official client packages that pair directly with `sopheak/sp-laravel-api`:
+
+| Platform | Package | Install | Links |
+| --- | --- | --- | --- |
+| **Flutter / Dart** | `sp_laravel_api` | `flutter pub add sp_laravel_api` | [![pub package](https://img.shields.io/pub/v/sp_laravel_api.svg)](https://pub.dev/packages/sp_laravel_api) · [Documentation](https://pub.dev/packages/sp_laravel_api) |
+| **JavaScript / TypeScript** | `@sokpheak/sp-laravel-api` | `npm install @sokpheak/sp-laravel-api` | [![npm version](https://img.shields.io/npm/v/@sokpheak/sp-laravel-api.svg)](https://www.npmjs.com/package/@sokpheak/sp-laravel-api) · [Documentation](https://www.npmjs.com/package/@sokpheak/sp-laravel-api) |
+
+### Features provided by client SDKs:
+- **Type-safe CRUD Operations:** Fluent methods for querying, creating, updating, and deleting records with full TypeScript & Dart typing.
+- **Advanced Query & Filter Builder:** Parameter building for PostgREST-style operators (`eq`, `like`, `in`, `gt`, `or=(...)`) matching backend API capabilities.
+- **Tenant & Authentication Handling:** Automatic injection for `Authorization: Bearer <token>` and `X-Tenant-ID` scoping headers.
+- **Relational Includes & Deep Embedding:** Eager load relationships directly via `select` projections (`select=*,customer(*),items(*)`).
+- **Pagination & File Uploads:** Native support for cursor and offset pagination models, plus multipart file attachments.
+
+For full client usage guides and code examples, see the [Client SDKs Documentation](docs/guide/modules/module-api-clients.md).
 
 ---
 

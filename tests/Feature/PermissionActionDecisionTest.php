@@ -83,4 +83,23 @@ class PermissionActionDecisionTest extends TestCase
         $this->assertSame(PermissionUtils::DECISION_ALLOWED, PermissionUtils::actionDecision($this->user(7), 'widgets', 'delete'));
         $this->assertSame(PermissionUtils::DECISION_FORBIDDEN, PermissionUtils::actionDecision($this->user(8), 'widgets', 'delete'));
     }
+
+    /** @test */
+    public function a_table_with_permissions_map_but_no_pms_name_enforces_permissions(): void
+    {
+        $columns = ['id' => ['type' => 'integer', 'nullable' => false], 'name' => ['type' => 'string', 'nullable' => true]];
+        Config::set('record.tables.restricted_widgets', new RecordTableType(
+            table: 'restricted_widgets',
+            pmsName: null,
+            hasTenantId: false,
+            columns: $columns,
+            permissions: ['delete' => ['widget:delete']]
+        ));
+        SchemaRegistryUtils::refresh();
+
+        $this->assertSame(
+            PermissionUtils::DECISION_FORBIDDEN,
+            PermissionUtils::actionDecision($this->user(), 'restricted_widgets', 'delete')
+        );
+    }
 }

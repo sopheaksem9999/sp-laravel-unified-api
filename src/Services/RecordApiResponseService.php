@@ -1064,6 +1064,10 @@ class RecordApiResponseService
             return true;
         }
 
+        if (!app()->environment(['local', 'testing'])) {
+            return false;
+        }
+
         $headerValue = request()->headers->get('X-Debug') ?? request()->headers->get('x-debug');
         if (!is_string($headerValue)) {
             return false;

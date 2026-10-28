@@ -307,6 +307,13 @@ class RecordService
             );
         }
 
+        if ($this->shouldApplyTenantId($tableSchema)) {
+            $tenantColumn = RecordConfigService::tenantColumn();
+            if (!in_array($tenantColumn, $matchOn, true)) {
+                array_unshift($matchOn, $tenantColumn);
+            }
+        }
+
         // Sanitize payload
         $item = $this->sanitizePayload($payload, $tableSchema);
         if ($this->shouldApplyTenantId($tableSchema)) {
@@ -406,6 +413,13 @@ class RecordService
         $pk = $tableSchema->primaryKey ?? 'id';
         $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
         $cacheTenantId = $tenantEnabled ? $this->normalizeTenantId($tenantId) : null;
+
+        if ($tenantEnabled) {
+            $tenantColumn = RecordConfigService::tenantColumn();
+            if (!in_array($tenantColumn, $matchOn, true)) {
+                array_unshift($matchOn, $tenantColumn);
+            }
+        }
 
         $preparedItems = [];
         $updateColumns = [];
@@ -851,7 +865,19 @@ class RecordService
             }
         }
 
-        $response = $this->executeCustomFunction($request, $functionConfig, $extractedParams);
+        $tablePublic = false;
+        if (isset($tableSchema->public)) {
+            $pub = $tableSchema->public;
+            if ($pub === true) {
+                $tablePublic = true;
+            } elseif (is_object($pub)) {
+                $tablePublic = ($pub->read ?? false) && ($pub->write ?? false);
+            } elseif (is_array($pub)) {
+                $tablePublic = ($pub['read'] ?? false) && ($pub['write'] ?? false);
+            }
+        }
+
+        $response = $this->executeCustomFunction($request, $functionConfig, $extractedParams, $tablePublic);
 
         $method = strtoupper($request->method());
         if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true) && $response->getStatusCode() < 400) {
@@ -949,7 +975,7 @@ class RecordService
             }
         }
 
-        $response = $this->executeCustomFunction($request, $functionConfig, $extractedParams);
+        $response = $this->executeCustomFunction($request, $functionConfig, $extractedParams, true);
 
         $method = strtoupper($request->method());
         if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true) && $response->getStatusCode() < 400) {
@@ -1902,6 +1928,14 @@ class RecordService
 
     public function shouldIncludeDebug(Request $request): bool
     {
+        if (RecordConfigService::debugEnabled()) {
+            return true;
+        }
+
+        if (!app()->environment(['local', 'testing'])) {
+            return false;
+        }
+
         $headerValue = $request->headers->get('X-Debug') ?? $request->headers->get('x-debug');
         if (null === $headerValue) {
             return false;
@@ -3363,7 +3397,7 @@ class RecordService
      * Execute a custom function based on its configuration.
      * @param array<string, string> $routeParams
      */
-    private function executeCustomFunction(Request $request, array|RecordFunctionType $functionConfig, array $routeParams = []): Response
+    private function executeCustomFunction(Request $request, array|RecordFunctionType $functionConfig, array $routeParams = [], bool $isPublicFallback = false): Response
     {
         if ($functionConfig instanceof RecordFunctionType) {
             $config = $functionConfig->toArray();
@@ -3372,7 +3406,7 @@ class RecordService
         }
 
         if (!array_key_exists('isPublic', $config) && (!array_key_exists('pmsName', $config) || $config['pmsName'] === null)) {
-            $config['isPublic'] = true;
+            $config['isPublic'] = $isPublicFallback;
         }
 
         $isPublic = (bool) ($config['isPublic'] ?? false);

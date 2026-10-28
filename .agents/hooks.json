@@ -1,0 +1,12 @@
+{
+  "trail": {
+    "enabled": true,
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "node .trail/antigravity-hook.cjs",
+        "timeout": 10
+      }
+    ]
+  }
+}

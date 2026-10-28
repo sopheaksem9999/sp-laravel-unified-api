@@ -13,6 +13,35 @@ All notable changes to `sp-laravel-api` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.07] - 2026-10-28
+
+### Security
+
+- **Explicit table permissions map takes precedence when `pmsName` is null**: `PermissionUtils::resolvePermissionName()` previously checked if `pmsName` was null before checking `$permissionsMap[$action]`. When `pmsName` was explicitly configured as `null`, it bypassed custom action permissions and defaulted directly to `$table.$action`. Explicit mappings in `$permissionsMap` are now resolved first.
+- **SSRF and credential relay prevention in OpenAPI / Scalar login route**: `/api-docs/auth/login` (`routes/web.php`) now validates that the forwarded URL endpoint matches either an absolute local origin (`http://localhost`, `http://127.0.0.1`, `APP_URL`) or an explicitly relative application path (`/api/...`). Remote origins, external hosts, and open redirects are rejected with `401 Unauthorized`.
+- **`X-Debug` profiling restricted to local and testing environments**: `RecordApiResponseService` and `RecordService` now restrict `X-Debug: true` header execution to `app()->environment(['local', 'testing'])`. In `staging` or `production` environments, the `X-Debug` header is safely ignored to prevent leaking query structures, execution timings, and bindings in response metadata.
+- **Tenant column enforced in `match_on` for tenant-scoped upserts**: `RecordService::upsertRecord` and `bulkUpsertRecord` now verify that `match_on` columns include the tenant scoping column (`tenant_id`) when upserting to a tenant-scoped table. If missing, the tenant column is automatically injected into the composite unique conflict target, preventing cross-tenant record overwriting.
+- **SSRF protection on webhook deliveries via `UrlSecurityValidator`**: Webhook dispatches (`DispatchWebhookJob`) now validate target URLs via `UrlSecurityValidator::assertSafeWebhookUrl()`. Webhook URLs resolving to IPv4/IPv6 private ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), loopbacks (`127.0.0.0/8`), link-local/cloud metadata services (`169.254.169.254`), or non-standard schemes are rejected with `SecurityException` prior to dispatch.
+- **Strict extension and MIME type allowlist on attachment uploads**: `AttachmentUploadController` now validates uploaded file extensions against both a dangerous executable blocklist (`.php`, `.phtml`, `.phar`, `.sh`, `.exe`, `.cgi`, etc.) and an allowlist of permitted safe extensions/MIME types (`image/*`, `application/pdf`, text/office formats), mitigating stored XSS and remote code execution vulnerabilities via malicious file uploads.
+- **Hidden columns excluded from filter, sort, and group-by clauses**: `QueryBuilderFiltersUtils::getFilterableColumns()` now excludes columns defined in `columnHiddens` from query filters (`eq`, `in`, `like`, etc.), sort orders (`sort=`), and groupings (`group_by=`). This closes a boolean inference side-channel where unauthenticated or unauthorized users could deduce sensitive hidden field values (e.g., password hashes, reset tokens).
+- **PDO parameter bindings for pivot where conditions and morph model types**: `RelationshipResolverUtils` now parameterizes dynamic pivot where conditions (`where_pivot`) using PDO `?` parameter bindings, and validates morph model types against valid class identifiers, eliminating SQL injection vectors in complex relationship resolutions.
+- **Custom table-level RPC functions fail-closed by default**: `RecordService::callCustomFunction` now enforces authentication by default for table-level custom functions unless explicitly marked `isPublic => true` or if the parent table is configured with `isPublic => true`.
+- **Dependency audit**: Upgraded `symfony/yaml` to `v8.1.9` resolving advisory `CVE-2026-109413` (`composer audit` returns 0 vulnerabilities).
+
+### Added
+
+- **Official Client SDK packages**: Published and documented official client libraries for modern frontends:
+  - Flutter / Dart: [`sp_laravel_api`](https://pub.dev/packages/sp_laravel_api) on pub.dev.
+  - TypeScript / JavaScript: [`@sokpheak/sp-laravel-api`](https://www.npmjs.com/package/@sokpheak/sp-laravel-api) on npm.
+  - Added installation and quickstart guides in `README.md`, `docs/guide/modules/module-api-clients.md`, `docs/sp-laravel-api-front.md`, and `docs/index.md`.
+- **Developer and AI agent tooling**: Added Trail code graph integration hooks (`.trail/antigravity-hook.cjs`, `.agents/hooks.json`) and Cloudflare Clef automatic error triage (`.agents/rules/clef-auto-triage.md`, `.claude/hooks/clef-triage.cjs`).
+
+### Notes
+
+- **Upgrade note — Table-level custom RPC function auth**: Table-level custom functions without `isPublic` or `pmsName` now require authentication unless the parent table is public. If you have public custom functions on protected tables, set `'isPublic' => true` in their configuration.
+- **Upgrade note — `X-Debug` header**: The `X-Debug` header is now ignored in production and staging environments. If query timings or debug metadata are needed during development, test on `local` or `testing` environments.
+- **Upgrade note — Webhook URLs**: External webhook target URLs must now resolve to public, routable IP addresses. Internal/local webhooks for integration tests should use mock handlers or local environment overrides.
+
 ## [0.5.06] - 2026-10-26
 
 ### Security

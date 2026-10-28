@@ -48,19 +48,12 @@ class PermissionUtils
         }
 
         $tableSchema = SchemaRegistryUtils::getTable($table);
-        if ($tableSchema instanceof RecordTableType) {
-            if (is_null($tableSchema->pmsName)) {
-                return self::DECISION_ALLOWED;
-            }
-
-            if (is_array($tableSchema->pmsName) && [] === $tableSchema->pmsName) {
-                return self::DECISION_ALLOWED;
-            }
-        }
 
         // Use the per-table permission map when it defines this action.
         if ($tableSchema instanceof RecordTableType && is_array($tableSchema->permissions) && isset($tableSchema->permissions[$action])) {
             $permissions = (array) $tableSchema->permissions[$action];
+        } elseif ($tableSchema instanceof RecordTableType && (is_null($tableSchema->pmsName) || (is_array($tableSchema->pmsName) && [] === $tableSchema->pmsName))) {
+            return self::DECISION_ALLOWED;
         } elseif ('force_delete' === $action && $tableSchema instanceof RecordTableType && is_array($tableSchema->permissions) && !isset($tableSchema->permissions['force_delete'])) {
             // force_delete has no override — independent, no fallback to 'delete'.
             $permissions = self::mapPermissions($table, 'force_delete');
