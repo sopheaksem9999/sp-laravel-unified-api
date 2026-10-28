@@ -307,6 +307,13 @@ class RecordService
             );
         }
 
+        if ($this->shouldApplyTenantId($tableSchema)) {
+            $tenantColumn = RecordConfigService::tenantColumn();
+            if (!in_array($tenantColumn, $matchOn, true)) {
+                array_unshift($matchOn, $tenantColumn);
+            }
+        }
+
         // Sanitize payload
         $item = $this->sanitizePayload($payload, $tableSchema);
         if ($this->shouldApplyTenantId($tableSchema)) {
@@ -406,6 +413,13 @@ class RecordService
         $pk = $tableSchema->primaryKey ?? 'id';
         $tenantEnabled = $this->shouldApplyTenantId($tableSchema);
         $cacheTenantId = $tenantEnabled ? $this->normalizeTenantId($tenantId) : null;
+
+        if ($tenantEnabled) {
+            $tenantColumn = RecordConfigService::tenantColumn();
+            if (!in_array($tenantColumn, $matchOn, true)) {
+                array_unshift($matchOn, $tenantColumn);
+            }
+        }
 
         $preparedItems = [];
         $updateColumns = [];
