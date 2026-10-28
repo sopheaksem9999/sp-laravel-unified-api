@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Utilities;
 
+use Throwable;
+
 class UrlSecurityValidator
 {
     /**
@@ -70,7 +72,7 @@ class UrlSecurityValidator
     public static function isPublicIp(string $ip): bool
     {
         // Reject 0.0.0.0 and IPv6 loopback / unspecified
-        if ($ip === '0.0.0.0' || $ip === '::' || $ip === '::1') {
+        if (in_array($ip, ['0.0.0.0', '::', '::1'], true)) {
             return false;
         }
 
@@ -85,12 +87,7 @@ class UrlSecurityValidator
             FILTER_VALIDATE_IP,
             FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
         );
-
-        if ($isValid === false) {
-            return false;
-        }
-
-        return true;
+        return $isValid !== false;
     }
 
     private static function isPrivateAllowedByConfig(): bool
@@ -99,7 +96,7 @@ class UrlSecurityValidator
             if (function_exists('config') && function_exists('app') && app()->has('config')) {
                 return (bool) config('webhooks.allow_private_ips', false);
             }
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // Container not bound or during early bootstrap
         }
 

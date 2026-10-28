@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Tests\Feature;
 
+use ReflectionMethod;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Config;
@@ -16,7 +17,7 @@ class DebugHeaderSecurityTest extends TestCase
     /** @test */
     public function x_debug_header_is_ignored_in_production_environment(): void
     {
-        App::detectEnvironment(fn() => 'production');
+        App::detectEnvironment(fn(): string => 'production');
         Config::set('record.debug', false);
 
         $request = Request::create('/api/test', 'GET', [], [], [], [
@@ -24,8 +25,7 @@ class DebugHeaderSecurityTest extends TestCase
         ]);
         $this->app->instance('request', $request);
 
-        $reflection = new \ReflectionMethod(RecordApiResponseService::class, 'shouldIncludeDebugDetails');
-        $reflection->setAccessible(true);
+        $reflection = new ReflectionMethod(RecordApiResponseService::class, 'shouldIncludeDebugDetails');
 
         $this->assertFalse($reflection->invoke(null));
 
@@ -36,7 +36,7 @@ class DebugHeaderSecurityTest extends TestCase
     /** @test */
     public function x_debug_header_is_allowed_in_local_environment(): void
     {
-        App::detectEnvironment(fn() => 'local');
+        App::detectEnvironment(fn(): string => 'local');
         Config::set('record.debug', false);
 
         $request = Request::create('/api/test', 'GET', [], [], [], [
@@ -44,8 +44,7 @@ class DebugHeaderSecurityTest extends TestCase
         ]);
         $this->app->instance('request', $request);
 
-        $reflection = new \ReflectionMethod(RecordApiResponseService::class, 'shouldIncludeDebugDetails');
-        $reflection->setAccessible(true);
+        $reflection = new ReflectionMethod(RecordApiResponseService::class, 'shouldIncludeDebugDetails');
 
         $this->assertTrue($reflection->invoke(null));
 
@@ -56,14 +55,13 @@ class DebugHeaderSecurityTest extends TestCase
     /** @test */
     public function config_debug_enabled_takes_precedence_in_any_environment(): void
     {
-        App::detectEnvironment(fn() => 'production');
+        App::detectEnvironment(fn(): string => 'production');
         Config::set('record.debug', true);
 
         $request = Request::create('/api/test', 'GET');
         $this->app->instance('request', $request);
 
-        $reflection = new \ReflectionMethod(RecordApiResponseService::class, 'shouldIncludeDebugDetails');
-        $reflection->setAccessible(true);
+        $reflection = new ReflectionMethod(RecordApiResponseService::class, 'shouldIncludeDebugDetails');
 
         $this->assertTrue($reflection->invoke(null));
 

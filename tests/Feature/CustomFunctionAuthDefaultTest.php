@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Tests\Feature;
 
+use ReflectionMethod;
 use Illuminate\Http\Request;
 use Sopheak\Core\Services\RecordService;
 use Sopheak\Core\Tests\TestCase;
@@ -29,8 +30,8 @@ class CustomFunctionAuthDefaultTest extends TestCase
             'functionName' => 'customAction',
         ];
 
-        $reflection = new \ReflectionMethod(RecordService::class, 'executeCustomFunction');
-        $reflection->setAccessible(true);
+        $reflection = new ReflectionMethod(RecordService::class, 'executeCustomFunction');
+
         $response = $reflection->invoke($service, $request, $functionConfig, []);
 
         $this->assertSame(401, $response->getStatusCode());
@@ -48,8 +49,8 @@ class CustomFunctionAuthDefaultTest extends TestCase
             'isPublic' => true,
         ];
 
-        $reflection = new \ReflectionMethod(RecordService::class, 'executeCustomFunction');
-        $reflection->setAccessible(true);
+        $reflection = new ReflectionMethod(RecordService::class, 'executeCustomFunction');
+
         $response = $reflection->invoke($service, $request, $functionConfig, []);
 
         $this->assertSame(200, $response->getStatusCode());

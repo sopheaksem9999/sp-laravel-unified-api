@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Tests\Feature;
 
+use Sopheak\Core\Enums\RecordRelationshipsEnum;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
@@ -45,6 +46,10 @@ class RelationshipSubqueryParameterizedBindingTest extends TestCase
 
         Config::set('record.tables.users', new RecordTableType(
             table: 'users',
+            columns: [
+                'id' => ['type' => 'integer'],
+                'name' => ['type' => 'string'],
+            ],
             relationships: [
                 'roles' => new RecordMetaBelongsToManyType(
                     related: 'roles',
@@ -55,10 +60,6 @@ class RelationshipSubqueryParameterizedBindingTest extends TestCase
                         ['column' => 'guard_name', 'operator' => '=', 'value' => 'web'],
                     ],
                 ),
-            ],
-            columns: [
-                'id' => ['type' => 'integer'],
-                'name' => ['type' => 'string'],
             ],
         ));
 
@@ -100,14 +101,14 @@ class RelationshipSubqueryParameterizedBindingTest extends TestCase
     {
         Config::set('record.tables.users.relationships.permissions', new RecordMetaBelongsToManyType(
             related: 'roles',
-            relation: 'App\\Models\\User',
+            type: RecordRelationshipsEnum::MORPH_TO_MANY,
             table: 'user_roles',
             foreignPivotKey: 'user_id',
             relatedPivotKey: 'role_id',
+            relation: 'App\\Models\\User',
             wherePivot: [
                 ['column' => 'guard_name', 'operator' => '=', 'value' => 'api'],
-            ],
-            type: \Sopheak\Core\Enums\RecordRelationshipsEnum::MORPH_TO_MANY
+            ]
         ));
         SchemaRegistryUtils::refresh();
 

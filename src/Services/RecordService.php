@@ -871,9 +871,9 @@ class RecordService
             if ($pub === true) {
                 $tablePublic = true;
             } elseif (is_object($pub)) {
-                $tablePublic = (bool) (($pub->read ?? false) && ($pub->write ?? false));
+                $tablePublic = ($pub->read ?? false) && ($pub->write ?? false);
             } elseif (is_array($pub)) {
-                $tablePublic = (bool) (($pub['read'] ?? false) && ($pub['write'] ?? false));
+                $tablePublic = ($pub['read'] ?? false) && ($pub['write'] ?? false);
             }
         }
 

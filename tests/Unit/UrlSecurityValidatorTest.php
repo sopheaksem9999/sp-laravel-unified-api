@@ -17,6 +17,9 @@ class UrlSecurityValidatorTest extends TestCase
         $this->assertFalse(UrlSecurityValidator::isPublicHttpUrl($url));
     }
 
+    /**
+     * @return string[][]
+     */
     public static function invalidUrlProvider(): array
     {
         return [
@@ -42,6 +45,9 @@ class UrlSecurityValidatorTest extends TestCase
         $this->assertTrue(UrlSecurityValidator::isPublicHttpUrl($url));
     }
 
+    /**
+     * @return string[][]
+     */
     public static function validUrlProvider(): array
     {
         return [

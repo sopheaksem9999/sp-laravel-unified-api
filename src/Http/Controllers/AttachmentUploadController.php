@@ -778,10 +778,8 @@ class AttachmentUploadController extends Controller
             return RecordApiResponseService::errorWrapped('File type not allowed for upload', Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        if (is_array($allowedExtensions) && !empty($allowedExtensions)) {
-            if (!in_array($extension, $allowedExtensions, true)) {
-                return RecordApiResponseService::errorWrapped('File type not allowed for upload', Response::HTTP_UNPROCESSABLE_ENTITY);
-            }
+        if (is_array($allowedExtensions) && !empty($allowedExtensions) && !in_array($extension, $allowedExtensions, true)) {
+            return RecordApiResponseService::errorWrapped('File type not allowed for upload', Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         $blockedMimes = [
