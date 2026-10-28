@@ -764,6 +764,43 @@ class AttachmentUploadController extends Controller
             return response()->json(['message' => 'File is required'], 422);
         }
 
+        $extension = strtolower(trim((string) $file->getClientOriginalExtension()));
+        $mimeType = strtolower(trim((string) $file->getMimeType()));
+
+        $defaultBlockedExtensions = [
+            'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'phar', 'sh', 'bash', 'exe',
+            'bat', 'cmd', 'cgi', 'pl', 'py', 'jsp', 'asp', 'aspx', 'pht', 'phps',
+        ];
+        $blockedExtensions = (array) config('attachments.blocked_extensions', $defaultBlockedExtensions);
+        $allowedExtensions = config('attachments.allowed_extensions');
+
+        if (in_array($extension, $blockedExtensions, true)) {
+            return RecordApiResponseService::errorWrapped('File type not allowed for upload', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        if (is_array($allowedExtensions) && !empty($allowedExtensions)) {
+            if (!in_array($extension, $allowedExtensions, true)) {
+                return RecordApiResponseService::errorWrapped('File type not allowed for upload', Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+        }
+
+        $blockedMimes = [
+            'application/x-php',
+            'text/x-php',
+            'application/x-httpd-php',
+            'application/x-httpd-php-source',
+            'application/x-sh',
+            'text/x-shellscript',
+            'application/x-executable',
+            'application/x-msdownload',
+            'application/x-bat',
+            'application/x-csh',
+        ];
+
+        if (in_array($mimeType, $blockedMimes, true)) {
+            return RecordApiResponseService::errorWrapped('File type not allowed for upload', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
         $tenantId = $this->resolveTenantId($request);
         if (!$this->accessService()->folderExists($request->input('folder_id'), $tenantId)) {
             return RecordApiResponseService::errorWrapped('Folder not found', Response::HTTP_UNPROCESSABLE_ENTITY);
