@@ -67,19 +67,15 @@ jobs:
   scan-sast:
     name: SAST — PHP Code (Semgrep)
     runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
     steps:
       - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
         with:
           persist-credentials: false
 
       - name: Run Semgrep
-        uses: semgrep/semgrep-action@v1
-        with:
-          config: >-
-            p/php
-            p/laravel
-            p/secrets
-            p/owasp-top-ten
+        run: semgrep scan --config p/php --config p/laravel --config p/secrets --config p/owasp-top-ten
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
