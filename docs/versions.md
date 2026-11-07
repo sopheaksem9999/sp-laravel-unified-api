@@ -20,7 +20,7 @@ The package follows [Semantic Versioning](https://semver.org) (MAJOR.MINOR.PATCH
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| [0.5.09](/changelog#0509---2026-11-07) | 2026-11-07 | MIT License adoption & LICENSE file, containerized Semgrep SAST runner, workflow_run fork security hardening, beta release throttling, CODEOWNERS governance, Symfony upstream CVE patches |
+| [0.5.09](/changelog#0509---2026-11-07) | 2026-11-07 | SSRF HTTP redirect hardening, MIT License adoption & LICENSE file, containerized Semgrep SAST runner, workflow_run fork security hardening, beta release throttling, CODEOWNERS governance, Symfony upstream CVE patches |
 | [0.5.08](/changelog#0508---2026-10-28) | 2026-10-28 | Automated CHANGELOG notes extraction in GitHub Release workflow (`--notes-file` + `--generate-notes`), compact Client SDK table in README |
 | [0.5.07](/changelog#0507---2026-10-28) | 2026-10-28 | Security hardening (SSRF guard on webhooks and scalar login, tenant upsert scoping, hidden column filter isolation, PDO pivot bindings, attachment upload allowlist, RPC fail-closed auth, symfony/yaml CVE fix), official client SDKs (Flutter pub.dev & TypeScript npm), Trail code graph & Clef auto-triage |
 | [0.5.06](/changelog#0506---2026-10-26) | 2026-10-26 | Audit stats/timeline pinned to the request tenant, webhook secret write-only, function errors keep their status (422/403/404), attachment URLs carry `rpc`, `attachment_ids[]` linking, exact `eq` with commas and quoted list items, `not.` on contains/starts_with/ends_with/date_*, default page size 25, error envelope for unknown table and 429 |

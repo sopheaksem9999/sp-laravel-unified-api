@@ -17,6 +17,7 @@ All notable changes to `sp-laravel-api` will be documented in this file.
 
 ### Security & Compliance
 
+- **SSRF HTTP 3xx redirect hardening**: Enforced `withoutRedirecting()` on `DispatchWebhookJob` and the Scalar login proxy route (`/api-docs/auth/login`). This blocks external services from redirecting pre-validated requests to internal metadata or loopback IP ranges via HTTP 301/302 redirects.
 - **Open source MIT License & SPDX alignment**: Added official `LICENSE` file for Sem Sopheak and aligned `composer.json` license metadata with `"license": "MIT"`, resolving licensing ambiguity in package security scans (Aikido Intel).
 - **Semgrep container migration**: Upgraded SAST scanning in `.github/workflows/security.yml` from the deprecated `semgrep/semgrep-action@v1` to the official `semgrep/semgrep` runner container.
 - **Supply chain workflow hardening**: Hardened `.github/workflows/release.yml` with `head_repository.full_name == github.repository` validation on `workflow_run` triggers to prevent untrusted fork code execution with elevated tokens.
