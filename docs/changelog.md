@@ -13,6 +13,17 @@ All notable changes to `sp-laravel-api` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.09] - 2026-11-07
+
+### Security & Compliance
+
+- **Open source MIT License & SPDX alignment**: Added official `LICENSE` file for Sem Sopheak and aligned `composer.json` license metadata with `"license": "MIT"`, resolving licensing ambiguity in package security scans (Aikido Intel).
+- **Semgrep container migration**: Upgraded SAST scanning in `.github/workflows/security.yml` from the deprecated `semgrep/semgrep-action@v1` to the official `semgrep/semgrep` runner container.
+- **Supply chain workflow hardening**: Hardened `.github/workflows/release.yml` with `head_repository.full_name == github.repository` validation on `workflow_run` triggers to prevent untrusted fork code execution with elevated tokens.
+- **Beta release throttling**: Throttled automated beta tag and release generation in `release.yml` so that commits to `develop` only publish pre-releases when `VERSION` or `composer.json` is modified, eliminating release frequency anomalies on Packagist.
+- **Repository governance**: Added `.github/CODEOWNERS` defining `@sopheaksem9999` for explicit maintainer ownership.
+- **Upstream CVE patches**: Upgraded Symfony core packages to 8.1.11 to patch upstream advisories in `symfony/filesystem`, `symfony/http-foundation`, and `symfony/yaml`.
+
 ## [0.5.08] - 2026-10-28
 
 ### Changed
