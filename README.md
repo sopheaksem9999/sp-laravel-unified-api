@@ -230,5 +230,5 @@ For complete guides, interactive examples, architecture overviews, and API refer
 
 ## 📄 License
 
-This package is proprietary software. All rights reserved.
+The MIT License (MIT). Please see [License File](LICENSE) for more information.
 
