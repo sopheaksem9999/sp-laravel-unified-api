@@ -62,7 +62,7 @@ Route::post('/api-docs/auth/login', function (Request $request) {
     }
 
     /** @var \Illuminate\Http\Client\Response $response */
-    $response = Http::acceptJson()->post($endpoint, [
+    $response = Http::acceptJson()->withoutRedirecting()->post($endpoint, [
         'email' => $username,
         'username' => $username,
         'password' => $password,

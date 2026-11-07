@@ -90,6 +90,7 @@ class DispatchWebhookJob implements ShouldQueue
         try {
             /** @var Response $response */
             $response = Http::timeout(10)
+                ->withoutRedirecting()
                 ->withHeaders([
                     'X-Webhook-Event' => $this->event,
                     'X-Webhook-Signature' => $signature,

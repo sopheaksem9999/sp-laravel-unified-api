@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Tests\Feature;
 
+use Throwable;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
@@ -70,6 +71,46 @@ class WebhookSsrfSecurityTest extends TestCase
         $this->assertDatabaseHas('sp_webhook_deliveries', [
             'id' => (int) $deliveryId,
             'response_status' => 400,
+            'status' => 'failed',
+        ]);
+    }
+
+    /** @test */
+    public function dispatch_webhook_job_does_not_follow_http_redirects(): void
+    {
+        Http::fake([
+            'https://1.1.1.1/webhook' => Http::response('', 302, ['Location' => 'http://169.254.169.254/latest/meta-data']),
+        ]);
+
+        $deliveryId = (string) DB::table('sp_webhook_deliveries')->insertGetId([
+            'endpoint_id' => 'ep_2',
+            'event' => 'record.created',
+            'payload' => json_encode(['id' => 2]),
+            'status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $job = new DispatchWebhookJob(
+            deliveryId: $deliveryId,
+            endpointId: 'ep_2',
+            url: 'https://1.1.1.1/webhook',
+            secret: 'sec_123',
+            event: 'record.created',
+            payload: ['id' => 2]
+        );
+
+        try {
+            $job->handle();
+        } catch (Throwable) {
+            // Fails due to 302 not being successful
+        }
+
+        Http::assertSentCount(1);
+        Http::assertSent(fn ($request): bool => $request->url() === 'https://1.1.1.1/webhook');
+        $this->assertDatabaseHas('sp_webhook_deliveries', [
+            'id' => (int) $deliveryId,
+            'response_status' => 302,
             'status' => 'failed',
         ]);
     }
