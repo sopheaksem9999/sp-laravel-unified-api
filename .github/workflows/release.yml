@@ -35,8 +35,8 @@ jobs:
     steps:
       - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
         with:
-          # Check out canonical branch verified by security workflow
-          ref: ${{ github.event.workflow_run.head_branch }}
+          # Check out canonical main branch verified by security workflow
+          ref: main
           fetch-depth: 0
           fetch-tags: true
           persist-credentials: false
@@ -122,8 +122,8 @@ jobs:
     steps:
       - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
         with:
-          # Check out canonical branch verified by security workflow
-          ref: ${{ github.event.workflow_run.head_branch }}
+          # Check out canonical develop branch verified by security workflow
+          ref: develop
           fetch-depth: 0
           fetch-tags: true
           persist-credentials: false
