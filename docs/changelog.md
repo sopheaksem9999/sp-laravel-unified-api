@@ -13,6 +13,15 @@ All notable changes to `sp-laravel-api` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.10] - 2026-11-08
+
+### Security & CI/CD
+
+- **Pinned container image in SAST workflow**: Pinned the Semgrep container image in `.github/workflows/security.yml` to `semgrep/semgrep:1.184.0`, resolving Aikido Intel's unpinned container supply chain caution (`workflow_audit`).
+- **Cleaned Semgrep rule configurations**: Removed nonexistent ruleset references, retaining verified `p/php`, `p/secrets`, and `p/owasp-top-ten` rulesets with `--error`.
+- **Pinned Gitleaks Action reference**: Pinned `gitleaks/gitleaks-action` to immutable commit SHA `@ff98106e4c7b2bc287b24eaf42907196329070c7` (`v2.3.8`).
+- **Static branch checkout references**: Replaced dynamic checkout refs in `.github/workflows/release.yml` with explicit static branch targets (`ref: main` for stable releases, `ref: develop` for beta releases).
+
 ## [0.5.09] - 2026-11-07
 
 ### Security & Compliance
