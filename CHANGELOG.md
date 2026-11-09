@@ -2,7 +2,7 @@
 
 All notable changes to `sp-laravel-api` will be documented in this file.
 
-## [Unreleased]
+## [1.0.0] - 2026-11-09
 
 ### Added
 

@@ -12,7 +12,7 @@ keywords:
 
 The package follows [Semantic Versioning](https://semver.org) (MAJOR.MINOR.PATCH).
 
-- **Current version:** `0.5.10` (2026-11-08)
+- **Current version:** `1.0.0` (2026-11-09)
 - **Installation:** `composer require sopheak/sp-laravel-api`
 - **Full details:** see the [Changelog](/changelog)
 
@@ -20,6 +20,7 @@ The package follows [Semantic Versioning](https://semver.org) (MAJOR.MINOR.PATCH
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| [1.0.0](/changelog#100---2026-11-09) | 2026-11-09 | Typed config definitions (`RecordColumnType`, `RecordSchemaType`, `RecordTablePermissionType`, `RecordComputedAttributeType`, `RecordCastType`, `RecordCastEnum`, `RecordTriggerHookEnum`, `RecordValidatorHookEnum`), `sync-record-columns` enum generation & constructor argument order preservation, restored Laravel Boost auto-discovery |
 | [0.5.10](/changelog#0510---2026-11-08) | 2026-11-08 | Pinned Semgrep container image (`semgrep/semgrep:1.184.0`), pinned Gitleaks Action commit SHA, static checkout branch targets in release automation |
 | [0.5.09](/changelog#0509---2026-11-07) | 2026-11-07 | SSRF HTTP redirect hardening, MIT License adoption & LICENSE file, containerized Semgrep SAST runner, workflow_run fork security hardening, beta release throttling, CODEOWNERS governance, Symfony upstream CVE patches |
 | [0.5.08](/changelog#0508---2026-10-28) | 2026-10-28 | Automated CHANGELOG notes extraction in GitHub Release workflow (`--notes-file` + `--generate-notes`), compact Client SDK table in README |
