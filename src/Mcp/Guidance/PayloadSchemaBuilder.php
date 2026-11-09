@@ -94,6 +94,12 @@ final class PayloadSchemaBuilder
                 $property['maxLength'] = $field['maxLength'];
             }
 
+            foreach (['description', 'example'] as $annotation) {
+                if (isset($field[$annotation])) {
+                    $property[$annotation] = $field[$annotation];
+                }
+            }
+
             $properties[$name] = $property;
         }
 

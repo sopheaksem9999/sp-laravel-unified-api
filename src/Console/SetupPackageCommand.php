@@ -409,13 +409,13 @@ class SetupPackageCommand extends Command
             use Sopheak\Core\Types\RecordTableType;
 
             return new RecordTableType(
-                pmsName: 'customer',
                 table: 'customers',
+                pmsName: 'customer',
+                hasTenantId: false,
+                softDeletes: true,
                 isAuthRead: true,
                 isAuthWrite: true,
                 relationships: [],
-                softDeletes: true,
-                hasTenantId: false,
                 createValidator: [CustomerValidator::class, 'createCustomer'],
             );
             ```
@@ -464,13 +464,13 @@ class SetupPackageCommand extends Command
 
             return [
                 'invoices' => new RecordTableType(
-                    pmsName: 'invoice',
                     table: 'invoices',
+                    pmsName: 'invoice',
+                    hasTenantId: false,
+                    softDeletes: true,
                     isAuthRead: true,
                     isAuthWrite: true,
                     relationships: [],
-                    softDeletes: true,
-                    hasTenantId: false,
                 ),
             ];
             ```
@@ -527,14 +527,14 @@ class SetupPackageCommand extends Command
             // must survive `php artisan config:cache` (var_export() cannot serialize
             // a Closure). See app/Record/Validators/UserValidator.php.
             return new RecordTableType(
-                pmsName: 'user',
                 table: 'users',
+                pmsName: 'user',
+                hasTenantId: false,
+                softDeletes: false,
                 isAuthRead: true,
                 isAuthWrite: true,
                 relationships: [],
                 functions: [],
-                softDeletes: false,
-                hasTenantId: false,
                 createValidator: [UserValidator::class, 'createUser'],
                 updateValidator: [UserValidator::class, 'updateUser'],
                 deleteValidator: [UserValidator::class, 'deleteUser'],

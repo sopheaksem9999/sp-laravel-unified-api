@@ -280,6 +280,50 @@ class SchemaRegistryUtils
      *
      * @param array<string, mixed>|null $colDef
      */
+    /**
+     * A column default as the PHP value to insert, or `[false, null]` when it
+     * is a database expression the database must apply itself.
+     *
+     * Databases report defaults as SQL: PostgreSQL `'0'::numeric`,
+     * `'draft'::character varying`, `false`, `nextval(...)`,
+     * `CURRENT_TIMESTAMP`; SQLite `'open'`; MySQL `0.00`, `CURRENT_TIMESTAMP`.
+     * Inserting that text as a value fails (`invalid input syntax for type
+     * numeric: "'0'::numeric"`), so only literals are turned into values.
+     *
+     * @return array{0: bool, 1: mixed} [is a literal, the PHP value]
+     */
+    public static function literalDefault(mixed $default): array
+    {
+        if (!is_string($default)) {
+            return [true, $default];
+        }
+
+        $raw = trim($default);
+        // 'text'::type, 'text', with '' as an escaped quote
+        if (1 === preg_match("/^'((?:[^']|'')*)'(?:::[\\w\\s\".\\[\\]]+)?$/s", $raw, $m)) {
+            return [true, str_replace("''", "'", $m[1])];
+        }
+
+        // 0, -1.5, (-1), 2::bigint (the database casts the text on insert)
+        if (1 === preg_match('/^\(?(-?\d+(?:\.\d+)?)\)?(?:::[\w\s"]+)?$/', $raw, $m)) {
+            // Kept as text: '007' in a varchar column must stay '007'.
+            return [true, $m[1]];
+        }
+
+        $lower = strtolower($raw);
+        if (in_array($lower, ['true', 'false'], true)) {
+            return [true, 'true' === $lower];
+        }
+
+        // NULL, NULL::text, functions, CURRENT_TIMESTAMP and other expressions
+        if (str_starts_with($lower, 'null') || str_contains($raw, '(') || 1 === preg_match('/^(current_(timestamp|date|time|user)|localtime(stamp)?|now)\b/i', $raw)) {
+            return [false, null];
+        }
+
+        // MySQL reports a plain string default without quotes.
+        return [true, $raw];
+    }
+
     public static function isUuidColumnType(?array $colDef): bool
     {
         if ($colDef === null) {

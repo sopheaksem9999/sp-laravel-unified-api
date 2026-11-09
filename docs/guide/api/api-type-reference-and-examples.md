@@ -3,6 +3,10 @@ title: "Record Type Reference and Class-Based Examples"
 description: "RecordTableType parameters, class-based configuration patterns, and Record* type reference for functions, triggers, and relationships."
 keywords:
   - RecordTableType
+  - RecordTablePermissionType
+  - RecordComputedAttributeType
+  - RecordColumnType
+  - RecordSchemaType
   - RecordFunctionType
   - RecordTableTriggerType
   - RecordValidationType
@@ -17,8 +21,8 @@ Constructor (named arguments recommended):
 
 ```php
 new RecordTableType(
-    pmsName: 'invoice',
     table: null,
+    pmsName: 'invoice',
     hasTenantId: false,
     softDeletes: false,
     disableAuditLog: false,
@@ -28,10 +32,9 @@ new RecordTableType(
     canCreate: true,
     canUpdate: true,
     canDelete: true,
+    canUpsert: true,
     isAuthRead: true,
     isAuthWrite: true,
-    relationships: [],
-    functions: [],
     primaryKey: 'id',
     ownerColumn: null,
     columns: [],
@@ -39,7 +42,9 @@ new RecordTableType(
     columnWriteDisabled: [],
     columnIndexes: [],
     searchable: [],
-    auditLogFn: null,
+    relationships: [],
+    functions: [],
+    customAuditLog: null,
     createValidator: null,
     updateValidator: null,
     deleteValidator: null,
@@ -51,7 +56,14 @@ new RecordTableType(
     afterUpdate: null,
     beforeDelete: null,
     afterDelete: null,
+    beforeRestore: null,
+    afterRestore: null,
     triggers: null,
+    overrideTimestamps: false,
+    overrideUserstamps: false,
+    attributes: null,
+    casting: null,
+    permissions: null,
 );
 ```
 
@@ -86,6 +98,7 @@ new RecordTableType(
 - `disableCache` (bool, default: `true`): Disables query caching for this table (even if `record.cache.enabled` is true). Caching is **opt-in per table** — set `disableCache: false` to enable it.
 - `disableAuditLog` (bool, default: `false`): Disables audit log inserts for create/update/delete on this table.
 - `disableBroadcast` (bool, default: `false`): Suppresses `RecordMutated` broadcast events for this table even when `record.broadcast_events` is globally enabled. Useful for high-volume tables where real-time broadcasting is not needed.
+- `customAuditLog` (`RecordTableTriggerType|string|array|null`, default: `null`): Optional custom audit logger invoked on write operations. Accepts a `RecordTableTriggerType` instance, a `[ClassName::class, 'method']` array, or a `'Class@method'` string.
 - `auditLogFn` (?string, default: `null`): Reserved for custom audit log behavior; not used by the current runtime.
 
 #### Schema & Search Metadata
@@ -107,32 +120,46 @@ new RecordTableType(
   - An array of Laravel validation rules.
   - A `RecordValidationType` instance.
   - A closure returning rules or a `RecordValidationType`.
-  - A string representing a class name containing `#[RecordValidator]` attributes.
+  - A string representing a class name containing `#[RecordValidator]` attributes (e.g. `#[RecordValidator(RecordValidatorHookEnum::CREATE)]` or `#[RecordValidator('create')]`). Classes listed in `triggers` are also scanned for `#[RecordValidator]` attributes.
 
 #### Computed Attributes
 
-- `attributes` (?array, default: `null`): Map of computed field name => callable resolver. Resolvers are **lazy** — they only execute when the field name is explicitly listed in the `?select=` query parameter. When no `?select=` is provided, or the field is not in the requested columns, the resolver is never called.
+- `attributes` (?array, default: `null`): Map of computed field name => callable resolver or `RecordComputedAttributeType`. Resolvers are **lazy** — they only execute when the field name is explicitly listed in the `?select=` query parameter. When no `?select=` is provided, or the field is not in the requested columns, the resolver is never called.
 
 Supported resolver formats:
 
 | Format | Example |
 |---|---|
+| `RecordComputedAttributeType` | `new RecordComputedAttributeType(class: BrandAttribute::class, functionName: 'getFullLabel', type: 'string')` |
 | Closure | `fn($row, $table) => value` |
 | `[Class, method]` array | `[BrandAttribute::class, 'getLogoUrl']` |
 | `'Class@method'` string | `BrandAttribute::class . '@getLogoUrl'` |
 | `'ClassName'` string | `BrandAttribute::class` → calls `handle($row, $table)` |
+
+##### Typed Computed Attributes (`RecordComputedAttributeType`)
+
+`RecordComputedAttributeType` is the recommended, strongly-typed way to configure computed attributes. In addition to specifying the handler class and method, it provides:
+- **`config:cache` support**: Survives `var_export()` when running `php artisan config:cache` (closures cannot be serialized).
+- **OpenAPI Schema generation**: Generates typed, read-only field metadata (`type`, `description`, `example`, `nullable`) for OpenAPI documentation and MCP schemas.
 
 The resolver class is resolved via the Laravel container (`app()`), so constructor injection works. `$row` is the raw DB row (`stdClass` in most cases).
 
 **Config example:**
 
 ```php
+use Sopheak\Core\Types\RecordComputedAttributeType;
 use Sopheak\Core\Types\RecordTableType;
 
 'brands' => new RecordTableType(
     table: 'brands',
     attributes: [
-        'full_label' => [\App\Attributes\BrandAttribute::class, 'getFullLabel'],
+        'full_label' => new RecordComputedAttributeType(
+            class: \App\Attributes\BrandAttribute::class,
+            functionName: 'getFullLabel',
+            type: 'string',
+            description: 'Full brand label with code',
+            example: 'Acme Corp (ACM)',
+        ),
         'logo_url'   => \App\Attributes\BrandAttribute::class . '@getLogoUrl',
         'is_premium' => fn($row, $table) => ($row->tier ?? null) === 'premium',
     ],
@@ -178,26 +205,27 @@ GET /api/v1/brands?select=*,logo_url             → logo_url fires; * fetches a
 
 Flat keys target main-table columns. **Dot-notation keys** target columns inside eagerly-loaded relationships — `'relation.column'` casts `column` on every row of that relation, regardless of whether the relation is a single object (`belongsTo`/`hasOne`) or a collection (`hasMany`/`hasManyThrough`).
 
-Supported built-in cast strings (Laravel-compatible names):
+Supported built-in cast strings and `RecordCastEnum` cases:
 
-| Cast | PHP transformation |
-|---|---|
-| `int` / `integer` | `(int) $value` |
-| `float` / `double` / `real` | `(float) $value` |
-| `decimal` | `(float) $value` |
-| `decimal:N` | `number_format((float) $value, N, '.', '')` |
-| `string` | `(string) $value` |
-| `bool` / `boolean` | `(bool) $value` |
-| `array` / `json` | `json_decode($value, true)` |
-| `object` | `json_decode($value)` |
-| `date` | `Carbon::parse($value)->toDateString()` |
-| `datetime` | `Carbon::parse($value)->toISOString()` |
-| `timestamp` | `Carbon::parse($value)->getTimestamp()` |
+| Cast String | `RecordCastEnum` | PHP transformation |
+|---|---|---|
+| `int` / `integer` | `RecordCastEnum::INT` / `INTEGER` | `(int) $value` |
+| `float` / `double` / `real` | `RecordCastEnum::FLOAT` / `DOUBLE` / `REAL` | `(float) $value` |
+| `decimal` | `RecordCastEnum::DECIMAL` | `(float) $value` |
+| `decimal:N` | `RecordCastEnum::decimal(N)` | `number_format((float) $value, N, '.', '')` |
+| `string` | `RecordCastEnum::STRING` | `(string) $value` |
+| `bool` / `boolean` | `RecordCastEnum::BOOL` / `BOOLEAN` | `(bool) $value` |
+| `array` / `json` | `RecordCastEnum::ARRAY` / `JSON` | `json_decode($value, true)` |
+| `object` | `RecordCastEnum::OBJECT` | `json_decode($value)` |
+| `date` | `RecordCastEnum::DATE` | `Carbon::parse($value)->toDateString()` |
+| `datetime` | `RecordCastEnum::DATETIME` | `Carbon::parse($value)->toISOString()` |
+| `timestamp` | `RecordCastEnum::TIMESTAMP` | `Carbon::parse($value)->getTimestamp()` |
 
 Custom cast forms — the callable receives `($value, $column, $row)`:
 
 | Format | Example |
 |---|---|
+| `RecordCastType` | `new RecordCastType(class: GlobalCasting::class, functionName: 'bool')` — `config:cache` safe |
 | Closure | `fn($v, $col, $row) => strtoupper($v)` |
 | `[Class, 'method']` array | `[GlobalCasting::class, 'bool']` — static or instance |
 | `'Class@method'` string | `'App\\Casts\\MoneyCast@get'` |
@@ -209,36 +237,38 @@ Custom cast forms — the callable receives `($value, $column, $row)`:
 
 ```php
 use App\Record\Casts\GlobalCasting;
+use Sopheak\Core\Enums\RecordCastEnum;
+use Sopheak\Core\Types\RecordCastType;
 
 // config/record.php
 'casting' => [
-    'is_active' => 'bool',
-    'amount' => 'decimal:2',
+    'is_active' => RecordCastEnum::BOOL,
+    'amount' => RecordCastEnum::decimal(2),
 ],
 
 // table config
 'brands' => new RecordTableType(
     table: 'brands',
     columns: [
-        'is_active' => ['type' => 'boolean'],
-        'quantity' => ['type' => 'bigint'],
-        'price' => ['type' => 'decimal(12,2)'],
-        'name' => ['type' => 'varchar', 'nullable' => false],
+        'is_active' => new RecordColumnType(type: RecordColumnTypeEnum::BOOLEAN),
+        'quantity' => new RecordColumnType(type: RecordColumnTypeEnum::BIGINT),
+        'price' => new RecordColumnType(type: RecordColumnTypeEnum::DECIMAL, cast: RecordCastEnum::decimal(2)),
+        'name' => ['type' => 'varchar', 'nullable' => false], // the array form still works
     ],
     casting: [
         // explicit override (custom output format)
         'price'      => fn($v) => number_format((float) $v, 2, '.', ''),
         // overrides global record.casting['amount'] when table-level is defined
-        'amount'     => 'string',
+        'amount'     => RecordCastEnum::STRING,
         // explicit override from inferred integer
-        'quantity'   => 'string',
+        'quantity'   => RecordCastEnum::STRING,
         // explicit override from inferred boolean
-        'is_active'  => 'bool',
-        'metadata'   => 'array',
-        'score'      => 'decimal:4',
-        'created_at' => 'datetime',
-        // custom static method
-        'is_cloud'   => [GlobalCasting::class, 'bool'],
+        'is_active'  => RecordCastEnum::BOOL,
+        'metadata'   => RecordCastEnum::ARRAY,
+        'score'      => RecordCastEnum::decimal(4),
+        'created_at' => RecordCastEnum::DATETIME,
+        // typed custom static method (config:cache safe)
+        'is_cloud'   => new RecordCastType(class: GlobalCasting::class, functionName: 'bool'),
         // inline Closure
         'status'     => fn($v) => strtoupper($v),
     ],
@@ -290,31 +320,54 @@ class GlobalCasting
 
 #### Per-Action Permission Map
 
-- `permissions` (?array, default: `null`): Per-table map that overrides the auto-generated `pmsName`-based permissions for specific actions. Only the actions listed in this map are affected — all other actions still fall back to the standard `PermissionUtils::mapPermissions()` logic using `pmsName` and `permission_separator`.
+- `permissions` (`RecordTablePermissionType|array|null`, default: `null`): Per-table map that overrides the auto-generated `pmsName`-based permissions for specific actions. Accepts a typed `RecordTablePermissionType` instance or an array. Only the actions listed in this map are affected — all other actions still fall back to the standard `PermissionUtils::mapPermissions()` logic using `pmsName` and `permission_separator`.
 
-Supported action keys:
+Supported action keys / properties:
 
-| Key | Applied by |
+| Key / Property | Applied by |
 |---|---|
-| `'read'` | `listRecords` (GET list) and `getRecordById` (GET single) |
-| `'create'` | `createRecord` and the create-check in `upsertRecord` |
-| `'update'` | `updateRecord` and the update-check in `upsertRecord` |
-| `'delete'` | `destroyRecord` (soft-delete) |
-| `'force_delete'` | `forceDeleteRecord` (permanent delete — independent, no fallback to `'delete'`) |
-| `'restore'` | `restoreRecord` |
+| `'read'` / `$read` | `listRecords` (GET list) and `getRecordById` (GET single) |
+| `'create'` / `$create` | `createRecord` and the create-check in `upsertRecord` |
+| `'update'` / `$update` | `updateRecord` and the update-check in `upsertRecord` |
+| `'delete'` / `$delete` | `destroyRecord` (soft-delete) |
+| `'force_delete'` / `$forceDelete` | `forceDeleteRecord` (permanent delete — independent, no fallback to `'delete'`) |
+| `'restore'` / `$restore` | `restoreRecord` |
+| `'custom'` / `$custom` | Custom action mapping |
 
 The value for each action can be a single permission string or an array of strings. Any one matching permission grants access (same OR logic used by the standard permission resolver).
 
-**Config example:**
+##### Typed Permission Map (`RecordTablePermissionType`)
+
+`RecordTablePermissionType` is the recommended, strongly-typed way to configure per-action permissions. It offers IDE autocomplete, named arguments, `ArrayAccess` compatibility, and works seamlessly with `php artisan config:cache`:
+
+```php
+use Sopheak\Core\Types\RecordTablePermissionType;
+use Sopheak\Core\Types\RecordTableType;
+
+'items' => new RecordTableType(
+    table: 'items',
+    pmsName: 'item',  // still used for actions not listed in permissions
+    permissions: new RecordTablePermissionType(
+        read: 'view_list_item',
+        create: 'insert_new_item',
+        update: 'update_existing_item',
+        delete: 'remove_item',
+        forceDelete: 'permanently_remove_item',
+        restore: 'restore_item',
+    ),
+),
+```
+
+The array form remains fully supported:
 
 ```php
 'items' => new RecordTableType(
     table: 'items',
     pmsName: 'item',  // still used for actions not listed in permissions
     permissions: [
-        'read'    => 'view_list_item',
-        'create'  => 'insert_new_item',
-        'update'  => 'update_existing_item',
+        'read'         => 'view_list_item',
+        'create'       => 'insert_new_item',
+        'update'       => 'update_existing_item',
         'delete'       => 'remove_item',
         'force_delete' => 'permanently_remove_item',
         'restore'      => 'restore_item',
@@ -332,7 +385,7 @@ The value for each action can be a single permission string or an array of strin
   - a `RecordTableTriggerType` instance,
   - a single array trigger config (`['class' => ..., 'functionName' => ..., 'description' => ...]`),
   - or an array of trigger configs to run sequentially.
-- `triggers` (`array|null`, default: `null`): An array of trigger class names. The package will automatically scan these classes for `#[RecordTrigger]` attributes and map them to the appropriate lifecycle hooks.
+- `triggers` (`array|null`, default: `null`): An array of trigger class names. The package will automatically scan these classes for `#[RecordTrigger]` attributes (using `RecordTriggerHookEnum` or string hook names) and map them to the appropriate lifecycle hooks.
 
 ### Class-Based Configuration (Lazy Loading)
 
@@ -405,6 +458,96 @@ return [
 ```
 
 ### Type Reference
+
+#### RecordTablePermissionType
+
+Typed per-action permission configuration that overrides `pmsName`-based mapping for specific CRUD operations. Implements `ArrayAccess`, survives `var_export()` for `config:cache`, and supports both array-style and property-style access (`$type['force_delete']` or `$type->forceDelete`).
+
+- `read` (`string|array|null`, default: `null`): Permission(s) required for `listRecords` and `getRecordById`.
+- `create` (`string|array|null`, default: `null`): Permission(s) required for `createRecord` and the create phase of `upsertRecord`.
+- `update` (`string|array|null`, default: `null`): Permission(s) required for `updateRecord` and the update phase of `upsertRecord`.
+- `delete` (`string|array|null`, default: `null`): Permission(s) required for `destroyRecord` (soft-delete).
+- `forceDelete` (`string|array|null`, default: `null`): Permission(s) required for `forceDeleteRecord`.
+- `restore` (`string|array|null`, default: `null`): Permission(s) required for `restoreRecord`.
+- `custom` (`array<string, string|array>|null`, default: `null`): Additional custom action permissions.
+
+```php
+use Sopheak\Core\Types\RecordTablePermissionType;
+
+$permissions = new RecordTablePermissionType(
+    read: 'view_invoices',
+    create: ['create_invoices', 'admin'],
+    update: 'edit_invoices',
+    delete: 'delete_invoices',
+    forceDelete: 'purge_invoices',
+    restore: 'restore_invoices',
+);
+```
+
+#### RecordComputedAttributeType
+
+Typed configuration for computed / virtual attributes. Defines the resolver class and method while providing OpenAPI schema documentation (`readOnly: true`). Survives `var_export()` for `php artisan config:cache`.
+
+- `class` (string, required): Resolver class name (resolved via Laravel container `app()`).
+- `functionName` (string, default: `'handle'`): Method to call on the resolver class.
+- `type` (?string, default: `'string'`): OpenAPI data type (e.g. `'string'`, `'number'`, `'boolean'`, `'integer'`, `'array'`, `'object'`).
+- `description` (?string, default: `null`): OpenAPI property description.
+- `example` (mixed, default: `null`): OpenAPI property example value.
+- `nullable` (bool, default: `false`): Whether the computed attribute can return `null`.
+
+```php
+use Sopheak\Core\Types\RecordComputedAttributeType;
+
+$attribute = new RecordComputedAttributeType(
+    class: \App\Attributes\InvoiceAttribute::class,
+    functionName: 'calculateTax',
+    type: 'number',
+    description: 'Calculated tax amount for the invoice',
+    example: 19.99,
+    nullable: false,
+);
+```
+
+#### RecordCastType & RecordCastEnum
+
+Typed configuration for built-in and custom column casts in `RecordTableType::$casting` and `RecordColumnType::$cast`. Survives `var_export()` for `php artisan config:cache`.
+
+- `RecordCastEnum`: Backed enum of built-in casts (`INT`, `INTEGER`, `FLOAT`, `DOUBLE`, `REAL`, `DECIMAL`, `STRING`, `BOOL`, `BOOLEAN`, `ARRAY`, `JSON`, `OBJECT`, `DATE`, `DATETIME`, `TIMESTAMP`), plus `RecordCastEnum::decimal(int $places = 2)` for fixed-precision decimal formatting (`'decimal:2'`).
+- `RecordCastType`: Typed custom cast class reference:
+  - `class` (string, required): Custom cast class name.
+  - `functionName` (string, default: `'get'`): Method to invoke on the cast class (`($value, $column, $row)`).
+  - `description` (?string, default: `null`): Optional description.
+
+```php
+use Sopheak\Core\Enums\RecordCastEnum;
+use Sopheak\Core\Types\RecordCastType;
+
+$cast = new RecordCastType(
+    class: \App\Record\Casts\MoneyCast::class,
+    functionName: 'format',
+    description: 'Format minor units as decimal currency string',
+);
+```
+
+#### RecordTriggerHookEnum & RecordValidatorHookEnum
+
+Backed string enums for `#[RecordTrigger]` and `#[RecordValidator]` PHP attributes (raw strings remain supported):
+
+- `RecordTriggerHookEnum`: `BEFORE_READ`, `AFTER_READ`, `BEFORE_CREATE`, `AFTER_CREATE`, `BEFORE_UPDATE`, `AFTER_UPDATE`, `BEFORE_DELETE`, `AFTER_DELETE`, `BEFORE_RESTORE`, `AFTER_RESTORE`.
+- `RecordValidatorHookEnum`: `CREATE`, `UPDATE`, `DELETE`.
+
+```php
+use Sopheak\Core\Attributes\RecordTrigger;
+use Sopheak\Core\Attributes\RecordValidator;
+use Sopheak\Core\Enums\RecordTriggerHookEnum;
+use Sopheak\Core\Enums\RecordValidatorHookEnum;
+
+#[RecordTrigger(RecordTriggerHookEnum::BEFORE_CREATE)]
+public static function onBeforeCreate(Request $request, string $table, array $context): array { ... }
+
+#[RecordValidator(RecordValidatorHookEnum::CREATE)]
+public static function validateCreate(): array { ... }
+```
 
 #### RecordTablePublic
 

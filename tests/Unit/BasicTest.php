@@ -815,7 +815,10 @@ class BasicTest extends TestCase
 
         $updated = file_get_contents($path);
         $this->assertNotFalse($updated);
-        $this->assertStringContainsString("'enum' => ['pending', 'completed', 'cancelled']", $updated);
+        $this->assertStringContainsString('RecordColumnType(', $updated);
+        $this->assertStringContainsString("enum: ['pending', 'completed', 'cancelled']", $updated);
+        $this->assertStringContainsString('use Sopheak\Core\Types\RecordColumnType;', $updated);
+        $this->assertStringContainsString('use Sopheak\Core\Enums\RecordColumnTypeEnum;', $updated);
 
         unlink($path);
     }

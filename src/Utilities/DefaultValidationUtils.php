@@ -152,7 +152,8 @@ class DefaultValidationUtils
         return $key === 'pri';
     }
 
-    private static function mapTypeToRule(string $type, string $udtName): ?string
+    /** The Laravel type rule default validation adds for a column type (null = none). */
+    public static function mapTypeToRule(string $type, string $udtName): ?string
     {
         $rawType = strtolower($type !== '' ? $type : $udtName);
         $rawType = preg_replace('/\([^)]*\)/', '', $rawType);

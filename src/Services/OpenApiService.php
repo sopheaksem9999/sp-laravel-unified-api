@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Services;
 
+use Sopheak\Core\Enums\RecordColumnTypeEnum;
+use Sopheak\Core\Types\RecordComputedAttributeType;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Interfaces\RecordFunctionInterface;
 use Sopheak\Core\Types\RecordFunctionType;
@@ -619,7 +621,7 @@ Accepts an array of IDs or an array of objects with the primary key.
                 continue;
             }
 
-            $mapped = self::mapColumnToOpenApi($info['type'] ?? 'string', $info);
+            $mapped = self::columnProperty($info);
             $properties[$name] = $mapped;
             // Avoid forcing typical system fields as required
             if (!(bool) ($info['nullable'] ?? true) && !in_array($name, ['id', 'created_at', 'updated_at', 'deleted_at'], true)) {
@@ -627,12 +629,78 @@ Accepts an array of IDs or an array of objects with the primary key.
             }
         }
 
+        $properties = self::appendComputedAttributeProperties($properties, $config);
+
         return [
             'type' => 'object',
             'properties' => $properties,
             'required' => $required,
             'description' => sprintf('Schema for table `%s` (excludes soft delete field%s)', $table, [] !== $hidden ? ' and columns hidden via `columnHiddens`' : ''),
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $properties
+     * @return array<string, mixed>
+     */
+    private static function appendComputedAttributeProperties(array $properties, ?RecordTableType $config): array
+    {
+        if (is_array($config?->attributes ?? null)) {
+            foreach ($config->attributes as $attrName => $attrDef) {
+                if ($attrDef instanceof RecordComputedAttributeType && is_string($attrName) && !isset($properties[$attrName])) {
+                    $attrSchema = $attrDef->type instanceof RecordColumnTypeEnum ? self::columnProperty(['type' => $attrDef->type->value, 'nullable' => $attrDef->nullable]) : ['type' => 'string'];
+                    $attrSchema['readOnly'] = true;
+                    if ($attrDef->description !== null && '' !== $attrDef->description) {
+                        $attrSchema['description'] = $attrDef->description;
+                    }
+
+                    if ($attrDef->example !== null) {
+                        $attrSchema['example'] = $attrDef->example;
+                    }
+
+                    $properties[$attrName] = $attrSchema;
+                }
+            }
+        }
+
+        return $properties;
+    }
+
+    /**
+     * One column as an OpenAPI property: its type, plus the `description`,
+     * `example` and `maxLength` the column config declares.
+     *
+     * @param array<string, mixed> $info
+     * @return array<string, mixed>
+     */
+    private static function columnProperty(array $info): array
+    {
+        $property = self::mapColumnToOpenApi((string) ($info['type'] ?? 'string'), $info);
+
+        if (is_string($info['description'] ?? null) && '' !== $info['description']) {
+            $property['description'] = $info['description'];
+        }
+
+        if (array_key_exists('example', $info) && null !== $info['example']) {
+            $property['example'] = $info['example'];
+        }
+
+        if (is_numeric($info['maxLength'] ?? null)) {
+            $property['maxLength'] = (int) $info['maxLength'];
+        }
+
+        return $property;
+    }
+
+    /**
+     * The OpenAPI type of a column definition (without description/example).
+     *
+     * @param array<string, mixed> $info
+     * @return array<string, mixed>
+     */
+    public static function columnTypeSchema(array $info): array
+    {
+        return self::mapColumnToOpenApi((string) ($info['type'] ?? 'string'), $info);
     }
 
     /**
@@ -722,13 +790,15 @@ Accepts an array of IDs or an array of objects with the primary key.
                 continue;
             }
 
-            $mapped = self::mapColumnToOpenApi($info['type'] ?? 'string', $info);
+            $mapped = self::columnProperty($info);
             $properties[$name] = $mapped;
             // Avoid forcing typical system fields as required
             if (!(bool) ($info['nullable'] ?? true) && !in_array($name, ['id', 'created_at', 'updated_at', 'deleted_at'], true)) {
                 $required[] = $name;
             }
         }
+
+        $properties = self::appendComputedAttributeProperties($properties, $config);
 
         return [
             'type' => 'object',
@@ -766,10 +836,11 @@ Accepts an array of IDs or an array of objects with the primary key.
                 continue;
             }
 
-            $mapped = self::mapColumnToOpenApi($info['type'] ?? 'string', $info);
+            $mapped = self::columnProperty($info);
             if (isset($writeDisabledSet[$name])) {
                 $mapped['readOnly'] = true;
-                $mapped['description'] = 'Write-disabled (columnWriteDisabled): sending this field is ignored (silent no-op).';
+                $note = 'Write-disabled (columnWriteDisabled): sending this field is ignored (silent no-op).';
+                $mapped['description'] = isset($mapped['description']) ? $mapped['description'] . ' ' . $note : $note;
             }
 
             if ('uuid' === $idType && 'id' === $name) {

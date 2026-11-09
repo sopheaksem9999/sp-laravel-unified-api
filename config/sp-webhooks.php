@@ -1,6 +1,8 @@
 <?php
 
+use Sopheak\Core\Enums\RecordColumnTypeEnum;
 use Sopheak\Core\Services\RecordConfigService;
+use Sopheak\Core\Types\RecordColumnType;
 use Sopheak\Core\Types\RecordTableType;
 
 return [
@@ -46,15 +48,15 @@ return [
                 // key; declaring 'string' left the column with no value and no
                 // database default, so a POST without a client-supplied id
                 // failed the not-null constraint.
-                'id' => ['type' => RecordConfigService::idType() === 'uuid' ? 'uuid' : 'bigIncrements', 'nullable' => false],
-                'name' => ['type' => 'string', 'nullable' => false],
-                'url' => ['type' => 'string', 'nullable' => false],
-                'secret' => ['type' => 'string', 'nullable' => false],
-                'is_active' => ['type' => 'boolean', 'nullable' => false],
+                'id' => new RecordColumnType(type: RecordConfigService::idType() === 'uuid' ? RecordColumnTypeEnum::UUID : RecordColumnTypeEnum::BIGINT, nullable: false, primary: true, autoIncrement: RecordConfigService::idType() !== 'uuid'),
+                'name' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'url' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'secret' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'is_active' => new RecordColumnType(type: RecordColumnTypeEnum::BOOLEAN, nullable: false),
                 // Created by $table->timestamps() in the migration; declaring
                 // them is what makes them sortable and filterable.
-                'created_at' => ['type' => 'datetime', 'nullable' => true],
-                'updated_at' => ['type' => 'datetime', 'nullable' => true],
+                'created_at' => new RecordColumnType(type: RecordColumnTypeEnum::DATETIME),
+                'updated_at' => new RecordColumnType(type: RecordColumnTypeEnum::DATETIME),
             ],
             // Write-only: the HMAC signing secret is chosen by the client on
             // create/update and never returned. WebhookTrigger reads it from
@@ -70,12 +72,12 @@ return [
             isAuthRead: true,
             isAuthWrite: true,
             columns: [
-                'id' => ['type' => RecordConfigService::idType() === 'uuid' ? 'uuid' : 'bigIncrements', 'nullable' => false],
-                'endpoint_id' => ['type' => 'string', 'nullable' => false],
-                'table_name' => ['type' => 'string', 'nullable' => false],
-                'event' => ['type' => 'string', 'nullable' => false],
-                'created_at' => ['type' => 'datetime', 'nullable' => true],
-                'updated_at' => ['type' => 'datetime', 'nullable' => true],
+                'id' => new RecordColumnType(type: RecordConfigService::idType() === 'uuid' ? RecordColumnTypeEnum::UUID : RecordColumnTypeEnum::BIGINT, nullable: false, primary: true, autoIncrement: RecordConfigService::idType() !== 'uuid'),
+                'endpoint_id' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'table_name' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'event' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'created_at' => new RecordColumnType(type: RecordColumnTypeEnum::DATETIME),
+                'updated_at' => new RecordColumnType(type: RecordColumnTypeEnum::DATETIME),
             ],
         ),
         'sp_webhook_deliveries' => new RecordTableType(
@@ -87,15 +89,15 @@ return [
             isAuthRead: true,
             isAuthWrite: false, // Deliveries should be read-only via API
             columns: [
-                'id' => ['type' => RecordConfigService::idType() === 'uuid' ? 'uuid' : 'bigIncrements', 'nullable' => false],
-                'endpoint_id' => ['type' => 'string', 'nullable' => false],
-                'event' => ['type' => 'string', 'nullable' => false],
-                'payload' => ['type' => 'json', 'nullable' => false],
-                'response_status' => ['type' => 'integer', 'nullable' => true],
-                'response_body' => ['type' => 'string', 'nullable' => true],
-                'status' => ['type' => 'string', 'nullable' => false],
-                'created_at' => ['type' => 'datetime', 'nullable' => true],
-                'updated_at' => ['type' => 'datetime', 'nullable' => true],
+                'id' => new RecordColumnType(type: RecordConfigService::idType() === 'uuid' ? RecordColumnTypeEnum::UUID : RecordColumnTypeEnum::BIGINT, nullable: false, primary: true, autoIncrement: RecordConfigService::idType() !== 'uuid'),
+                'endpoint_id' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'event' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'payload' => new RecordColumnType(type: RecordColumnTypeEnum::JSON, nullable: false),
+                'response_status' => new RecordColumnType(type: RecordColumnTypeEnum::INTEGER),
+                'response_body' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
+                'status' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'created_at' => new RecordColumnType(type: RecordColumnTypeEnum::DATETIME),
+                'updated_at' => new RecordColumnType(type: RecordColumnTypeEnum::DATETIME),
             ],
         ),
     ],

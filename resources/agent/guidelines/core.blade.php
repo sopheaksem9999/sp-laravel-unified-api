@@ -17,6 +17,7 @@ This package provides a config-driven dynamic CRUD API for database tables and c
 ### Auth / Permissions Mental Model
 
 - Auth flags: `RecordTableType::$isAuthRead` and `RecordTableType::$isAuthWrite`
+- Per-action permission overrides: `RecordTableType::$permissions` using `new RecordTablePermissionType(read: '...', create: '...', ...)` (or array map)
 - Permission enforcement: `HasControllerHelpers::authorizeAction()` (table public/auth check, resolve user, map permission, optional custom authorizer, Gate fallback)
 - Tenancy: resolved in request attributes first, then record_context, then tenant header (`record.tenant_header`)
 
@@ -32,6 +33,8 @@ This package provides a config-driven dynamic CRUD API for database tables and c
 
 - Filters are top-level query parameters in the form `{column}={operator}.{value}` (e.g. `status=eq.open`, `created_at=gte.2026-08-01T00:00:00.000`). Do not wrap filters in a `filter[...]` key or use bracket syntax like `column[operator]=value` — that shape is rejected (or silently ignored), not supported.
 - Combine filters on the same column with grouped logic: `and=(created_at.gte.X,created_at.lte.Y)`.
+- Keyword search across root columns and 1-level relationships uses `?search=keyword` with `RecordTableType::$searchable` (e.g. `searchable: ['ref_number', 'vendor.display_name', 'items.name', 'items.description']`). For multi-level joins or workflow scenario subqueries, use a `beforeRead` trigger to set `or=(...)` or `id=in.(...)`.
+- Computed attributes (`RecordTableType::$attributes`) use `RecordComputedAttributeType` (`new RecordComputedAttributeType(class: ..., functionName: ..., type: ...)`) so configs remain `config:cache`-safe and documented in OpenAPI.
 
 ### Create/Update Payloads
 
@@ -57,6 +60,8 @@ You can attach triggers and validators using either:
    - `php artisan sp-laravel-api:record users --table=users --pms-name=user --tenant`
 2. Sync columns:
    - `php artisan sp-laravel-api:sync-record-columns --force`
+   - Writes each column as `new RecordColumnType(type: RecordColumnTypeEnum::…)` in `RecordTableType`'s canonical constructor parameter order, reuses any matching backed enum already under `app/Enums/`, and otherwise generates a backed enum in `app/Enums/Records/` for enum columns (`enum: BookingStatus::class`). Existing enum files are never overwritten. `--no-enums` keeps value lists.
+   - Hand-written columns: use `RecordColumnType` with only these parameters — `type` (a `RecordColumnTypeEnum` case), `nullable`, `default`, `primary`, `autoIncrement`, `enum` (list or backed enum class), `cast`, `maxLength`, `description`, `example`, `compositeType`/`compositeFields` (PostgreSQL). Do not invent others; the array form `['type' => …]` still works.
 3. Validate setup:
    - `php artisan sp-laravel-api:validate`
 
@@ -67,7 +72,6 @@ Add to the table config `functions:`:
 @verbatim
 <code-snippet name="Table function example" lang="php">
 'recalculate' => new \Sopheak\Core\Types\RecordFunctionType(
-    type: 'class',
     class: \App\Services\InvoiceService::class,
     functionName: 'recalculate',
     httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::POST->value],

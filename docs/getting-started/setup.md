@@ -14,33 +14,7 @@ keywords:
 
 ## 1) Install
 
-This package is installed from a private Git repository.
-
-### Configure Composer Repository (VCS)
-
-In your host application's `composer.json`, add a VCS repository entry:
-
-```json
-{
-  "repositories": [
-    {
-      "type": "vcs",
-      "url": "https://github.com/<org>/<repo>.git"
-    }
-  ]
-}
-```
-
-### Authenticate (Private Repo)
-
-Use one of these approaches:
-
-- SSH: use an SSH URL in `repositories.url` and ensure your deploy key / SSH agent is configured
-- HTTPS token: configure a token using Composer auth (recommended) instead of putting tokens in `composer.json`
-
-### Require the Package
-
-Then require the package in your host Laravel app:
+This package is published on [Packagist (`sopheak/sp-laravel-api`)](https://packagist.org/packages/sopheak/sp-laravel-api). Install it directly via Composer in your Laravel application:
 
 ```bash
 composer require sopheak/sp-laravel-api
@@ -91,7 +65,7 @@ php artisan migrate
 
 ## 4) Validate Setup
 
-Run the validator to check config files, directories, migrations, routes, and optional modules:
+Run the validator to check config files, directories, migrations, routes, function definitions, and optional modules. For every table and global function it warns when the class or method does not exist, an `httpMethod` is invalid, or a `querySchema` / `payloadSchema` / `responseSchema` is malformed:
 
 ```bash
 php artisan sp-laravel-api:validate
@@ -102,3 +76,37 @@ Try auto-fixing common issues:
 ```bash
 php artisan sp-laravel-api:validate --fix
 ```
+
+## 5) Laravel Boost & AI Agent Setup (Optional)
+
+`sp-laravel-api` ships first-class AI guidelines (`resources/boost/guidelines/core.blade.php`), an agent skill (`resources/boost/skills/sp-laravel-api-development/SKILL.md`), and a local stdio MCP server (`sp-laravel-api:mcp`).
+
+### Option A: With Laravel Boost (`laravel/boost`)
+
+1. Install Laravel Boost and run its installer (it auto-discovers `sopheak/sp-laravel-api`'s guidelines and `sp-laravel-api-development` skill):
+
+```bash
+composer require laravel/boost --dev
+php artisan boost:install
+```
+
+2. Merge the `sp-laravel-api` MCP server into `.mcp.json` (preserving `laravel-boost` and any other MCP servers) and validate the setup:
+
+```bash
+php artisan sp-laravel-api:boost
+```
+
+> **Note:** `boost:install` regenerates `.mcp.json` from scratch. Re-run `php artisan sp-laravel-api:boost` whenever `boost:install` regenerates `.mcp.json`, or run `php artisan boost:update` when updating guidelines and skills.
+
+### Option B: Standalone Agent Setup (Without Laravel Boost)
+
+Install the `sp-laravel-api-development` skill (`.agents/skills/`), rules (`.agents/rules/sp-laravel-api.md`), and `.mcp.json` entry directly:
+
+```bash
+php artisan sp-laravel-api:agent
+
+# Overwrite existing skill/rules after upgrading sp-laravel-api:
+php artisan sp-laravel-api:agent --force
+```
+
+See [MCP Support — Laravel Boost & Agent Setup](/guide/module-mcp#laravel-boost-agent-setup) for full options (`--skill`, `--rules`, `--mcp`).

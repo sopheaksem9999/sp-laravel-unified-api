@@ -17,8 +17,11 @@ use Illuminate\Support\MessageBag;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Sopheak\Core\Enums\RecordApiJsonResponseEnum;
+use Sopheak\Core\Enums\RecordCastEnum;
 use Sopheak\Core\Constants\HttpErrorCodeConstant;
 use Sopheak\Core\Utilities\SchemaRegistryUtils;
+use Sopheak\Core\Types\RecordCastType;
+use Sopheak\Core\Types\RecordComputedAttributeType;
 use Sopheak\Core\Utilities\RelationshipResolverUtils;
 
 class RecordApiResponseService
@@ -614,6 +617,16 @@ class RecordApiResponseService
         $normalize = static function (array $casting): ?array {
             $normalizedCasts = [];
             foreach ($casting as $col => $cast) {
+                if ($cast instanceof RecordCastEnum) {
+                    $normalizedCasts[(string) $col] = 'str:' . $cast->value;
+                    continue;
+                }
+
+                if ($cast instanceof RecordCastType) {
+                    $normalizedCasts[(string) $col] = 'arr:' . $cast->class . '@' . $cast->functionName;
+                    continue;
+                }
+
                 if (is_string($cast)) {
                     $normalizedCasts[(string) $col] = 'str:' . $cast;
                     continue;
@@ -645,6 +658,12 @@ class RecordApiResponseService
 
     private static function resolveSingleCastDescriptor(mixed $cast, string $column, string $source): array
     {
+        if ($cast instanceof RecordCastEnum) {
+            $cast = $cast->value;
+        } elseif ($cast instanceof RecordCastType) {
+            $cast = $cast->toCallable();
+        }
+
         if ($cast instanceof Closure) {
             return ['callable' => $cast];
         }
@@ -721,7 +740,7 @@ class RecordApiResponseService
     /**
      * @param array<string, mixed> $meta
      */
-    private static function inferBuiltinCastFromColumnMeta(array $meta): ?string
+    public static function inferBuiltinCastFromColumnMeta(array $meta): ?string
     {
         $type = strtolower((string) ($meta['type'] ?? $meta['data_type'] ?? ''));
         $udtName = strtolower((string) ($meta['udt_name'] ?? ''));
@@ -821,6 +840,10 @@ class RecordApiResponseService
 
             if ($resolver instanceof Closure) {
                 $callable = $resolver;
+            } elseif ($resolver instanceof RecordComputedAttributeType) {
+                if (class_exists($resolver->class)) {
+                    $callable = [app($resolver->class), $resolver->functionName];
+                }
             } elseif (is_array($resolver) && count($resolver) === 2) {
                 [$class, $method] = $resolver;
                 if (is_string($class) && class_exists($class)) {

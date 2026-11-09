@@ -1,10 +1,15 @@
 <?php
 
+use Sopheak\Core\Enums\RecordColumnTypeEnum;
 use Sopheak\Core\Enums\RecordFunctionMethodEnum;
 use Sopheak\Core\Services\RecordConfigService;
 use Sopheak\Core\Triggers\AttachmentTrigger;
+use Sopheak\Core\Types\RecordColumnType;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordFunctionType;
+use Sopheak\Core\Enums\RecordSchemaFormatEnum;
+use Sopheak\Core\Enums\RecordSchemaTypeEnum;
+use Sopheak\Core\Types\RecordSchemaType;
 use Sopheak\Core\Http\Controllers\AttachmentUploadController;
 
 $routePrefix = 'sp_attachments';
@@ -127,23 +132,23 @@ return [
             columns: [
                 // Governed by record.id_type — see MigrationIdHelper::primary()
                 // in 2024_01_01_000000_create_sp_attachments_tables.
-                'id' => ['type' => RecordConfigService::idType() === 'uuid' ? 'uuid' : 'bigIncrements', 'nullable' => false],
-                'folder_id' => ['type' => 'string', 'nullable' => true],
-                'title' => ['type' => 'string', 'nullable' => true],
-                'caption' => ['type' => 'string', 'nullable' => true],
-                'disk' => ['type' => 'string', 'nullable' => false],
-                'path' => ['type' => 'string', 'nullable' => false],
-                'filename' => ['type' => 'string', 'nullable' => false],
-                'mime_type' => ['type' => 'string', 'nullable' => false],
-                'size' => ['type' => 'integer', 'nullable' => false],
-                'visibility' => ['type' => 'string', 'nullable' => false],
-                'temp_timeout' => ['type' => 'datetime', 'nullable' => true],
+                'id' => new RecordColumnType(type: RecordConfigService::idType() === 'uuid' ? RecordColumnTypeEnum::UUID : RecordColumnTypeEnum::BIGINT, nullable: false, primary: true, autoIncrement: RecordConfigService::idType() !== 'uuid'),
+                'folder_id' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
+                'title' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
+                'caption' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
+                'disk' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'path' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'filename' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'mime_type' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'size' => new RecordColumnType(type: RecordColumnTypeEnum::INTEGER, nullable: false),
+                'visibility' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'temp_timeout' => new RecordColumnType(type: RecordColumnTypeEnum::DATETIME),
                 // Created by $table->timestamps() in the migration. Declaring
                 // them is what makes ?sortby=created_at and created_at=gte.…
                 // work; they stay server-managed either way (overrideTimestamps
                 // is false, so write payloads are stripped of them).
-                'created_at' => ['type' => 'datetime', 'nullable' => true],
-                'updated_at' => ['type' => 'datetime', 'nullable' => true],
+                'created_at' => new RecordColumnType(type: RecordColumnTypeEnum::DATETIME),
+                'updated_at' => new RecordColumnType(type: RecordColumnTypeEnum::DATETIME),
             ],
             functions: [
                 'upload' => new RecordFunctionType(
@@ -151,98 +156,98 @@ return [
                     class: AttachmentUploadController::class,
                     functionName: 'upload',
                     description: 'Upload a new attachment',
-                    payloadSchema: [
-                        'type' => 'object',
-                        'properties' => [
-                            'file' => ['type' => 'string', 'format' => 'binary', 'description' => 'The file to upload'],
-                            'visibility' => ['type' => 'string', 'enum' => ['private', 'public', 'temp_private', 'temp_public'], 'description' => 'Visibility level of the attachment'],
-                            'as_temp' => ['type' => 'boolean', 'description' => 'Mark as temporary file'],
-                            'temp_timeout_minutes' => ['type' => 'integer', 'description' => 'Minutes until temporary file expires'],
-                            'temp_timeout_at' => ['type' => 'string', 'format' => 'date-time', 'description' => 'Exact date-time when temporary file expires'],
-                            'folder_id' => ['type' => 'string', 'description' => 'Folder ID to store the attachment'],
-                            'title' => ['type' => 'string', 'description' => 'Title of the attachment'],
-                            'caption' => ['type' => 'string', 'description' => 'Caption for the attachment'],
-                            'record_id' => ['type' => 'string', 'description' => 'ID of the record to link'],
-                            'record_type' => ['type' => 'string', 'description' => 'Table name of the record to link'],
-                            'collection_name' => ['type' => 'string', 'description' => 'Collection name for the link'],
-                            'replace_old' => ['type' => 'boolean', 'description' => 'Replace existing attachment in collection'],
+                    payloadSchema: RecordSchemaType::object(
+                        properties: [
+                            'file' => RecordSchemaType::string(format: RecordSchemaFormatEnum::BINARY, description: 'The file to upload'),
+                            'visibility' => RecordSchemaType::string(
+                                enum: ['private', 'public', 'temp_private', 'temp_public'],
+                                description: 'Visibility level of the attachment',
+                            ),
+                            'as_temp' => RecordSchemaType::boolean(description: 'Mark as temporary file'),
+                            'temp_timeout_minutes' => RecordSchemaType::integer(description: 'Minutes until temporary file expires'),
+                            'temp_timeout_at' => RecordSchemaType::dateTime(description: 'Exact date-time when temporary file expires'),
+                            'folder_id' => RecordSchemaType::string(description: 'Folder ID to store the attachment'),
+                            'title' => RecordSchemaType::string(description: 'Title of the attachment'),
+                            'caption' => RecordSchemaType::string(description: 'Caption for the attachment'),
+                            'record_id' => RecordSchemaType::string(description: 'ID of the record to link'),
+                            'record_type' => RecordSchemaType::string(description: 'Table name of the record to link'),
+                            'collection_name' => RecordSchemaType::string(description: 'Collection name for the link'),
+                            'replace_old' => RecordSchemaType::boolean(description: 'Replace existing attachment in collection'),
                         ],
-                        'required' => ['file'],
-                    ],
-                    responseSchema: [
-                        'type' => 'object',
-                        'properties' => [
-                            'id' => ['type' => 'string'],
-                            'url' => ['type' => 'string'],
-                            'filename' => ['type' => 'string'],
-                            'mime_type' => ['type' => 'string'],
-                            'size' => ['type' => 'integer'],
-                            'visibility' => ['type' => 'string'],
+                        required: ['file'],
+                    ),
+                    responseSchema: RecordSchemaType::object(
+                        properties: [
+                            'id' => RecordSchemaType::string(),
+                            'url' => RecordSchemaType::string(),
+                            'filename' => RecordSchemaType::string(),
+                            'mime_type' => RecordSchemaType::string(),
+                            'size' => RecordSchemaType::integer(),
+                            'visibility' => RecordSchemaType::string(),
                         ],
-                    ]
+                    )
                 ),
                 'clone-temp' => new RecordFunctionType(
                     httpMethod: [RecordFunctionMethodEnum::POST->value],
                     class: AttachmentUploadController::class,
                     functionName: 'cloneTemp',
                     description: 'Clone an existing attachment as temporary attachment',
-                    payloadSchema: [
-                        'type' => 'object',
-                        'properties' => [
-                            'attachment_id' => ['type' => 'string', 'description' => 'ID of the source attachment to clone'],
-                            'visibility' => ['type' => 'string', 'enum' => ['temp_private', 'temp_public'], 'description' => 'Visibility level of the new attachment'],
-                            'temp_timeout_minutes' => ['type' => 'integer', 'description' => 'Minutes until temporary file expires'],
-                            'temp_timeout_at' => ['type' => 'string', 'format' => 'date-time', 'description' => 'Exact date-time when temporary file expires'],
+                    payloadSchema: RecordSchemaType::object(
+                        properties: [
+                            'attachment_id' => RecordSchemaType::string(description: 'ID of the source attachment to clone'),
+                            'visibility' => RecordSchemaType::string(
+                                enum: ['temp_private', 'temp_public'],
+                                description: 'Visibility level of the new attachment',
+                            ),
+                            'temp_timeout_minutes' => RecordSchemaType::integer(description: 'Minutes until temporary file expires'),
+                            'temp_timeout_at' => RecordSchemaType::dateTime(description: 'Exact date-time when temporary file expires'),
                         ],
-                        'required' => ['attachment_id'],
-                    ],
-                    responseSchema: [
-                        'type' => 'object',
-                        'properties' => [
-                            'id' => ['type' => 'string'],
-                            'url' => ['type' => 'string'],
-                            'filename' => ['type' => 'string'],
-                            'mime_type' => ['type' => 'string'],
-                            'size' => ['type' => 'integer'],
-                            'visibility' => ['type' => 'string'],
-                            'temp_timeout' => ['type' => 'string', 'format' => 'date-time'],
+                        required: ['attachment_id'],
+                    ),
+                    responseSchema: RecordSchemaType::object(
+                        properties: [
+                            'id' => RecordSchemaType::string(),
+                            'url' => RecordSchemaType::string(),
+                            'filename' => RecordSchemaType::string(),
+                            'mime_type' => RecordSchemaType::string(),
+                            'size' => RecordSchemaType::integer(),
+                            'visibility' => RecordSchemaType::string(),
+                            'temp_timeout' => RecordSchemaType::dateTime(),
                         ],
-                    ]
+                    )
                 ),
                 'create-upload-url' => new RecordFunctionType(
                     httpMethod: [RecordFunctionMethodEnum::POST->value],
                     class: AttachmentUploadController::class,
                     functionName: 'createUploadUrl',
                     description: 'Request a presigned upload URL for a direct browser upload',
-                    payloadSchema: [
-                        'type' => 'object',
-                        'properties' => [
-                            'filename' => ['type' => 'string'],
-                            'content_type' => ['type' => 'string'],
-                            'visibility' => ['type' => 'string'],
-                            'folder_id' => ['type' => 'string'],
+                    payloadSchema: RecordSchemaType::object(
+                        properties: [
+                            'filename' => RecordSchemaType::string(),
+                            'content_type' => RecordSchemaType::string(),
+                            'visibility' => RecordSchemaType::string(),
+                            'folder_id' => RecordSchemaType::string(),
                         ],
-                        'required' => ['filename'],
-                    ]
+                        required: ['filename'],
+                    )
                 ),
                 'complete-upload' => new RecordFunctionType(
                     httpMethod: [RecordFunctionMethodEnum::POST->value],
                     class: AttachmentUploadController::class,
                     functionName: 'completeUpload',
                     description: 'Persist an attachment after a direct upload',
-                    payloadSchema: [
-                        'type' => 'object',
-                        'properties' => [
-                            'key' => ['type' => 'string'],
-                            'upload_token' => ['type' => 'string'],
-                            'expires_at' => ['type' => 'integer'],
-                            'filename' => ['type' => 'string'],
-                            'content_type' => ['type' => 'string'],
-                            'visibility' => ['type' => 'string'],
-                            'file' => ['type' => 'string', 'format' => 'binary'],
+                    payloadSchema: RecordSchemaType::object(
+                        properties: [
+                            'key' => RecordSchemaType::string(),
+                            'upload_token' => RecordSchemaType::string(),
+                            'expires_at' => RecordSchemaType::integer(),
+                            'filename' => RecordSchemaType::string(),
+                            'content_type' => RecordSchemaType::string(),
+                            'visibility' => RecordSchemaType::string(),
+                            'file' => RecordSchemaType::string(format: RecordSchemaFormatEnum::BINARY),
                         ],
-                        'required' => ['key', 'upload_token', 'expires_at'],
-                    ]
+                        required: ['key', 'upload_token', 'expires_at'],
+                    )
                 ),
                 'create-multipart-upload' => new RecordFunctionType(
                     httpMethod: [RecordFunctionMethodEnum::POST->value],
@@ -250,16 +255,15 @@ return [
                     functionName: 'createMultipartUpload',
                     description: 'Start an S3 multipart upload',
                     disableCache: true,
-                    payloadSchema: [
-                        'type' => 'object',
-                        'properties' => [
-                            'filename' => ['type' => 'string'],
-                            'content_type' => ['type' => 'string'],
-                            'visibility' => ['type' => 'string'],
-                            'folder_id' => ['type' => 'string'],
+                    payloadSchema: RecordSchemaType::object(
+                        properties: [
+                            'filename' => RecordSchemaType::string(),
+                            'content_type' => RecordSchemaType::string(),
+                            'visibility' => RecordSchemaType::string(),
+                            'folder_id' => RecordSchemaType::string(),
                         ],
-                        'required' => ['filename'],
-                    ]
+                        required: ['filename'],
+                    )
                 ),
                 'sign-multipart-part' => new RecordFunctionType(
                     httpMethod: [RecordFunctionMethodEnum::POST->value],
@@ -267,18 +271,17 @@ return [
                     functionName: 'signMultipartPart',
                     description: 'Sign an S3 multipart part',
                     disableCache: true,
-                    payloadSchema: [
-                        'type' => 'object',
-                        'properties' => [
-                            'key' => ['type' => 'string'],
-                            'upload_id' => ['type' => 'string'],
-                            'upload_token' => ['type' => 'string'],
-                            'expires_at' => ['type' => 'integer'],
-                            'part_number' => ['type' => 'integer'],
-                            'visibility' => ['type' => 'string'],
+                    payloadSchema: RecordSchemaType::object(
+                        properties: [
+                            'key' => RecordSchemaType::string(),
+                            'upload_id' => RecordSchemaType::string(),
+                            'upload_token' => RecordSchemaType::string(),
+                            'expires_at' => RecordSchemaType::integer(),
+                            'part_number' => RecordSchemaType::integer(),
+                            'visibility' => RecordSchemaType::string(),
                         ],
-                        'required' => ['key', 'upload_id', 'upload_token', 'expires_at', 'part_number'],
-                    ]
+                        required: ['key', 'upload_id', 'upload_token', 'expires_at', 'part_number'],
+                    )
                 ),
                 'complete-multipart-upload' => new RecordFunctionType(
                     httpMethod: [RecordFunctionMethodEnum::POST->value],
@@ -286,29 +289,26 @@ return [
                     functionName: 'completeMultipartUpload',
                     description: 'Complete an S3 multipart upload',
                     disableCache: true,
-                    payloadSchema: [
-                        'type' => 'object',
-                        'properties' => [
-                            'key' => ['type' => 'string'],
-                            'upload_id' => ['type' => 'string'],
-                            'upload_token' => ['type' => 'string'],
-                            'expires_at' => ['type' => 'integer'],
-                            'parts' => [
-                                'type' => 'array',
-                                'items' => [
-                                    'type' => 'object',
-                                    'properties' => [
-                                        'part_number' => ['type' => 'integer'],
-                                        'etag' => ['type' => 'string'],
+                    payloadSchema: RecordSchemaType::object(
+                        properties: [
+                            'key' => RecordSchemaType::string(),
+                            'upload_id' => RecordSchemaType::string(),
+                            'upload_token' => RecordSchemaType::string(),
+                            'expires_at' => RecordSchemaType::integer(),
+                            'parts' => RecordSchemaType::array(
+                                items: RecordSchemaType::object(
+                                    properties: [
+                                        'part_number' => RecordSchemaType::integer(),
+                                        'etag' => RecordSchemaType::string(),
                                     ],
-                                ],
-                            ],
-                            'visibility' => ['type' => 'string'],
-                            'folder_id' => ['type' => 'string'],
-                            'filename' => ['type' => 'string'],
+                                ),
+                            ),
+                            'visibility' => RecordSchemaType::string(),
+                            'folder_id' => RecordSchemaType::string(),
+                            'filename' => RecordSchemaType::string(),
                         ],
-                        'required' => ['key', 'upload_id', 'upload_token', 'expires_at', 'parts'],
-                    ]
+                        required: ['key', 'upload_id', 'upload_token', 'expires_at', 'parts'],
+                    )
                 ),
                 'abort-multipart-upload' => new RecordFunctionType(
                     httpMethod: [RecordFunctionMethodEnum::POST->value],
@@ -316,27 +316,23 @@ return [
                     functionName: 'abortMultipartUpload',
                     description: 'Abort an S3 multipart upload',
                     disableCache: true,
-                    payloadSchema: [
-                        'type' => 'object',
-                        'properties' => [
-                            'key' => ['type' => 'string'],
-                            'upload_id' => ['type' => 'string'],
-                            'upload_token' => ['type' => 'string'],
-                            'expires_at' => ['type' => 'integer'],
-                            'visibility' => ['type' => 'string'],
+                    payloadSchema: RecordSchemaType::object(
+                        properties: [
+                            'key' => RecordSchemaType::string(),
+                            'upload_id' => RecordSchemaType::string(),
+                            'upload_token' => RecordSchemaType::string(),
+                            'expires_at' => RecordSchemaType::integer(),
+                            'visibility' => RecordSchemaType::string(),
                         ],
-                        'required' => ['key', 'upload_id', 'upload_token', 'expires_at', 'visibility'],
-                    ]
+                        required: ['key', 'upload_id', 'upload_token', 'expires_at', 'visibility'],
+                    )
                 ),
                 '{id}/download' => new RecordFunctionType(
                     httpMethod: [RecordFunctionMethodEnum::GET->value],
                     class: AttachmentUploadController::class,
                     functionName: 'download',
                     description: 'Download an attachment',
-                    responseSchema: [
-                        'type' => 'string',
-                        'format' => 'binary',
-                    ]
+                    responseSchema: RecordSchemaType::string(format: RecordSchemaFormatEnum::BINARY)
                 ),
                 '{id}/preview' => new RecordFunctionType(
                     httpMethod: [RecordFunctionMethodEnum::GET->value],
@@ -344,100 +340,93 @@ return [
                     functionName: 'preview',
                     isPublic: true,
                     description: 'Serve an attachment inline using a signed preview URL',
-                    responseSchema: [
-                        'type' => 'string',
-                        'format' => 'binary',
-                    ]
+                    responseSchema: RecordSchemaType::string(format: RecordSchemaFormatEnum::BINARY)
                 ),
                 '{id}/view' => new RecordFunctionType(
                     httpMethod: [RecordFunctionMethodEnum::GET->value],
                     class: AttachmentUploadController::class,
                     functionName: 'view',
                     description: 'View an attachment inline',
-                    responseSchema: [
-                        'type' => 'string',
-                        'format' => 'binary',
-                    ]
+                    responseSchema: RecordSchemaType::string(format: RecordSchemaFormatEnum::BINARY)
                 ),
                 'folders' => new RecordFunctionType(
                     httpMethod: [RecordFunctionMethodEnum::GET->value, RecordFunctionMethodEnum::POST->value],
                     class: AttachmentUploadController::class,
                     functionName: 'folders',
                     description: 'List or create folders',
-                    querySchema: [
-                        'type' => 'object',
-                        'properties' => [
-                            'parent_id' => ['type' => 'string', 'description' => 'Parent folder ID'],
+                    querySchema: RecordSchemaType::object(
+                        properties: [
+                            'parent_id' => RecordSchemaType::string(description: 'Parent folder ID'),
                         ],
-                    ],
-                    payloadSchema: [
-                        'type' => 'object',
-                        'properties' => [
-                            'name' => ['type' => 'string', 'description' => 'Folder name (required for POST)'],
-                            'parent_id' => ['type' => 'string', 'description' => 'Parent folder ID'],
-                            'scope' => ['type' => 'string', 'description' => 'Resource scope such as internal or public'],
-                            'visibility' => ['type' => 'string', 'enum' => ['private', 'public', 'temp_private', 'temp_public'], 'description' => 'Default visibility for resources organized under this folder'],
-                            'owner_type' => ['type' => 'string', 'description' => 'Optional owner type for application-specific folder ownership'],
-                            'owner_id' => ['type' => 'string', 'description' => 'Optional owner ID for application-specific folder ownership'],
-                            'metadata' => ['type' => 'object', 'description' => 'Optional folder metadata'],
+                    ),
+                    payloadSchema: RecordSchemaType::object(
+                        properties: [
+                            'name' => RecordSchemaType::string(description: 'Folder name (required for POST)'),
+                            'parent_id' => RecordSchemaType::string(description: 'Parent folder ID'),
+                            'scope' => RecordSchemaType::string(description: 'Resource scope such as internal or public'),
+                            'visibility' => RecordSchemaType::string(
+                                enum: ['private', 'public', 'temp_private', 'temp_public'],
+                                description: 'Default visibility for resources organized under this folder',
+                            ),
+                            'owner_type' => RecordSchemaType::string(description: 'Optional owner type for application-specific folder ownership'),
+                            'owner_id' => RecordSchemaType::string(description: 'Optional owner ID for application-specific folder ownership'),
+                            'metadata' => RecordSchemaType::object(description: 'Optional folder metadata'),
                         ],
-                        'required' => ['name'],
-                    ],
-                    responseSchema: [
-                        'type' => 'array',
-                        'items' => [
-                            'type' => 'object',
-                            'properties' => [
-                                'id' => ['type' => 'string'],
-                                'name' => ['type' => 'string'],
-                                'parent_id' => ['type' => 'string'],
-                                'scope' => ['type' => 'string'],
-                                'visibility' => ['type' => 'string'],
-                                'owner_type' => ['type' => 'string'],
-                                'owner_id' => ['type' => 'string'],
-                                'metadata' => ['type' => 'object'],
+                        required: ['name'],
+                    ),
+                    responseSchema: RecordSchemaType::array(
+                        items: RecordSchemaType::object(
+                            properties: [
+                                'id' => RecordSchemaType::string(),
+                                'name' => RecordSchemaType::string(),
+                                'parent_id' => RecordSchemaType::string(),
+                                'scope' => RecordSchemaType::string(),
+                                'visibility' => RecordSchemaType::string(),
+                                'owner_type' => RecordSchemaType::string(),
+                                'owner_id' => RecordSchemaType::string(),
+                                'metadata' => RecordSchemaType::object(),
                             ],
-                        ],
-                    ]
+                        ),
+                    )
                 ),
                 'folders/{id}' => new RecordFunctionType(
                     httpMethod: [RecordFunctionMethodEnum::PUT->value, RecordFunctionMethodEnum::PATCH->value, RecordFunctionMethodEnum::DELETE->value],
                     class: AttachmentUploadController::class,
                     functionName: 'folderItem',
                     description: 'Update or delete folder',
-                    payloadSchema: [
-                        'type' => 'object',
-                        'properties' => [
-                            'name' => ['type' => 'string', 'description' => 'New folder name'],
-                            'parent_id' => ['type' => 'string', 'description' => 'New parent folder ID'],
-                            'scope' => ['type' => 'string', 'description' => 'Resource scope such as internal or public'],
-                            'visibility' => ['type' => 'string', 'enum' => ['private', 'public', 'temp_private', 'temp_public'], 'description' => 'Default visibility for resources organized under this folder'],
-                            'owner_type' => ['type' => 'string', 'description' => 'Optional owner type for application-specific folder ownership'],
-                            'owner_id' => ['type' => 'string', 'description' => 'Optional owner ID for application-specific folder ownership'],
-                            'metadata' => ['type' => 'object', 'description' => 'Optional folder metadata'],
+                    payloadSchema: RecordSchemaType::object(
+                        properties: [
+                            'name' => RecordSchemaType::string(description: 'New folder name'),
+                            'parent_id' => RecordSchemaType::string(description: 'New parent folder ID'),
+                            'scope' => RecordSchemaType::string(description: 'Resource scope such as internal or public'),
+                            'visibility' => RecordSchemaType::string(
+                                enum: ['private', 'public', 'temp_private', 'temp_public'],
+                                description: 'Default visibility for resources organized under this folder',
+                            ),
+                            'owner_type' => RecordSchemaType::string(description: 'Optional owner type for application-specific folder ownership'),
+                            'owner_id' => RecordSchemaType::string(description: 'Optional owner ID for application-specific folder ownership'),
+                            'metadata' => RecordSchemaType::object(description: 'Optional folder metadata'),
                         ],
-                    ]
+                    )
                 ),
                 'record/{table}/{record_id}' => new RecordFunctionType(
                     httpMethod: [RecordFunctionMethodEnum::GET->value, RecordFunctionMethodEnum::POST->value],
                     class: AttachmentUploadController::class,
                     functionName: 'record',
                     description: 'Get or link attachments for a specific record',
-                    querySchema: [
-                        'type' => 'object',
-                        'properties' => [
-                            'collection_name' => ['type' => 'string', 'description' => 'Filter by collection name'],
+                    querySchema: RecordSchemaType::object(
+                        properties: [
+                            'collection_name' => RecordSchemaType::string(description: 'Filter by collection name'),
                         ],
-                    ],
-                    payloadSchema: [
-                        'type' => 'object',
-                        'properties' => [
-                            'attachment_ids' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'Array of attachment IDs to link (idempotent per id); required for POST unless attachment_id is sent'],
-                            'attachment_id' => ['type' => 'string', 'description' => 'Single attachment ID to link (legacy form; use attachment_ids)'],
-                            'collection_name' => ['type' => 'string', 'description' => 'Collection name for the link'],
-                        ],
-                        'anyOf' => [['required' => ['attachment_ids']], ['required' => ['attachment_id']]],
-                    ]
+                    ),
+                    payloadSchema: new RecordSchemaType(RecordSchemaTypeEnum::OBJECT, properties: [
+                            'attachment_ids' => RecordSchemaType::array(
+                                items: RecordSchemaType::string(),
+                                description: 'Array of attachment IDs to link (idempotent per id); required for POST unless attachment_id is sent',
+                            ),
+                            'attachment_id' => RecordSchemaType::string(description: 'Single attachment ID to link (legacy form; use attachment_ids)'),
+                            'collection_name' => RecordSchemaType::string(description: 'Collection name for the link'),
+                        ], anyOf: [['required' => ['attachment_ids']], ['required' => ['attachment_id']]])
                 ),
                 'record/{table}/{record_id}/{attachment_id}' => new RecordFunctionType(
                     httpMethod: [RecordFunctionMethodEnum::DELETE->value],
@@ -465,16 +454,16 @@ return [
                 // in 2024_01_01_000000_create_sp_attachments_tables. The table
                 // is created as sp_document_folders and renamed by
                 // 2026_08_02_000000_rename_sp_document_folders_table.
-                'id' => ['type' => RecordConfigService::idType() === 'uuid' ? 'uuid' : 'bigIncrements', 'nullable' => false],
-                'name' => ['type' => 'string', 'nullable' => false],
-                'parent_id' => ['type' => 'string', 'nullable' => true],
-                'scope' => ['type' => 'string', 'nullable' => false],
-                'visibility' => ['type' => 'string', 'nullable' => false],
-                'owner_type' => ['type' => 'string', 'nullable' => true],
-                'owner_id' => ['type' => 'string', 'nullable' => true],
-                'metadata' => ['type' => 'json', 'nullable' => true],
-                'created_at' => ['type' => 'datetime', 'nullable' => true],
-                'updated_at' => ['type' => 'datetime', 'nullable' => true],
+                'id' => new RecordColumnType(type: RecordConfigService::idType() === 'uuid' ? RecordColumnTypeEnum::UUID : RecordColumnTypeEnum::BIGINT, nullable: false, primary: true, autoIncrement: RecordConfigService::idType() !== 'uuid'),
+                'name' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'parent_id' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
+                'scope' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'visibility' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'owner_type' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
+                'owner_id' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
+                'metadata' => new RecordColumnType(type: RecordColumnTypeEnum::JSON),
+                'created_at' => new RecordColumnType(type: RecordColumnTypeEnum::DATETIME),
+                'updated_at' => new RecordColumnType(type: RecordColumnTypeEnum::DATETIME),
             ],
         ),
         'sp_attachment_links' => new RecordTableType(
@@ -486,13 +475,13 @@ return [
             isAuthWrite: true,
             primaryKey: 'id',
             columns: [
-                'id' => ['type' => 'integer', 'nullable' => false],
-                'attachment_id' => ['type' => 'string', 'nullable' => false],
-                'record_id' => ['type' => 'string', 'nullable' => false],
-                'record_type' => ['type' => 'string', 'nullable' => false],
-                'collection_name' => ['type' => 'string', 'nullable' => true],
-                'created_at' => ['type' => 'datetime', 'nullable' => true],
-                'updated_at' => ['type' => 'datetime', 'nullable' => true],
+                'id' => new RecordColumnType(type: RecordColumnTypeEnum::INTEGER, nullable: false, primary: true, autoIncrement: true),
+                'attachment_id' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'record_id' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'record_type' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'collection_name' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
+                'created_at' => new RecordColumnType(type: RecordColumnTypeEnum::DATETIME),
+                'updated_at' => new RecordColumnType(type: RecordColumnTypeEnum::DATETIME),
             ],
         ),
     ],

@@ -7,6 +7,7 @@ namespace Sopheak\Core\Mcp;
 use Closure;
 use Exception;
 use Sopheak\Core\Constants\RecordConstants;
+use Sopheak\Core\Enums\RecordColumnTypeEnum;
 use Sopheak\Core\Mcp\Guidance\ApiReference;
 use Sopheak\Core\Mcp\Guidance\ColumnTypes;
 use Sopheak\Core\Mcp\Guidance\EndpointContext;
@@ -14,6 +15,7 @@ use Sopheak\Core\Mcp\Guidance\IncludeGuide;
 use Sopheak\Core\Mcp\Guidance\PayloadSchemaBuilder;
 use Sopheak\Core\Mcp\Guidance\SchemaDeduper;
 use Sopheak\Core\Services\RecordConfigService;
+use Sopheak\Core\Types\RecordComputedAttributeType;
 use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Types\RecordTableType;
 use Sopheak\Core\Types\RecordValidationType;
@@ -421,6 +423,56 @@ final class SchemaTools
 
                 if (isset($colDef['maxLength'])) {
                     $field['maxLength'] = (int) $colDef['maxLength'];
+                }
+
+                if (is_string($colDef['description'] ?? null) && '' !== $colDef['description']) {
+                    $field['description'] = $colDef['description'];
+                }
+
+                if (array_key_exists('example', $colDef) && null !== $colDef['example']) {
+                    $field['example'] = $colDef['example'];
+                }
+
+                $fields[] = $field;
+            }
+        }
+
+        // Computed attributes (read-only, resolved when requested in ?select=)
+        if (!empty($config->attributes) && is_array($config->attributes)) {
+            $hiddenCols = (array) ($config->columnHiddens ?? []);
+            foreach ($config->attributes as $attrName => $attrDef) {
+                if (!is_string($attrName)) {
+                    continue;
+                }
+
+                if ('' === $attrName) {
+                    continue;
+                }
+
+                if (in_array($attrName, $hiddenCols, true)) {
+                    continue;
+                }
+
+                $attrType = $attrDef instanceof RecordComputedAttributeType
+                    ? ($attrDef->type instanceof RecordColumnTypeEnum ? $attrDef->type->value : ($attrDef->type ?? 'string'))
+                    : 'string';
+
+                $field = [
+                    'name' => $attrName,
+                    'type' => $attrType,
+                    'nullable' => $attrDef instanceof RecordComputedAttributeType ? $attrDef->nullable : true,
+                    'in' => ['read'],
+                    'computed' => true,
+                ];
+
+                if ($attrDef instanceof RecordComputedAttributeType) {
+                    if (is_string($attrDef->description) && '' !== $attrDef->description) {
+                        $field['description'] = $attrDef->description;
+                    }
+
+                    if (null !== $attrDef->example) {
+                        $field['example'] = $attrDef->example;
+                    }
                 }
 
                 $fields[] = $field;

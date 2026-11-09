@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Attributes;
 
+use Sopheak\Core\Types\RecordSchemaType;
 use Attribute;
 use Sopheak\Core\Enums\RecordFunctionMethodEnum;
 
@@ -27,9 +28,9 @@ class RecordFunction
         /** Display name for OpenAPI summary generation. Unrelated to $name (which overrides the function's route key) — falls back to $description, then a humanized function key, when empty. */
         public readonly ?string $displayName = null,
         public readonly ?string $description = null,
-        public readonly ?array $querySchema = null,
-        public readonly ?array $payloadSchema = null,
-        public readonly ?array $responseSchema = null,
+        public readonly RecordSchemaType|array|null $querySchema = null,
+        public readonly RecordSchemaType|array|null $payloadSchema = null,
+        public readonly RecordSchemaType|array|null $responseSchema = null,
         public readonly array|string|null $clearCacheTables = null,
         public readonly array|string|null $middleware = null,
     ) {}

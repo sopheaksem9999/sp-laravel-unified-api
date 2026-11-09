@@ -9,17 +9,18 @@
  * Copy this to your Laravel app's config/record.php and modify
  * according to your database schema and requirements.
  */
-use Illuminate\Http\Request;
-use Illuminate\Contracts\Validation\Validator;
 use Sopheak\Core\Enums\RecordFunctionMethodEnum;
-use Sopheak\Core\Types\RecordFunctionType;
-use Sopheak\Core\Types\RecordTableType;
-use Sopheak\Core\Types\RecordHasManyType;
 use Sopheak\Core\Types\RecordBelongsToType;
+use Sopheak\Core\Types\RecordComputedAttributeType;
+use Sopheak\Core\Types\RecordFunctionType;
 use Sopheak\Core\Types\RecordHasManyThroughType;
+use Sopheak\Core\Types\RecordHasManyType;
 use Sopheak\Core\Types\RecordMetaBelongsToManyType;
-use Sopheak\Core\Types\RecordTablePublic;
+use Sopheak\Core\Types\RecordSchemaType;
+use Sopheak\Core\Types\RecordTablePermissionType;
 use Sopheak\Core\Types\RecordTableTriggerType;
+use Sopheak\Core\Types\RecordTableType;
+use Sopheak\Core\Types\RecordValidationType;
 
 $tables = [
     /*
@@ -32,10 +33,9 @@ $tables = [
         table: 'users',
         hasTenantId: false,
         softDeletes: false,
-        public: new RecordTablePublic(
-            read: false,
-            write: false
-        ),
+        isAuthRead: true,
+        isAuthWrite: true,
+        searchable: ['name', 'email', 'posts.title', 'roles.name'],
         relationships: [
             'posts' => new RecordHasManyType(
                 table: 'posts',
@@ -63,45 +63,37 @@ $tables = [
                 functionName: 'getFullName',
                 pmsName: 'view_user',
                 description: 'Get the full name of a user by ID',
-                querySchema: [
-                    'type' => 'object',
-                    'properties' => [
-                        'id' => [
-                            'type' => 'integer',
-                            'description' => 'User ID',
-                            'example' => 123,
-                        ],
+                querySchema: RecordSchemaType::object(
+                    properties: [
+                        'id' => RecordSchemaType::integer(description: 'User ID', example: 123),
                     ],
-                    'required' => ['id'],
-                ],
-                responseSchema: [
-                    'type' => 'object',
-                    'properties' => [
-                        'data' => [
-                            'type' => 'object',
-                            'properties' => [
-                                'full_name' => [
-                                    'type' => 'string',
-                                    'example' => 'John Doe',
-                                ],
+                    required: ['id'],
+                ),
+                responseSchema: RecordSchemaType::object(
+                    properties: [
+                        'data' => RecordSchemaType::object(
+                            properties: [
+                                'full_name' => RecordSchemaType::string(example: 'John Doe'),
                             ],
-                            'required' => ['full_name'],
-                        ],
+                            required: ['full_name'],
+                        ),
                     ],
-                    'required' => ['data'],
-                ],
+                    required: ['data'],
+                ),
             ),
         ],
-        createValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'email' => 'required|email',
-        ]),
-        updateValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make($request->all(), [
-            'name' => 'sometimes|required|string|max:255',
-        ]),
-        deleteValidator: fn(Request $request, ?int $id = null): Validator => \Illuminate\Support\Facades\Validator::make(['id' => $id], [
-            'id' => 'required|integer',
-        ]),
+        createValidator: new RecordValidationType(
+            class: 'App\\Record\\Validators\\UserValidators',
+            functionName: 'createRules',
+        ),
+        updateValidator: new RecordValidationType(
+            class: 'App\\Record\\Validators\\UserValidators',
+            functionName: 'updateRules',
+        ),
+        deleteValidator: new RecordValidationType(
+            class: 'App\\Record\\Validators\\UserValidators',
+            functionName: 'deleteRules',
+        ),
         beforeRead: new RecordTableTriggerType(
             class: 'App\\Record\\Triggers\\UserTriggers',
             functionName: 'beforeRead'
@@ -133,7 +125,21 @@ $tables = [
         afterDelete: new RecordTableTriggerType(
             class: 'App\\Record\\Triggers\\UserTriggers',
             functionName: 'afterDelete'
-        )
+        ),
+        attributes: [
+            'display_label' => new RecordComputedAttributeType(
+                class: 'App\\Record\\Attributes\\UserAttributes',
+                functionName: 'getDisplayLabel',
+                type: 'string',
+                description: 'Formatted user display label',
+            ),
+        ],
+        permissions: new RecordTablePermissionType(
+            read: 'view:user',
+            create: 'create:user',
+            update: 'update:user',
+            delete: 'delete:user',
+        ),
     ),
 
     /*
@@ -145,10 +151,8 @@ $tables = [
         pmsName: 'post',
         hasTenantId: false,
         softDeletes: true, // The PMS name for permissions (e.g., view_post, create_post)
-        public: new RecordTablePublic(
-            read: false, // Requires authentication for read operations
-            write: false // Requires authentication for write operations
-        ),
+        isAuthRead: true,
+        isAuthWrite: true,
         relationships: [
             // Belongs To: Post belongs to user
             'user' => new RecordBelongsToType(
@@ -185,10 +189,8 @@ $tables = [
         pmsName: 'comment',
         hasTenantId: false,
         softDeletes: true, // The PMS name for permissions (e.g., view_comment, create_comment)
-        public: new RecordTablePublic(
-            read: false, // Requires authentication for read operations
-            write: false // Requires authentication for write operations
-        ),
+        isAuthRead: true,
+        isAuthWrite: true,
         relationships: [
             // Belongs To: Comment belongs to post
             'post' => new RecordBelongsToType(
@@ -215,10 +217,8 @@ $tables = [
         pmsName: 'order',
         hasTenantId: true,
         softDeletes: true, // The PMS name for permissions (e.g., view_order, create_order)
-        public: new RecordTablePublic(
-            read: false, // Requires authentication for read operations
-            write: false // Requires authentication for write operations
-        ),
+        isAuthRead: true,
+        isAuthWrite: true,
         relationships: [
             // Belongs To: Order belongs to user
             'user' => new RecordBelongsToType(
@@ -255,10 +255,8 @@ $tables = [
         pmsName: 'product',
         hasTenantId: true,
         softDeletes: true, // The PMS name for permissions (e.g., view_product, create_product)
-        public: new RecordTablePublic(
-            read: false, // Requires authentication for read operations
-            write: false // Requires authentication for write operations
-        ),
+        isAuthRead: true,
+        isAuthWrite: true,
         relationships: [
             // One-to-Many: Product has many order items
             'order_items' => new RecordHasManyType(
@@ -285,10 +283,8 @@ $tables = [
         pmsName: 'category',
         hasTenantId: false,
         softDeletes: false, // The PMS name for permissions (e.g., view_category, create_category)
-        public: new RecordTablePublic(
-            read: false, // Requires authentication for read operations
-            write: false // Requires authentication for write operations
-        ),
+        isAuthRead: true,
+        isAuthWrite: true,
         relationships: [
             // One-to-Many: Category has many products
             'products' => new RecordHasManyType(

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sopheak\Core\Attributes;
 
 use Attribute;
+use Sopheak\Core\Enums\RecordValidatorHookEnum;
 
 /**
  * Declare a validation rule directly on a method in a Validator or Handler class.
@@ -39,8 +40,12 @@ use Attribute;
 #[Attribute(Attribute::TARGET_METHOD | Attribute::IS_REPEATABLE)]
 class RecordValidator
 {
+    public readonly string $hook;
+
     public function __construct(
-        public readonly string $hook,
+        RecordValidatorHookEnum|string $hook,
         public readonly ?string $description = null,
-    ) {}
+    ) {
+        $this->hook = $hook instanceof RecordValidatorHookEnum ? $hook->value : $hook;
+    }
 }

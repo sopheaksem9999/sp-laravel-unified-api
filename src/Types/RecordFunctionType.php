@@ -119,12 +119,20 @@ class RecordFunctionType
         public ?int $cacheTTL = null,
         public ?string $name = null,
         public ?string $description = null,
-        public ?array $querySchema = null,
-        public ?array $payloadSchema = null,
-        public ?array $responseSchema = null,
+        /** Stored as the OpenAPI array form. */
+        public RecordSchemaType|array|null $querySchema = null,
+        /** Stored as the OpenAPI array form. */
+        public RecordSchemaType|array|null $payloadSchema = null,
+        /** Stored as the OpenAPI array form. */
+        public RecordSchemaType|array|null $responseSchema = null,
         public array|string|null $clearCacheTables = null,
         public array|string|null $middleware = null,
     ) {
+        // Typed schemas are stored as arrays, so every reader keeps seeing arrays.
+        $this->querySchema = RecordSchemaType::normalize($querySchema);
+        $this->payloadSchema = RecordSchemaType::normalize($payloadSchema);
+        $this->responseSchema = RecordSchemaType::normalize($responseSchema);
+
         $this->assertValidHttpMethod($httpMethod);
 
         if (null !== $pmsName && (empty($pmsName) || (is_array($pmsName) && [] === $pmsName))) {
@@ -142,6 +150,86 @@ class RecordFunctionType
         if (null !== $cacheTTL && $cacheTTL <= 0) {
             throw new InvalidArgumentException('cacheTTL must be greater than 0');
         }
+
+        if (!preg_match('/^\\\\?[A-Za-z_]\w*(\\\\[A-Za-z_]\w*)*$/', $class)) {
+            throw new InvalidArgumentException(sprintf('class must be a valid class name; got: %s', $class));
+        }
+
+        if (!preg_match('/^[A-Za-z_]\w*$/', $functionName)) {
+            throw new InvalidArgumentException(sprintf('functionName must be a valid method name; got: %s', $functionName));
+        }
+
+        if (null !== $name && '' === trim($name)) {
+            throw new InvalidArgumentException('name cannot be empty if provided');
+        }
+
+        $this->assertStringList('clearCacheTables', $clearCacheTables);
+        $this->assertStringList('middleware', $middleware);
+    }
+
+    private const SCHEMA_TYPES = ['object', 'array', 'string', 'integer', 'number', 'boolean', 'null'];
+
+    /**
+     * Problems in a querySchema / payloadSchema / responseSchema, as messages.
+     * Not enforced by the constructor so existing configs keep loading;
+     * `sp-laravel-api:validate` reports them as warnings.
+     *
+     * @param array<string, mixed>|null $schema
+     * @return list<string>
+     */
+    public static function schemaProblems(string $label, ?array $schema): array
+    {
+        if (null === $schema || [] === $schema) {
+            return [];
+        }
+
+        $problems = [];
+        foreach ((array) ($schema['type'] ?? []) as $one) {
+            if (!is_string($one) || !in_array($one, self::SCHEMA_TYPES, true)) {
+                $problems[] = sprintf('%s.type must be one of [%s]; got: %s', $label, implode(', ', self::SCHEMA_TYPES), is_string($one) ? $one : get_debug_type($one));
+            }
+        }
+
+        if (isset($schema['properties']) && !is_array($schema['properties'])) {
+            $problems[] = sprintf('%s.properties must be an array', $label);
+        }
+
+        if (isset($schema['required'])) {
+            if (!is_array($schema['required']) || array_filter($schema['required'], static fn(mixed $field): bool => !is_string($field) || '' === $field) !== []) {
+                $problems[] = sprintf('%s.required must be a list of property names', $label);
+            } elseif (is_array($schema['properties'] ?? null)) {
+                $unknown = array_diff($schema['required'], array_keys($schema['properties']));
+                if ([] !== $unknown) {
+                    $problems[] = sprintf('%s.required lists properties that are not declared: %s', $label, implode(', ', $unknown));
+                }
+            }
+        }
+
+        foreach (is_array($schema['properties'] ?? null) ? $schema['properties'] : [] as $property => $definition) {
+            if (is_array($definition)) {
+                $problems = [...$problems, ...self::schemaProblems($label . '.properties.' . $property, $definition)];
+            }
+        }
+
+        if (is_array($schema['items'] ?? null)) {
+            return [...$problems, ...self::schemaProblems($label . '.items', $schema['items'])];
+        }
+
+        return $problems;
+    }
+
+    private function assertStringList(string $label, array|string|null $value): void
+    {
+        if (null === $value) {
+            return;
+        }
+
+        foreach ((array) $value as $item) {
+            if (!is_string($item) || '' === trim($item)) {
+                throw new InvalidArgumentException(sprintf('%s must be a non-empty string or a list of non-empty strings', $label));
+            }
+        }
+
     }
 
     /**

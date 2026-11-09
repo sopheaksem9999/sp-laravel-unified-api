@@ -1208,13 +1208,17 @@ class RecordService
      * @param array<string, mixed> $auditData
      */
     protected function callCustomAuditLogger(
-        string|array $callback,
+        RecordTableTriggerType|string|array $callback,
         AuditLogEventEnum $event,
         string $entityClass,
         array $auditData,
         mixed $tenantId,
         array $context
     ): bool {
+        if ($callback instanceof RecordTableTriggerType) {
+            $callback = [$callback->class, $callback->functionName];
+        }
+
         $callable = null;
 
         if (is_array($callback)) {

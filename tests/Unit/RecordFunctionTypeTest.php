@@ -244,4 +244,36 @@ class RecordFunctionTypeTest extends TestCase
 
         $this->assertNull($restored->middleware);
     }
+
+    public function test_malformed_class_method_and_lists_are_rejected(): void
+    {
+        foreach ([
+            ['class' => 'not a class', 'functionName' => 'run'],
+            ['class' => 'App\\Svc', 'functionName' => 'run now'],
+            ['class' => 'App\\Svc', 'functionName' => 'run', 'name' => ' '],
+            ['class' => 'App\\Svc', 'functionName' => 'run', 'clearCacheTables' => ['ok', '']],
+            ['class' => 'App\\Svc', 'functionName' => 'run', 'middleware' => [1]],
+        ] as $args) {
+            try {
+                /** @var array<string, mixed> $callArgs */
+                $callArgs = ['httpMethod' => 'GET', ...$args];
+                new RecordFunctionType(...$callArgs);
+                $this->fail('expected InvalidArgumentException for ' . json_encode($args));
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        $this->assertInstanceOf(RecordFunctionType::class, new RecordFunctionType(httpMethod: 'GET', class: '\\App\\Svc', functionName: 'run', middleware: []));
+    }
+
+    public function test_schema_problems_are_reported_not_thrown(): void
+    {
+        $this->assertSame([], RecordFunctionType::schemaProblems('payloadSchema', ['type' => 'object', 'properties' => ['a' => ['type' => 'string']], 'required' => ['a']]));
+
+        $problems = RecordFunctionType::schemaProblems('payloadSchema', ['type' => 'obj', 'properties' => ['a' => ['type' => 'int']], 'required' => ['b']]);
+        $this->assertCount(3, $problems);
+
+        $this->assertInstanceOf(RecordFunctionType::class, new RecordFunctionType(httpMethod: 'GET', class: 'App\\Svc', functionName: 'run', payloadSchema: ['type' => 'obj']));
+    }
 }

@@ -198,20 +198,23 @@ final class UserHooks
 
 ## Registration Pattern B: Trigger Class Auto-discovery
 
+`#[RecordTrigger]` accepts either `RecordTriggerHookEnum` cases (recommended for IDE autocomplete) or hook name strings:
+
 ```php
 use Illuminate\Http\Request;
 use Sopheak\Core\Attributes\RecordTrigger;
+use Sopheak\Core\Enums\RecordTriggerHookEnum;
 use Sopheak\Core\Types\RecordTableType;
 
 final class UserTriggers
 {
-    #[RecordTrigger('beforeCreate', description: 'Normalize payload')]
+    #[RecordTrigger(RecordTriggerHookEnum::BEFORE_CREATE, description: 'Normalize payload')]
     public static function normalize(Request $request, string $table, array $context): array
     {
         return ['name' => trim((string) $request->input('name'))];
     }
 
-    #[RecordTrigger('afterCreate', description: 'Dispatch welcome event')]
+    #[RecordTrigger(RecordTriggerHookEnum::AFTER_CREATE, description: 'Dispatch welcome event')]
     public static function afterCreate(Request $request, string $table, array $context): void
     {
         // dispatch event / job
@@ -248,6 +251,8 @@ new RecordTableType(
 - `after*`: table hook runs before global hook.
 
 ## Search OR Migration Example (`beforeRead`)
+
+> **Tip: Prefer `searchable` for 1-level relationship search.** If you only need `?search=keyword` across root columns and direct relationships (e.g. `searchable: ['ref_number', 'vendor.display_name', 'items.name', 'items.description']`), configure [`searchable` on `RecordTableType`](/guide/api-filter-operators#config-driven-search) directly — no `beforeRead` hook or custom RPC is needed. Use `beforeRead` below when you need dynamic/conditional search fields or custom query logic.
 
 Use this pattern when migrating old controller search logic like:
 
@@ -443,6 +448,100 @@ GET /api/v2/invoices?per_page=50&sortby=invoice_date&order=asc
 ```
 
 > **List reads only.** Filters a `beforeRead` hook adds to the query apply to `GET /{table}` only. `GET /{table}/{id}`, update, delete, restore and force-delete do not read query filters, so a user hidden from a row in the list can still reach it by id. For "only mine", use [`viewOwn`](/guide/feature-permission-own-records), which scopes every operation; for team visibility, also check ownership in `beforeUpdate` / `beforeDelete`, and in `beforeRead` when `$context['type'] === 'show'`.
+
+## Complex Multi-Table Join and Scenario Filtering (`beforeRead`)
+
+When migrating custom RPC list endpoints that require **multi-level joins** (for example `purchase_orders -> purchase_order_items -> products.sku`) or **complex workflow subqueries** (such as multi-step approval scenarios), resolve the matching primary keys in `beforeRead` and inject them via `$request->query->set('id', 'in.(...)')`.
+
+### Why `beforeRead` Instead of a Query-Builder Hook?
+
+In `RecordService::listRecords()`, `beforeRead` executes **before** tenant include verification and **before** the query cache key is computed:
+
+1. `beforeRead` mutates `$request->query`
+2. Tenant-scoped include guard checks `$request`
+3. Query cache key is generated from `$request` filters
+4. `QueryBuilderFiltersUtils::apply()` builds SQL, paginates, and eager-loads `select` relations
+
+Because `beforeRead` rewrites `$request->query` before step 3, any custom search or scenario filter is **automatically part of the query cache key** and works identically across HTTP endpoints, MCP tools, and AI SDK tools.
+
+```php
+namespace App\Record\PurchaseOrder;
+
+use Illuminate\Database\Query\Builder;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Sopheak\Core\Attributes\RecordTrigger;
+
+final class PurchaseOrderTriggers
+{
+    #[RecordTrigger('beforeRead', description: 'Deep item/product SKU search and approval scenario filter')]
+    public static function beforeRead(Request $request, string $table, array $context): Request
+    {
+        if (($context['type'] ?? null) !== 'index') {
+            return $request;
+        }
+
+        $deepSearch = trim((string) $request->query('deep_search', ''));
+        $scenario = trim((string) $request->query('scenario', ''));
+
+        if ($deepSearch === '' && $scenario === '') {
+            return $request;
+        }
+
+        $request->query->remove('deep_search');
+        $request->query->remove('scenario');
+
+        $tenantId = $context['company_id'] ?? $context['tenant_id'] ?? null;
+
+        $query = DB::table('purchase_orders')
+            ->where('company_id', $tenantId)
+            ->whereNull('deleted_at');
+
+        // Example 1: 2-level relationship join (purchase_order_items -> products.sku)
+        if ($deepSearch !== '') {
+            $term = '%' . strtolower($deepSearch) . '%';
+            $query->where(static function (Builder $q) use ($term, $tenantId): void {
+                $q->whereRaw('LOWER(purchase_orders.ref_number) LIKE ?', [$term])
+                    ->orWhereExists(static function (Builder $sub) use ($term, $tenantId): void {
+                        $sub->select(DB::raw(1))
+                            ->from('purchase_order_items as poi')
+                            ->join('products as p', 'p.id', '=', 'poi.product_id')
+                            ->whereColumn('poi.purchase_order_id', 'purchase_orders.id')
+                            ->where('poi.company_id', $tenantId)
+                            ->where(static function (Builder $pq) use ($term): void {
+                                $pq->whereRaw('LOWER(poi.name) LIKE ?', [$term])
+                                    ->orWhereRaw('LOWER(p.sku) LIKE ?', [$term]);
+                            });
+                    });
+            });
+        }
+
+        // Example 2: Custom workflow / approval scenario subquery
+        if ($scenario === 'action_required') {
+            $query->where('is_proceed_scenario', true)
+                ->where('is_approved', false);
+        }
+
+        $matchingIds = $query->pluck('id')->map(static fn ($id): int => (int) $id)->all();
+
+        // Inject into standard filter pipeline (empty match -> id=in.(0))
+        $request->query->set(
+            'id',
+            'in.(' . ($matchingIds !== [] ? implode(',', $matchingIds) : '0') . ')'
+        );
+
+        return $request;
+    }
+}
+```
+
+### Choosing the Right Search Approach
+
+| Use Case | Recommended Solution | Custom Code Needed |
+| --- | --- | --- |
+| Root columns + 1-level relations (`vendor.display_name`, `items.name`) | `searchable: ['ref_number', 'vendor.display_name', 'items.name']` | None (config only) |
+| Dynamic/conditional OR search across 1-level relations | `beforeRead` rewriting `?search=` to `$request->query->set('or', '(...)')` | Small `beforeRead` hook |
+| 2+ level deep joins (`items -> product -> sku`) or workflow subqueries | `beforeRead` resolving IDs into `$request->query->set('id', 'in.(...)')` | `beforeRead` hook (reuses standard CRUD pagination, `select`, and cache) |
 
 ## Context Quick Map
 

@@ -302,6 +302,64 @@ Every number below is read from your config, routes and registry when the tool r
 
 Replace the host and token. The Schema MCP needs only a token; the Data MCP needs a user credential.
 
+### Laravel Boost & Agent Setup
+
+`sp-laravel-api` integrates directly with [Laravel Boost](https://github.com/laravel/boost) (`laravel/boost`) and also provides a standalone installer for projects that do not use Boost.
+
+#### Using Laravel Boost (`boost:install` + `sp-laravel-api:boost`)
+
+1. **Install Boost and discover package guidelines & skills** (`resources/boost/guidelines/core.blade.php` and `resources/boost/skills/sp-laravel-api-development/SKILL.md` are auto-discovered by Boost):
+
+```bash
+composer require laravel/boost --dev
+php artisan boost:install
+```
+
+When prompted for third-party packages, select `sopheak/sp-laravel-api (guidelines, skills)`. Later, run `php artisan boost:update` to refresh the guidelines and skill after upgrading `sp-laravel-api`.
+
+2. **Register the `sp-laravel-api` MCP server alongside `laravel-boost` in `.mcp.json`**:
+
+```bash
+php artisan sp-laravel-api:boost
+```
+
+`sp-laravel-api:boost` performs an idempotent read-modify-write merge on `.mcp.json`, adding:
+
+```json
+{
+  "mcpServers": {
+    "laravel-boost": {
+      "command": "php",
+      "args": ["artisan", "boost:mcp"]
+    },
+    "sp-laravel-api": {
+      "command": "php",
+      "args": ["artisan", "sp-laravel-api:mcp"]
+    }
+  }
+}
+```
+
+and then runs `php artisan sp-laravel-api:validate`. Re-run `php artisan sp-laravel-api:boost` if `boost:install` regenerates `.mcp.json`.
+
+#### Standalone Setup Without Laravel Boost (`sp-laravel-api:agent`)
+
+If you do not use `laravel/boost`, install the skill, compiled rules, and `.mcp.json` server entry directly:
+
+```bash
+# Install skill (.agents/skills/sp-laravel-api-development/SKILL.md),
+# rules (.agents/rules/sp-laravel-api.md), and .mcp.json entry:
+php artisan sp-laravel-api:agent
+
+# Refresh skill and rules after upgrading the package:
+php artisan sp-laravel-api:agent --force
+
+# Or install individual parts only:
+php artisan sp-laravel-api:agent --skill
+php artisan sp-laravel-api:agent --rules
+php artisan sp-laravel-api:agent --mcp
+```
+
 **Claude Code**
 
 ```bash

@@ -7,6 +7,8 @@ namespace Sopheak\Core\Types;
 use ReflectionClass;
 use Sopheak\Core\Attributes\RecordValidator;
 use Sopheak\Core\Attributes\RecordTrigger;
+use Sopheak\Core\Enums\RecordCastEnum;
+use Sopheak\Core\Enums\RecordTriggerHookEnum;
 use Closure;
 
 /**
@@ -31,12 +33,12 @@ use Closure;
  * @property null|string       $primaryKey      The primary key column name (defaults to 'id')
  * @property null|string       $ownerColumn     Column holding the record owner's user id, used by `viewOwn:*` scoping.
  *                                               Defaults to auto-detection via `record.own_records_owner_columns`.
- * @property null|array        $columns          Array of column definitions
+ * @property null|array        $columns          Column definitions, each a RecordColumnType or the legacy array (stored as arrays)
  * @property null|array        $columnHiddens   Columns to hide from responses
  * @property null|array        $columnWriteDisabled    Columns that cannot be written via API payloads
  * @property null|array        $columnIndexes  Array of full-text index configurations for optimized search
  * @property null|array        $searchable      Explicit searchable fields for `?search=` (supports `relationship.column`)
- * @property string|array|null $customAuditLog Custom audit logger callback (callable string or [class, httpMethod])
+ * @property RecordTableTriggerType|string|array|null $customAuditLog Custom audit logger callback (RecordTableTriggerType, callable string, or [class, method])
  *
  * Example usage:
  * ```php
@@ -55,42 +57,31 @@ use Closure;
  *     isAuthWrite: true,
  *     relationships: [
  *         'roles' => new RecordMetaBelongsToManyType(...),
- *         'profile' => new RecordHasOneType(...),
+ *         'profile' => new RecordHasManyType(...),
  *     ],
  *     functions: [
  *         // Using RecordFunctionType object (recommended)
  *         'getFullName' => new RecordFunctionType(
- *             type: 'class',
+ *             httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
  *             class: 'App\\Services\\UserService',
  *             functionName: 'getFullName',
- *             httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
  *             description: 'Get the full name of the user'
  *         ),
  *
  *         // Using array configuration (legacy support)
  *         'calculateStats' => [
- *             'type' => 'class',
  *             'class' => 'App\\Services\\UserStatsService',
  *             'functionName' => 'calculate',
  *             'httpMethod' => [\Sopheak\Core\Enums\RecordFunctionMethodEnum::POST->value],
  *             'required_params' => ['period'],
  *             'description' => 'Calculate user statistics'
  *         ],
- *
- *         // Query-based function
- *         'getActiveUsers' => new RecordFunctionType(
- *             type: 'query',
- *             query: 'SELECT * FROM users WHERE active = 1 AND created_at >= ::since',
- *             httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
- *             required_params: ['since'],
- *             description: 'Get active users since a specific date'
- *         ),
  *     ],
  *     primaryKey: 'id',
  *     columns: [
- *         'name' => ['type' => 'string', 'nullable' => false],
- *         'email' => ['type' => 'string', 'unique' => true],
- * ],
+ *         'name' => new RecordColumnType(type: 'string', nullable: false),
+ *         'email' => ['type' => 'string', 'unique' => true], // legacy array form still works
+ *     ],
  *     columnHiddens: ['password', 'remember_token'],
  *     columnIndexes: [
  *         ['name', 'description'],
@@ -104,6 +95,8 @@ use Closure;
  */
 class RecordTableType
 {
+    public ?RecordTablePermissionType $permissionsType = null;
+
     public function __construct(
         public ?string $table = null,
         public string|array|null $pmsName = null,
@@ -122,6 +115,7 @@ class RecordTableType
         public RecordTablePublic|bool $public = new RecordTablePublic(),
         public ?string $primaryKey = 'id',
         public ?string $ownerColumn = null,
+        /** @var array<string, RecordColumnType|array<string, mixed>>|null */
         public ?array $columns = [],
         public ?array $columnHiddens = [],
         public ?array $columnWriteDisabled = [],
@@ -129,7 +123,7 @@ class RecordTableType
         public ?array $searchable = [],
         public ?array $relationships = [],
         public ?array $functions = [],
-        public string|array|null $customAuditLog = null,
+        public RecordTableTriggerType|string|array|null $customAuditLog = null,
         public Closure|RecordValidationType|array|string|null $createValidator = null,
         public Closure|RecordValidationType|array|string|null $updateValidator = null,
         public Closure|RecordValidationType|array|string|null $deleteValidator = null,
@@ -147,24 +141,56 @@ class RecordTableType
         public ?array $triggers = null,
         public bool $overrideTimestamps = false,
         public bool $overrideUserstamps = false,
+        /** @var array<string, RecordComputedAttributeType|Closure|array{0: class-string, 1: string}|string>|null */
         public ?array $attributes = null,
+        /** @var array<string, RecordCastEnum|RecordCastType|Closure|array{0: class-string, 1: string}|string>|null */
         public ?array $casting = null,
-        public ?array $permissions = null,
+        public RecordTablePermissionType|array|null $permissions = null,
     ) {
+        $this->columns = $this->normalizeColumns($this->columns);
+
+        if ($this->permissions instanceof RecordTablePermissionType) {
+            $this->permissionsType = $this->permissions;
+            $this->permissions = $this->permissions->toArray();
+        } elseif (is_array($this->permissions)) {
+            $this->permissionsType = RecordTablePermissionType::fromArray($this->permissions);
+        }
+
         if ($this->isAuthRead && $this->isAuthWrite && $this->hasLegacyPublicOverride($this->public)) {
             $authFlags = $this->deriveAuthFlagsFromPublic($this->public);
             $this->isAuthRead = $authFlags['read'];
             $this->isAuthWrite = $authFlags['write'];
-            return;
         }
 
-        $this->public = $this->derivePublicFromAuthFlags(publicConfig: $this->public, isAuthRead: $this->isAuthRead, isAuthWrite: $this->isAuthWrite);
+        $this->public = $this->derivePublicFromAuthFlags(isAuthRead: $this->isAuthRead, isAuthWrite: $this->isAuthWrite);
 
         if (!empty($this->triggers)) {
             $this->resolveClassTriggers();
         }
 
         $this->resolveClassValidators();
+    }
+
+    /**
+     * Store every column as the legacy array form, so a RecordColumnType and a
+     * hand-written array are interchangeable and readers keep seeing arrays.
+     *
+     * @param array<string, RecordColumnType|array<string, mixed>>|null $columns
+     * @return array<string, mixed>|null
+     */
+    private function normalizeColumns(?array $columns): ?array
+    {
+        if (null === $columns) {
+            return null;
+        }
+
+        foreach ($columns as $name => $definition) {
+            if ($definition instanceof RecordColumnType) {
+                $columns[$name] = $definition->toArray();
+            }
+        }
+
+        return $columns;
     }
 
     /**
@@ -210,6 +236,19 @@ class RecordTableType
         }
     }
 
+    private function hasTrigger(mixed $hook, string $class, string $method): bool
+    {
+        foreach (is_array($hook) && !array_is_list($hook) ? [$hook] : (array) (is_object($hook) ? [$hook] : $hook) as $existing) {
+            $existingClass = is_object($existing) ? ($existing->class ?? null) : ($existing['class'] ?? $existing[0] ?? null);
+            $existingMethod = is_object($existing) ? ($existing->functionName ?? null) : ($existing['functionName'] ?? $existing[1] ?? null);
+            if ($existingClass === $class && $existingMethod === $method) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Resolve class-level triggers using PHP Attributes.
      */
@@ -232,7 +271,13 @@ class RecordTableType
                     $triggerAttr = $attribute->newInstance();
                     $hook = $triggerAttr->hook;
 
-                    if (property_exists($this, $hook)) {
+                    if (in_array($hook, RecordTriggerHookEnum::values(), true)) {
+                        if ($this->hasTrigger($this->{$hook}, $triggerClass, $method->getName())) {
+                            // Already resolved: __set_state() (config:cache) passes both the
+                            // resolved hooks and the `triggers` list they came from.
+                            continue;
+                        }
+
                         $triggerType = new RecordTableTriggerType(
                             class: $triggerClass,
                             functionName: $method->getName(),
@@ -310,16 +355,8 @@ class RecordTableType
         );
     }
 
-    private function derivePublicFromAuthFlags(RecordTablePublic|bool $publicConfig, bool $isAuthRead, bool $isAuthWrite): RecordTablePublic
+    private function derivePublicFromAuthFlags(bool $isAuthRead, bool $isAuthWrite): RecordTablePublic
     {
-        if (is_bool($publicConfig)) {
-            $defaultPublicRead = $publicConfig;
-            $defaultPublicWrite = $publicConfig;
-        } else {
-            $defaultPublicRead = (bool) ($publicConfig->read ?? false);
-            $defaultPublicWrite = (bool) ($publicConfig->write ?? false);
-        }
-
         return new RecordTablePublic(
             read: !$isAuthRead,
             write: !$isAuthWrite,
@@ -342,6 +379,7 @@ class RecordTableType
         return '' === $value ? null : $value;
     }
 
+    /** Anything that is not a real bool means "auth required" (fails closed). */
     private static function normalizeBool(mixed $value): bool
     {
         if (is_bool($value)) {

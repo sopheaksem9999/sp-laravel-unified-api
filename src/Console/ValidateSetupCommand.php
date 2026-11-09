@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Console;
 
+use BackedEnum;
+use Sopheak\Core\Types\RecordFunctionType;
 use Exception;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -53,6 +55,7 @@ class ValidateSetupCommand extends Command
         $this->validatePermissions();
         $this->validateSchemaRegistryUtils();
         $this->validateColumnDrift();
+        $this->validateFunctionDefinitions();
         $this->validateRoutes();
         $this->validatePackageLimits();
         $this->validateRateLimiters();
@@ -183,6 +186,63 @@ class ValidateSetupCommand extends Command
                 $this->info('🔧 Attempting to create missing global function directory...');
                 $this->call('sp-laravel-api:setup', ['--force' => false]);
             }
+        }
+    }
+
+    /**
+     * Check every table and global function: the class and method exist, the
+     * HTTP methods are valid and the schemas are well formed. Warnings only, so
+     * a config that loads today is never turned into a failure.
+     */
+    private function validateFunctionDefinitions(): void
+    {
+        $this->info('🧩 Checking Function Definitions...');
+
+        $entries = [];
+        foreach (SchemaRegistryUtils::get() as $table => $config) {
+            foreach ((array) ($config->functions ?? []) as $name => $function) {
+                $entries[] = [sprintf('%s.%s', $table, $name), $function];
+            }
+        }
+
+        foreach (RecordConfigService::globalFunctions() as $name => $function) {
+            $entries[] = ['global.' . $name, $function];
+        }
+
+        $problems = 0;
+        $valid = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+        foreach ($entries as [$label, $function]) {
+            $get = static fn(string $key): mixed => is_array($function) ? ($function[$key] ?? null) : ($function->{$key} ?? null);
+            $class = $get('class');
+            $method = $get('functionName') ?? ($get('class') ? 'handle' : null);
+            $messages = [];
+
+            if (!is_string($class) || !class_exists($class)) {
+                $messages[] = sprintf('class %s does not exist', is_string($class) ? $class : get_debug_type($class));
+            } elseif (is_string($method) && !method_exists($class, $method)) {
+                $messages[] = sprintf('%s::%s() does not exist', $class, $method);
+            }
+
+            foreach ((array) $get('httpMethod') as $httpMethod) {
+                $value = $httpMethod instanceof BackedEnum ? (string) $httpMethod->value : (string) $httpMethod;
+                if (!in_array(strtoupper($value), $valid, true)) {
+                    $messages[] = sprintf('httpMethod %s is not one of %s', $value, implode(', ', $valid));
+                }
+            }
+
+            foreach (['querySchema', 'payloadSchema', 'responseSchema'] as $schemaKey) {
+                $schema = $get($schemaKey);
+                $messages = [...$messages, ...RecordFunctionType::schemaProblems($schemaKey, is_array($schema) ? $schema : null)];
+            }
+
+            foreach ($messages as $message) {
+                ++$problems;
+                $this->addResult('⚠️', sprintf("Function '%s': %s", $label, $message), 'warning');
+            }
+        }
+
+        if (0 === $problems) {
+            $this->addResult('✅', sprintf('%d function definition(s) look valid', count($entries)), 'success');
         }
     }
 

@@ -112,6 +112,8 @@ When adding or changing a table, follow this order and never skip validation:
    (alias `sp-laravel-api:record {table}`; `sp-laravel-api:generate-all-configs`
    for all tables at once).
 3. Sync columns from the DB: `php artisan sp-laravel-api:sync-record-columns`.
+   It writes `RecordColumnType` columns with standard `RecordColumnTypeEnum` types
+   and generates enum classes in `app/Enums/Records/` (never overwriting them).
    Re-check afterwards — it rewrites config files and can drop hand-written
    `permissions` / `triggers` / `relationships` / `columnWriteDisabled` args.
 4. Configure permissions, relationships, casting, audit flags, trigger hooks, and

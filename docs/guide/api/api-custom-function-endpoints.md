@@ -74,6 +74,57 @@ Content-Type: application/json
 
 ---
 
+### Typed schemas: `RecordSchemaType`
+
+`querySchema`, `payloadSchema` and `responseSchema` are OpenAPI 3.0 schemas.
+Write them with `RecordSchemaType` and they are checked when the config loads;
+the array form keeps working and the two can be mixed.
+
+```php
+use Sopheak\Core\Types\RecordSchemaType;
+
+'updateProgress' => new RecordFunctionType(
+    httpMethod: [RecordFunctionMethodEnum::POST->value],
+    class: BookingFunctions::class,
+    functionName: 'updateProgress',
+    payloadSchema: RecordSchemaType::object(
+        properties: [
+            'booking_id' => RecordSchemaType::uuid('Target booking UUID'),
+            'status' => RecordSchemaType::string('Target status', enum: ['accepted', 'rejected', 'completed']),
+            'latitude' => RecordSchemaType::number(),
+            'tags' => RecordSchemaType::array(RecordSchemaType::string()),
+            'note' => RecordSchemaType::string(maxLength: 500, nullable: true),
+        ],
+        required: ['booking_id', 'status'],
+    ),
+    responseSchema: RecordSchemaType::object(['next_allowed_actions' => RecordSchemaType::array(RecordSchemaType::string())]),
+),
+```
+
+| Helper | Produces |
+|---|---|
+| `RecordSchemaType::object(properties, required)` | `{type: object, properties, required}` |
+| `RecordSchemaType::array(items)` | `{type: array, items}` |
+| `RecordSchemaType::string(description, enum, format, example, maxLength)` | `{type: string, …}` |
+| `RecordSchemaType::integer()`, `RecordSchemaType::number()` | with `minimum` / `maximum` |
+| `RecordSchemaType::boolean()` | `{type: boolean}` |
+| `RecordSchemaType::uuid()`, `RecordSchemaType::date()`, `RecordSchemaType::dateTime()` | `{type: string, format: uuid / date / date-time}` |
+
+The full constructor (`new S(RecordSchemaTypeEnum::…, …)`) also takes `title`,
+`default`, `nullable`, `additionalProperties`, `oneOf`, `anyOf`, `minLength`,
+`pattern`, `minItems`, `maxItems`, `readOnly`, `writeOnly`, and `meta` for any
+other OpenAPI keyword (`x-…`). Formats come from `RecordSchemaFormatEnum` (or a
+custom string).
+
+Rejected when the config loads, with a message naming the problem: `required`
+listing an undeclared property; `properties` / `required` /
+`additionalProperties` on a non-object; an array without `items`, or `items` on
+a non-array; a format that does not fit the type (`uuid` on an integer);
+`minLength` / `maxLength` / `pattern` on a non-string; `minimum` / `maximum` on a
+non-number; an enum value of the wrong type or an empty enum; an invalid
+`pattern`; `readOnly` together with `writeOnly`. The same schemas work in
+`#[RecordFunction(payloadSchema: new RecordSchemaType(...))]` attributes.
+
 ### Using PHP Attributes for Table and Global Functions
 
 > **Legacy — only for old client projects using Laravel ORM.**

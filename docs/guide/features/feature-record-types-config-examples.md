@@ -3,6 +3,8 @@ title: "Record Type Config Examples"
 description: "Compatibility entry. Use the Record Type Reference for the full Record*Type parameter reference and examples."
 keywords:
   - RecordTableType
+  - RecordTablePermissionType
+  - RecordComputedAttributeType
   - RecordFunctionType
   - RecordValidationType
   - RecordTableTriggerType
@@ -19,6 +21,7 @@ Use the canonical reference:
 - [Record Type Reference and Class-Based Examples](/guide/api-type-reference-and-examples)
 
 That page covers the full `RecordTableType` parameter reference, class-based
-configuration, casting/attributes/permissions, and every `Record*Type`
+configuration, casting/attributes/permissions (`RecordComputedAttributeType`,
+`RecordTablePermissionType`), and every `Record*Type`
 (including `RecordValidationType`, `RecordMetaHasManyThroughType`, and
 `RecordAassociationType`).

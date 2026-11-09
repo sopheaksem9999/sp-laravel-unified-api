@@ -45,6 +45,10 @@ class TimestampColumnDriftTest extends TestCase
     {
         parent::getEnvironmentSetUp($app);
 
+        // Set before the shipped configs are evaluated: their id column type
+        // is derived from record.id_type when the file is required.
+        $app['config']->set('record.id_type', 'uuid');
+
         foreach ([
             'sp-attachments' => 'attachments',
             'sp-webhooks' => 'webhooks',

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sopheak\Core\Attributes;
 
 use Attribute;
+use Sopheak\Core\Enums\RecordTriggerHookEnum;
 
 /**
  * Declare a lifecycle trigger on an Eloquent model method for use by the dynamic CRUD system.
@@ -55,8 +56,12 @@ use Attribute;
 #[Attribute(Attribute::TARGET_METHOD | Attribute::IS_REPEATABLE)]
 class RecordTrigger
 {
+    public string $hook;
+
     public function __construct(
-        public string $hook, // e.g., 'beforeRead', 'afterCreate'
+        RecordTriggerHookEnum|string $hook, // e.g., RecordTriggerHookEnum::BEFORE_READ or 'beforeRead'
         public ?string $description = null
-    ) {}
+    ) {
+        $this->hook = $hook instanceof RecordTriggerHookEnum ? $hook->value : $hook;
+    }
 }

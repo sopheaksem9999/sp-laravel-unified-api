@@ -95,8 +95,12 @@ final class RecordPayloadExtractor
         $columnDefaults = [];
         if (!$isUpdate && $tableSchema instanceof RecordTableType) {
             foreach ($tableSchema->columns ?? [] as $field => $info) {
-                if (array_key_exists('default', $info) && $info['default'] !== null) {
-                    $columnDefaults[$field] = $info['default'];
+                if (is_array($info) && array_key_exists('default', $info) && $info['default'] !== null) {
+                    // Only a literal; an expression (CURRENT_TIMESTAMP, nextval) is left to the database.
+                    [$isLiteral, $value] = SchemaRegistryUtils::literalDefault($info['default']);
+                    if ($isLiteral) {
+                        $columnDefaults[$field] = $value;
+                    }
                 }
             }
         }

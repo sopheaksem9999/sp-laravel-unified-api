@@ -57,7 +57,9 @@ class PermissionsConfigIdTypeTest extends TestCase
 
         $permissions = require __DIR__ . '/../../config/sp-permissions.php';
 
-        $this->assertSame('bigIncrements', $permissions['tables']['sp_permissions']->columns['id']['type']);
-        $this->assertSame('bigIncrements', $permissions['tables']['sp_roles']->columns['id']['type']);
+        $this->assertSame('bigint', $permissions['tables']['sp_permissions']->columns['id']['type']);
+        $this->assertSame('auto_increment', $permissions['tables']['sp_permissions']->columns['id']['extra']);
+        $this->assertSame('bigint', $permissions['tables']['sp_roles']->columns['id']['type']);
+        $this->assertSame('auto_increment', $permissions['tables']['sp_roles']->columns['id']['extra']);
     }
 }

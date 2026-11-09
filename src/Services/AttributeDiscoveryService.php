@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sopheak\Core\Services;
 
+use Sopheak\Core\Types\RecordSchemaType;
 use Generator;
 use RecursiveIteratorIterator;
 use RecursiveDirectoryIterator;
@@ -451,9 +452,9 @@ class AttributeDiscoveryService
         ?int $cacheTTL,
         ?string $displayName,
         ?string $description,
-        ?array $querySchema,
-        ?array $payloadSchema,
-        ?array $responseSchema,
+        RecordSchemaType|array|null $querySchema,
+        RecordSchemaType|array|null $payloadSchema,
+        RecordSchemaType|array|null $responseSchema,
         array|string|null $clearCacheTables,
         array|string|null $middleware
     ): RecordFunctionType {

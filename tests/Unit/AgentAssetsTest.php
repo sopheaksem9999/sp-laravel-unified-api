@@ -21,6 +21,10 @@ class AgentAssetsTest extends TestCase
         foreach (['RecordTableType', 'sp-laravel-api:record', 'sp-laravel-api:validate', 'isAuthRead'] as $needle) {
             $this->assertStringContainsString($needle, $content, sprintf('Guidelines must mention [%s]', $needle));
         }
+
+        $boostPath = __DIR__ . '/../../resources/boost/guidelines/core.blade.php';
+        $this->assertFileExists($boostPath, 'Laravel Boost third-party discovery requires resources/boost/guidelines/core.blade.php');
+        $this->assertSame($content, (string) File::get($boostPath), 'resources/boost and resources/agent guidelines must stay in sync');
     }
 
     public function test_agent_skill_exists_with_valid_frontmatter_and_debug_workflow(): void
@@ -46,5 +50,9 @@ class AgentAssetsTest extends TestCase
         foreach (['sp-laravel-api:validate', 'sp_api_get_endpoint', 'composer format-check'] as $needle) {
             $this->assertStringContainsString($needle, $body, sprintf('Skill body must mention [%s]', $needle));
         }
+
+        $boostPath = __DIR__ . '/../../resources/boost/skills/sp-laravel-api-development/SKILL.md';
+        $this->assertFileExists($boostPath, 'Laravel Boost third-party discovery requires resources/boost/skills/sp-laravel-api-development/SKILL.md');
+        $this->assertSame($content, (string) File::get($boostPath), 'resources/boost and resources/agent skill files must stay in sync');
     }
 }

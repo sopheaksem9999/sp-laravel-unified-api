@@ -97,15 +97,15 @@ class MakeRecordTableCommand extends Command
             use Sopheak\\Core\\Types\\RecordTableType;
 
             return new RecordTableType(
-                pmsName: {$pmsLiteral},
                 table: {$tableLiteral},
+                pmsName: {$pmsLiteral},
+                hasTenantId: {$hasTenantLiteral},
+                softDeletes: {$softDeletesLiteral},
                 isAuthRead: true,
                 isAuthWrite: true,
                 relationships: [],
                 functions: [],
                 triggers: [], // e.g. [MyTriggerClass::class]
-                softDeletes: {$softDeletesLiteral},
-                hasTenantId: {$hasTenantLiteral},
             );
             PHP;
     }

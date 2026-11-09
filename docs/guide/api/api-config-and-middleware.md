@@ -62,6 +62,12 @@ php artisan sp-laravel-api:generate-record-tables-from-db
 php artisan sp-laravel-api:sync-record-columns --force
 ```
 
+The sync writes each column as `new RecordColumnType(type: RecordColumnTypeEnum::…)`
+in `RecordTableType`'s canonical constructor parameter order, reuses any matching
+backed enum already defined under `app/Enums/`, and otherwise generates a backed
+enum class in `app/Enums/Records/` for every enum column (`--no-enums` keeps
+plain value lists). See [Record Data Types](/guide/feature-record-data-types).
+
 Record endpoints use table-level access rules from `config/record.php`:
 
 - If a table/action is configured as public (`RecordTablePublic`), the endpoint is accessible without authentication.

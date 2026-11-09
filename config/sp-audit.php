@@ -1,5 +1,15 @@
 <?php
 
+use Sopheak\Core\Enums\RecordColumnTypeEnum;
+use Sopheak\Core\Enums\RecordFunctionMethodEnum;
+use Sopheak\Core\Enums\RecordRelationshipsEnum;
+use Sopheak\Core\Http\Controllers\AuditLogController;
+use Sopheak\Core\Services\RecordConfigService;
+use Sopheak\Core\Types\RecordBelongsToType;
+use Sopheak\Core\Types\RecordColumnType;
+use Sopheak\Core\Types\RecordFunctionType;
+use Sopheak\Core\Types\RecordTableType;
+
 return [
     /*
     |--------------------------------------------------------------------------
@@ -232,7 +242,7 @@ return [
     |
     */
     'tables' => [
-        'sp_audit_logs' => new \Sopheak\Core\Types\RecordTableType(
+        'sp_audit_logs' => new RecordTableType(
             table: 'sp_audit_logs',
             pmsName: 'audit_log',
             primaryKey: 'id',
@@ -245,52 +255,52 @@ return [
             canDelete: false,
             canUpsert: false,
             columns: [
-                'id' => ['type' => \Sopheak\Core\Services\RecordConfigService::idType() === 'uuid' ? 'uuid' : 'bigIncrements', 'nullable' => false],
-                'entity_name' => ['type' => 'string', 'nullable' => true],
-                'entity_type' => ['type' => 'string', 'nullable' => true],
-                'entity_id' => ['type' => 'string', 'nullable' => true],
-                'user_id' => ['type' => 'string', 'nullable' => true],
-                'event' => ['type' => 'string', 'nullable' => true],
-                'title' => ['type' => 'string', 'nullable' => true],
-                'subject' => ['type' => 'string', 'nullable' => true],
-                'recap' => ['type' => 'string', 'nullable' => true],
-                'old_data' => ['type' => 'json', 'nullable' => true],
-                'new_data' => ['type' => 'json', 'nullable' => true],
-                'metadata' => ['type' => 'json', 'nullable' => true],
-                'ip_address' => ['type' => 'string', 'nullable' => true],
-                'user_agent' => ['type' => 'string', 'nullable' => true],
-                'request_id' => ['type' => 'string', 'nullable' => true],
+                'id' => new RecordColumnType(type: RecordConfigService::idType() === 'uuid' ? RecordColumnTypeEnum::UUID : RecordColumnTypeEnum::BIGINT, nullable: false, primary: true, autoIncrement: RecordConfigService::idType() !== 'uuid'),
+                'entity_name' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
+                'entity_type' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
+                'entity_id' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
+                'user_id' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
+                'event' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
+                'title' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
+                'subject' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
+                'recap' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
+                'old_data' => new RecordColumnType(type: RecordColumnTypeEnum::JSON),
+                'new_data' => new RecordColumnType(type: RecordColumnTypeEnum::JSON),
+                'metadata' => new RecordColumnType(type: RecordColumnTypeEnum::JSON),
+                'ip_address' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
+                'user_agent' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
+                'request_id' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
                 // Created by $table->timestamps() in the migration. Audit logs
                 // are read in time order, so an undeclared created_at made the
                 // default sort silently fall back to the primary key.
-                'created_at' => ['type' => 'datetime', 'nullable' => true],
-                'updated_at' => ['type' => 'datetime', 'nullable' => true],
+                'created_at' => new RecordColumnType(type: RecordColumnTypeEnum::DATETIME),
+                'updated_at' => new RecordColumnType(type: RecordColumnTypeEnum::DATETIME),
             ],
             relationships: [
-                'user' => new \Sopheak\Core\Types\RecordBelongsToType(
+                'user' => new RecordBelongsToType(
                     table: 'users',
-                    type: \Sopheak\Core\Enums\RecordRelationshipsEnum::BELONGS_TO,
+                    type: RecordRelationshipsEnum::BELONGS_TO,
                     foreignKey: 'user_id',
                     ownerKey: 'id'
                 ),
             ],
             functions: [
-                'stats' => new \Sopheak\Core\Types\RecordFunctionType(
-                    class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
+                'stats' => new RecordFunctionType(
+                    class: AuditLogController::class,
                     functionName: 'getStats',
-                    httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
+                    httpMethod: [RecordFunctionMethodEnum::GET->value],
                     description: 'Get audit statistics'
                 ),
-                'field-timeline/{entityType}/{entityId}/{field}' => new \Sopheak\Core\Types\RecordFunctionType(
-                    class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
+                'field-timeline/{entityType}/{entityId}/{field}' => new RecordFunctionType(
+                    class: AuditLogController::class,
                     functionName: 'getFieldTimeline',
-                    httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
+                    httpMethod: [RecordFunctionMethodEnum::GET->value],
                     description: 'Get field timeline'
                 ),
-                'field-stats/{entityType}/{entityId}/{field}' => new \Sopheak\Core\Types\RecordFunctionType(
-                    class: \Sopheak\Core\Http\Controllers\AuditLogController::class,
+                'field-stats/{entityType}/{entityId}/{field}' => new RecordFunctionType(
+                    class: AuditLogController::class,
                     functionName: 'getFieldStats',
-                    httpMethod: [\Sopheak\Core\Enums\RecordFunctionMethodEnum::GET->value],
+                    httpMethod: [RecordFunctionMethodEnum::GET->value],
                     description: 'Get field statistics'
                 ),
             ]

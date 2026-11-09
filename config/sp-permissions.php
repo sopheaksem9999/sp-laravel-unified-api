@@ -1,6 +1,8 @@
 <?php
 
+use Sopheak\Core\Enums\RecordColumnTypeEnum;
 use Sopheak\Core\Services\RecordConfigService;
+use Sopheak\Core\Types\RecordColumnType;
 use Sopheak\Core\Types\RecordMetaBelongsToManyType;
 use Sopheak\Core\Types\RecordTableType;
 
@@ -145,15 +147,15 @@ return [
             canDelete: false,
             canUpsert: false,
             columns: [
-                'id' => ['type' => RecordConfigService::idType() === 'uuid' ? 'uuid' : 'bigIncrements', 'nullable' => false],
-                'name' => ['type' => 'string', 'nullable' => false],
-                'group' => ['type' => 'string', 'nullable' => true],
-                'guard_name' => ['type' => 'string', 'nullable' => false],
-                'description' => ['type' => 'text', 'nullable' => true],
+                'id' => new RecordColumnType(type: RecordConfigService::idType() === 'uuid' ? RecordColumnTypeEnum::UUID : RecordColumnTypeEnum::BIGINT, nullable: false, primary: true, autoIncrement: RecordConfigService::idType() !== 'uuid'),
+                'name' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'group' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
+                'guard_name' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                'description' => new RecordColumnType(type: RecordColumnTypeEnum::TEXT),
                 // Created by $table->timestamps() in the migration; declaring
                 // them is what makes them sortable and filterable.
-                'created_at' => ['type' => 'datetime', 'nullable' => true],
-                'updated_at' => ['type' => 'datetime', 'nullable' => true],
+                'created_at' => new RecordColumnType(type: RecordColumnTypeEnum::DATETIME),
+                'updated_at' => new RecordColumnType(type: RecordColumnTypeEnum::DATETIME),
             ],
             relationships: [
                 'roles' => new RecordMetaBelongsToManyType(
@@ -182,19 +184,19 @@ return [
             canUpsert: false,
             columns: array_merge(
                 [
-                    'id' => ['type' => RecordConfigService::idType() === 'uuid' ? 'uuid' : 'bigIncrements', 'nullable' => false],
-                    'name' => ['type' => 'string', 'nullable' => false],
-                    'key' => ['type' => 'string', 'nullable' => true],
-                    'guard_name' => ['type' => 'string', 'nullable' => true, 'default' => 'api'],
-                    'description' => ['type' => 'text', 'nullable' => true],
-                    'is_system' => ['type' => 'boolean', 'nullable' => false, 'default' => false],
-                    'is_master' => ['type' => 'boolean', 'nullable' => false, 'default' => false],
-                    'is_default' => ['type' => 'boolean', 'nullable' => false, 'default' => false],
-                    'created_at' => ['type' => 'datetime', 'nullable' => true],
-                    'updated_at' => ['type' => 'datetime', 'nullable' => true],
+                    'id' => new RecordColumnType(type: RecordConfigService::idType() === 'uuid' ? RecordColumnTypeEnum::UUID : RecordColumnTypeEnum::BIGINT, nullable: false, primary: true, autoIncrement: RecordConfigService::idType() !== 'uuid'),
+                    'name' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, nullable: false),
+                    'key' => new RecordColumnType(type: RecordColumnTypeEnum::STRING),
+                    'guard_name' => new RecordColumnType(type: RecordColumnTypeEnum::STRING, default: 'api'),
+                    'description' => new RecordColumnType(type: RecordColumnTypeEnum::TEXT),
+                    'is_system' => new RecordColumnType(type: RecordColumnTypeEnum::BOOLEAN, nullable: false, default: false),
+                    'is_master' => new RecordColumnType(type: RecordColumnTypeEnum::BOOLEAN, nullable: false, default: false),
+                    'is_default' => new RecordColumnType(type: RecordColumnTypeEnum::BOOLEAN, nullable: false, default: false),
+                    'created_at' => new RecordColumnType(type: RecordColumnTypeEnum::DATETIME),
+                    'updated_at' => new RecordColumnType(type: RecordColumnTypeEnum::DATETIME),
                 ],
                 config('record.enable_tenant_id', false)
-                    ? [config('record.tenant_column', 'tenant_id') => ['type' => 'string', 'nullable' => true]]
+                    ? [config('record.tenant_column', 'tenant_id') => new RecordColumnType(type: RecordColumnTypeEnum::STRING)]
                     : []
             ),
             relationships: [

@@ -114,7 +114,7 @@ When `auto_register = true`, the system scans **every table** in `config/record.
 | `pmsName: 'invoice'`, `canUpdate: true` | `update:<separator>invoice` |
 | `pmsName: 'invoice'`, `canDelete: true` | `delete:<separator>invoice` |
 
-Custom `permissions` maps on `RecordTableType` are also registered (e.g., `'read' => 'view_invoice'`).
+Custom `permissions` maps on `RecordTableType` are also registered — either via `new RecordTablePermissionType(read: 'view_invoice', ...)` or the array form `['read' => 'view_invoice']` (see [Per-Action Permission Map](/guide/api-type-reference-and-examples#per-action-permission-map)).
 
 ### Config Hash Boot Optimization
 

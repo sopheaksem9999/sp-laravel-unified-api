@@ -84,6 +84,28 @@ Write a parent record and its related rows in one call instead of one request pe
 - Caching: `Sopheak\Core\Services\RecordCacheService` + `Sopheak\Core\Services\QueryCacheService`
 - Permission enforcement: `Sopheak\Core\Http\Controllers\Concerns\HasControllerHelpers::authorizeAction()`
 
+## Columns
+
+Declare columns with `Sopheak\Core\Types\RecordColumnType` and a standard `Sopheak\Core\Enums\RecordColumnTypeEnum` type (driver-independent: `STRING`, `TEXT`, `INTEGER`, `BIGINT`, `DECIMAL`, `BOOLEAN`, `DATETIME`, `TIMESTAMPTZ`, `UUID`, `JSON`, `JSONB`, `ENUM`, `VECTOR`, …). Only these parameters exist: `type`, `nullable`, `default`, `primary`, `autoIncrement`, `enum` (list or backed enum class), `cast`, `maxLength`, `description`, `example`, `compositeType`, `compositeFields`, `nativeType`, `meta`.
+
+```php
+'id'     => new RecordColumnType(type: RecordColumnTypeEnum::UUID, nullable: false, primary: true),
+'status' => new RecordColumnType(type: RecordColumnTypeEnum::ENUM, nullable: false, enum: BookingStatus::class),
+'total'  => new RecordColumnType(type: RecordColumnTypeEnum::DECIMAL, nullable: false, default: 0, description: 'Grand total'),
+```
+
+Prefer `sp-laravel-api:sync-record-columns` over writing columns by hand: it reads the real schema, inserts `columns:` in `RecordTableType`'s canonical constructor parameter order, reuses existing matching backed enums in `app/Enums/`, generates new enum classes in `app/Enums/Records/` (never overwriting them), and keeps `nativeType` where a standard type would change behaviour.
+
+## Typed Table Options (`permissions`, `attributes`, `searchable`)
+
+- **Per-action permissions**: Use `Sopheak\Core\Types\RecordTablePermissionType` (`permissions: new RecordTablePermissionType(read: 'view_invoice', create: 'create_invoice', ...)`).
+- **Computed attributes**: Use `Sopheak\Core\Types\RecordComputedAttributeType` (`attributes: ['full_label' => new RecordComputedAttributeType(class: ..., functionName: ..., type: 'string')]`) for `config:cache` safety and OpenAPI schema generation.
+- **Configured search (`?search=`)**: Declare `searchable: ['ref_number', 'vendor.display_name', 'items.name', 'items.description']` on `RecordTableType` to search root columns and 1-level relationship fields via tenant-scoped `WHERE EXISTS` subqueries. For 2+ level deep joins or workflow scenarios, use a `beforeRead` hook to set `or=(...)` or `id=in.(...)`.
+
+## Function schemas
+
+Write `querySchema` / `payloadSchema` / `responseSchema` of `RecordFunctionType` with `Sopheak\Core\Types\RecordSchemaType` (OpenAPI 3.0, validated when the config loads): `RecordSchemaType::object([...], required: [...])`, `RecordSchemaType::array(RecordSchemaType::string())`, `RecordSchemaType::string(enum: [...])`, `RecordSchemaType::integer(minimum: 1)`, `RecordSchemaType::number()`, `RecordSchemaType::boolean()`, `RecordSchemaType::uuid()`, `RecordSchemaType::date()`, `RecordSchemaType::dateTime()`. Every name in `required` must be a declared property; formats come from `RecordSchemaFormatEnum`.
+
 ## Commands
 
 ```bash

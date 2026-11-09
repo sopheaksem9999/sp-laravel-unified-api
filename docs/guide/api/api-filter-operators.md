@@ -123,12 +123,15 @@ GET /api/v1/invoices?select=*,customer(*),items(*)&or=(ref_number.ilike.INV-001,
 Notes:
 
 - `search` is additive with normal top-level filters, so `status=eq.open&search=INV-001` becomes `status = open AND (...)`.
-- Relationship fields in `searchable` use the same one-level dot notation supported by grouped relationship filters.
+- Relationship fields in `searchable` use the same one-level dot notation supported by grouped relationship filters (`belongsTo`, `hasMany`, `hasManyThrough`, `morphMany`, and `belongsToMany`).
+- Under the hood, relationship entries compile into tenant-scoped, soft-delete-aware `WHERE EXISTS` subqueries rather than `LEFT JOIN`, so `hasMany` searches (like `items.name`) never duplicate parent rows or distort pagination counts (`X-Total-Count`).
 - `search` uses `ilike` on PostgreSQL and `like` on other drivers.
-- `s=<text>` is a separate auto-detected search param (works without `searchable` config) — prefer it for ad-hoc search.
+- `s=<text>` is a separate auto-detected search param (works without `searchable` config, root columns only) — prefer `search=<text>` with `searchable` when relationship fields must be included.
+- For multi-level relationship joins (for example `items -> product -> sku`) or custom workflow/approval subqueries, combine `searchable` with a [`beforeRead` hook](/guide/record-hooks#complex-multi-table-join-and-scenario-filtering-beforeread).
 
 ## Related Docs
 
 - [Standard CRUD Operations](/guide/api-crud-operations)
 - [Relationships](/core-concepts/relationships) — relationship filtering
+- [Record Hooks](/guide/record-hooks) — custom `beforeRead` search and multi-table join pre-filtering
 - [QueryHelpers Trait](/guide/api-queryhelpers-trait) — a smaller fixed operator set for custom endpoints
